@@ -180,7 +180,7 @@ async fn open_transport_unicast(
         .zid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     // Create the listener on the router
@@ -199,7 +199,7 @@ async fn open_transport_unicast(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient))
+        .build_test(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client
@@ -290,18 +290,6 @@ async fn run_single(client_endpoints: &[EndPoint], server_endpoints: &[EndPoint]
         open_transport_unicast(client_endpoints, server_endpoints).await;
 
     test_transport(router_handler.clone(), client_transport.clone()).await;
-
-    #[cfg(feature = "stats")]
-    {
-        let c_stats = client_transport.get_stats().unwrap().report();
-        println!("\tClient: {c_stats:?}");
-        let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
-            .unwrap()
-            .get_stats()
-            .map(|s| s.report())
-            .unwrap();
-        println!("\tRouter: {r_stats:?}");
-    }
 
     close_transport(
         router_manager,

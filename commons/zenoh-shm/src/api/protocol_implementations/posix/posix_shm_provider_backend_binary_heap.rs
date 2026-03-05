@@ -86,6 +86,7 @@ where
 }
 
 /// A largest-fit allocator backend based on POSIX shared memory.
+///
 /// This is old legacy Zenoh SHM provider. It's only strong point - it doesn't store any metadata in
 /// SHM, which makes it resistant to memory corruptions that might happen at receiver side.
 #[zenoh_macros::unstable_doc]

@@ -55,6 +55,8 @@ mod serialization;
 mod session_ext;
 #[cfg(feature = "unstable")]
 mod subscriber_ext;
+#[cfg(feature = "unstable")]
+mod utils;
 
 #[cfg(feature = "internal")]
 pub use crate::serialization::VarInt;

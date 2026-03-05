@@ -222,12 +222,12 @@ async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
             Ok(sample) => response(
                 StatusCode::Ok,
                 Cow::from(sample.encoding()).as_ref(),
-                &sample.payload().try_to_string().unwrap_or_default(),
+                &sample.payload().to_bytes(),
             ),
             Err(value) => response(
                 StatusCode::Ok,
                 Cow::from(value.encoding()).as_ref(),
-                &value.payload().try_to_string().unwrap_or_default(),
+                &value.payload().to_bytes(),
             ),
         },
         Err(_) => response(StatusCode::Ok, "", ""),
@@ -245,14 +245,26 @@ fn method_to_kind(method: Method) -> SampleKind {
 fn response<'a, S: Into<&'a str> + std::fmt::Debug>(
     status: StatusCode,
     content_type: S,
-    body: &str,
+    body: &(impl AsRef<[u8]> + ?Sized),
 ) -> Response {
-    tracing::trace!("Outgoing Response: {status} - {content_type:?} - body: {body}");
+    let body = body.as_ref();
+    let mut content_type = content_type.into().to_string();
+    tracing::trace!(
+        "Outgoing Response: {status} - {content_type:?} - body: {body}",
+        body = std::str::from_utf8(body).unwrap_or_default(),
+    );
     let mut builder = Response::builder(status)
         .header("content-length", body.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
         .body(body);
-    if let Ok(mime) = Mime::from_str(content_type.into()) {
+    for chunk in content_type.split(";") {
+        if let Some((_, header)) = chunk.split_once("content-encoding=") {
+            builder = builder.header("content-encoding", header);
+            content_type = content_type.replace(&[";", chunk].concat(), "");
+            break;
+        }
+    }
+    if let Ok(mime) = Mime::from_str(&content_type) {
         builder = builder.content_type(mime);
     }
     builder.build()

@@ -31,10 +31,12 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_result::{Error, ZResult};
 #[cfg(feature = "unstable")]
 use {
-    crate::api::sample::SourceInfo, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto, zenoh_protocol::core::Reliability,
+    zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto,
+    zenoh_protocol::core::Reliability,
 };
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
 use crate::api::{
     builders::{
         matching_listener::MatchingListenerBuilder,
@@ -81,13 +83,14 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").await.unwrap();
 /// publisher.put("value").await.unwrap();
+/// # format!("{publisher:?}");
 /// # }
 /// ```
 ///
 ///
 /// `Publisher` implements the `Sink` trait which is useful for forwarding
 /// streams to zenoh.
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::StreamExt;
@@ -95,6 +98,11 @@ impl fmt::Debug for PublisherState {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let mut subscriber = session.declare_subscriber("key/expression").await.unwrap();
 /// let publisher = session.declare_publisher("another/key/expression").await.unwrap();
+/// # tokio::task::spawn(async move {
+/// #     session.put("key/expression", "value").await.unwrap();
+/// #     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+/// #     session.close().await.unwrap();
+/// # });
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # }
 /// ```
@@ -112,6 +120,8 @@ pub struct Publisher<'a> {
     pub(crate) reliability: Reliability,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
+    #[cfg(feature = "unstable")]
+    pub(crate) sync_group: SyncGroup,
 }
 
 impl<'a> Publisher<'a> {
@@ -138,30 +148,90 @@ impl<'a> Publisher<'a> {
     }
 
     /// Returns the [`KeyExpr`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let key_expr = publisher.key_expr();
+    /// # }
+    /// ```
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Get the [`Encoding`] used when publishing data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let encoding = publisher.encoding();
+    /// # }
+    /// ```
     #[inline]
     pub fn encoding(&self) -> &Encoding {
         &self.encoding
     }
 
     /// Get the [`CongestionControl`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let congestion_control = publisher.congestion_control();
+    /// # }
+    /// ```
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.congestion_control
     }
 
     /// Get the [`Priority`] of the written data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let priority = publisher.priority();
+    /// # }
+    /// ```
     #[inline]
     pub fn priority(&self) -> Priority {
         self.priority
     }
 
     /// Get the [`Reliability`] applied when routing the data.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let reliability = publisher.reliability();
+    /// # }
+    /// ```
     #[zenoh_macros::unstable]
     #[inline]
     pub fn reliability(&self) -> Reliability {
@@ -197,7 +267,7 @@ impl<'a> Publisher<'a> {
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -224,7 +294,7 @@ impl<'a> Publisher<'a> {
             kind: PublicationBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -288,6 +358,8 @@ impl<'a> Publisher<'a> {
             matching_listeners: &self.matching_listeners,
             matching_status_type: MatchingStatusType::Subscribers,
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            parent_callback_sync_group_notifier: self.sync_group.notifier(),
         }
     }
 
@@ -303,7 +375,7 @@ impl<'a> Publisher<'a> {
     /// publisher.undeclare().await.unwrap();
     /// # }
     /// ```
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> PublisherUndeclaration<'a> {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
@@ -318,8 +390,8 @@ impl<'a> Publisher<'a> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        self.session.session()
+    pub fn session(&self) -> &WeakSession {
+        &self.session
     }
 }
 
@@ -327,7 +399,11 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
     type Undeclaration = PublisherUndeclaration<'a>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        PublisherUndeclaration(self)
+        PublisherUndeclaration {
+            publisher: self,
+            #[cfg(feature = "unstable")]
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -344,7 +420,20 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct PublisherUndeclaration<'a>(Publisher<'a>);
+pub struct PublisherUndeclaration<'a> {
+    publisher: Publisher<'a>,
+    #[cfg(feature = "unstable")]
+    wait_callbacks: bool,
+}
+
+impl<'a> PublisherUndeclaration<'a> {
+    /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl Resolvable for PublisherUndeclaration<'_> {
     type To = ZResult<()>;
@@ -352,7 +441,12 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.publisher.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_callbacks {
+            self.publisher.sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -405,7 +499,7 @@ impl Sink<Sample> for Publisher<'_> {
             self.reliability,
             None,
             #[cfg(feature = "unstable")]
-            SourceInfo::empty(),
+            None,
             attachment,
         )
     }

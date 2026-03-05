@@ -27,19 +27,15 @@ use zenoh_protocol::{
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-#[cfg(feature = "unstable")]
-use zenoh_sync::{event, Notifier, Waiter};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
         authentication::TransportAuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
-        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        transport_unicast_inner::{AddLinkResult, TransportStatus, TransportUnicastTrait},
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
     },
@@ -65,20 +61,11 @@ pub(crate) struct TransportUnicastUniversal {
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
-    // Lock used to ensure no race in add_link method
-    add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
-    pub(super) alive: Arc<AsyncMutex<bool>>,
-    #[cfg(feature = "unstable")]
-    // Notifier for a BlockFirst message to be ready to be sent
-    // (after the previous one has been sent)
-    pub block_first_notifier: Notifier,
-    #[cfg(feature = "unstable")]
-    // Waiter for a BlockFirst message to be ready to be sent
-    pub block_first_waiter: Waiter,
+    pub(super) status: Arc<AsyncMutex<TransportStatus>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
 }
 
 impl TransportUnicastUniversal {
@@ -86,7 +73,7 @@ impl TransportUnicastUniversal {
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -110,11 +97,6 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
-        #[cfg(feature = "unstable")]
-        let (block_first_notifier, block_first_waiter) = event::new();
-        // notify to be make the BlockFirst "slot" available
-        #[cfg(feature = "unstable")]
-        block_first_notifier.notify().unwrap();
 
         let t = Arc::new(TransportUnicastUniversal {
             manager: Arc::new(manager),
@@ -122,15 +104,11 @@ impl TransportUnicastUniversal {
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
-            add_link_lock: Arc::new(AsyncMutex::new(())),
+
             callback: Arc::new(RwLock::new(None)),
-            alive: Arc::new(AsyncMutex::new(false)),
+            status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
             stats,
-            #[cfg(feature = "unstable")]
-            block_first_notifier,
-            #[cfg(feature = "unstable")]
-            block_first_waiter,
             #[cfg(feature = "shared-memory")]
             shm_context,
         });
@@ -150,12 +128,9 @@ impl TransportUnicastUniversal {
 
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
-        *a_guard = false;
+        let mut status_guard = self.get_status().await;
+        *status_guard = TransportStatus::Closed;
         let callback = zwrite!(self.callback).take();
-
-        // Delete the transport on the manager
-        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close all the links
         let mut links = {
@@ -172,18 +147,17 @@ impl TransportUnicastUniversal {
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
-
+        // Delete the transport on the manager - this should be the last step to ensure that no new transport to the same peer can be added while we are closing this transport.
+        // We also drop the status_guard, to avoid deadlock due to different lock acquisition order in init_existing_transport unicast.
+        // The lock is no longer needed at this point, as we have already marked the transport as not alive and taken the callback to notify it of the closure.
+        drop(status_guard);
+        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
         Ok(())
     }
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
-        enum Target {
-            Transport,
-            Link(Box<TransportLinkUnicastUniversal>),
-        }
-
         // Try to remove the link
-        let target = {
+        let (is_last, stl) = {
             let mut guard = zwrite!(self.links);
 
             if let Some(index) = guard.iter().position(|tl| {
@@ -195,19 +169,11 @@ impl TransportUnicastUniversal {
                 )
                 .eq(&link)
             }) {
-                let is_last = guard.len() == 1;
-                if is_last {
-                    // Close the whole transport
-                    drop(guard);
-                    Target::Transport
-                } else {
-                    // Remove the link
-                    let mut links = guard.to_vec();
-                    let stl = links.remove(index);
-                    *guard = links.into_boxed_slice();
-                    drop(guard);
-                    Target::Link(stl.into())
-                }
+                // Remove the link
+                let mut links = guard.to_vec();
+                let stl = links.remove(index);
+                *guard = links.into_boxed_slice();
+                (guard.is_empty(), stl)
             } else {
                 bail!(
                     "Can not delete Link {} with peer: {}",
@@ -220,36 +186,47 @@ impl TransportUnicastUniversal {
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
-            callback.del_link(link);
+            tokio::task::spawn_blocking(move || {
+                callback.del_link(link);
+            })
+            .await?;
         }
-
-        match target {
-            Target::Transport => self.delete().await,
-            Target::Link(stl) => stl.close().await,
+        if is_last {
+            let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
+            self.delete().await?;
+            r
+        } else {
+            stl.close().await
         }
     }
 
-    async fn sync(&self, initial_sn_rx: TransportSn) -> ZResult<()> {
+    async fn sync(
+        &self,
+        initial_sn_rx: TransportSn,
+    ) -> ZResult<AsyncMutexGuard<'_, TransportStatus>> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = zasynclock!(self.alive);
-        if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            tracing::trace!("{}", e);
-            return Err(e.into());
+        let mut status_guard = zasynclock!(self.status);
+
+        match *status_guard {
+            TransportStatus::Uninitialized => {
+                *status_guard = TransportStatus::Alive;
+                let csn = PrioritySn {
+                    reliable: initial_sn_rx,
+                    best_effort: initial_sn_rx,
+                };
+                for c in self.priority_rx.iter() {
+                    c.sync(csn)?;
+                }
+                Ok(status_guard)
+            }
+            TransportStatus::Alive => Ok(status_guard),
+            TransportStatus::Closed => {
+                let e = zerror!("Transport with peer {} is closed", self.config.zid);
+                tracing::trace!("{}", e);
+                Err(e.into())
+            }
         }
-
-        *a_guard = true;
-
-        let csn = PrioritySn {
-            reliable: initial_sn_rx,
-            best_effort: initial_sn_rx,
-        };
-        for c in self.priority_rx.iter() {
-            c.sync(csn)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -264,8 +241,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        let add_link_guard = zasynclock!(self.add_link_lock);
-
         // Check if we can add more inbound links
         {
             let guard = zread!(self.links);
@@ -298,7 +273,17 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
 
         // sync the RX sequence number
-        let _ = self.sync(other_initial_sn).await;
+        let status_guard = match self.sync(other_initial_sn).await {
+            Ok(status_guard) => status_guard,
+            Err(e) => {
+                tracing::error!(
+                    "Error syncing transport with peer {}: {}",
+                    self.config.zid,
+                    e
+                );
+                return Err((e, link.fail(), close::reason::GENERIC));
+            }
+        };
 
         // Wrap the link
         let (link, ack) = link.unpack();
@@ -330,7 +315,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             link.start_rx(transport, other_lease);
         });
 
-        Ok((start_tx, start_rx, ack, Some(add_link_guard)))
+        Ok((start_tx, start_rx, ack, status_guard))
     }
 
     /*************************************/
@@ -340,8 +325,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         *zwrite!(self.callback) = Some(callback);
     }
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
-        zasynclock!(self.alive)
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
+        zasynclock!(self.status)
     }
 
     fn get_zid(&self) -> ZenohIdProto {
@@ -370,16 +355,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats> {
+    fn stats(&self) -> zenoh_stats::TransportStats {
         self.stats.clone()
-    }
-
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        zread!(self.links)
-            .iter()
-            .map(|l| (l.link.link(), l.stats.clone()))
-            .collect()
     }
 
     /*************************************/
@@ -429,7 +406,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.internal_schedule(msg)
     }
 

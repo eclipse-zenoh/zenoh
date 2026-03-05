@@ -1,3 +1,6 @@
+use zenoh_buffers::buffer::Buffer;
+
+use crate::zenoh::reply::ReplyBody;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -71,6 +74,18 @@ pub mod ext {
 }
 
 impl Response {
+    pub fn payload_size(&self) -> usize {
+        match &self.payload {
+            ResponseBody::Reply(r) => match &r.payload {
+                ReplyBody::Put(p) => {
+                    p.payload.len() + p.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
+                }
+                ReplyBody::Del(d) => d.ext_attachment.as_ref().map_or(0, |a| a.buffer.len()),
+            },
+            ResponseBody::Err(e) => e.payload.len(),
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {

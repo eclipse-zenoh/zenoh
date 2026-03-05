@@ -62,6 +62,7 @@ use crate::net::{
     routing::{
         dispatcher::{face::Face, interests::RemoteInterest},
         hat::TREES_COMPUTATION_DELAY_MS,
+        router::{LocalQueryables, LocalSubscribers},
     },
     runtime::Runtime,
 };
@@ -355,9 +356,11 @@ impl HatBaseTrait for HatCode {
             }
         }
 
+        let mut tokens = vec![];
         for (_id, mut res) in hat_face.remote_tokens.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
             undeclare_simple_token(&mut wtables, &mut face_clone, &mut res, send_declare);
+            tokens.push(res);
         }
 
         for mut res in subs_matches {
@@ -372,6 +375,9 @@ impl HatBaseTrait for HatCode {
                 .disable_query_routes();
             Resource::clean(&mut res);
         }
+        for mut res in tokens {
+            Resource::clean(&mut res);
+        }
         wtables.faces.remove(&face.id);
 
         if face.whatami != WhatAmI::Client {
@@ -381,9 +387,9 @@ impl HatBaseTrait for HatCode {
                 .unwrap()
                 .remove_link(&face.zid)
             {
-                pubsub_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                queries_remove_node(&mut wtables, &removed_node.zid, send_declare);
-                token_remove_node(&mut wtables, &removed_node.zid, send_declare);
+                pubsub_remove_node(&mut wtables, &removed_node, send_declare);
+                queries_remove_node(&mut wtables, &removed_node, send_declare);
+                token_remove_node(&mut wtables, &removed_node, send_declare);
             }
 
             hat_mut!(wtables).schedule_compute_trees(tables_ref.clone());
@@ -416,9 +422,9 @@ impl HatBaseTrait for HatCode {
                             let changes = net.link_states(list.link_states, zid);
 
                             for (_, removed_node) in changes.removed_nodes {
-                                pubsub_remove_node(tables, &removed_node.zid, send_declare);
-                                queries_remove_node(tables, &removed_node.zid, send_declare);
-                                token_remove_node(tables, &removed_node.zid, send_declare);
+                                pubsub_remove_node(tables, &removed_node, send_declare);
+                                queries_remove_node(tables, &removed_node, send_declare);
+                                token_remove_node(tables, &removed_node, send_declare);
                             }
 
                             hat_mut!(tables).schedule_compute_trees(tables_ref.clone());
@@ -532,11 +538,11 @@ struct HatFace {
     link_id: usize,
     next_id: AtomicU32, // @TODO: manage rollover and uniqueness
     remote_interests: HashMap<InterestId, RemoteInterest>,
-    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    local_subs: LocalSubscribers,
     remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_tokens: HashMap<Arc<Resource>, SubscriberId>,
     remote_tokens: HashMap<SubscriberId, Arc<Resource>>,
-    local_qabls: HashMap<Arc<Resource>, (QueryableId, QueryableInfoType)>,
+    local_qabls: LocalQueryables,
     remote_qabls: HashMap<QueryableId, (Arc<Resource>, QueryableInfoType)>,
 }
 
@@ -546,9 +552,9 @@ impl HatFace {
             link_id: 0,
             next_id: AtomicU32::new(0),
             remote_interests: HashMap::new(),
-            local_subs: HashMap::new(),
+            local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),
-            local_qabls: HashMap::new(),
+            local_qabls: LocalQueryables::new(),
             remote_qabls: HashMap::new(),
             local_tokens: HashMap::new(),
             remote_tokens: HashMap::new(),

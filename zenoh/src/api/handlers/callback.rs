@@ -45,14 +45,44 @@ impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
     }
 }
 
+#[cfg(feature = "unstable")]
+struct Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    drop: Option<F>,
+}
+#[cfg(feature = "unstable")]
+impl<F> Drop for Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    fn drop(&mut self) {
+        if let Some(d) = self.drop.take() {
+            (d)()
+        }
+    }
+}
+#[cfg(feature = "unstable")]
+trait DropperTrait {}
+#[cfg(feature = "unstable")]
+impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 /// Callback type used by zenoh entities.
 ///
 /// This type stores the callback function passed to zenoh entities.
-pub struct Callback<T: CallbackParameter>(Arc<dyn CallbackImpl<T>>);
+pub struct Callback<T: CallbackParameter> {
+    callable: Arc<dyn CallbackImpl<T>>,
+    #[cfg(feature = "unstable")]
+    drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
+}
 
 impl<T: CallbackParameter> Clone for Callback<T> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self {
+            callable: self.callable.clone(),
+            #[cfg(feature = "unstable")]
+            drop: self.drop.clone(),
+        }
     }
 }
 
@@ -66,17 +96,27 @@ impl<T: CallbackParameter> Callback<T> {
     /// Call the inner callback.
     #[inline]
     pub fn call(&self, arg: T) {
-        self.0.call(arg)
+        self.callable.call(arg)
     }
 
     pub(crate) fn call_with_message(&self, msg: T::Message<'_>) {
-        self.0.call_with_message(msg)
+        self.callable.call_with_message(msg)
+    }
+
+    #[zenoh_macros::pub_visibility_if_internal]
+    #[cfg(feature = "unstable")]
+    pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
+        self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
     }
 }
 
 impl<T: CallbackParameter, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
     fn from(value: F) -> Self {
-        Self(Arc::new(value))
+        Self {
+            callable: Arc::new(value),
+            #[cfg(feature = "unstable")]
+            drop: None,
+        }
     }
 }
 

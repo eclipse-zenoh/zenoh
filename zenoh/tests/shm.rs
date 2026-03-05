@@ -11,11 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(all(
-    feature = "unstable",
-    feature = "shared-memory",
-    feature = "internal_config"
-))]
+#![cfg(all(feature = "unstable", feature = "shared-memory",))]
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},

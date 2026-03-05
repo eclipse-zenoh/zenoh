@@ -243,7 +243,7 @@ const GIT_COMMIT: &str = git_version::git_version!(
         "--abbrev=40",
         "--exclude=*"
     ],
-    fallback = "unknown"
+    fallback = "release"
 );
 
 pub const GIT_VERSION: &str =
@@ -388,6 +388,20 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::internal]
+    pub use crate::api::session::WeakSession;
+    #[zenoh_macros::unstable]
+    pub use crate::api::{
+        builders::info_links::{
+            LinkEventsListener, LinkEventsListenerBuilder, LinkEventsListenerUndeclaration,
+            LinksBuilder,
+        },
+        builders::info_transport::{
+            TransportEventsListener, TransportEventsListenerBuilder,
+            TransportEventsListenerUndeclaration, TransportsBuilder,
+        },
+        info::{Link, LinkEvent, Transport, TransportEvent},
+    };
     pub use crate::api::{
         builders::{
             close::CloseBuilder,
@@ -635,6 +649,8 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
     pub use crate::api::{
         builders::{
             querier::{QuerierBuilder, QuerierGetBuilder},
@@ -642,12 +658,12 @@ pub mod query {
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
         querier::{Querier, QuerierUndeclaration},
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        query::{
+            ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError, ReplyKeyExpr,
+        },
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// # Matching primitives
@@ -916,9 +932,11 @@ pub mod scouting {
 /// # }
 /// ```
 pub mod liveliness {
-    pub use crate::api::liveliness::{
-        Liveliness, LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessToken,
-        LivelinessTokenBuilder, LivelinessTokenUndeclaration,
+    pub use crate::api::{
+        builders::liveliness::{
+            LivelinessGetBuilder, LivelinessSubscriberBuilder, LivelinessTokenBuilder,
+        },
+        liveliness::{Liveliness, LivelinessToken, LivelinessTokenUndeclaration},
     };
 }
 
@@ -1101,7 +1119,16 @@ pub mod shm {
             },
         },
     };
+
+    pub use crate::net::runtime::ShmProviderState;
 }
 
+/// Functionality for interrupting queries.
+#[zenoh_macros::unstable]
+pub mod cancellation {
+    pub use crate::api::cancellation::CancellationToken;
+    #[cfg(feature = "internal")]
+    pub use crate::api::cancellation::{SyncGroup, SyncGroupNotifier};
+}
 #[cfg(test)]
 mod tests;

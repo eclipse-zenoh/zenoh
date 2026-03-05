@@ -25,12 +25,12 @@ use crate::{
 #[derive(Clone)]
 pub(super) struct MulticastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
-    pub(super) shm_provider: Arc<LazyShmProvider>,
+    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(super) shm_config: MulticastTransportShmConfig,
 }
 
 impl MulticastTransportShmContext {
-    pub(super) fn new(shm_reader: ShmReader, shm_provider: Arc<LazyShmProvider>) -> Self {
+    pub(super) fn new(shm_reader: ShmReader, shm_provider: Option<Arc<LazyShmProvider>>) -> Self {
         Self {
             shm_reader,
             shm_provider,
@@ -42,14 +42,14 @@ impl MulticastTransportShmContext {
 #[derive(Clone)]
 pub(super) struct UnicastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
-    pub(super) shm_provider: Arc<LazyShmProvider>,
+    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(super) shm_config: TransportShmConfig,
 }
 
 impl UnicastTransportShmContext {
     pub(super) fn new(
         shm_reader: ShmReader,
-        shm_provider: Arc<LazyShmProvider>,
+        shm_provider: Option<Arc<LazyShmProvider>>,
         shm_config: TransportShmConfig,
     ) -> Self {
         Self {
@@ -61,8 +61,8 @@ impl UnicastTransportShmContext {
 }
 
 pub struct ShmContext {
-    pub(super) shm_provider: Arc<LazyShmProvider>,
     pub(crate) shm_reader: ShmReader,
+    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(super) auth: AuthUnicast,
 }
 
@@ -75,14 +75,14 @@ impl ShmContext {
             return Ok(None);
         }
 
-        let shm_provider = Arc::new(if *cfg.transport_optimization.enabled() {
-            LazyShmProvider::new(
+        let shm_provider = if *cfg.transport_optimization.enabled() {
+            Some(Arc::new(LazyShmProvider::new(
                 *cfg.transport_optimization.pool_size(),
                 *cfg.transport_optimization.message_size_threshold(),
-            )
+            )))
         } else {
-            LazyShmProvider::new_disabled()
-        });
+            None
+        };
 
         let shm_reader = external_reader
             .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
@@ -94,5 +94,9 @@ impl ShmContext {
             shm_reader,
             auth,
         }))
+    }
+
+    pub fn shm_provider(&self) -> &Option<Arc<LazyShmProvider>> {
+        &self.shm_provider
     }
 }

@@ -15,6 +15,10 @@ allow = [
   "Unicode-3.0",
   "Unicode-DFS-2016",
   "Zlib",
+  # the webpki-roots is under under CDLA-PERMISSIVE-2.0 since version 0.26.9
+  # which is not in the list at https://www.eclipse.org/legal/licenses/
+  # But it's transitive dependency which can't be avoided, so at least temporarily allowing it
+  "CDLA-Permissive-2.0",
 ]
 
 # This was copied from https://github.com/EmbarkStudios/cargo-deny/blob/main/deny.toml#L64

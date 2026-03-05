@@ -210,7 +210,7 @@ impl std::fmt::LowerExp for FullStats {
 impl Bench {
     fn run_once<F: FnOnce() -> O, O>(&mut self, f: F) {
         let start = std::time::Instant::now();
-        criterion::black_box(f());
+        std::hint::black_box(f());
         let t = start.elapsed();
         self.runs.push(t);
     }

@@ -25,8 +25,6 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
     TransportPeerEventHandler,
@@ -44,11 +42,17 @@ pub(crate) type AddLinkResult<'a> = Result<
         Box<dyn FnOnce() + Send + Sync + 'a>,
         Box<dyn FnOnce() + Send + Sync + 'a>,
         MaybeOpenAck,
-        Option<AsyncMutexGuard<'a, ()>>,
+        AsyncMutexGuard<'a, TransportStatus>,
     ),
     LinkError,
 >;
 pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
+
+pub(crate) enum TransportStatus {
+    Uninitialized,
+    Alive,
+    Closed,
+}
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -60,7 +64,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus>;
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
@@ -71,9 +75,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn is_qos(&self) -> bool;
     fn get_config(&self) -> &TransportConfigUnicast;
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats>;
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)>;
+    fn stats(&self) -> zenoh_stats::TransportStats;
 
     /*************************************/
     /*               LINK                */
@@ -88,7 +90,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()>;
+    /// Returns if the message has successfully been sent.
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool>;
 
     /*************************************/
     /*            TERMINATION            */

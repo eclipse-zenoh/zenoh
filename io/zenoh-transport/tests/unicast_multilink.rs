@@ -88,7 +88,7 @@ mod tests {
             .whatami(WhatAmI::Router)
             .zid(router_id)
             .unicast(unicast)
-            .build(router_handler.clone())
+            .build_test(router_handler.clone())
             .unwrap();
 
         /* [CLIENT] */
@@ -103,7 +103,7 @@ mod tests {
             .whatami(WhatAmI::Client)
             .zid(client01_id)
             .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
+            .build_test(Arc::new(SHClientOpenClose::new()))
             .unwrap();
 
         // Create the transport transport manager for the second client
@@ -114,7 +114,7 @@ mod tests {
             .whatami(WhatAmI::Client)
             .zid(client02_id)
             .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
+            .build_test(Arc::new(SHClientOpenClose::new()))
             .unwrap();
 
         // Create the transport transport manager for the third client spoofing the first
@@ -125,7 +125,7 @@ mod tests {
             .whatami(WhatAmI::Client)
             .zid(client01_id)
             .unicast(unicast)
-            .build(Arc::new(SHClientOpenClose::new()))
+            .build_test(Arc::new(SHClientOpenClose::new()))
             .unwrap();
 
         /* [1] */

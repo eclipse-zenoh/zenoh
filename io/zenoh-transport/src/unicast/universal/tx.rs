@@ -72,7 +72,47 @@ impl TransportUnicastUniversal {
         match_.full.or(match_.partial).or(match_.any)
     }
 
-    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<()> {
+    fn handle_push_result(
+        &self,
+        msg: NetworkMessageRef,
+        pushed: bool,
+        #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    ) {
+        if !pushed && !msg.is_droppable() {
+            tracing::error!(
+                "Unable to push non droppable network message to {}. Closing transport!",
+                self.config.zid
+            );
+            zenoh_runtime::ZRuntime::RX.spawn({
+                let transport = self.clone();
+                async move {
+                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
+                        tracing::error!(
+                            "Error closing transport with {}: {}",
+                            transport.config.zid,
+                            e
+                        );
+                    }
+                }
+            });
+        }
+        #[cfg(feature = "stats")]
+        if pushed {
+            stats.inc_network_message(zenoh_stats::Tx, msg);
+        } else {
+            stats.tx_observe_congestion(msg);
+        }
+    }
+
+    #[allow(unused_mut)] // When feature "shared-memory" is not enabled
+    #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
+    #[inline(always)]
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
+        #[cfg(feature = "shared-memory")]
+        if let Some(shm_context) = &self.shm_context {
+            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
+        }
+        let msg = msg.as_ref();
         let transport_links = self
             .links
             .read()
@@ -97,8 +137,8 @@ impl TransportUnicastUniversal {
             );
             // No Link found
             #[cfg(feature = "stats")]
-            self.stats.inc_tx_n_dropped(1);
-            return Ok(());
+            self.stats.tx_observe_no_link(msg);
+            return Ok(false);
         };
 
         let transport_link = transport_links
@@ -112,79 +152,54 @@ impl TransportUnicastUniversal {
             transport_link.link.link.get_dst(),
             self.get_zid()
         );
-        // Drop the guard before the push_zenoh_message since
-        // the link could be congested and this operation could
-        // block for fairly long time
-        drop(transport_links);
-        let droppable = msg.is_droppable();
-        let push = pipeline.push_network_message(msg)?;
-        if !push && !droppable {
-            tracing::error!(
-                "Unable to push non droppable network message to {}. Closing transport!",
-                self.config.zid
-            );
-            zenoh_runtime::ZRuntime::RX.spawn({
-                let transport = self.clone();
-                async move {
-                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
-                        tracing::error!(
-                            "Error closing transport with {}: {}",
-                            transport.config.zid,
-                            e
-                        );
-                    }
-                }
-            });
-        }
-        #[cfg(feature = "stats")]
-        if push {
-            #[cfg(feature = "shared-memory")]
-            if msg.is_shm() {
-                self.stats.tx_n_msgs.inc_shm(1);
-            } else {
-                self.stats.tx_n_msgs.inc_net(1);
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            self.stats.tx_n_msgs.inc_net(1);
-        } else {
-            self.stats.inc_tx_n_dropped(1);
-        }
-        Ok(())
-    }
 
-    #[allow(unused_mut)] // When feature "shared-memory" is not enabled
-    #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
-    #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
-        #[cfg(feature = "shared-memory")]
-        if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
-        }
+        #[cfg(feature = "stats")]
+        let stats = transport_link.stats.clone();
 
         #[cfg(feature = "unstable")]
         if msg.congestion_control() == CongestionControl::BlockFirst {
-            if self
-                .block_first_waiter
+            let priority = msg.priority();
+            if transport_link.block_first_waiters[priority as usize]
                 .wait_timeout(self.manager.config.wait_before_drop)
                 .is_err()
             {
                 #[cfg(feature = "stats")]
-                self.stats.inc_tx_n_dropped(1);
-                return Ok(());
+                stats.tx_observe_congestion(msg);
+                return Ok(false);
             };
             let transport = self.clone();
-            let msg = msg.to_owned();
+            let block_first_notifier =
+                transport_link.block_first_notifiers[priority as usize].clone();
+            let msg = NetworkMessageExt::to_owned(&msg);
             zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
-                let _ = transport.schedule_on_link(msg.as_ref());
-                let _ = transport.block_first_notifier.notify();
+                let msg = msg.as_ref();
+                if let Ok(pushed) = pipeline.push_network_message(msg) {
+                    transport.handle_push_result(
+                        msg,
+                        pushed,
+                        #[cfg(feature = "stats")]
+                        stats,
+                    );
+                }
+                let _ = block_first_notifier.notify();
             });
-            Ok(())
-        } else {
-            self.schedule_on_link(msg.as_ref())
+            // Message should be sent as it is blocking.
+            return Ok(true);
         }
 
-        #[cfg(not(feature = "unstable"))]
-        self.schedule_on_link(msg.as_ref())
+        // Drop the guard before the push_zenoh_message since
+        // the link could be congested and this operation could
+        // block for fairly long time
+        drop(transport_links);
+
+        let pushed = pipeline.push_network_message(msg)?;
+        self.handle_push_result(
+            msg,
+            pushed,
+            #[cfg(feature = "stats")]
+            stats,
+        );
+        Ok(pushed)
     }
 }
 

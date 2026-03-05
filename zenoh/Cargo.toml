@@ -58,7 +58,7 @@ shared-memory = [
   "zenoh-shm",
   "zenoh-transport/shared-memory",
 ]
-stats = ["zenoh-transport/stats"]
+stats = ["zenoh-stats", "zenoh-transport/stats"]
 tracing-instrument = [
   "zenoh-runtime/tracing-instrument",
   "zenoh-task/tracing-instrument",
@@ -76,10 +76,10 @@ transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
 transport_vsock = ["zenoh-transport/transport_vsock"]
 transport_ws = ["zenoh-transport/transport_ws"]
 unstable = [
-  "internal_config",
   "zenoh-config/unstable",
   "zenoh-keyexpr/unstable",
   "zenoh-protocol/unstable",
+  "zenoh-transport/unstable",
 ]
 
 [dependencies]
@@ -88,6 +88,7 @@ arc-swap = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 const_format = { workspace = true }
+flate2 = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
@@ -96,11 +97,9 @@ json5 = { workspace = true }
 lazy_static = { workspace = true }
 nonempty-collections = { workspace = true }
 once_cell = { workspace = true }
-paste = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
-ref-cast = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
@@ -123,6 +122,7 @@ zenoh-protocol = { workspace = true, features = ["std"] }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
+zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
@@ -130,6 +130,7 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+test-case = { workspace = true }
 tokio = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 
@@ -147,7 +148,7 @@ features = ["shared-memory", "unstable"]
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.6.2), zenoh-plugin-rest (=1.6.2), zenoh-plugin-storage-manager (=1.6.2)"
+depends = "zenohd (=1.7.2), zenoh-plugin-rest (=1.7.2), zenoh-plugin-storage-manager (=1.7.2)"
 license-file = ["../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 maintainer-scripts = ".deb"

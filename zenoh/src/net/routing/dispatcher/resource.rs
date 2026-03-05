@@ -274,6 +274,8 @@ pub(crate) struct ResourceContext {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeyCache,
 }
 
 impl ResourceContext {
@@ -283,6 +285,8 @@ impl ResourceContext {
             hat,
             data_routes: Default::default(),
             query_routes: Default::default(),
+            #[cfg(feature = "stats")]
+            stats_keys: Default::default(),
         }
     }
 
@@ -561,6 +565,7 @@ impl Resource {
     /// Suffix usually starts with '/', so this first slash is kept as part of the split chunk.
     /// The rest will contain the slash of the split.
     /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
+    #[inline(always)]
     fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
         if suffix.is_empty() {
             return None;
@@ -734,16 +739,6 @@ impl Resource {
                 visit(node, &mut nodes);
             }
         }
-        fn push_all(from: &Arc<Resource>, matches: &mut Vec<Weak<Resource>>) {
-            visit_nodes(from, |from, nodes| {
-                if from.context.is_some() {
-                    matches.push(Arc::downgrade(from));
-                }
-                for child in from.children.iter() {
-                    nodes.push_back(child);
-                }
-            });
-        }
         fn get_matches_from(
             key_expr: &keyexpr,
             from: &Arc<Resource>,
@@ -772,45 +767,48 @@ impl Resource {
                     },
                     None => (key_expr, None),
                 };
-                if ke_chunk.intersects(suffix) {
-                    match ke_rest {
-                        None => {
-                            if ke_chunk.as_bytes() == b"**" {
-                                push_all(from, matches)
-                            } else {
-                                if from.context.is_some() {
-                                    matches.push(Arc::downgrade(from));
-                                }
-                                if suffix.as_bytes() == b"**" {
-                                    for child in from.children.iter() {
-                                        nodes.push_back((key_expr, child));
-                                    }
-                                }
-                                if let Some(child) =
-                                    from.children.get("/**").or_else(|| from.children.get("**"))
-                                {
-                                    if child.context.is_some() {
-                                        matches.push(Arc::downgrade(child))
-                                    }
+                let ke_chunk_intersects_suffix = ke_chunk.intersects(suffix);
+                let ke_chunk_is_wild = ke_chunk.as_bytes() == b"**";
+                let suffix_is_wild = suffix.as_bytes() == b"**";
+                match ke_rest {
+                    None => {
+                        if ke_chunk_intersects_suffix {
+                            if from.context.is_some() {
+                                matches.push(Arc::downgrade(from));
+                            }
+                            if let Some(child) =
+                                from.children.get("/**").or_else(|| from.children.get("**"))
+                            {
+                                if child.context.is_some() {
+                                    matches.push(Arc::downgrade(child))
                                 }
                             }
                         }
-                        Some(rest) if rest.as_bytes() == b"**" => push_all(from, matches),
-                        Some(rest) => {
-                            let recheck_keyexpr_one_level_lower =
-                                ke_chunk.as_bytes() == b"**" || suffix.as_bytes() == b"**";
+                        if (ke_chunk_is_wild && ke_chunk_intersects_suffix) || suffix_is_wild {
                             for child in from.children.iter() {
-                                nodes.push_back((rest, child));
-                                if recheck_keyexpr_one_level_lower {
-                                    nodes.push_back((key_expr, child));
-                                }
-                            }
-                            if recheck_keyexpr_one_level_lower {
-                                nodes.push_back((rest, from));
+                                nodes.push_back((key_expr, child));
                             }
                         }
-                    };
-                }
+                    }
+                    Some(rest) => {
+                        if ke_chunk_intersects_suffix
+                            && rest.as_bytes() == b"**"
+                            && from.context.is_some()
+                        {
+                            matches.push(Arc::downgrade(from));
+                        }
+                        for child in from.children.iter() {
+                            if (ke_chunk_is_wild && ke_chunk_intersects_suffix) || suffix_is_wild {
+                                nodes.push_back((key_expr, child));
+                            } else if ke_chunk_intersects_suffix {
+                                nodes.push_back((rest, child));
+                            }
+                        }
+                        if (suffix_is_wild && ke_chunk_intersects_suffix) || ke_chunk_is_wild {
+                            nodes.push_back((rest, from));
+                        }
+                    }
+                };
             })
         }
         let mut matches = Vec::new();
@@ -935,9 +933,17 @@ pub(crate) fn register_expr(
 }
 
 pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
-    let wtables = zwrite!(tables.tables);
+    let mut wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
-        Some(mut res) => Resource::clean(&mut res),
+        Some(mut res) => {
+            if let Some(ctx) = get_mut_unchecked(&mut res).session_ctxs.get_mut(&face.id) {
+                get_mut_unchecked(ctx).remote_expr_id = None;
+            }
+            disable_matches_data_routes(&mut wtables, &mut res);
+            disable_matches_query_routes(&mut wtables, &mut res);
+            face.update_interceptors_caches(&mut res);
+            Resource::clean(&mut res);
+        }
         None => tracing::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);

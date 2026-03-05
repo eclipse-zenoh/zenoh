@@ -23,6 +23,8 @@ use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
 use crate::api::{
     handlers::Callback,
     key_expr::KeyExpr,
@@ -73,7 +75,20 @@ pub(crate) struct SubscriberInner {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
+pub struct SubscriberUndeclaration<Handler> {
+    subscriber: Subscriber<Handler>,
+    #[cfg(feature = "unstable")]
+    wait_callbacks: bool,
+}
+
+impl<Handler> SubscriberUndeclaration<Handler> {
+    /// Block in undeclare operation until all currently running instances of subscriber callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
     type To = ZResult<()>;
@@ -81,7 +96,12 @@ impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
 
 impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.subscriber.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_callbacks {
+            self.subscriber.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -137,6 +157,8 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 pub struct Subscriber<Handler> {
     pub(crate) inner: SubscriberInner,
     pub(crate) handler: Handler,
+    #[cfg(feature = "unstable")]
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl<Handler> Subscriber<Handler> {
@@ -212,7 +234,8 @@ impl<Handler> Subscriber<Handler> {
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
-            .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
+            .undeclare_subscriber_inner(self.inner.id, self.inner.kind)?;
+        Ok(())
     }
 
     #[zenoh_macros::internal]
@@ -221,8 +244,8 @@ impl<Handler> Subscriber<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        self.inner.session.session()
+    pub fn session(&self) -> &WeakSession {
+        &self.inner.session
     }
 }
 
@@ -240,7 +263,11 @@ impl<Handler: Send> UndeclarableSealed<()> for Subscriber<Handler> {
     type Undeclaration = SubscriberUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        SubscriberUndeclaration(self)
+        SubscriberUndeclaration {
+            subscriber: self,
+            #[cfg(feature = "unstable")]
+            wait_callbacks: false,
+        }
     }
 }
 

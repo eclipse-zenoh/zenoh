@@ -177,7 +177,7 @@ mod tests {
             .zid(router_id)
             .whatami(WhatAmI::Router)
             .unicast(unicast)
-            .build(router_handler.clone())
+            .build_test(router_handler.clone())
             .unwrap();
 
         // Create the listener on the router
@@ -197,7 +197,7 @@ mod tests {
             .whatami(WhatAmI::Client)
             .zid(client_id)
             .unicast(unicast)
-            .build(Arc::new(SHClient))
+            .build_test(Arc::new(SHClient))
             .unwrap();
 
         // Create an empty transport with the client
@@ -324,19 +324,6 @@ mod tests {
             msg_size,
         )
         .await;
-
-        #[cfg(feature = "stats")]
-        {
-            let c_stats = client_transport.get_stats().unwrap().report();
-            println!("\tClient: {c_stats:?}");
-            let r_stats =
-                ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
-                    .unwrap()
-                    .get_stats()
-                    .map(|s| s.report())
-                    .unwrap();
-            println!("\tRouter: {r_stats:?}");
-        }
 
         close_transport(
             router_manager,

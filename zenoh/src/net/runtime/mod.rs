@@ -20,6 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 
+#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -40,7 +41,7 @@ use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
 use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
-use zenoh_link::{EndPoint, Link};
+use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
@@ -48,7 +49,11 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::api::client_storage::ShmClientStorage;
+use zenoh_shm::api::{
+    client_storage::ShmClientStorage,
+    protocol_implementations::posix::posix_shm_provider_backend::PosixShmProviderBackend,
+    provider::shm_provider::ShmProvider,
+};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::ShmReader;
 use zenoh_sync::get_mut_unchecked;
@@ -77,9 +82,31 @@ use crate::{
     api::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
+        info::{Link, Transport},
     },
-    GIT_VERSION, LONG_VERSION,
+    GIT_VERSION,
 };
+
+/// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+pub enum ShmProviderState {
+    Disabled,
+    Initializing,
+    Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
+    Error,
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl ShmProviderState {
+    pub fn into_option(self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+        match self {
+            ShmProviderState::Ready(provider) => Some(provider),
+            _ => None,
+        }
+    }
+}
 
 pub(crate) struct RuntimeState {
     zid: ZenohId,
@@ -97,6 +124,8 @@ pub(crate) struct RuntimeState {
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
     namespace: Option<OwnedNonWildKeyExpr>,
+    #[cfg(feature = "stats")]
+    stats: zenoh_stats::StatsRegistry,
 }
 
 #[allow(private_interfaces)]
@@ -111,8 +140,18 @@ pub trait IRuntime: Send + Sync {
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    fn get_shm_provider(&self) -> ShmProviderState;
+
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
+
+    fn get_transports_blocking(&self) -> Vec<Transport>;
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     fn new_primitives(
         &self,
@@ -197,20 +236,47 @@ impl IRuntime for RuntimeState {
         zwrite!(self.transport_handlers).push(handler);
     }
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
-        zenoh_runtime::ZRuntime::Net
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
+        let unicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_unicast())
             .into_iter()
             .filter_map(|t| t.get_peer().ok())
-            .collect::<Vec<_>>()
-    }
+            .map(|ref peer| Transport::new(peer, false));
 
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
-        zenoh_runtime::ZRuntime::Net
+        let multicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_multicast())
             .into_iter()
-            .filter_map(|t| t.get_peers().ok())
-            .collect::<Vec<_>>()
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .map(|ref peer| Transport::new(peer, true));
+
+        Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_transports_blocking(&self) -> Vec<Transport> {
+        self.manager
+            .get_transports_unicast_blocking()
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .map(|peer| Transport::new(&peer, false))
+            .chain(
+                self.manager
+                    .get_transports_multicast_blocking()
+                    .into_iter()
+                    .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+                    .map(|peer| Transport::new(&peer, true)),
+            )
+            .collect()
+    }
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        match transport {
+            None => self.get_links_all(),
+            Some(t) if t.is_multicast => self.get_links_transport_multicast(&t.zid),
+            Some(t) => self.get_links_transport_unicast(&t.zid),
+        }
     }
 
     fn matching_status_remote(
@@ -284,6 +350,24 @@ impl IRuntime for RuntimeState {
     fn get_config(&self) -> GenericConfig {
         GenericConfig::new(Arc::new(self.config.clone()))
     }
+
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    fn get_shm_provider(&self) -> ShmProviderState {
+        use zenoh_transport::shm::ProviderInitState;
+
+        match &self.manager.get_shm_context() {
+            Some(ctx) => match ctx.shm_provider() {
+                Some(provider) => match provider.try_get_provider() {
+                    ProviderInitState::Initializing => ShmProviderState::Initializing,
+                    ProviderInitState::Ready(provider) => ShmProviderState::Ready(provider),
+                    ProviderInitState::Error => ShmProviderState::Error,
+                },
+                None => ShmProviderState::Disabled,
+            },
+            None => ShmProviderState::Disabled,
+        }
+    }
 }
 
 impl RuntimeState {
@@ -300,7 +384,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -311,7 +395,10 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -342,6 +429,89 @@ impl RuntimeState {
 
     async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.pending_connections.lock().await.remove(zid)
+    }
+
+    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .filter_map(|t| t.get_peers().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
+            let zid: ZenohId = peer.zid.into();
+            let is_qos = peer.is_qos;
+            peer.links
+                .into_iter()
+                .map(|ref link| Link::new(zid, link, is_qos))
+                .collect()
+        };
+
+        let unicast_links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .flat_map(peer_to_links);
+
+        let multicast_links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .flat_map(peer_to_links);
+
+        Box::new(unicast_links.chain(multicast_links))
+    }
+
+    fn get_links_transport_unicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
+    }
+
+    fn get_links_transport_multicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
     }
 }
 
@@ -400,10 +570,21 @@ impl RuntimeBuilder {
         tracing::info!("Using ZID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
+
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
+
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config)?);
+        let router = Arc::new(Router::new(
+            zid,
+            whatami,
+            hlc.clone(),
+            &config,
+            #[cfg(feature = "stats")]
+            stats.clone(),
+        )?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -419,7 +600,11 @@ impl RuntimeBuilder {
         let transport_manager_builder =
             transport_manager_builder.shm_reader(shm_clients.map(ShmReader::new));
 
-        let transport_manager = transport_manager_builder.build(handler.clone())?;
+        let transport_manager = transport_manager_builder.build(
+            handler.clone(),
+            #[cfg(feature = "stats")]
+            stats.clone(),
+        )?;
 
         // Plugins manager
         #[cfg(feature = "plugins")]
@@ -452,6 +637,8 @@ impl RuntimeBuilder {
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
                 namespace,
+                #[cfg(feature = "stats")]
+                stats,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
@@ -459,7 +646,7 @@ impl RuntimeBuilder {
 
         // Admin space
         if start_admin_space {
-            AdminSpace::start(&runtime, LONG_VERSION.clone()).await;
+            AdminSpace::start(&runtime).await;
         }
 
         // Start plugins
@@ -540,7 +727,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -550,7 +737,10 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn_abortable<F, T>(
+        &self,
+        future: F,
+    ) -> JoinHandle<Result<T, zenoh_task::TaskCancelledError>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -589,6 +779,13 @@ impl Runtime {
         self.state.get_cancellation_token()
     }
 
+    #[cfg(feature = "shared-memory")]
+    #[zenoh_macros::unstable]
+    #[allow(dead_code)]
+    pub fn get_shm_provider(&self) -> ShmProviderState {
+        self.state.get_shm_provider()
+    }
+
     pub(crate) fn start_conditions(&self) -> &Arc<StartConditions> {
         self.state.start_conditions()
     }
@@ -599,6 +796,11 @@ impl Runtime {
 
     pub(crate) async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.state.remove_pending_connection(zid).await
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
+        &self.state.stats
     }
 }
 
@@ -680,14 +882,14 @@ impl TransportPeerEventHandler for RuntimeSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -752,14 +954,14 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -780,7 +982,8 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
-    async fn close_inner(&self) {
+    type CloseArgs = ();
+    async fn close_inner(&self, _: ()) {
         tracing::trace!("Runtime::close())");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn

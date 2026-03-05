@@ -34,7 +34,7 @@ use zenoh::{
     liveliness::LivelinessToken,
     pubsub::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
-        PublisherBuilder,
+        PublisherBuilder, PublisherUndeclaration,
     },
     qos::{CongestionControl, Priority, Reliability},
     sample::{Locality, SourceInfo},
@@ -203,8 +203,8 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// A key expression added to the liveliness token key expression
-    /// and to the cache queryable key expression.
+    /// A key expression added to the liveliness token key expression and to the cache queryable key expression.
+    ///
     /// It can be used to convey meta data.
     #[zenoh_macros::unstable]
     pub fn publisher_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
@@ -532,10 +532,10 @@ impl<'a> AdvancedPublisher<'a> {
     {
         let mut builder = self.publisher.put(payload);
         if let Some(seqnum) = &self.seqnum {
-            let info = SourceInfo::new(
-                Some(self.publisher.id()),
-                Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            );
+            let info = Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            ));
             tracing::trace!(
                 "AdvancedPublisher{{key_expr: {}}}: Put data with {:?}",
                 self.publisher.key_expr(),
@@ -571,10 +571,10 @@ impl<'a> AdvancedPublisher<'a> {
     pub fn delete(&self) -> AdvancedPublisherDeleteBuilder<'_> {
         let mut builder = self.publisher.delete();
         if let Some(seqnum) = &self.seqnum {
-            builder = builder.source_info(SourceInfo::new(
-                Some(self.publisher.id()),
-                Some(seqnum.fetch_add(1, Ordering::Relaxed)),
-            ));
+            builder = builder.source_info(Some(SourceInfo::new(
+                self.publisher.id(),
+                seqnum.fetch_add(1, Ordering::Relaxed),
+            )));
         }
         if let Some(hlc) = self.publisher.session().hlc() {
             builder = builder.timestamp(hlc.new_timestamp());
@@ -660,7 +660,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> PublisherUndeclaration<'a> {
         tracing::debug!(
             "AdvancedPublisher{{key_expr: {}}}: Undeclare",
             self.key_expr()
@@ -699,7 +699,7 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 #[zenoh_macros::unstable]
 impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             builder: self.builder.source_info(source_info),
             ..self

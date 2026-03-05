@@ -30,13 +30,16 @@ use super::{
 use crate::{
     key_expr::KeyExpr,
     net::routing::{
-        dispatcher::tables::RoutingExpr,
+        dispatcher::{
+            local_resources::{LocalResourceInfoTrait, LocalResources},
+            tables::RoutingExpr,
+        },
         hat::{HatTrait, SendDeclare},
         router::get_or_set_route,
     },
 };
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub(crate) struct SubscriberInfo;
 
 #[allow(clippy::too_many_arguments)]
@@ -246,45 +249,12 @@ pub(crate) fn get_matching_subscriptions(
     hat_code.get_matching_subscriptions(tables, key_expr)
 }
 
-#[cfg(feature = "stats")]
-macro_rules! inc_stats {
-    (
-        $face:expr,
-        $txrx:ident,
-        $space:ident,
-        $body:expr
-    ) => {
-        paste::paste! {
-            if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::buffer::Buffer;
-                match &$body {
-                    PushBody::Put(p) => {
-                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        let mut n =  p.payload.len();
-                        if let Some(a) = p.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
-                    }
-                    PushBody::Del(d) => {
-                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
-                        let mut n = 0;
-                        if let Some(a) = d.ext_attachment.as_ref() {
-                           n += a.buffer.len();
-                        }
-                        stats.[<$txrx _z_del_pl_bytes>].[<inc_ $space>](n);
-                    }
-                }
-            }
-        }
-    };
-}
-
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
+    consume: bool,
 ) {
     let tables = zread!(tables_ref.tables);
     match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
@@ -298,13 +268,9 @@ pub fn route_data(
             let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
             #[cfg(feature = "stats")]
-            let admin = expr.key_expr().is_some_and(|ke| ke.starts_with("@/"));
+            let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &tables);
             #[cfg(feature = "stats")]
-            if !admin {
-                inc_stats!(face, rx, user, msg.payload);
-            } else {
-                inc_stats!(face, rx, admin, msg.payload);
-            }
+            payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
             if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
                 let route = get_data_route(
@@ -325,17 +291,18 @@ pub fn route_data(
                             .egress_filter(&tables, face, outface, &expr)
                         {
                             drop(tables);
-                            #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_stats!(outface, tx, user, msg.payload);
-                            } else {
-                                inc_stats!(outface, tx, admin, msg.payload);
+                            let mut msg_clone;
+                            let mut msg = &mut *msg;
+                            if !consume {
+                                msg_clone = msg.clone();
+                                msg = &mut msg_clone;
                             }
                             msg.wire_expr = key_expr.into();
                             msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            outface.primitives.send_push(msg, reliability);
-                            // Reset the wire_expr to indicate the message has been consumed
-                            msg.wire_expr = WireExpr::empty();
+                            if outface.primitives.send_push(msg, reliability) {
+                                #[cfg(feature = "stats")]
+                                payload_observer.observe_payload(zenoh_stats::Tx, outface, msg);
+                            }
                         }
                     } else {
                         let route = route
@@ -350,23 +317,17 @@ pub fn route_data(
 
                         drop(tables);
                         for (outface, key_expr, context) in route {
-                            #[cfg(feature = "stats")]
-                            if !admin {
-                                inc_stats!(outface, tx, user, msg.payload)
-                            } else {
-                                inc_stats!(outface, tx, admin, msg.payload)
+                            let msg = &mut Push {
+                                wire_expr: key_expr,
+                                ext_qos: msg.ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: context },
+                                payload: msg.payload.clone(),
+                            };
+                            if outface.primitives.send_push(msg, reliability) {
+                                #[cfg(feature = "stats")]
+                                payload_observer.observe_payload(zenoh_stats::Tx, &outface, msg);
                             }
-
-                            outface.primitives.send_push(
-                                &mut Push {
-                                    wire_expr: key_expr,
-                                    ext_qos: msg.ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: context },
-                                    payload: msg.payload.clone(),
-                                },
-                                reliability,
-                            )
                         }
                     }
                 }
@@ -381,3 +342,23 @@ pub fn route_data(
         }
     }
 }
+
+impl LocalResourceInfoTrait<Arc<Resource>> for SubscriberInfo {
+    fn aggregate(
+        _self_val: Option<Self>,
+        _self_res: &Arc<Resource>,
+        other_val: &Self,
+        _other_res: &Arc<Resource>,
+    ) -> Self {
+        *other_val
+    }
+
+    fn aggregate_many<'a>(
+        _self_res: &Arc<Resource>,
+        mut iter: impl Iterator<Item = (&'a Arc<Resource>, Self)>,
+    ) -> Option<Self> {
+        iter.next().map(|(_, val)| val)
+    }
+}
+
+pub(crate) type LocalSubscribers = LocalResources<SubscriberId, Arc<Resource>, SubscriberInfo>;

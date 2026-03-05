@@ -98,6 +98,7 @@ impl LinkUnicastTls {
         }
 
         // Set the TLS linger option
+        #[allow(deprecated)]
         if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
             (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
         ))) {
@@ -572,11 +573,10 @@ fn get_client_cert_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAut
             .subject
             .iter_common_name()
             .next()
-            .and_then(|cn| cn.as_str().ok())
-            .unwrap();
+            .and_then(|cn| cn.as_str().ok());
 
         Ok(TlsAuthId {
-            auth_value: Some(subject_name.to_string()),
+            auth_value: subject_name.map(|cn| cn.to_string()),
         })
     } else {
         Ok(TlsAuthId { auth_value: None })
@@ -594,11 +594,10 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
             .subject
             .iter_common_name()
             .next()
-            .and_then(|cn| cn.as_str().ok())
-            .unwrap();
+            .and_then(|cn| cn.as_str().ok());
 
         auth_id = TlsAuthId {
-            auth_value: Some(subject_name.to_string()),
+            auth_value: subject_name.map(|cn| cn.to_string()),
         };
         return Ok(auth_id);
     }
