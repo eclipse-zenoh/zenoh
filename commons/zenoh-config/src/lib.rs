@@ -493,6 +493,9 @@ validated_struct::validator! {
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
+            /// Interval in millisecond to check if the listening endpoints changed (e.g. when listening on 0.0.0.0).
+            /// Also update the multicast scouting listening interfaces. Use -1 to disable.
+            pub endpoint_poll_interval_ms: Option<i64>,
         },
         /// Configure the session open behavior.
         pub open: #[derive(Default)]

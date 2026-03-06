@@ -115,6 +115,12 @@ impl Gossip {
             }
         }
     }
+    pub(crate) fn update_locators(&mut self) {
+        match self {
+            Self::Gossip(n) => n.update_locators(),
+            Self::Network(n) => n.update_locators(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -611,5 +617,20 @@ impl GossipNet {
             );
         }
         vec![]
+    }
+
+    pub(super) fn update_locators(&mut self) {
+        self.graph[self.idx].sn += 1;
+        self.send_on_links(
+            vec![(
+                self.idx,
+                Details {
+                    zid: false,
+                    locators: true,
+                    links: self.router_peers_failover_brokering,
+                },
+            )],
+            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+        );
     }
 }
