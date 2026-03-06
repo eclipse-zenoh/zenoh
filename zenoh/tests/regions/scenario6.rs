@@ -13,7 +13,7 @@
 //
 
 // Scenario 6
-//          R       
+//          R
 // P P P  P P P  P P P
 
 use std::time::Duration;
@@ -50,11 +50,13 @@ async fn test_regions_scenario6_order1_putsub() {
 
     let z9100 = ztimeout!(Node::new(Router, "61aa9100")
         .listen("tcp/0.0.0.0:0")
-        .gateway("{south:[
+        .gateway(
+            "{south:[
             {filters:[{region_names:[\"region1\"]}]},
             {filters:[{region_names:[\"region2\"]}]},
             {filters:[{region_names:[\"region3\"]}]}
-        ]}")
+        ]}"
+        )
         .open());
 
     let z9110 = ztimeout!(Node::new(Peer, "61aa9110")
@@ -162,11 +164,13 @@ async fn test_regions_scenario6_order1_pubsub() {
 
     let z9100 = ztimeout!(Node::new(Router, "61ab9100")
         .listen("tcp/0.0.0.0:0")
-        .gateway("{south:[
+        .gateway(
+            "{south:[
             {filters:[{region_names:[\"region1\"]}]},
             {filters:[{region_names:[\"region2\"]}]},
             {filters:[{region_names:[\"region3\"]}]}
-        ]}")
+        ]}"
+        )
         .open());
 
     let z9110 = ztimeout!(Node::new(Peer, "61ab9110")
@@ -284,11 +288,13 @@ async fn test_regions_scenario6_order1_getque() {
 
     let z9100 = ztimeout!(Node::new(Router, "61ac9100")
         .listen("tcp/0.0.0.0:0")
-        .gateway("{south:[
+        .gateway(
+            "{south:[
             {filters:[{region_names:[\"region1\"]}]},
             {filters:[{region_names:[\"region2\"]}]},
             {filters:[{region_names:[\"region3\"]}]}
-        ]}")
+        ]}"
+        )
         .open());
 
     let z9110 = ztimeout!(Node::new(Peer, "61ac9110")
@@ -390,11 +396,13 @@ async fn test_regions_scenario6_order1_queque() {
 
     let z9100 = ztimeout!(Node::new(Router, "61ad9100")
         .listen("tcp/0.0.0.0:0")
-        .gateway("{south:[
+        .gateway(
+            "{south:[
             {filters:[{region_names:[\"region1\"]}]},
             {filters:[{region_names:[\"region2\"]}]},
             {filters:[{region_names:[\"region3\"]}]}
-        ]}")
+        ]}"
+        )
         .open());
 
     let z9110 = ztimeout!(Node::new(Peer, "61ad9110")
@@ -506,11 +514,13 @@ async fn test_regions_scenario6_order1_toksub() {
 
     let z9100 = ztimeout!(Node::new(Router, "61ae9100")
         .listen("tcp/0.0.0.0:0")
-        .gateway("{south:[
+        .gateway(
+            "{south:[
             {filters:[{region_names:[\"region1\"]}]},
             {filters:[{region_names:[\"region2\"]}]},
             {filters:[{region_names:[\"region3\"]}]}
-        ]}")
+        ]}"
+        )
         .open());
 
     let z9110 = ztimeout!(Node::new(Peer, "61ae9110")
