@@ -20,7 +20,10 @@ use std::{
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_protocol::{
-    core::key_expr::include::{Includer, DEFAULT_INCLUDER},
+    core::{
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
+        Region,
+    },
     network::declare::{
         self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare, DeclareBody,
         DeclareQueryable, QueryableId, UndeclareQueryable,
@@ -237,11 +240,24 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    /// Computes routing destination for `Request` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `expr`
+    ///
+    /// ## This hat's state
+    /// + `owned_faces`
+    /// + `mres.face_ctx.qabl` for all `mres` in `matches(res)` and all owned faces in `mres`.
+    /// + `mres.face_ctx.queryable_interest_finalized` for all `mres` in `matches(res)` and all owned faces in `mres`.
+    /// + `face.initial_interest_finalized` for all owned faces in `mres`.
+    #[tracing::instrument(level = "debug", skip(tables, src_region, _node_id), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -265,16 +281,16 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
-                if !self.owns(src_face) {
+                if self.region() != *src_region {
                     if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
                         route.push(qabl);
                     }
                 }
             }
         }
 
-        if src_face.region.bound().is_south() {
+        if self.region.bound().is_north() && src_region.bound().is_south() {
             // TODO: BestMatching: What if there is a local compete ?
             if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
                 let has_interest_finalized = expr
@@ -282,7 +298,7 @@ impl HatQueriesTrait for Hat {
                     .and_then(|res| res.face_ctxs.get(&face.id))
                     .is_some_and(|ctx| ctx.queryable_interest_finalized);
                 if !has_interest_finalized {
-                    tracing::trace!(dst = %face, reason = "unfinalized queryable interest");
+                    tracing::trace!(dst = %face, dst.has_unfinalized_queryable_interest = true);
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         dir: Direction {
@@ -299,7 +315,7 @@ impl HatQueriesTrait for Hat {
             for face in self.owned_faces(tables).filter(|f| {
                 f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
             }) {
-                tracing::trace!(dst = %face, reason = "unfinalized initial interest");
+                tracing::trace!(dst = %face, dst.has_unfinalized_initial_interest = true);
                 let wire_expr = expr.get_best_key(face.id);
                 route.push(QueryTargetQabl {
                     dir: Direction {

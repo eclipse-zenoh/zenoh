@@ -121,7 +121,7 @@ impl HatInterestTrait for Hat {
             f.remote_bound.is_north()
                 && f.whatami.is_peer()
                 && msg.options.tokens()
-                && msg.mode == InterestMode::Current
+                && msg.mode == InterestMode::Current // TODO(regions): why not `CurrentFuture` as well?
                 && !initial_interest(f).is_none_or(|i| i.finalized)
         });
 
@@ -129,6 +129,7 @@ impl HatInterestTrait for Hat {
         // don't register inbound/outbound token propagation. For this reason, we pick at most one
         // destination for `Current` interests; otherwise we would wind up with duplicate tokens.
         let dsts = if msg.mode == InterestMode::Current {
+            // FIXME(regions): when initial_interest_peers is non-empty, we may get duplicates tokens.
             initial_interest_peers
                 .chain(
                     self.owned_faces(ctx.tables)

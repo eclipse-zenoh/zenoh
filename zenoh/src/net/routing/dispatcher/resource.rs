@@ -24,7 +24,7 @@ use std::{
 
 use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Bound, ExprId, Region, WireExpr},
+    core::{key_expr::keyexpr, ExprId, Region, WireExpr},
     network::{
         self,
         declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
@@ -42,11 +42,9 @@ use super::{
 use crate::net::routing::{
     dispatcher::{
         face::{Face, FaceId},
-        queries::disable_matches_query_routes,
-        region::{BoundMap, RegionMap},
+        region::RegionMap,
         tables::{RoutingExpr, Tables},
     },
-    gateway::disable_matches_data_routes,
     interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
@@ -218,9 +216,23 @@ impl FaceContext {
 /// Use 64bit to not care about rollover.
 pub type RoutesVersion = u64;
 
+/// Per-hat data/query routes.
+///
+/// 1. Routes depend on the source region of a message.
+///
+///   + For instance, a north peer hat N may route a message in its region only if said message
+///     arrives from a south-bound face, otherwise N would not route messages within its region.
+///     Thus routes depend on the source bound of a message.
+///
+///   + Given two south peer sub-regions, say S1 and S2, S1 may route a message to peers in its
+///     region only said the message originates in S2 and vice-versa. Thus routes not only depend
+///     on the source bound of a message but on its source region more generally.
+///
+/// 2. Routes depend on the source node id for router hats. In a `R1 - R - R2` topology, R would
+///    route a message to R1 only if it originates in R2 and vice-versa.
 pub(crate) struct Routes<T> {
-    /// Mapping from **source** [`zenoh_transport::Bound`] and [`NodeId`] to data/query routes.
-    mapping: BoundMap<NodeIdMap<T>>,
+    /// Mapping from **source** [`Region`] and [`NodeId`] to data/query routes.
+    mapping: RegionMap<NodeIdMap<T>>,
     version: u64,
 }
 
@@ -229,7 +241,7 @@ pub(crate) type NodeIdMap<T> = Vec<Option<T>>;
 impl<T> Default for Routes<T> {
     fn default() -> Self {
         Self {
-            mapping: BoundMap::default(),
+            mapping: RegionMap::default(),
             version: 0,
         }
     }
@@ -244,7 +256,7 @@ impl<T> Routes<T> {
     pub(crate) fn get_route(
         &self,
         version: RoutesVersion,
-        bound: &Bound,
+        region: &Region,
         node_id: NodeId,
     ) -> Option<&T> {
         if version != self.version {
@@ -252,7 +264,7 @@ impl<T> Routes<T> {
         }
 
         self.mapping
-            .get(bound)
+            .get(region)
             .and_then(|rs| rs.get(node_id as usize))
             .and_then(|r| r.as_ref())
     }
@@ -261,7 +273,7 @@ impl<T> Routes<T> {
     pub(crate) fn set_route(
         &mut self,
         version: RoutesVersion,
-        bound: &Bound,
+        region: &Region,
         node_id: NodeId,
         route: T,
     ) {
@@ -275,12 +287,12 @@ impl<T> Routes<T> {
             routes[node_id as usize] = Some(route);
         };
 
-        if let Some(routes) = self.mapping.get_mut(bound) {
+        if let Some(routes) = self.mapping.get_mut(region) {
             aux(routes);
         } else {
             let mut routes = NodeIdMap::default();
             aux(&mut routes);
-            self.mapping.insert(bound, routes);
+            self.mapping.insert(*region, routes);
         }
     }
 }
@@ -288,19 +300,21 @@ impl<T> Routes<T> {
 pub(crate) fn get_or_set_route<T: Clone>(
     routes: &RwLock<Routes<T>>,
     version: RoutesVersion,
-    bound: &Bound,
+    region: &Region,
     node_id: NodeId,
     compute_route: impl FnOnce() -> T,
 ) -> T {
-    if let Some(route) = routes.read().unwrap().get_route(version, bound, node_id) {
+    if let Some(route) = routes.read().unwrap().get_route(version, region, node_id) {
         return route.clone();
     }
     let mut routes = routes.write().unwrap();
-    if let Some(route) = routes.get_route(version, bound, node_id) {
+    // NOTE(regions): we supposedly re-read the routes here because they might've changed, but I'm
+    // not sure this is true given that all callers would've acquired `TablesLock::tables`.
+    if let Some(route) = routes.get_route(version, region, node_id) {
         return route.clone();
     }
     let route = compute_route();
-    routes.set_route(version, bound, node_id, route.clone());
+    routes.set_route(version, region, node_id, route.clone());
     route
 }
 
@@ -329,7 +343,7 @@ impl ResourceContext {
 }
 
 pub(crate) struct HatResourceContext {
-    /// Downcasts to `HatContext`.
+    /// Map from `Region` to `HatContext`.
     pub(crate) ctx: Box<dyn Any + Send + Sync>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     pub(crate) query_routes: RwLock<QueryRoutes>,
@@ -565,7 +579,7 @@ impl Resource {
         result
     }
 
-    #[tracing::instrument(level = "trace", skip(tables))]
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
     pub fn make_resource(
         tables: &mut Tables,
         from: &mut Arc<Resource>,
@@ -877,7 +891,7 @@ impl Resource {
     }
 
     pub fn match_resource(
-        _tables: &TablesData, // FIXME: is there a better way to ensure that a lock is held?
+        _tables: &TablesData,
         res: &mut Arc<Resource>,
         matches: Vec<Weak<Resource>>,
     ) {
@@ -922,6 +936,7 @@ impl Resource {
     }
 }
 
+// TODO(regions): move under `Face`
 pub(crate) fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -981,10 +996,13 @@ pub(crate) fn register_expr(
                     .remote_mappings
                     .insert(expr_id, res.clone());
 
-                let tables = &mut wtables.data;
+                let tables = &mut *wtables;
+                let hats = &mut tables.hats;
+                let tables = &mut tables.data;
+                let region = face.region;
 
-                disable_matches_data_routes(tables, &mut res);
-                disable_matches_query_routes(tables, &mut res);
+                hats[region].disable_data_routes(tables, &mut res);
+                hats[region].disable_query_routes(tables, &mut res);
 
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
@@ -1000,15 +1018,19 @@ pub(crate) fn register_expr(
 
 pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
     let mut wtables = zwrite!(tables.tables);
-    let tables = &mut wtables.data;
+
+    let tables = &mut *wtables;
+    let hats = &mut tables.hats;
+    let tables = &mut tables.data;
+    let region = face.region;
 
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => {
             if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&face.id) {
                 get_mut_unchecked(ctx).remote_expr_id = None;
             }
-            disable_matches_data_routes(tables, &mut res);
-            disable_matches_query_routes(tables, &mut res);
+            hats[region].disable_data_routes(tables, &mut res);
+            hats[region].disable_query_routes(tables, &mut res);
             face.update_interceptors_caches(&mut res);
             Resource::clean(&mut res);
         }

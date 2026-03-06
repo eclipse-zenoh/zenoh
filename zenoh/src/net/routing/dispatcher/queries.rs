@@ -43,7 +43,7 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
-        tables::{Tables, TablesData},
+        tables::Tables,
     },
     gateway::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
     hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
@@ -127,9 +127,9 @@ impl Face {
                     qabl_info,
                 );
 
-                for region in hats.regions().copied().collect_vec() {
-                    disable_matches_query_routes(ctx.tables, &mut res);
+                hats[region].disable_query_routes(ctx.tables, &mut res);
 
+                for region in hats.regions().copied().collect_vec() {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -213,7 +213,7 @@ impl Face {
         match hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id) {
             UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
             UnregisterEntityResult::InfoUpdate { mut res } => {
-                disable_matches_query_routes(ctx.tables, &mut res);
+                hats[region].disable_query_routes(ctx.tables, &mut res);
 
                 for region in hats.regions().copied().collect_vec() {
                     let other_info = hats
@@ -226,6 +226,8 @@ impl Face {
                 }
             }
             UnregisterEntityResult::LastUnregistered { mut res } => {
+                hats[region].disable_query_routes(ctx.tables, &mut res);
+
                 let remainder = hats
                     .values()
                     .filter_map(|hat| {
@@ -600,34 +602,6 @@ impl Timed for QueryCleanup {
     }
 }
 
-/// Disables query routes for the given [`Resource`].
-///
-/// ## Note
-///
-/// **Changes in data/query routes are not hat-local**. For example, a north peer hat has routes for query
-/// that originate from south-bound remotes but has no routes for query that originate in its north
-/// region, thus a change in a broker's query routes affects the routes of the north peer hat.
-pub(crate) fn disable_matches_query_routes(_tables: &mut TablesData, res: &mut Arc<Resource>) {
-    if res.ctx.is_some() {
-        for hat in get_mut_unchecked(res).context_mut().hats.values_mut() {
-            hat.disable_query_routes();
-        }
-
-        for match_ in &res.context().matches {
-            let mut match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                for hat in get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .hats
-                    .values_mut()
-                {
-                    hat.disable_query_routes();
-                }
-            }
-        }
-    }
-}
-
 #[inline]
 fn get_query_route(
     tables: &Tables,
@@ -638,7 +612,7 @@ fn get_query_route(
 ) -> Arc<QueryTargetQablSet> {
     let node_id = tables.hats[region].map_routing_context(&tables.data, src_face, routing_context);
     let compute_route =
-        || tables.hats[region].compute_query_route(&tables.data, src_face, expr, node_id);
+        || tables.hats[region].compute_query_route(&tables.data, &src_face.region, expr, node_id);
     if let Some(query_routes) = expr
         .resource()
         .as_ref()
@@ -648,7 +622,7 @@ fn get_query_route(
         return get_or_set_route(
             query_routes,
             tables.data.hats[region].routes_version,
-            &src_face.region.bound(),
+            &src_face.region,
             node_id,
             compute_route,
         );

@@ -21,7 +21,7 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_protocol::{
-    core::WhatAmI,
+    core::{Region, WhatAmI},
     network::declare::{
         self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
         UndeclareSubscriber,
@@ -32,7 +32,6 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
         pubsub::SubscriberInfo,
         region::RegionMap,
         resource::{FaceContext, NodeId, Resource},
@@ -110,11 +109,23 @@ impl HatPubSubTrait for Hat {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    /// Computes routing destination for `Push` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `expr`
+    ///
+    /// ## This hat's state
+    /// + `mres.owned_face_ctx.subs` for all matching resources `mres`.
+    /// + `mres.owned_face_ctx.subscriber_interest_finalized` for all matching resources `mres`.
+    /// + `owned_face.initial_interest_finalized` for all owned faces.
+    #[tracing::instrument(level = "debug", skip(tables, src_region, _node_id), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<Route> {
@@ -134,9 +145,9 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for ctx in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && !self.owns(src_face) {
+                if ctx.subs.is_some() && *src_region != self.region() {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -148,7 +159,7 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if src_face.region.bound().is_south() {
+        if src_region.bound().is_south() {
             if let Some(face) = self
                 .owned_faces(tables)
                 .find(|f| f.region.bound().is_north())
@@ -159,7 +170,7 @@ impl HatPubSubTrait for Hat {
                         .and_then(|res| res.face_ctxs.get(&face.id))
                         .is_some_and(|ctx| ctx.subscriber_interest_finalized);
                     (!has_interest_finalized).then(|| {
-                        tracing::trace!(dst = %face, reason = "unfinalized subscriber interest");
+                        tracing::trace!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),

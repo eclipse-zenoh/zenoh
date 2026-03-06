@@ -20,7 +20,7 @@ use std::{
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{Region, ZenohIdProto},
     network::declare::{
         common::ext::WireExprType, ext, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
         UndeclareSubscriber,
@@ -294,11 +294,22 @@ impl HatPubSubTrait for Hat {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face), ret)]
+    /// Computes routing destination for `Push` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `res`
+    /// + `node_id`
+    ///
+    /// ## This hat's state
+    /// + `mres.router_subs` for all `mres` in `matches(res)`
+    #[tracing::instrument(level = "debug", skip(tables, src_region), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         node_id: NodeId,
     ) -> Arc<Route> {
@@ -322,6 +333,7 @@ impl HatPubSubTrait for Hat {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = this.face(tables, &net.graph[direction].zid)
                                     {
+                                        tracing::trace!(dst = %face, dst.has_subscriber = true);
                                         route.insert(face.id, || {
                                             let wire_expr = expr.get_best_key(face.id);
                                             Direction {
@@ -345,13 +357,6 @@ impl HatPubSubTrait for Hat {
         let Some(key_expr) = expr.key_expr() else {
             return Arc::new(route.build());
         };
-        let source_type = src_face.whatami;
-        tracing::trace!(
-            "compute_data_route({}, {:?}, {:?})",
-            key_expr,
-            node_id,
-            source_type
-        );
 
         let matches = expr
             .resource()
@@ -363,10 +368,11 @@ impl HatPubSubTrait for Hat {
         for mres in matches.iter() {
             let mres = mres.upgrade().unwrap();
 
-            let net = self.routers_net.as_ref().unwrap();
-            let router_source = match source_type {
-                WhatAmI::Router => node_id,
-                _ => net.idx.index() as NodeId,
+            let net = self.net();
+            let router_source = if *src_region == self.region() {
+                node_id
+            } else {
+                net.idx.index() as NodeId
             };
             insert_faces_for_subs(
                 self,

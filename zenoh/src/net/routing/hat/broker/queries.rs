@@ -24,9 +24,14 @@ use zenoh_keyexpr::{
     include::{Includer, DEFAULT_INCLUDER},
     keyexpr,
 };
-use zenoh_protocol::network::{
-    declare::{self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId},
-    Declare, DeclareBody, DeclareQueryable, UndeclareQueryable,
+use zenoh_protocol::{
+    core::Region,
+    network::{
+        declare::{
+            self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId,
+        },
+        Declare, DeclareBody, DeclareQueryable, UndeclareQueryable,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -271,11 +276,20 @@ impl HatQueriesTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, _src_face, _node_id), ret)]
+    /// Computes routing destination for `Request` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `res`
+    ///
+    /// ## This hat's state
+    /// + `mres.face_ctx.qabl` for all `mres` in `matches(res)` and owned faces in `mres`.
+    #[tracing::instrument(level = "debug", skip(tables, _src_region, _node_id), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        _src_face: &FaceState,
+        _src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -300,7 +314,7 @@ impl HatQueriesTrait for Hat {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
                 if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                    tracing::trace!(dst = %ctx.face, reason = "resource match");
+                    tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
                     route.push(qabl);
                 }
             }

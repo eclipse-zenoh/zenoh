@@ -140,16 +140,14 @@ impl HatBaseTrait for Hat {
     fn new_local_face(
         &mut self,
         ctx: DispatcherContext,
-        _tables_ref: &Arc<TablesLock>,
+        _tables_lock: &Arc<TablesLock>,
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        // NOTE(regions):
-        // 1. The broker hat is never the north hat, thus there are no interests to re-propagate
-        // 2. The broker hat doesn't re-propagate entities to between clients
+        // NOTE(regions): see `new_transport_unicast_face`
 
-        ctx.tables.disable_all_routes();
+        self.disable_all_routes(ctx.tables);
 
         Ok(())
     }
@@ -168,7 +166,7 @@ impl HatBaseTrait for Hat {
         // 1. The broker hat is never the north hat, thus there are no interests to re-propagate
         // 2. The broker hat doesn't re-propagate entities between clients
 
-        ctx.tables.disable_all_routes();
+        self.disable_all_routes(ctx.tables);
 
         Ok(())
     }

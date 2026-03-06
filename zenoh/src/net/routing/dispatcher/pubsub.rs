@@ -21,7 +21,6 @@ use zenoh_protocol::{
     core::{Region, Reliability, WireExpr},
     network::{declare::SubscriberId, push::ext, Push},
 };
-use zenoh_sync::get_mut_unchecked;
 
 use super::{
     face::FaceState,
@@ -32,7 +31,6 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
-        tables::TablesData,
     },
     gateway::{get_or_set_route, node_id_as_source, Direction, RouteBuilder},
     hat::{DispatcherContext, SendDeclare},
@@ -105,6 +103,8 @@ impl Face {
                     sub_info,
                 );
 
+                hats[region].disable_data_routes(ctx.tables, &mut res);
+
                 for region in hats.regions().copied().collect_vec() {
                     let other_info = hats
                         .values()
@@ -113,8 +113,6 @@ impl Face {
                         .reduce(|_, _| SubscriberInfo);
 
                     hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
-
-                    disable_matches_data_routes(ctx.tables, &mut res);
                 }
 
                 drop(wtables);
@@ -192,7 +190,7 @@ impl Face {
         if let Some(mut res) =
             hats[region].unregister_subscriber(ctx.reborrow(), id, res.clone(), node_id)
         {
-            disable_matches_data_routes(ctx.tables, &mut res);
+            hats[region].disable_data_routes(ctx.tables, &mut res);
 
             let mut remaining = tables
                 .hats
@@ -207,34 +205,6 @@ impl Face {
                 Resource::clean(&mut res);
             } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_subscriber(ctx, res.clone())
-            }
-        }
-    }
-}
-
-/// Disables data routes for the given [`Resource`].
-///
-/// ## Note
-///
-/// **Changes in data/query routes are not hat-local**. For example, a north peer hat has routes for data
-/// that originate from south-bound remotes but has no routes for data that originate in its north
-/// region, thus a change in a broker's data routes affects the routes of the north peer hat.
-pub(crate) fn disable_matches_data_routes(_tables: &mut TablesData, res: &mut Arc<Resource>) {
-    if res.ctx.is_some() {
-        for hat in get_mut_unchecked(res).context_mut().hats.values_mut() {
-            hat.disable_data_routes();
-        }
-
-        for match_ in &res.context().matches {
-            let mut match_ = match_.upgrade().unwrap();
-            if !Arc::ptr_eq(&match_, res) {
-                for hat in get_mut_unchecked(&mut match_)
-                    .context_mut()
-                    .hats
-                    .values_mut()
-                {
-                    hat.disable_data_routes();
-                }
             }
         }
     }
@@ -286,7 +256,7 @@ fn get_data_route(
 ) -> Arc<Route> {
     let node_id = tables.hats[region].map_routing_context(&tables.data, src_face, node_id);
     let compute_route =
-        || tables.hats[region].compute_data_route(&tables.data, src_face, expr, node_id);
+        || tables.hats[region].compute_data_route(&tables.data, &src_face.region, expr, node_id);
     match expr
         .resource()
         .as_ref()
@@ -296,7 +266,7 @@ fn get_data_route(
         Some(data_routes) => get_or_set_route(
             data_routes,
             tables.data.hats[region].routes_version,
-            &src_face.region.bound(),
+            &src_face.region,
             node_id,
             compute_route,
         ),

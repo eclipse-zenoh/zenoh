@@ -158,7 +158,7 @@ impl HatBaseTrait for Hat {
         self.pubsub_new_face(ctx.reborrow(), &other_hats);
         self.queries_new_face(ctx.reborrow(), &other_hats);
         self.tokens_new_face(ctx.reborrow(), &other_hats);
-        ctx.tables.disable_all_routes();
+        self.disable_all_routes(ctx.tables);
         Ok(())
     }
 

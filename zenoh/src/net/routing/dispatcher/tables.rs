@@ -247,13 +247,6 @@ impl TablesData {
         }
     }
 
-    pub(crate) fn disable_all_routes(&mut self) {
-        // REVIEW(regions): should hats invalidate each other's routes?
-        for hat in self.hats.values_mut() {
-            hat.routes_version = hat.routes_version.saturating_add(1);
-        }
-    }
-
     pub(crate) fn new_face_id(&mut self) -> FaceId {
         let face_id = self.face_counter;
         self.face_counter += 1;
@@ -268,12 +261,39 @@ pub struct TablesLock {
     pub(crate) zid: ZenohIdProto, // FIXME(regions): refactor/remove
 }
 
+/// Gateway state.
+///
+/// In order to mutably borrow [`Tables::data`] and [`Tables::hats`] at the same time given an
+/// acquired guard from [`TablesLock::tables`], one needs to first dereference the guard into [`Tables`]:
+///
+/// ```rust
+/// fn borrow_hats_and_data(tables_lock: &TablesLock) {
+///     let mut guard = tables_lock.tables.write().unwrap();
+///
+///     // NOTE(regions): The following doesn't compile due to E0499:
+///     // let hats = &mut guard.hats;
+///     // let tables_data = &mut guard.data;
+///     // drop((hats, tables_data));
+///
+///     let tables = &mut *guard;
+///     let hats = &mut tables.hats;
+///     let tables_data = &mut tables.data;
+///     drop((hats, tables_data));
+/// }
+/// ```
 pub struct Tables {
     pub data: TablesData,
     pub hats: RegionMap<Box<dyn HatTrait + Send + Sync>>,
 }
 
 impl Tables {
+    #[allow(dead_code)] // FIXME(regions)
+    pub(crate) fn disable_all_hat_routes(&mut self) {
+        for hat in self.hats.values_mut() {
+            hat.disable_all_routes(&mut self.data);
+        }
+    }
+
     pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()

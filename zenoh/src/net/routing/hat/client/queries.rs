@@ -23,7 +23,7 @@ use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
-        WhatAmI,
+        Region, WhatAmI,
     },
     network::declare::{
         self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare, DeclareBody,
@@ -35,7 +35,6 @@ use zenoh_sync::get_mut_unchecked;
 use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
         queries::merge_qabl_infos,
         region::RegionMap,
         resource::{FaceContext, NodeId, Resource},
@@ -126,11 +125,22 @@ impl HatQueriesTrait for Hat {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    /// Computes routing destination for `Request` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `expr`
+    ///
+    /// ## This hat's state
+    /// + `mres.owned_face_ctx.qabl` for all matching resources `mres`.
+    /// + `mres.face_ctx.queryable_interest_finalized` for all matching resources `mres`.
+    #[tracing::instrument(level = "debug", skip(tables, src_region, _node_id), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -150,16 +160,16 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
-                if !self.owns(src_face) {
+                if self.region() != *src_region {
                     if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
                         route.push(qabl);
                     }
                 }
             }
         }
 
-        if src_face.region.bound().is_south() {
+        if src_region.bound().is_south() {
             if let Some(face) = self
                 .owned_faces(tables)
                 .find(|f| f.region.bound().is_north())
@@ -169,7 +179,7 @@ impl HatQueriesTrait for Hat {
                     .and_then(|res| res.face_ctxs.get(&face.id))
                     .is_some_and(|ctx| ctx.queryable_interest_finalized);
                 if !has_interest_finalized {
-                    tracing::trace!(dst = %face, reason = "unfinalized queryable interest");
+                    tracing::trace!(dst = %face, dst.has_unfinalized_queryable_interest = true);
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         info: None,

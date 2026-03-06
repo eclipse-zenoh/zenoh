@@ -44,8 +44,8 @@ use crate::net::{
         dispatcher::{
             interests::{finalize_pending_interests, RemoteInterest},
             queries::{
-                disable_matches_query_routes, finalize_pending_queries, merge_qabl_infos,
-                route_send_response, route_send_response_final, Query,
+                finalize_pending_queries, merge_qabl_infos, route_send_response,
+                route_send_response_final, Query,
             },
             region::RegionMap,
         },
@@ -132,7 +132,7 @@ pub struct FaceState {
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
     pub(crate) in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
-    /// Downcasts to `HatFace`.
+    /// Map from `Region` to `HatFace`.
     pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
     pub(crate) is_local: bool,
@@ -520,8 +520,6 @@ impl Primitives for Face {
                         declares.push((p.clone(), m))
                     });
 
-                    wtables.data.disable_all_routes();
-
                     drop(wtables);
                     drop(ctrl_lock);
                     for (p, m) in declares {
@@ -582,7 +580,7 @@ impl Primitives for Face {
         let src_fid = ctx.src_face.id;
 
         for mut res in hats[region].unregister_face_subscribers(ctx.reborrow()) {
-            disable_matches_data_routes(ctx.tables, &mut res);
+            hats[region].disable_data_routes(ctx.tables, &mut res);
 
             let mut remaining = hats
                 .values_mut()
@@ -601,7 +599,7 @@ impl Primitives for Face {
         }
 
         for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
-            disable_matches_query_routes(ctx.tables, &mut res);
+            hats[region].disable_query_routes(ctx.tables, &mut res);
 
             let remaining = hats
                 .iter()

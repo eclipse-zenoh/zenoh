@@ -191,7 +191,7 @@ impl Gateway {
         Ok(())
     }
 
-    pub(crate) fn new_face<F>(&self, new_face_state: F) -> Arc<Face>
+    pub(crate) fn new_face<F>(&self, state: F) -> Arc<Face>
     where
         F: FnOnce(&mut Tables) -> FaceState,
     {
@@ -199,7 +199,7 @@ impl Gateway {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let newface = Arc::new(new_face_state(tables));
+        let newface = Arc::new(state(tables));
         tables.data.faces.insert(newface.id, newface.clone());
         tracing::debug!("New {}", newface);
 
@@ -209,7 +209,7 @@ impl Gateway {
         };
         let mut declares = vec![];
         tables.hats[face.state.region]
-            // FIXME(regions): what if face.local is false?
+            // TODO(regions): rename caller to `new_local_face`
             .new_local_face(
                 DispatcherContext {
                     tables_lock: &face.tables,
@@ -366,9 +366,11 @@ impl Gateway {
             state: face.clone(),
             tables: self.tables.clone(),
         });
+
         tables.data.hats[region].mcast_groups.push(face);
 
-        tables.data.disable_all_routes();
+        tables.hats[region].disable_all_routes(&mut tables.data);
+
         Ok(())
     }
 
@@ -416,9 +418,11 @@ impl Gateway {
             &tables.data.interceptors,
             tables.data.next_interceptor_version.load(Ordering::SeqCst),
         );
+
         tables.data.hats[region].mcast_faces.push(face.clone());
 
-        tables.data.disable_all_routes();
+        tables.hats[region].disable_all_routes(&mut tables.data);
+
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

@@ -20,9 +20,12 @@ use std::{
 use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
-use zenoh_protocol::network::declare::{
-    self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
-    UndeclareSubscriber,
+use zenoh_protocol::{
+    core::Region,
+    network::declare::{
+        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        UndeclareSubscriber,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -210,11 +213,24 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face, _node_id), ret)]
+    /// Computes routing destination for `Push` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `expr`
+    ///
+    /// ## This hat's state
+    /// + `owned_faces`
+    /// + `mres.face_ctx.subs` for all `mres` in `matches(res)` and all owned faces in `mres`.
+    /// + `mres.face_ctx.subscriber_interest_finalized` for all `mres` in `matches(res)` and all owned faces in `mres`.
+    /// + `face.initial_interest_finalized` for all owned faces in `mres`.
+    #[tracing::instrument(level = "debug", skip(tables, src_region, _node_id), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<Route> {
@@ -234,9 +250,9 @@ impl HatPubSubTrait for Hat {
             let mres = mres.upgrade().unwrap();
 
             for ctx in self.owned_face_contexts(&mres) {
-                if ctx.subs.is_some() && !self.owns(src_face) {
+                if ctx.subs.is_some() && self.region() != *src_region {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -248,7 +264,7 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if src_face.region.bound().is_south() {
+        if self.region.bound().is_north() && src_region.bound().is_south() {
             if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr
@@ -256,7 +272,7 @@ impl HatPubSubTrait for Hat {
                         .and_then(|res| res.face_ctxs.get(&face.id))
                         .is_some_and(|ctx| ctx.subscriber_interest_finalized);
                     (!has_interest_finalized).then(|| {
-                        tracing::trace!(dst = %face, res = ?expr.resource(), reason = "unfinalized subscriber interest");
+                        tracing::trace!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),
@@ -270,7 +286,7 @@ impl HatPubSubTrait for Hat {
             for face in self.owned_faces(tables).filter(|f| {
                 f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
             }) {
-                tracing::trace!(dst = %face, reason = "unfinalized initial interest");
+                tracing::trace!(dst = %face, dst.has_unfinalized_initial_interest = true);
                 route.insert(face.id, || {
                     let wire_expr = expr.get_best_key(face.id);
                     Direction {

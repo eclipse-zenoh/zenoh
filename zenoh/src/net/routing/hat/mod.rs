@@ -34,6 +34,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::unicast::TransportUnicast;
 
 use super::{
@@ -258,6 +259,45 @@ pub(crate) trait HatBaseTrait: Any {
 
         self.region() == face.region
     }
+
+    // TODO(regions): in the following two methods, `&mut self` is enough to ""ensure"" that we have
+    // the gateway lock, so `&mut TablesData` can be ""safely"" removed.
+
+    /// Disables this hat's data routes for the given resource and all its matches.
+    fn disable_data_routes(&mut self, _tables: &mut TablesData, res: &mut Arc<Resource>) {
+        if res.ctx.is_some() {
+            get_mut_unchecked(res).context_mut().hats[self.region()].disable_data_routes();
+
+            for match_ in &res.context().matches {
+                let mut match_ = match_.upgrade().unwrap();
+                if !Arc::ptr_eq(&match_, res) {
+                    get_mut_unchecked(&mut match_).context_mut().hats[self.region()]
+                        .disable_data_routes();
+                }
+            }
+        }
+    }
+
+    /// Disables this hat's query routes for the given resource and all its matches.
+    fn disable_query_routes(&mut self, _tables: &mut TablesData, res: &mut Arc<Resource>) {
+        if res.ctx.is_some() {
+            get_mut_unchecked(res).context_mut().hats[self.region()].disable_query_routes();
+
+            for match_ in &res.context().matches {
+                let mut match_ = match_.upgrade().unwrap();
+                if !Arc::ptr_eq(&match_, res) {
+                    get_mut_unchecked(&mut match_).context_mut().hats[self.region()]
+                        .disable_query_routes();
+                }
+            }
+        }
+    }
+
+    /// Disables this hat's data and query routes **for all resources**.
+    fn disable_all_routes(&mut self, tables: &mut TablesData) {
+        let routes_version = &mut tables.hats[self.region()].routes_version;
+        *routes_version = routes_version.saturating_add(1);
+    }
 }
 
 /// Return value of current entity routing methods.
@@ -467,10 +507,23 @@ pub(crate) trait HatPubSubTrait {
 
     fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
+    /// Computes routing destination for `Push` messages.
+    ///
+    /// Note that it's the responsibility of the dispatcher to ensure that messages are not routed
+    /// to their source: this method is agnostic vis-à-vis the source face.
+    ///
+    /// Note that the computed route contains the wire expression used for a given direction, thus
+    /// routes are invalidated when keyexpr mappings change.
+    ///
+    /// # Dependencies
+    /// The result of this method depends on two classes of variables: message properties and hat
+    /// state; these variables are documented in each hat's impl. Changes in stateful properties
+    /// (i.e. the hats' state) invalidate the computed routes. While message properties are used to
+    /// store distinct sets of routes for each possible message property.
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         node_id: NodeId,
     ) -> Arc<Route>;
@@ -539,10 +592,23 @@ pub(crate) trait HatQueriesTrait {
 
     fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
 
+    /// Computes routing destination for `Request` messages.
+    ///
+    /// Note that it's the responsibility of the dispatcher to ensure that messages are not routed
+    /// to their source: this method is agnostic vis-à-vis the source face.
+    ///
+    /// Note that the computed route contains the wire expression used for a given direction, thus
+    /// routes are invalidated when keyexpr mappings change.
+    ///
+    /// # Dependencies
+    /// The result of this method depends on two classes of variables: message properties and hat
+    /// state; these variables are documented in each hat's impl. Changes in stateful properties
+    /// (i.e. the hats' state) invalidate the computed routes. While message properties are used to
+    /// store distinct sets of routes for each possible message property.
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         source: NodeId,
     ) -> Arc<QueryTargetQablSet>;

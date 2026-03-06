@@ -16,13 +16,29 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use zenoh_protocol::core::{Bound, Region};
+use zenoh_protocol::core::Region;
 
 // TODO(regions): optimization
 #[derive(Debug, Default)]
 pub(crate) struct RegionMap<D>(hashbrown::HashMap<Region, D>);
 
 impl<D> RegionMap<D> {
+    pub(crate) fn get(&self, region: &Region) -> Option<&D> {
+        self.0.get(region)
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub(crate) fn get_mut(&mut self, region: &Region) -> Option<&mut D> {
+        self.0.get_mut(region)
+    }
+
+    pub(crate) fn insert(&mut self, region: Region, value: D) -> Option<D> {
+        self.0.insert(region, value)
+    }
+
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&Region, &D)> {
         self.0.iter()
     }
@@ -123,39 +139,5 @@ impl<D> IndexMut<&Region> for RegionMap<D> {
 impl<D> IndexMut<Region> for RegionMap<D> {
     fn index_mut(&mut self, region: Region) -> &mut Self::Output {
         self.index_mut(&region)
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct BoundMap<D> {
-    north: Option<D>,
-    south: Option<D>,
-}
-
-impl<D> BoundMap<D> {
-    pub(crate) fn clear(&mut self) {
-        self.north.take();
-        self.south.take();
-    }
-
-    pub(crate) fn get(&self, bound: &Bound) -> Option<&D> {
-        match bound {
-            Bound::North => self.north.as_ref(),
-            Bound::South => self.south.as_ref(),
-        }
-    }
-
-    pub(crate) fn get_mut(&mut self, bound: &Bound) -> Option<&mut D> {
-        match bound {
-            Bound::North => self.north.as_mut(),
-            Bound::South => self.south.as_mut(),
-        }
-    }
-
-    pub(crate) fn insert(&mut self, bound: &Bound, value: D) -> Option<D> {
-        match bound {
-            Bound::North => self.north.replace(value),
-            Bound::South => self.south.replace(value),
-        }
     }
 }

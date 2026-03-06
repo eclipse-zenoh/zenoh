@@ -52,7 +52,7 @@ use crate::net::{
         ROUTERS_NET_NAME,
     },
     routing::{
-        dispatcher::{self, queries::merge_qabl_infos, region::RegionMap},
+        dispatcher::{queries::merge_qabl_infos, region::RegionMap},
         gateway::DEFAULT_NODE_ID,
         hat::{DispatcherContext, Remote, TREES_COMPUTATION_DELAY_MS},
     },
@@ -95,7 +95,7 @@ impl TreesComputationWorker {
                     hat.pubsub_tree_change(&mut tables.data, &new_children);
                     hat.queries_tree_change(&mut tables.data, &new_children);
                     hat.token_tree_change(&mut tables.data, &new_children);
-                    tables.data.disable_all_routes();
+                    hat.disable_all_routes(&mut tables.data);
                     drop(wtables);
                 }
             }
@@ -342,7 +342,7 @@ impl HatBaseTrait for Hat {
                     .collect::<RegionMap<_>>();
 
                 for mut res in removed_subscribers {
-                    dispatcher::pubsub::disable_matches_data_routes(ctx.tables, &mut res);
+                    hats[region].disable_data_routes(ctx.tables, &mut res);
 
                     let mut remaining = hats
                         .values_mut()
@@ -361,7 +361,7 @@ impl HatBaseTrait for Hat {
                 }
 
                 for mut res in removed_queryables {
-                    dispatcher::queries::disable_matches_query_routes(ctx.tables, &mut res);
+                    hats[region].disable_query_routes(ctx.tables, &mut res);
 
                     let remaining = hats
                         .iter()

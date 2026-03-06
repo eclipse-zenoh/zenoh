@@ -422,8 +422,6 @@ impl Face {
         _node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        let _span = tracing::debug_span!("declare_final", interest_id).entered();
-
         let tables = &mut *wtables;
 
         let mut ctx = DispatcherContext {
@@ -437,12 +435,14 @@ impl Face {
         let region = ctx.src_face.region;
 
         if region.bound().is_south() {
-            tracing::error!(
-                "Received current interest finalization from south-bound face. \
-                This message should only flow downstream"
-            );
+            tracing::error!("Received DeclareFinal from south-bound face");
             return;
         }
+
+        // TODO(regions): this is too conservative, the north hat should be able to decide what
+        // keyexpr(s)—if not all—are affected and whether this finalization concerns subscribers
+        // or queryables or borth.
+        hats[region].disable_all_routes(ctx.tables);
 
         match hats[region].route_declare_final(ctx.reborrow(), interest_id) {
             RouteCurrentDeclareResult::Noop | RouteCurrentDeclareResult::NoBreadcrumb => {} // ¯\_(ツ)_/¯

@@ -24,7 +24,7 @@ use zenoh_core::polyfill::*;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
-        WhatAmI, ZenohIdProto,
+        Region, ZenohIdProto,
     },
     network::declare::{
         self, common::ext::WireExprType, queryable::ext::QueryableInfoType, Declare, DeclareBody,
@@ -300,11 +300,22 @@ impl HatQueriesTrait for Hat {
         Vec::default()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, src_face), ret)]
+    /// Computes routing destination for `Request` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `src_region`
+    /// + `res`
+    /// + `node_id`
+    ///
+    /// ## This hat's state
+    /// + `mres.router_qabls` for all `mres` in `matches(res)`
+    #[tracing::instrument(level = "debug", skip(tables, src_region), ret)]
     fn compute_query_route(
         &self,
         tables: &TablesData,
-        src_face: &FaceState,
+        src_region: &Region,
         expr: &RoutingExpr,
         node_id: NodeId,
     ) -> Arc<QueryTargetQablSet> {
@@ -335,6 +346,7 @@ impl HatQueriesTrait for Hat {
                                     {
                                         if net.distances.len() > qabl_idx.index() {
                                             let wire_expr = expr.get_best_key(face.id);
+                                            tracing::trace!(dst = %face, dst.has_queryable = true);
                                             route.push(QueryTargetQabl {
                                                 dir: Direction {
                                                     dst_face: face.clone(),
@@ -376,10 +388,10 @@ impl HatQueriesTrait for Hat {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             let net = self.routers_net.as_ref().unwrap();
-            // FIXME(regions): remove this
-            let router_source = match src_face.whatami {
-                WhatAmI::Router => node_id,
-                _ => net.idx.index() as NodeId,
+            let router_source = if *src_region == self.region() {
+                node_id
+            } else {
+                net.idx.index() as NodeId
             };
             insert_target_for_qabls(
                 self,

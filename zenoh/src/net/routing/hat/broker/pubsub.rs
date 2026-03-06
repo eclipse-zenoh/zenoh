@@ -21,9 +21,12 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_keyexpr::keyexpr;
-use zenoh_protocol::network::declare::{
-    self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
-    UndeclareSubscriber,
+use zenoh_protocol::{
+    core::Region,
+    network::declare::{
+        self, common::ext::WireExprType, Declare, DeclareBody, DeclareSubscriber, SubscriberId,
+        UndeclareSubscriber,
+    },
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -224,11 +227,20 @@ impl HatPubSubTrait for Hat {
         result.into_iter().collect()
     }
 
-    #[tracing::instrument(level = "debug", skip(tables, _src_face, _node_id), ret)]
+    /// Computes routing destination for `Push` messages.
+    ///
+    /// # Dependencies
+    ///
+    /// ## Message properties
+    /// + `res`
+    ///
+    /// ## This hat's state
+    /// + `mres.face_ctx.subs` for all `mres` in `matches(res)` and owned faces in `mres`.
+    #[tracing::instrument(level = "debug", skip(tables, _src_region, _node_id), ret)]
     fn compute_data_route(
         &self,
         tables: &TablesData,
-        _src_face: &FaceState,
+        _src_region: &Region,
         expr: &RoutingExpr,
         _node_id: NodeId,
     ) -> Arc<Route> {
@@ -250,7 +262,7 @@ impl HatPubSubTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, reason = "resource match");
+                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
