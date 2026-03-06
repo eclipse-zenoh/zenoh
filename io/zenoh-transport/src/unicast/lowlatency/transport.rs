@@ -130,8 +130,6 @@ impl TransportUnicastLowlatency {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
-        // Delete the transport on the manager
-        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
         self.token.cancel();
