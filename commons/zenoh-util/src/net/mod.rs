@@ -12,6 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::{IpAddr, Ipv6Addr};
+#[cfg(unix)]
+use std::sync::{Arc, RwLock};
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(unix)]
 use lazy_static::lazy_static;
@@ -30,7 +34,23 @@ zconfigurable! {
 
 #[cfg(unix)]
 lazy_static! {
-    static ref IFACES: Vec<NetworkInterface> = pnet_datalink::interfaces();
+    static ref IFACES: Arc<RwLock<Vec<NetworkInterface>>> = {
+        let ifaces = Arc::new(RwLock::new(pnet_datalink::interfaces()));
+
+        let ifaces_clone = Arc::clone(&ifaces);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                let new_interfaces = pnet_datalink::interfaces();
+                if let Ok(mut guard) = ifaces_clone.write() {
+                    *guard = new_interfaces;
+                }
+            }
+        });
+
+        ifaces
+    };
 }
 
 #[cfg(windows)]
@@ -68,7 +88,7 @@ unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)]
     {
-        for iface in IFACES.iter() {
+        for iface in IFACES.read().unwrap().iter() {
             if iface.name == name {
                 for ifaddr in &iface.ips {
                     if ifaddr.is_ipv4() {
@@ -132,6 +152,8 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
     #[cfg(unix)]
     {
         IFACES
+            .read()
+            .unwrap()
             .iter()
             .filter_map(|iface| {
                 if iface.is_up() && iface.is_running() && iface.is_multicast() {
@@ -156,6 +178,8 @@ pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
         Ok(IFACES
+            .read()
+            .unwrap()
             .iter()
             .filter(|iface| {
                 if let Some(interface) = interface.as_ref() {
@@ -206,6 +230,8 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
     #[cfg(unix)]
     {
         IFACES
+            .read()
+            .unwrap()
             .iter()
             .filter(|iface| iface.is_up() && iface.is_running() && iface.is_multicast())
             .flat_map(|iface| {
@@ -228,7 +254,12 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
 pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
-        match IFACES.iter().find(|iface| iface.name == name) {
+        match IFACES
+            .read()
+            .unwrap()
+            .iter()
+            .find(|iface| iface.name == name)
+        {
             Some(iface) => {
                 if !iface.is_up() {
                     bail!("Interface {name} is not up");
@@ -283,6 +314,8 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
     #[cfg(unix)]
     {
         IFACES
+            .read()
+            .unwrap()
             .iter()
             .find(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
             .map(|iface| iface.index)
@@ -320,12 +353,16 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
     {
         if addr.is_unspecified() {
             Ok(IFACES
+                .read()
+                .unwrap()
                 .iter()
                 .map(|iface| iface.name.clone())
                 .collect::<Vec<String>>())
         } else {
             let addr = addr.to_canonical();
             Ok(IFACES
+                .read()
+                .unwrap()
                 .iter()
                 .filter(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
                 .map(|iface| iface.name.clone())
