@@ -11,147 +11,157 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
-
-use zenoh_protocol::{
-    core::WhatAmI,
-    network::{
-        declare::ext,
-        interest::{InterestId, InterestMode, InterestOptions},
-        Declare, DeclareBody, DeclareFinal,
-    },
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
 };
-use zenoh_sync::get_mut_unchecked;
 
-use super::{
-    face_hat_mut, pubsub::declare_sub_interest, queries::declare_qabl_interest,
-    token::declare_token_interest, HatCode, HatFace,
+use zenoh_protocol::network::{
+    declare::queryable::ext::QueryableInfoType, interest::InterestId, Interest,
 };
+
+use super::Hat;
 use crate::net::routing::{
     dispatcher::{
-        face::FaceState,
-        interests::RemoteInterest,
+        interests::{CurrentInterest, RemoteInterest},
         resource::Resource,
-        tables::{Tables, TablesLock},
+        tables::TablesData,
     },
-    hat::{CurrentFutureTrait, HatInterestTrait, SendDeclare},
-    RoutingContext,
+    gateway::SubscriberInfo,
+    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentDeclareResult},
 };
 
-impl HatInterestTrait for HatCode {
-    fn declare_interest(
-        &self,
-        tables: &mut Tables,
-        _tables_ref: &Arc<TablesLock>,
-        face: &mut Arc<FaceState>,
-        id: InterestId,
-        res: Option<&mut Arc<Resource>>,
-        mode: InterestMode,
-        mut options: InterestOptions,
-        send_declare: &mut SendDeclare,
+impl HatInterestTrait for Hat {
+    #[tracing::instrument(level = "debug", skip(ctx, msg), fields(%src), ret)]
+    fn route_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        src: &Remote,
+    ) -> Option<CurrentInterest> {
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
+
+        Some(CurrentInterest {
+            src: src.clone(),
+            src_region: ctx.src_face.region,
+            src_interest_id: msg.id,
+            mode: msg.mode,
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn route_interest_final(
+        &mut self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+        _remote_interest: &RemoteInterest,
     ) {
-        if options.aggregate() && face.whatami == WhatAmI::Peer {
-            tracing::warn!(
-                "Received Interest with aggregate=true from peer {}. Not supported!",
-                face.zid
-            );
-            options -= InterestOptions::AGGREGATE;
-        }
-        if options.aggregate() && res.is_none() {
-            tracing::warn!(
-                "Received Interest with aggregate=true with empty key expression. Not supported!"
-            );
-            options -= InterestOptions::AGGREGATE;
-        }
-        if options.subscribers() {
-            declare_sub_interest(
-                tables,
-                face,
-                id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
-                mode,
-                options.aggregate(),
-                send_declare,
-            )
-        }
-        if options.queryables() {
-            declare_qabl_interest(
-                tables,
-                face,
-                id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
-                mode,
-                options.aggregate(),
-                send_declare,
-            )
-        }
-        if options.tokens() {
-            // Note: aggregation is forbidden for tokens. The flag is ignored.
-            declare_token_interest(
-                tables,
-                face,
-                id,
-                res.as_ref().map(|r| (*r).clone()).as_mut(),
-                mode,
-                send_declare,
-            )
-        }
-        if mode.future() {
-            face_hat_mut!(face).remote_interests.insert(
-                id,
-                RemoteInterest {
-                    res: res.cloned(),
-                    options,
-                    mode,
-                },
-            );
-        }
-        if mode.current() {
-            send_declare(
-                &face.primitives,
-                RoutingContext::new(Declare {
-                    interest_id: Some(id),
-                    ext_qos: ext::QoSType::DECLARE,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                }),
-            );
-        }
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
     }
 
-    fn undeclare_interest(&self, _tables: &mut Tables, face: &mut Arc<FaceState>, id: InterestId) {
-        if let Some(i) = face_hat_mut!(face).remote_interests.remove(&id) {
-            if i.options.subscribers() {
-                if i.options.aggregate() {
-                    if let Some(ires) = &i.res {
-                        face_hat_mut!(face)
-                            .local_subs
-                            .remove_aggregated_resource_interest(ires, id);
-                    }
-                } else {
-                    face_hat_mut!(face)
-                        .local_subs
-                        .remove_simple_resource_interest(id);
-                }
-            }
-            if i.options.queryables() {
-                if i.options.aggregate() {
-                    if let Some(ires) = &i.res {
-                        face_hat_mut!(face)
-                            .local_qabls
-                            .remove_aggregated_resource_interest(ires, id);
-                    }
-                } else {
-                    face_hat_mut!(face)
-                        .local_qabls
-                        .remove_simple_resource_interest(id);
-                }
-            }
-        }
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn route_declare_final(
+        &mut self,
+        ctx: DispatcherContext,
+        _interest_id: InterestId,
+    ) -> RouteCurrentDeclareResult {
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_south());
+
+        RouteCurrentDeclareResult::Noop
     }
 
-    fn declare_final(&self, _tables: &mut Tables, _face: &mut Arc<FaceState>, _id: InterestId) {
-        // Nothing
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn route_current_token(
+        &mut self,
+        ctx: DispatcherContext,
+        _interest_id: InterestId,
+        _res: Arc<Resource>,
+    ) -> RouteCurrentDeclareResult {
+        debug_assert!(self.region().bound().is_north());
+        debug_assert!(ctx.src_face.region.bound().is_north());
+
+        RouteCurrentDeclareResult::Noop
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn send_current_subscribers(
+        &self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn send_current_queryables(
+        &self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+        _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn send_current_tokens(
+        &self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+        res: Option<Arc<Resource>>,
+        other_matches: HashSet<Arc<Resource>>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn propagate_current_token(
+        &self,
+        ctx: DispatcherContext,
+        _res: Arc<Resource>,
+        _interest: CurrentInterest,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(ctx.src_face.region.bound().is_south());
+    }
+
+    #[tracing::instrument(level = "debug", skip(_ctx, _dst), ret)]
+    fn send_declare_final(&mut self, _ctx: DispatcherContext, _id: InterestId, _dst: &Remote) {}
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn register_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+        _res: Option<Arc<Resource>>,
+    ) {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+    }
+
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
+    fn unregister_interest(
+        &mut self,
+        ctx: DispatcherContext,
+        _msg: &Interest,
+    ) -> Option<RemoteInterest> {
+        debug_assert!(self.owns(ctx.src_face));
+        debug_assert!(self.region().bound().is_south());
+
+        None
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn remote_interests(&self, _tables: &TablesData) -> HashSet<RemoteInterest> {
+        HashSet::default()
     }
 }
