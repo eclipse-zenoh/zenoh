@@ -554,6 +554,8 @@ pub struct RuntimeBuilder {
     shm_clients: Option<Arc<ShmClientStorage>>,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
+    #[cfg(test)]
+    disable_async_tree_computation: bool,
 }
 
 impl RuntimeBuilder {
@@ -566,6 +568,8 @@ impl RuntimeBuilder {
             shm_clients: None,
             #[cfg(test)]
             subregions: None,
+            #[cfg(test)]
+            disable_async_tree_computation: false,
         }
     }
 
@@ -587,6 +591,12 @@ impl RuntimeBuilder {
         self
     }
 
+    #[cfg(all(test, feature = "test"))]
+    pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
+        self.disable_async_tree_computation = value;
+        self
+    }
+
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
             config,
@@ -596,6 +606,8 @@ impl RuntimeBuilder {
             shm_clients,
             #[cfg(test)]
             subregions,
+            #[cfg(test)]
+            disable_async_tree_computation,
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
@@ -625,6 +637,10 @@ impl RuntimeBuilder {
         } else {
             gateway_builder
         };
+
+        #[cfg(all(test, feature = "test"))]
+        let gateway_builder =
+            gateway_builder.disable_async_tree_computation(disable_async_tree_computation);
 
         let gateway = Arc::new(gateway_builder.build()?);
 

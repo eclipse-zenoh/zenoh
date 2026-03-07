@@ -27,6 +27,7 @@ mod routing;
 
 use std::{
     any::Any,
+    fmt::Debug,
     sync::{Arc, Mutex},
 };
 
@@ -47,12 +48,14 @@ use zenoh_protocol::{
         ext::{self, NodeIdType},
         interest::{InterestId, InterestMode, InterestOptions},
         request::ext::QueryTarget,
-        Declare, DeclareBody, Interest, NetworkBody, Oam, Push, Request, RequestId, Response,
-        ResponseFinal,
+        Declare, DeclareBody, Interest, NetworkBody, NetworkBodyMut, NetworkMessageMut, Oam, Push,
+        Request, RequestId, Response, ResponseFinal,
     },
     zenoh::{PushBody, Put, Query, RequestBody},
 };
-use zenoh_transport::unicast::test_helpers::MockTransportUnicastInner;
+use zenoh_transport::{
+    unicast::test_helpers::MockTransportUnicastInner, TransportPeerEventHandler,
+};
 
 use crate::net::{
     primitives::{DeMux, EPrimitives, Primitives},
@@ -420,6 +423,12 @@ pub(crate) struct MockFace {
     _data: Option<Arc<MockTransportUnicastInner>>,
 }
 
+impl Debug for MockFace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&self.face, f)
+    }
+}
+
 impl MockFace {
     /// Inject a `Put` with an explicit payload.
     pub(crate) fn put(&self, key_expr: &keyexpr, payload: Vec<u8>) {
@@ -631,6 +640,7 @@ impl Harness {
         let runtime = block_on(
             RuntimeBuilder::new(crate::api::config::Config(config))
                 .subregions(subregions.to_vec())
+                .disable_async_tree_computation(true)
                 .build(),
         )
         .unwrap();
@@ -652,6 +662,7 @@ impl Harness {
         config.set_mode(Some(mode)).unwrap();
         let gateway = GatewayBuilder::new(&config)
             .subregions(subregions.to_vec())
+            .disable_async_tree_computation(true)
             .build()
             .unwrap();
         Self {
@@ -660,8 +671,19 @@ impl Harness {
         }
     }
 
+    pub(crate) fn zid(&self) -> ZenohIdProto {
+        self.gateway.tables.zid
+    }
+
     pub(crate) fn new_session(&self) -> MockFace {
-        self.new_face(FaceConfig::new_session())
+        let recorder = Arc::new(RecordingPrimitives::new());
+        let face = self.gateway.new_primitives(recorder.clone());
+        MockFace {
+            face,
+            recorder,
+            demux: None,
+            _data: None,
+        }
     }
 
     /// Attach a mock face to the gateway and return its handle.
@@ -671,21 +693,13 @@ impl Harness {
     pub(crate) fn new_face(&self, cfg: FaceConfig) -> MockFace {
         let recorder = Arc::new(RecordingPrimitives::new());
 
-        if cfg.region == Region::Local {
-            let face = self.gateway.new_primitives(recorder.clone());
-            return MockFace {
-                face,
-                recorder,
-                demux: None,
-                _data: None,
-            };
-        }
+        assert_ne!(cfg.region, Region::Local);
 
         use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
 
         let rec = recorder.clone();
         let (mock_transport, mock_inner) = mock_transport_unicast(
-            ZenohIdProto::rand(),
+            cfg.zid,
             cfg.mode,
             Arc::new(move |msg| match msg.body {
                 NetworkBody::Push(mut p) => {
@@ -723,6 +737,7 @@ pub(crate) struct FaceConfig {
     pub(crate) region: Region,
     pub(crate) mode: WhatAmI,
     pub(crate) remote_bound: Bound,
+    pub(crate) zid: ZenohIdProto,
 }
 
 impl FaceConfig {
@@ -741,17 +756,19 @@ impl FaceConfig {
         self
     }
 
-    pub(crate) fn new_session() -> Self {
-        Self::default().region(Region::Local).mode(WhatAmI::Client)
+    pub(crate) fn zid(mut self, zid: ZenohIdProto) -> Self {
+        self.zid = zid;
+        self
     }
 }
 
 /// Connects two gateways together at the primitives level.
+#[derive(Debug)]
 pub(crate) struct EstablishedConnection {
     /// A's face for B.
-    ab: MockFace,
+    pub(crate) ab: MockFace,
     /// B's face for A.
-    ba: MockFace,
+    pub(crate) ba: MockFace,
     nfwd: usize,
     rev_nfwd: usize,
 }
@@ -771,8 +788,8 @@ pub(crate) struct Connection<'a> {
 impl Connection<'_> {
     pub(crate) fn establish(self) -> EstablishedConnection {
         EstablishedConnection {
-            ab: self.a.new_face(self.ab),
-            ba: self.b.new_face(self.ba),
+            ab: self.a.new_face(self.ab.zid(self.b.zid())),
+            ba: self.b.new_face(self.ba.zid(self.a.zid())),
             nfwd: 0,
             rev_nfwd: 0,
         }
@@ -781,6 +798,7 @@ impl Connection<'_> {
 
 impl EstablishedConnection {
     /// Forward one pending message **from A to B**.
+    #[tracing::instrument(level = "info", skip(self), fields(from = %self.ba.face, to = %self.ab.face.state.zid.short()), ret)]
     pub(crate) fn fwd1(&mut self) -> Option<Message> {
         let msg = self
             .ab
@@ -792,6 +810,7 @@ impl EstablishedConnection {
     }
 
     /// Forward one pending message in the reverse direction, i.e. **from B to A**.
+    #[tracing::instrument(level = "info", skip(self), fields(from = %self.ab.face, to = %self.ba.face.state.zid.short()), ret)]
     pub(crate) fn rev_fwd1(&mut self) -> Option<Message> {
         let msg = self
             .ba
@@ -821,16 +840,44 @@ impl EstablishedConnection {
         msgs
     }
 
-    /// Bi-directionally forward all pending messages, i.e. **from A and B _then_ from B to A**.
+    /// Bi-directionally forward all pending messages, i.e. **from A to B and from B to A**.
     pub(crate) fn bi_fwd(&mut self) {
-        self.fwd();
-        self.rev_fwd();
+        loop {
+            match (self.fwd1(), self.rev_fwd1()) {
+                (None, None) => break,
+                _ => continue,
+            }
+        }
     }
 
-    fn inject(target: &MockFace, msg: &Message) {
-        use zenoh_protocol::network::{NetworkBodyMut, NetworkMessageMut};
-        use zenoh_transport::TransportPeerEventHandler as _;
+    pub(crate) fn bi_fwd_many_bounded<const N: usize, const L: usize>(
+        mut conns: [&mut EstablishedConnection; N],
+    ) {
+        for _ in 0..L {
+            if conns
+                .iter_mut()
+                .all(|c| c.fwd1().is_none() && c.rev_fwd1().is_none())
+            {
+                break;
+            }
+        }
+    }
 
+    pub(crate) fn bi_fwd_many_unbounded<const N: usize>(
+        mut conns: [&mut EstablishedConnection; N],
+    ) {
+        loop {
+            if conns
+                .iter_mut()
+                .all(|c| c.fwd1().is_none() && c.rev_fwd1().is_none())
+            {
+                break;
+            }
+        }
+    }
+
+    #[tracing::instrument(level = "info", fields(target = %target.face), ret)]
+    fn inject(target: &MockFace, msg: &Message) {
         match msg {
             Message::Push(p) => target
                 .face
@@ -849,5 +896,21 @@ impl EstablishedConnection {
                 }
             }
         }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.ab
+            .recorder
+            .with_messages(|msgs| msgs.len() == self.nfwd)
+    }
+
+    fn is_rev_complete(&self) -> bool {
+        self.ba
+            .recorder
+            .with_messages(|msgs| msgs.len() == self.rev_nfwd)
+    }
+
+    fn is_bi_complete(&self) -> bool {
+        self.is_complete() && self.is_rev_complete()
     }
 }

@@ -54,6 +54,8 @@ pub struct GatewayBuilder<'c> {
     stats: Option<zenoh_stats::StatsRegistry>,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
+    #[cfg(test)]
+    disable_async_tree_computation: bool,
 }
 
 impl<'conf> GatewayBuilder<'conf> {
@@ -65,6 +67,8 @@ impl<'conf> GatewayBuilder<'conf> {
             stats: None,
             #[cfg(test)]
             subregions: None,
+            #[cfg(test)]
+            disable_async_tree_computation: false,
         }
     }
 
@@ -82,6 +86,12 @@ impl<'conf> GatewayBuilder<'conf> {
     #[cfg(feature = "stats")]
     pub fn stats(mut self, stats: zenoh_stats::StatsRegistry) -> Self {
         self.stats = Some(stats);
+        self
+    }
+
+    #[cfg(all(test, feature = "test"))]
+    pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
+        self.disable_async_tree_computation = value;
         self
     }
 
@@ -165,7 +175,19 @@ impl<'conf> GatewayBuilder<'conf> {
                                         Box::new(hat::broker::Hat::new(region))
                                     }
                                     (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(region)),
-                                    (_, WhatAmI::Router) => Box::new(hat::router::Hat::new(region)),
+                                    (_, WhatAmI::Router) => {
+                                        #[cfg(test)]
+                                        {
+                                            let mut hat = hat::router::Hat::new(region);
+                                            hat.set_disable_async_tree_computation(
+                                                self.disable_async_tree_computation,
+                                            );
+                                            Box::new(hat)
+                                        }
+
+                                        #[cfg(not(test))]
+                                        Box::new(hat::router::Hat::new(region))
+                                    }
                                 },
                             )
                         })

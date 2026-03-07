@@ -80,23 +80,16 @@ impl TreesComputationWorker {
                     *TREES_COMPUTATION_DELAY_MS,
                 ))
                 .await;
+
                 if let Ok(tables_ref) = rx.recv_async().await {
                     let mut wtables = zwrite!(tables_ref.tables);
                     let tables = &mut *wtables;
-                    let hat = tables.hats[region]
+
+                    tables.hats[region]
                         .as_any_mut()
                         .downcast_mut::<Hat>()
-                        .unwrap();
-
-                    tracing::trace!("Compute trees");
-                    let new_children = hat.net_mut().compute_trees();
-
-                    tracing::trace!("Compute routes");
-                    hat.pubsub_tree_change(&mut tables.data, &new_children);
-                    hat.queries_tree_change(&mut tables.data, &new_children);
-                    hat.token_tree_change(&mut tables.data, &new_children);
-                    hat.disable_all_routes(&mut tables.data);
-                    drop(wtables);
+                        .unwrap()
+                        .do_compute_trees(&mut tables.data);
                 }
             }
         });
@@ -111,6 +104,8 @@ pub(crate) struct Hat {
     router_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>, // TODO(regions): remove Option?
     routers_trees_worker: TreesComputationWorker,
+    #[cfg(test)]
+    disable_async_tree_computation: bool,
 }
 
 impl Debug for Hat {
@@ -128,7 +123,14 @@ impl Hat {
             router_tokens: HashSet::new(),
             routers_net: None,
             routers_trees_worker: TreesComputationWorker::new(region),
+            #[cfg(test)]
+            disable_async_tree_computation: false,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_disable_async_tree_computation(&mut self, value: bool) {
+        self.disable_async_tree_computation = value;
     }
 
     pub(crate) fn net(&self) -> &Network {
@@ -168,11 +170,35 @@ impl Hat {
         tables.faces.values().find(|face| face.zid == *zid)
     }
 
-    fn schedule_compute_trees(&self, tables_ref: Arc<TablesLock>) {
+    fn compute_trees_async(&self, tables_ref: Arc<TablesLock>) {
         tracing::trace!("Schedule trees computation");
         if let Err(err) = self.routers_trees_worker.tx.try_send(tables_ref) {
             tracing::trace!(%err, "Failed to schedule routing tree computation");
         }
+    }
+
+    fn compute_trees(&mut self, ctx: DispatcherContext) {
+        #[cfg(test)]
+        {
+            if self.disable_async_tree_computation {
+                self.do_compute_trees(ctx.tables);
+            } else {
+                self.compute_trees_async(ctx.tables_lock.clone());
+            }
+        }
+
+        #[cfg(not(test))]
+        self.compute_trees_async(ctx.tables_lock.clone());
+    }
+
+    fn do_compute_trees(&mut self, tables: &mut TablesData) {
+        tracing::trace!("Compute trees");
+        let new_children = self.net_mut().compute_trees();
+        tracing::trace!("Compute routes");
+        self.pubsub_tree_change(tables, &new_children);
+        self.queries_tree_change(tables, &new_children);
+        self.token_tree_change(tables, &new_children);
+        self.disable_all_routes(tables);
     }
 
     fn get_router(&self, face: &FaceState, nodeid: NodeId) -> Option<ZenohIdProto> {
@@ -273,9 +299,9 @@ impl HatBaseTrait for Hat {
         debug_assert!(self.owns(ctx.src_face));
 
         let link_id = self.net_mut().add_link(transport.clone());
-
         self.face_hat_mut(ctx.src_face).link_id = link_id;
-        self.schedule_compute_trees(ctx.tables_lock.clone());
+
+        self.compute_trees(ctx);
 
         Ok(())
     }
@@ -283,7 +309,7 @@ impl HatBaseTrait for Hat {
     fn close_face(&mut self, ctx: DispatcherContext) {
         debug_assert!(self.owns(ctx.src_face));
 
-        self.schedule_compute_trees(ctx.tables_lock.clone());
+        self.compute_trees(ctx);
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, other_hats), ret)]
@@ -411,10 +437,10 @@ impl HatBaseTrait for Hat {
                 }
 
                 hats[region]
-                    .as_any()
-                    .downcast_ref::<Self>()
+                    .as_any_mut()
+                    .downcast_mut::<Self>()
                     .unwrap()
-                    .schedule_compute_trees(ctx.tables_lock.clone());
+                    .compute_trees(ctx);
             }
         }
 
@@ -481,7 +507,7 @@ impl HatBaseTrait for Hat {
         drop(config);
         if let Some(net) = self.routers_net.as_mut() {
             if net.update_link_weights(router_link_weights) {
-                self.schedule_compute_trees(tables_ref.clone());
+                self.compute_trees_async(tables_ref.clone());
             }
         }
         Ok(())

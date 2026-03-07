@@ -350,7 +350,7 @@ impl fmt::Debug for FaceState {
         f.debug_struct("FaceState")
             .field("id", &self.id)
             .field("zid", &self.zid)
-            .field("bound", &self.region)
+            .field("region", &self.region)
             .finish()
     }
 }

@@ -33,3 +33,10 @@ serial = { max-threads = 1 }
 [[profile.default.overrides]]
 filter = 'test(zenoh_querier_matching_status::)'
 test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = """
+package(zenoh) + test(net::tests::regions)
+"""
+retries = 0
+slow-timeout = { period = "2s", terminate-after = 1 }
