@@ -89,7 +89,7 @@ impl<'conf> GatewayBuilder<'conf> {
         self
     }
 
-    #[cfg(all(test, feature = "test"))]
+    #[cfg(test)]
     pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
         self.disable_async_tree_computation = value;
         self

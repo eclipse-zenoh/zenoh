@@ -36,7 +36,7 @@ test-group = 'serial'
 
 [[profile.default.overrides]]
 filter = """
-package(zenoh) + test(net::tests::regions)
+package(zenoh) and test(net::tests::regions)
 """
 retries = 0
 slow-timeout = { period = "2s", terminate-after = 1 }

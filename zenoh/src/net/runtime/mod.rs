@@ -585,13 +585,15 @@ impl RuntimeBuilder {
         self
     }
 
-    #[cfg(all(test, feature = "test"))]
+    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn subregions(mut self, subregions: Vec<Region>) -> Self {
         self.subregions.replace(subregions);
         self
     }
 
-    #[cfg(all(test, feature = "test"))]
+    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
         self.disable_async_tree_computation = value;
         self
@@ -638,7 +640,7 @@ impl RuntimeBuilder {
             gateway_builder
         };
 
-        #[cfg(all(test, feature = "test"))]
+        #[cfg(test)]
         let gateway_builder =
             gateway_builder.disable_async_tree_computation(disable_async_tree_computation);
 
