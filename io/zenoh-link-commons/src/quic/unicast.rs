@@ -540,7 +540,7 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
                                 }
                             };
                             // Communicate the new link to the initial transport manager
-                            if let Err(e) = self.inner.manager.send_async(LinkUnicast(link)).await {
+                            if let Err(e) = self.inner.manager.send_async(LinkUnicast::from(link)).await {
                                 tracing::error!("{}-{}: {}", file!(), line!(), e)
                             }
                         }

@@ -265,7 +265,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             )
         });
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
