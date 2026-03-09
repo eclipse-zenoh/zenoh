@@ -309,12 +309,21 @@ pub fn route_data(
     payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
     let mut builder = RouteBuilder::<Direction>::new();
 
+    let region = face.region;
+    let src_zid = rtables.hats[region].node_id_to_zid(
+        face,
+        rtables.hats[region].map_routing_context(&rtables.data, face, msg.ext_nodeid.node_id),
+    );
+
     for (region, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &expr) {
             let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, region);
 
             for dir in route.iter() {
-                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
+                // TODO(regions): cache result by inputs?
+                if rtables.inter_region_filter(&face.region, &dir.dst_face.region, src_zid.as_ref())
+                    && hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr)
+                {
                     builder.insert(dir.dst_face.id, || dir.clone());
                 }
             }
@@ -328,9 +337,9 @@ pub fn route_data(
         }
     };
 
-    let mut dirs = builder.build().into_iter();
-
+    let dirs = builder.build();
     tracing::trace!(?dirs);
+    let mut dirs = dirs.into_iter();
 
     if let Some(dir) = dirs.next() {
         treat_timestamp!(
@@ -338,11 +347,6 @@ pub fn route_data(
             msg.payload,
             rtables.data.drop_future_timestamp
         );
-
-        msg.wire_expr = dir.wire_expr.clone();
-        msg.ext_nodeid = ext::NodeIdType {
-            node_id: dir.node_id,
-        };
 
         drop(rtables);
 
@@ -368,6 +372,11 @@ pub fn route_data(
             msg_clone = msg.clone();
             msg = &mut msg_clone;
         }
+        msg.wire_expr = dir.wire_expr.clone();
+        msg.ext_nodeid = ext::NodeIdType {
+            node_id: dir.node_id,
+        };
+
         send_push(&dir.dst_face, msg, reliability);
     }
 }

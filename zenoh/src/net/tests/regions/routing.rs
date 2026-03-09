@@ -500,9 +500,7 @@ fn multiple_gateways_data_routing_r2r_downstream() {
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -576,9 +574,7 @@ fn multiple_gateways_query_routing_r2r_downstream() {
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -823,12 +819,12 @@ fn multiple_gateways_query_routing_p2r_upstream() {
     ps.query(1, &ke);
     bi_fwd_all();
 
-    assert_eq!(rs.recorder().requests().len(), 1);
-
     assert!(r_g0.is_bi_complete());
     assert!(r_g1.is_bi_complete());
     assert!(p_g0.is_bi_complete());
     assert!(p_g1.is_bi_complete());
+
+    assert_eq!(rs.recorder().requests().len(), 1);
 }
 
 #[test]
@@ -966,9 +962,7 @@ fn multiple_gateways_data_routing_r2r_upstream() {
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -1042,9 +1036,7 @@ fn multiple_gateways_query_routing_r2r_upstream() {
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -1057,12 +1049,12 @@ fn multiple_gateways_query_routing_r2r_upstream() {
     ss.query(1, &ke);
     bi_fwd_all();
 
-    assert_eq!(ns.recorder().requests().len(), 1);
-
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+
+    assert_eq!(ns.recorder().requests().len(), 1);
 }
 
 #[test]
@@ -1117,8 +1109,18 @@ fn multiple_gateways_data_routing_p2p_downstream() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1137,6 +1139,7 @@ fn multiple_gateways_data_routing_p2p_downstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
@@ -1191,8 +1194,18 @@ fn multiple_gateways_query_routing_p2p_downstream() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1211,6 +1224,7 @@ fn multiple_gateways_query_routing_p2p_downstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
@@ -1265,8 +1279,18 @@ fn multiple_gateways_data_routing_p2p_upstream() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1279,12 +1303,13 @@ fn multiple_gateways_data_routing_p2p_upstream() {
     ss.put(&ke, vec![0x42]);
     bi_fwd_all();
 
-    assert_eq!(ns.recorder().pushes().len(), 1);
-
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
+
+    assert_eq!(ns.recorder().pushes().len(), 1);
 }
 
 #[test]
@@ -1339,8 +1364,18 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1367,6 +1402,7 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
@@ -1421,8 +1457,18 @@ fn multiple_gateways_query_routing_p2p_upstream() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1441,6 +1487,7 @@ fn multiple_gateways_query_routing_p2p_upstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
@@ -1495,8 +1542,18 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceConfig::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1523,4 +1580,5 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }

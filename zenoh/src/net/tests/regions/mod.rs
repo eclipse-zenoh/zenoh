@@ -636,6 +636,7 @@ impl Harness {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.adminspace.set_enabled(false).unwrap();
         config.plugins_loading.set_enabled(false).unwrap();
+        config.scouting.gossip.set_multihop(Some(true)).unwrap();
 
         let runtime = block_on(
             RuntimeBuilder::new(crate::api::config::Config(config))

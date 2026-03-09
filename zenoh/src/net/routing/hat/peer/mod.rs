@@ -55,7 +55,7 @@ use crate::net::{
             face::InterestState, interests::RemoteInterest, queries::LocalQueryables,
             region::RegionMap,
         },
-        gateway::{FaceContext, LocalSubscribers},
+        gateway::{FaceContext, LocalSubscribers, DEFAULT_NODE_ID},
         hat::{DispatcherContext, Remote},
         RoutingContext,
     },
@@ -170,7 +170,7 @@ impl HatBaseTrait for Hat {
                 gossip_target,
                 autoconnect,
                 wait_declares,
-                &self.region,
+                self.region().bound(),
             ));
         }
         Ok(())
@@ -353,6 +353,24 @@ impl HatBaseTrait for Hat {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        debug_assert_eq!(node_id, DEFAULT_NODE_ID);
+
+        Some(src.zid)
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn region_gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+        let Some(gossip) = self.gossip.as_ref() else {
+            tracing::error!(
+                "Gossip is disabled: cannot de-duplicate data traversing region gateways"
+            );
+            return None;
+        };
+
+        Some(gossip.region_gateways())
     }
 }
 

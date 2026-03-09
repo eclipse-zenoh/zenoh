@@ -265,7 +265,10 @@ impl HatPubSubTrait for Hat {
         }
 
         if self.region.bound().is_north() && src_region.bound().is_south() {
-            if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
+            for face in self
+                .owned_faces(tables)
+                .filter(|f| f.remote_bound.is_south())
+            {
                 route.try_insert(face.id, || {
                     let has_interest_finalized = expr
                         .resource()

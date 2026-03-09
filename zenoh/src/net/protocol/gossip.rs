@@ -13,6 +13,7 @@
 //
 use std::{collections::HashMap, convert::TryInto};
 
+use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use vec_map::VecMap;
 use zenoh_buffers::{
@@ -23,8 +24,11 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{Region, WhatAmI, WhatAmIMatcher, ZenohIdProto},
-    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+    core::{Bound, WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    network::{
+        oam::{self, id::OAM_LINKSTATE},
+        NetworkBody, NetworkMessage, Oam,
+    },
 };
 use zenoh_transport::unicast::TransportUnicast;
 
@@ -54,7 +58,7 @@ impl Gossip {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         wait_declares: bool,
-        region: &Region,
+        bound: Bound,
     ) -> Self {
         if gossip_multihop {
             Self::Network(Network::new(
@@ -67,7 +71,7 @@ impl Gossip {
                 gossip_target,
                 autoconnect,
                 HashMap::new(),
-                region,
+                bound,
             ))
         } else {
             Self::Gossip(GossipNet::new(
@@ -78,27 +82,32 @@ impl Gossip {
                 gossip_target,
                 autoconnect,
                 wait_declares,
+                bound,
             ))
         }
     }
+
     pub(crate) fn dot(&self) -> String {
         match self {
             Self::Gossip(n) => n.dot(),
             Self::Network(n) => n.dot(),
         }
     }
+
     pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         match self {
             Self::Gossip(n) => n.add_link(transport),
             Self::Network(n) => n.add_link(transport),
         }
     }
+
     pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         match self {
             Self::Gossip(n) => n.remove_link(zid),
             Self::Network(n) => n.remove_link(zid),
         }
     }
+
     pub(crate) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
@@ -112,6 +121,21 @@ impl Gossip {
             Self::Network(n) => {
                 n.link_states(link_states, src);
             }
+        }
+    }
+
+    pub(crate) fn region_gateways(&self) -> Vec<ZenohIdProto> {
+        match self {
+            Gossip::Gossip(gossip) => gossip
+                .graph
+                .node_weights()
+                .filter_map(|n| n.is_gateway.then_some(n.zid))
+                .collect_vec(),
+            Gossip::Network(network) => network
+                .graph
+                .node_weights()
+                .filter_map(|n| n.is_gateway.then_some(n.zid))
+                .collect_vec(),
         }
     }
 }
@@ -129,6 +153,10 @@ struct Node {
     whatami: Option<WhatAmI>,
     locators: Option<Vec<Locator>>,
     sn: u64,
+    /// Whether this node is a peer region gateway.
+    ///
+    /// Multiple nodes within the peer-to-peer network may set this flag to `true`.
+    is_gateway: bool,
 }
 
 impl std::fmt::Debug for Node {
@@ -194,6 +222,7 @@ impl GossipNet {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         wait_declares: bool,
+        bound: Bound,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -202,6 +231,7 @@ impl GossipNet {
             whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
+            is_gateway: bound.is_south(),
         });
         GossipNet {
             name,
@@ -377,6 +407,7 @@ impl GossipNet {
                         link_state.locators,
                         link_state.sn,
                         link_state.links,
+                        link_state.is_gateway,
                     ))
                 } else {
                     match src_link.get_zid(&link_state.psid) {
@@ -386,6 +417,7 @@ impl GossipNet {
                             link_state.locators,
                             link_state.sn,
                             link_state.links,
+                            link_state.is_gateway,
                         )),
                         None => {
                             tracing::error!(
@@ -409,7 +441,7 @@ impl GossipNet {
             );
         }
 
-        for (zid, whatami, locators, sn, _links) in link_states.into_iter() {
+        for (zid, whatami, locators, sn, _links, is_gateway) in link_states.into_iter() {
             if zid == src {
                 let idx = match self.get_idx(&zid) {
                     None => {
@@ -418,6 +450,7 @@ impl GossipNet {
                             whatami: Some(whatami),
                             locators: locators.clone(),
                             sn,
+                            is_gateway,
                         });
                         locators.is_some().then_some(idx)
                     }

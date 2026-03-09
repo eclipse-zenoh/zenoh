@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{Encoding, Region, WireExpr},
+    core::{Encoding, Region, WireExpr, ZenohIdProto},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         request::{self, ext::QueryTarget, Request, RequestId},
@@ -288,7 +288,7 @@ impl Face {
                 #[cfg(feature = "stats")]
                 payload_observer.observe_payload(zenoh_stats::Rx, &self.state, msg);
 
-                let mut query_dirs = RouteBuilder::<QueryDirection>::new();
+                let mut builder = RouteBuilder::<QueryDirection>::new();
 
                 let queries_lock = zwrite!(self.tables.queries_lock);
 
@@ -308,14 +308,24 @@ impl Face {
                             region,
                         );
 
+                        let src_zid = rtables.hats[self.state.region].node_id_to_zid(
+                            &self.state,
+                            rtables.hats[self.state.region].map_routing_context(
+                                &rtables.data,
+                                &self.state,
+                                msg.ext_nodeid.node_id,
+                            ),
+                        );
+
                         compute_final_route(
                             &rtables,
-                            &mut query_dirs,
+                            &mut builder,
                             &qabls,
                             &self.state,
                             &expr,
-                            &msg.ext_target,
+                            msg.ext_target,
                             &query,
+                            src_zid.as_ref(),
                         );
                     }
                 }
@@ -332,7 +342,7 @@ impl Face {
                 drop(queries_lock);
                 drop(rtables);
 
-                let dirs = query_dirs.build();
+                let dirs = builder.build();
 
                 tracing::trace!(?dirs);
 
@@ -410,19 +420,23 @@ impl Face {
     }
 }
 
-#[inline]
+#[allow(clippy::too_many_arguments)] // FIXME(regions)
 fn compute_final_route(
     tables: &Tables,
     route: &mut RouteBuilder<QueryDirection>,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     expr: &RoutingExpr,
-    target: &QueryTarget,
+    target: QueryTarget,
     query: &Arc<Query>,
+    src_zid: Option<&ZenohIdProto>,
 ) {
     match target {
         QueryTarget::All => {
-            for qabl in qabls.iter() {
+            for qabl in qabls
+                .iter()
+                .filter(|q| tables.inter_region_filter(&src_face.region, &q.region, src_zid))
+            {
                 if tables.hats[qabl.region].egress_filter(
                     &tables.data,
                     src_face,
@@ -445,7 +459,10 @@ fn compute_final_route(
             }
         }
         QueryTarget::AllComplete => {
-            for qabl in qabls.iter() {
+            for qabl in qabls
+                .iter()
+                .filter(|q| tables.inter_region_filter(&src_face.region, &q.region, src_zid))
+            {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
                     && tables.hats[qabl.region].egress_filter(
                         &tables.data,
@@ -470,8 +487,10 @@ fn compute_final_route(
             }
         }
         QueryTarget::BestMatching => {
-            if let Some(qabl) = qabls.iter().find(|qabl| {
-                qabl.dir.dst_face.id != src_face.id && qabl.info.is_some_and(|info| info.complete)
+            if let Some(qabl) = qabls.iter().find(|q| {
+                q.dir.dst_face.id != src_face.id
+                    && q.info.is_some_and(|info| info.complete)
+                    && tables.inter_region_filter(&src_face.region, &q.region, src_zid)
             }) {
                 route.insert(qabl.dir.dst_face.id, || {
                     let mut dir = qabl.dir.clone();
@@ -492,8 +511,9 @@ fn compute_final_route(
                     qabls,
                     src_face,
                     expr,
-                    &QueryTarget::All,
+                    QueryTarget::All,
                     query,
+                    src_zid,
                 )
             }
         }

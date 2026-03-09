@@ -16,6 +16,7 @@ use std::{
     cell::OnceCell,
     collections::HashMap,
     fmt::Debug,
+    hash::Hasher,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -27,7 +28,7 @@ use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WireExpr, ZenohIdProto},
+    core::{Bound, ExprId, Region, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -287,6 +288,56 @@ pub struct Tables {
 }
 
 impl Tables {
+    /// Returns `false` if a `Push` or `Request` should be filtered out if routed from `src` to `dst`.
+    #[tracing::instrument(level = "trace", skip(self), ret)]
+    pub(crate) fn inter_region_filter(
+        &self,
+        src: &Region,
+        dst: &Region,
+        src_zid: Option<&ZenohIdProto>,
+    ) -> bool {
+        if src.bound() == dst.bound() {
+            // NOTE(regions): only messages traveling downstream/upstream need filtering, i.e. in
+            // the presence of multiple region gateways.
+            return true;
+        }
+
+        let gwys = match src.bound() {
+            Bound::North => self.hats[*dst].region_gateways(&self.data),
+            Bound::South => self.hats[*src].region_gateways(&self.data),
+        };
+
+        let Some(gwys) = gwys else {
+            tracing::debug!("Could not compute region gateways");
+            return true;
+        };
+
+        debug_assert!(gwys.contains(&self.data.zid));
+
+        let Some(src_zid) = src_zid else {
+            bug!("Unknown src zid");
+            return true;
+        };
+
+        let hash = |gwy: &ZenohIdProto| {
+            let mut hasher = ahash::AHasher::default();
+            hasher.write(&src_zid.to_le_bytes());
+            hasher.write(&gwy.to_le_bytes());
+            hasher.finish()
+        };
+
+        let Some(primary) = gwys
+            .iter()
+            .max_by(|lhs, rhs| hash(lhs).cmp(&hash(rhs)))
+            .copied()
+        else {
+            bug!("Empty region gateways list");
+            return true;
+        };
+
+        self.data.zid == primary
+    }
+
     #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn disable_all_hat_routes(&mut self) {
         for hat in self.hats.values_mut() {

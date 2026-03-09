@@ -24,6 +24,7 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use itertools::Itertools;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{Region, ZenohIdProto},
@@ -47,7 +48,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, region::RegionMap},
-        gateway::FaceContext,
+        gateway::{FaceContext, DEFAULT_NODE_ID},
         hat::{DispatcherContext, Remote},
     },
     runtime::Runtime,
@@ -239,6 +240,21 @@ impl HatBaseTrait for Hat {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        debug_assert_eq!(node_id, DEFAULT_NODE_ID);
+
+        Some(src.zid)
+    }
+
+    #[tracing::instrument(level = "trace", skip(tables), ret)]
+    fn region_gateways(&self, tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+        let gwys = self.owned_faces(tables).map(|f| f.zid).collect_vec();
+
+        debug_assert!(gwys.len() <= 1);
+
+        Some(gwys)
     }
 }
 
