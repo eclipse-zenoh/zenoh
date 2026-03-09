@@ -71,8 +71,7 @@ fn main() {
         peer_ext.to_bytes()
     };
 
-    let parsed_peer =
-        MemInitExt::from_bytes(&peer_ext_bytes).expect("peer's ext_mem should parse");
+    let parsed_peer = MemInitExt::from_bytes(&peer_ext_bytes).expect("peer's ext_mem should parse");
 
     let peer_caps = MemPeerCaps::new(parsed_peer.backends);
     let negotiated = registry.negotiate(&peer_caps);

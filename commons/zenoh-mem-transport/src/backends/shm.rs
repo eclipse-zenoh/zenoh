@@ -75,12 +75,18 @@ impl ZeroMemTransport for ShmBackend {
         // This method is a no-op placeholder — the actual encoding lives in the codec
         // for now and will be migrated here in Phase 3.
         let _ = (zs, writer);
-        Err(zerror!("ShmBackend::write_handle: use codec directly (Phase 3 migration pending)").into())
+        Err(
+            zerror!("ShmBackend::write_handle: use codec directly (Phase 3 migration pending)")
+                .into(),
+        )
     }
 
     fn read_handle(&self, reader: &mut dyn HandleReader, kind: ZSliceKind) -> ZResult<ZSlice> {
         let _ = (reader, kind);
-        Err(zerror!("ShmBackend::read_handle: use codec directly (Phase 3 migration pending)").into())
+        Err(
+            zerror!("ShmBackend::read_handle: use codec directly (Phase 3 migration pending)")
+                .into(),
+        )
     }
 
     fn downgrade(&self, _zs: &ZSlice, _path: DowngradePath) -> Option<ZSlice> {

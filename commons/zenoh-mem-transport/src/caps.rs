@@ -271,7 +271,9 @@ mod tests {
 
     #[test]
     fn mem_init_ext_shm_roundtrip() {
-        let ext = MemInitExt::new(vec![MemBackendCaps::Shm(ShmCaps { segment_id: 0xDEAD_BEEF_1234_5678 })]);
+        let ext = MemInitExt::new(vec![MemBackendCaps::Shm(ShmCaps {
+            segment_id: 0xDEAD_BEEF_1234_5678,
+        })]);
         let bytes = ext.to_bytes();
         let decoded = MemInitExt::from_bytes(&bytes).expect("decode failed");
         assert_eq!(decoded.backends.len(), 1);
@@ -283,7 +285,9 @@ mod tests {
 
     #[test]
     fn mem_init_ext_cuda_roundtrip_no_devices() {
-        let ext = MemInitExt::new(vec![MemBackendCaps::CudaIpc(CudaIpcCaps { device_ids: vec![] })]);
+        let ext = MemInitExt::new(vec![MemBackendCaps::CudaIpc(CudaIpcCaps {
+            device_ids: vec![],
+        })]);
         let bytes = ext.to_bytes();
         let decoded = MemInitExt::from_bytes(&bytes).expect("decode failed");
         assert_eq!(decoded.backends.len(), 1);
@@ -295,9 +299,9 @@ mod tests {
 
     #[test]
     fn mem_init_ext_cuda_roundtrip_multiple_devices() {
-        let ext = MemInitExt::new(vec![
-            MemBackendCaps::CudaIpc(CudaIpcCaps { device_ids: vec![0, 1, 2, -1] }),
-        ]);
+        let ext = MemInitExt::new(vec![MemBackendCaps::CudaIpc(CudaIpcCaps {
+            device_ids: vec![0, 1, 2, -1],
+        })]);
         let bytes = ext.to_bytes();
         let decoded = MemInitExt::from_bytes(&bytes).expect("decode failed");
         match &decoded.backends[0] {
@@ -310,7 +314,9 @@ mod tests {
     fn mem_init_ext_multiple_backends_roundtrip() {
         let ext = MemInitExt::new(vec![
             MemBackendCaps::Shm(ShmCaps { segment_id: 42 }),
-            MemBackendCaps::CudaIpc(CudaIpcCaps { device_ids: vec![0, 1] }),
+            MemBackendCaps::CudaIpc(CudaIpcCaps {
+                device_ids: vec![0, 1],
+            }),
         ]);
         let bytes = ext.to_bytes();
         let decoded = MemInitExt::from_bytes(&bytes).expect("decode failed");
@@ -335,7 +341,9 @@ mod tests {
     #[test]
     fn mem_init_ext_rejects_truncated() {
         // Truncate after version+n_backends but before first backend
-        let ext = MemInitExt::new(vec![MemBackendCaps::CudaIpc(CudaIpcCaps { device_ids: vec![0] })]);
+        let ext = MemInitExt::new(vec![MemBackendCaps::CudaIpc(CudaIpcCaps {
+            device_ids: vec![0],
+        })]);
         let bytes = ext.to_bytes();
         assert!(MemInitExt::from_bytes(&bytes[..3]).is_none()); // header only, no caps
     }
@@ -344,14 +352,14 @@ mod tests {
     fn mem_init_ext_skips_unknown_backend_id() {
         // Manually craft a payload with an unknown backend id (0x42)
         let mut bytes = vec![
-            1u8,    // version
-            2u8,    // n_backends = 2
-            0x42,   // unknown id
-            3, 0,   // len = 3
-            0, 0, 0,// 3 bytes of garbage
-            1u8,    // CudaIpc id
+            1u8,  // version
+            2u8,  // n_backends = 2
+            0x42, // unknown id
+            3, 0, // len = 3
+            0, 0, 0,   // 3 bytes of garbage
+            1u8, // CudaIpc id
             1, 0,   // len = 1
-            0u8,    // n_devices = 0
+            0u8, // n_devices = 0
         ];
         let _ = bytes; // suppress unused warning; use directly
         let decoded = MemInitExt::from_bytes(&bytes).expect("should succeed, skipping unknown");
@@ -376,9 +384,15 @@ mod tests {
     fn negotiated_mem_caps_fallback() {
         use zenoh_buffers::ZSliceKind;
         let mut caps = NegotiatedMemCaps::new();
-        caps.set(ZSliceKind::ShmPtr, NegotiationResult::Fallback(DowngradePath::ToRaw));
+        caps.set(
+            ZSliceKind::ShmPtr,
+            NegotiationResult::Fallback(DowngradePath::ToRaw),
+        );
         let entry = caps.get(ZSliceKind::ShmPtr).expect("should be present");
-        assert!(matches!(entry.result, NegotiationResult::Fallback(DowngradePath::ToRaw)));
+        assert!(matches!(
+            entry.result,
+            NegotiationResult::Fallback(DowngradePath::ToRaw)
+        ));
     }
 
     // ── MemPeerCaps ───────────────────────────────────────────────────────────
@@ -387,7 +401,9 @@ mod tests {
     fn mem_peer_caps_find() {
         let peer = MemPeerCaps::new(vec![
             MemBackendCaps::Shm(ShmCaps { segment_id: 1 }),
-            MemBackendCaps::CudaIpc(CudaIpcCaps { device_ids: vec![0] }),
+            MemBackendCaps::CudaIpc(CudaIpcCaps {
+                device_ids: vec![0],
+            }),
         ]);
         assert!(peer.find(MemBackendId::Shm).is_some());
         assert!(peer.find(MemBackendId::CudaIpc).is_some());

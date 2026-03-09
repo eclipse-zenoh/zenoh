@@ -117,7 +117,9 @@ mod tests {
         let reg = make_shm_registry();
         let peer = MemPeerCaps::new(vec![MemBackendCaps::Shm(ShmCaps { segment_id: 99 })]);
         let neg = reg.negotiate(&peer);
-        let entry = neg.get(ZSliceKind::ShmPtr).expect("ShmPtr should be negotiated");
+        let entry = neg
+            .get(ZSliceKind::ShmPtr)
+            .expect("ShmPtr should be negotiated");
         assert!(matches!(entry.result, NegotiationResult::Native));
     }
 
@@ -126,7 +128,9 @@ mod tests {
         let reg = make_shm_registry();
         let peer = MemPeerCaps::new(vec![]); // peer advertises nothing
         let neg = reg.negotiate(&peer);
-        let entry = neg.get(ZSliceKind::ShmPtr).expect("ShmPtr should be negotiated");
+        let entry = neg
+            .get(ZSliceKind::ShmPtr)
+            .expect("ShmPtr should be negotiated");
         assert!(matches!(
             entry.result,
             NegotiationResult::Fallback(DowngradePath::ToRaw)

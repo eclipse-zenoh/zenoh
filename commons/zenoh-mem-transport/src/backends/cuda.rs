@@ -78,7 +78,10 @@ impl ZeroMemTransport for CudaIpcBackend {
         // Encoding is still handled by the codec in zenoh-codec/src/core/zbuf.rs
         // for Phase 1/2. This will be fully migrated in Phase 3.
         let _ = (zs, writer);
-        Err(zerror!("CudaIpcBackend::write_handle: codec handles encoding (Phase 3 pending)").into())
+        Err(
+            zerror!("CudaIpcBackend::write_handle: codec handles encoding (Phase 3 pending)")
+                .into(),
+        )
     }
 
     fn read_handle(&self, reader: &mut dyn HandleReader, kind: ZSliceKind) -> ZResult<ZSlice> {
