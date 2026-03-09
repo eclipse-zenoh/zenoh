@@ -226,7 +226,7 @@ impl HatBaseTrait for Hat {
             && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
-    fn info(&self, _kind: WhatAmI) -> String {
+    fn info(&self) -> String {
         "graph {}".to_string()
     }
 

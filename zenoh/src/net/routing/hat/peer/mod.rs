@@ -332,7 +332,7 @@ impl HatBaseTrait for Hat {
             && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
-    fn info(&self, _kind: WhatAmI) -> String {
+    fn info(&self) -> String {
         self.gossip
             .as_ref()
             .map(|net| net.dot())
