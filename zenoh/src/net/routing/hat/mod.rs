@@ -216,7 +216,7 @@ pub(crate) trait HatBaseTrait: Any {
         expr: &RoutingExpr,
     ) -> bool;
 
-    fn info(&self, kind: WhatAmI) -> String; // FIXME(regions*): remove `kind`.
+    fn info(&self) -> String;
 
     fn close_face(&mut self, ctx: DispatcherContext);
 

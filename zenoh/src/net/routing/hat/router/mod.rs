@@ -478,15 +478,8 @@ impl HatBaseTrait for Hat {
             && src_face.mcast_group.is_none()
     }
 
-    fn info(&self, kind: WhatAmI) -> String {
-        match kind {
-            WhatAmI::Router => self
-                .routers_net
-                .as_ref()
-                .map(|net| net.dot())
-                .unwrap_or_else(|| "graph {}".to_string()),
-            _ => "graph {}".to_string(),
-        }
+    fn info(&self) -> String {
+        self.net().dot()
     }
 
     fn update_from_config(

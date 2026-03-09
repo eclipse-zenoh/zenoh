@@ -22,7 +22,7 @@ use itertools::Itertools;
 use serde_json::json;
 use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{wrappers::ZenohId, ConfigValidator, WhatAmI};
+use zenoh_config::{wrappers::ZenohId, ConfigValidator};
 use zenoh_core::Wait;
 use zenoh_keyexpr::keyexpr;
 use zenoh_link::Link;
@@ -793,7 +793,7 @@ fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 
         if query.key_expr().intersects(&reply_key) {
             if let Err(e) = query
-                .reply(reply_key, hat.info(WhatAmI::Router))
+                .reply(reply_key, hat.info())
                 .encoding(Encoding::TEXT_PLAIN)
                 .wait()
             {
