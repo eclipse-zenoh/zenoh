@@ -34,7 +34,7 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
-/// A minimal stub implementation of [`TransportUnicastTrait`] for use in routing tests.
+/// A minimal stub implementation of `TransportUnicastTrait` for use in routing tests.
 ///
 /// All methods panic with `unimplemented!()` except `get_zid`, `get_whatami`, and `schedule`.
 /// `schedule` converts each incoming [`NetworkMessageMut`] to an owned [`NetworkMessage`] and
