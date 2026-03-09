@@ -492,7 +492,7 @@ async fn rx_task_uring(
 
     tokio::select! {
         e = uring_read_task.read_error() => {
-            tracing::debug!("Uring RX task stopped by uring error event");
+            tracing::debug!("Uring RX task stopped by uring task error event");
             return Err(e);
         },
         finished = transport

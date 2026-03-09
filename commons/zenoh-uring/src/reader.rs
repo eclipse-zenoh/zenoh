@@ -51,19 +51,14 @@ struct Rx {
 }
 
 impl Rx {
-    fn new(
-        callback: Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()>>,
-        fd: RawFd,
-    ) -> (Self, UnboundedReceiver<zenoh_result::Error>) {
-        let (error_sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-
+    fn new(fd: RawFd, cb: RxCallback, error_sender: UnboundedSender<zenoh_result::Error>) -> Self {
         let rx = Self {
-            cb: RxCallback::new(UnsafeCell::new(callback)),
+            cb,
             error_sender,
             fd,
         };
         tracing::debug!("RX context created: {:?}", rx);
-        (rx, receiver)
+        rx
     }
 
     fn run_callback(&self, buffer: Arc<RxBuffer>) {
@@ -74,6 +69,7 @@ impl Rx {
     }
 
     fn post_error(&self, error: zenoh_result::Error) {
+        tracing::debug!("Read task error: {error}");
         let _ = self.error_sender.send(error);
     }
 }
@@ -85,52 +81,71 @@ impl Drop for Rx {
 }
 
 #[derive(Debug)]
+enum ReactorCmd {
+    StartRx(
+        RawFd,
+        RxCallback,
+        Arc<tokio::sync::SetOnce<IndexGeneration>>,
+        UnboundedSender<zenoh_result::Error>,
+    ),
+    StopRx(IndexGeneration),
+}
+#[derive(Debug)]
 pub struct ReadTask {
-    user_data: u64,
     inner: Arc<ReaderInner>,
-    error_listener: UnboundedReceiver<zenoh_result::Error>,
+    error_receiver: UnboundedReceiver<zenoh_result::Error>,
+    index: Arc<tokio::sync::SetOnce<IndexGeneration>>,
 }
 
 impl Drop for ReadTask {
     fn drop(&mut self) {
         tracing::debug!("Stopping read task: {:?}", self);
 
-        let event = opcode::AsyncCancel::new(self.user_data)
-            .build()
-            .flags(io_uring::squeue::Flags::ASYNC);
-        let _ = self.inner.submitter.submit(event);
+        let inner = self.inner.clone();
+        let index = self.index.clone();
+
+        ZRuntime::RX.spawn(async move {
+            let index = index.wait().await;
+            let stop_rx_cmd = ReactorCmd::StopRx(index.clone());
+            let _ = inner.submitter.submit(stop_rx_cmd);
+        });
     }
 }
 
 impl ReadTask {
+    pub async fn stop(&mut self) {
+        tracing::debug!("Async stopping read task: {:?}", self);
+
+        let index = self.index.wait().await;
+        let stop_rx_cmd = ReactorCmd::StopRx(index.clone());
+        let _ = self.inner.submitter.submit(stop_rx_cmd);
+
+        // waiting for read task context to be destroyed within the reactor
+        while let Some(_) = self.error_receiver.recv().await {}
+    }
+
     fn new<Cb>(fd: RawFd, callback: Cb, inner: Arc<ReaderInner>) -> ZResult<Self>
     where
         Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static,
     {
-        let (rx, error_listener) = Rx::new(Box::new(callback), fd.clone());
-        let rx = Arc::new(rx);
-        let user_data = unsafe { std::mem::transmute(rx) };
+        tracing::debug!("Creating read task: fd = {fd}");
 
-        let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
-            .build()
-            .user_data(user_data)
-            .flags(io_uring::squeue::Flags::ASYNC);
+        let (error_sender, error_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let index = Arc::new(tokio::sync::SetOnce::new());
+        let rx_callback = RxCallback::new(UnsafeCell::new(Box::new(callback)));
 
-        inner.submitter.submit(recv)?;
+        let start_rx_cmd = ReactorCmd::StartRx(fd, rx_callback, index.clone(), error_sender);
+        inner.submitter.submit(start_rx_cmd)?;
 
-        let task = Self {
-            user_data,
+        Ok(Self {
             inner,
-            error_listener,
-        };
-
-        tracing::debug!("Read task created: {:?}", task);
-
-        Ok(task)
+            error_receiver,
+            index,
+        })
     }
 
     pub async fn read_error(&mut self) -> zenoh_result::Error {
-        let e = self.error_listener.recv().await;
+        let e = self.error_receiver.recv().await;
         e.unwrap_or_else(|| zerror!("Task stopped").into())
     }
 }
@@ -138,21 +153,22 @@ impl ReadTask {
 #[derive(Debug, Clone)]
 struct SubmissionIface {
     waker: Arc<EventFd>,
-    sender: Sender<io_uring::squeue::Entry>,
+    sender: Sender<ReactorCmd>,
 }
 
 impl SubmissionIface {
-    fn new(waker: Arc<EventFd>, sender: Sender<io_uring::squeue::Entry>) -> Self {
+    fn new(waker: Arc<EventFd>, sender: Sender<ReactorCmd>) -> Self {
         Self { waker, sender }
     }
 
-    fn submit(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
-        self.submit_quiet(entry)?;
+    fn submit(&self, cmd: ReactorCmd) -> ZResult<()> {
+        self.submit_quiet(cmd)?;
         self.wake_reader_thread()
     }
 
-    fn submit_quiet(&self, entry: io_uring::squeue::Entry) -> ZResult<()> {
-        self.sender.send(entry).map_err(|e| e.to_string().into())
+    fn submit_quiet(&self, cmd: ReactorCmd) -> ZResult<()> {
+        tracing::debug!("Submit cmd: {:?}", cmd);
+        self.sender.send(cmd).map_err(|e| e.to_string().into())
     }
 
     fn wake_reader_thread(&self) -> ZResult<()> {
@@ -160,6 +176,7 @@ impl SubmissionIface {
         // With non-blocking mode (EfdFlags::EFD_NONBLOCK), you’ll get EAGAIN instead of risking
         // a hang during shutdown logic.
         // TODO: handle EAGAIN or switch to blocking mode
+        tracing::debug!("Waking reader thread");
         self.waker.write(1).map(|_| ()).map_err(|e| e.into())
     }
 }
@@ -585,6 +602,127 @@ impl ReservableArena {
     }
 }
 
+struct RxContextCell {
+    context: Option<Arc<Rx>>,
+    generation: u32,
+}
+
+impl RxContextCell {
+    fn new(context: Arc<Rx>, generation: u32) -> Self {
+        Self {
+            context: Some(context),
+            generation,
+        }
+    }
+
+    fn get(&self, generation: u32) -> Option<&Rx> {
+        if self.generation == generation {
+            return (self.context.as_ref()).map(|val| val.deref());
+        }
+        None
+    }
+
+    fn free(&mut self, generation: u32) {
+        if self.generation == generation {
+            self.context = None;
+        }
+    }
+
+    fn try_alloc(&mut self, generation: u32, context: &Arc<Rx>) -> bool {
+        if self.context.is_none() {
+            self.context = Some(context.clone());
+            self.generation = generation;
+            return true;
+        }
+        false
+    }
+}
+
+struct RxContextStorage {
+    data: Vec<RxContextCell>,
+    next_generation: u32,
+}
+
+impl RxContextStorage {
+    fn new() -> Self {
+        let mut data = Vec::default();
+        data.reserve(16);
+
+        Self {
+            data,
+            next_generation: 0,
+        }
+    }
+
+    fn get(&self, id: IndexGeneration) -> Option<&Rx> {
+        self.data[id.index() as usize].get(id.generation())
+    }
+
+    fn free(&mut self, id: IndexGeneration) {
+        self.data[id.index() as usize].free(id.generation())
+    }
+
+    fn alloc(&mut self, context: Arc<Rx>) -> IndexGeneration {
+        self.next_generation = self.next_generation.wrapping_add(1);
+        let mut index = 0;
+        for cell in &mut self.data {
+            if cell.try_alloc(self.next_generation, &context) {
+                return IndexGeneration::new(index, self.next_generation);
+            }
+            index += 1;
+        }
+
+        let new_cell = RxContextCell::new(context, self.next_generation);
+        self.data.push(new_cell);
+        IndexGeneration::new((self.data.len() - 1) as u32, self.next_generation)
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IndexGeneration(u64);
+
+impl IndexGeneration {
+    #[inline]
+    pub const fn new(index: u32, generation: u32) -> Self {
+        Self(((generation as u64) << 32) | (index as u64))
+    }
+
+    #[inline]
+    pub const fn index(self) -> u32 {
+        self.0 as u32
+    }
+
+    #[inline]
+    pub const fn generation(self) -> u32 {
+        (self.0 >> 32) as u32
+    }
+
+    #[inline]
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    #[inline]
+    pub const fn from_u64(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<u64> for IndexGeneration {
+    #[inline]
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<IndexGeneration> for u64 {
+    #[inline]
+    fn from(value: IndexGeneration) -> Self {
+        value.0
+    }
+}
+
 #[derive(Clone)]
 pub struct Reader {
     inner: Arc<ReaderInner>,
@@ -635,6 +773,9 @@ impl Reader {
         join_receiver.mark_unchanged();
 
         let ring_worker = move || -> ZResult<()> {
+            // Create Rx context storge
+            let mut context_storage = RxContextStorage::new();
+
             // Create memory for waker's read events
             let mut dummy_mem = {
                 let mem: [u8; 8] = [0; 8];
@@ -676,6 +817,43 @@ impl Reader {
 
             unsafe { ring.submission_shared().push(&waker_read)? };
 
+            fn roll_cmds(
+                receiver: &std::sync::mpsc::Receiver<ReactorCmd>,
+                context_storage: &mut RxContextStorage,
+                sq: &mut SubmissionQueue<'_>,
+            ) -> ZResult<()> {
+                // receive external submissions
+                while let Ok(val) = receiver.try_recv() {
+                    tracing::debug!("Cmd: {:?}", val);
+
+                    match val {
+                        ReactorCmd::StartRx(fd, callback, set_once, error_sender) => {
+                            let rx_context = Arc::new(Rx::new(fd, callback, error_sender));
+                            let index = context_storage.alloc(rx_context);
+                            set_once.set(index)?;
+
+                            let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
+                                .build()
+                                .flags(io_uring::squeue::Flags::ASYNC)
+                                .user_data(index.into());
+
+                            unsafe { sq.push(&recv)? }
+                        }
+                        ReactorCmd::StopRx(index_generation) => {
+                            context_storage.free(index_generation);
+
+                            let event = opcode::AsyncCancel::new(index_generation.into())
+                                .build()
+                                .user_data(index_generation.into())
+                                .flags(io_uring::squeue::Flags::ASYNC);
+
+                            unsafe { sq.push(&event)? }
+                        }
+                    }
+                }
+                Ok(())
+            }
+
             fn roll_ring_batches(
                 arena: &ReservableArena,
                 ctr: &mut i32,
@@ -701,6 +879,8 @@ impl Reader {
 
                     let mut sq = unsafe { ring.submission_shared() };
 
+                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
+
                     match e.user_data() {
                         0 => {
                             tracing::debug!("Zero-user-data entry: {:?}", e);
@@ -708,32 +888,34 @@ impl Reader {
                         u64::MAX => {
                             tracing::debug!("Waker event: {:?}", e);
                             unsafe { sq.push(&waker_read)? };
-
-                            // receive external submissions
-                            while let Ok(val) = receiver.try_recv() {
-                                tracing::debug!("Waker submission: {:?}", val);
-                                unsafe { sq.push(&val)? };
-                            }
+                            roll_cmds(&receiver, &mut context_storage, &mut sq)?;
                         }
-                        val => {
-                            let rx: &Arc<Rx> = unsafe { std::mem::transmute(&val) };
-
-                            let need_submit =
-                                Reader::read_multi(&e, rx, &arena, &mut sq, &mut batch_ctr);
-
-                            roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
-
-                            if need_submit {
-                                let len = sq.len() as u32;
-                                drop(sq);
-
-                                unsafe {
-                                    ring.submitter().enter::<libc::sigset_t>(
-                                        len,
-                                        0,
-                                        EnterFlags::GETEVENTS.bits(),
-                                        None,
-                                    )?;
+                        index => {
+                            if let Some(context) = context_storage.get(index.into()) {
+                                match Reader::read_multi(
+                                    &e,
+                                    index.into(),
+                                    context,
+                                    &arena,
+                                    &mut sq,
+                                    &mut batch_ctr,
+                                ) {
+                                    Ok(true) => {
+                                        let len = sq.len() as u32;
+                                        drop(sq);
+                                        unsafe {
+                                            ring.submitter().enter::<libc::sigset_t>(
+                                                len,
+                                                0,
+                                                EnterFlags::GETEVENTS.bits(),
+                                                None,
+                                            )?;
+                                        }
+                                    }
+                                    Ok(false) => {}
+                                    Err(e) => {
+                                        context.post_error(e);
+                                    }
                                 }
                             }
                         }
@@ -746,10 +928,7 @@ impl Reader {
                 roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
 
                 // receive external submissions
-                while let Ok(val) = receiver.try_recv() {
-                    tracing::debug!("Waker submission (out): {:?}", val);
-                    unsafe { sq.push(&val)? };
-                }
+                roll_cmds(&receiver, &mut context_storage, &mut sq)?;
                 drop(sq);
 
                 if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -762,7 +941,7 @@ impl Reader {
             Ok(())
         };
 
-        ZRuntime::Net.spawn_blocking(move || {
+        ZRuntime::RX.spawn_blocking(move || {
             if let Err(e) = ring_worker() {
                 let _ = join_sender.send(e.to_string());
             }
@@ -833,78 +1012,70 @@ impl Reader {
 
     fn read_multi(
         e: &io_uring::cqueue::Entry,
-        rx: &Rx,
+        index: IndexGeneration,
+        context: &Rx,
         arena: &ReservableArena,
         sq: &mut SubmissionQueue<'_>,
         ctr: &mut i32,
-    ) -> bool {
+    ) -> ZResult<bool> {
         let mut need_submit = false;
         if e.result() < 0 {
+            tracing::trace!("Error entry: {:?}", e);
+
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
-                    //        tracing::debug!( "ENOBUFS: Restart multishot receive!!!");
+                    tracing::trace!("ENOBUFS: Restart multishot receive for task {:?}", index);
 
-                    //let provide_buffers = arena
-                    //    .inner
-                    //    .arena
-                    //    .provide_root_buffers()
-                    //    .flags(Flags::SKIP_SUCCESS);
-                    //unsafe { sq.push(&provide_buffers).unwrap() };
-
-                    let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
+                    let recv = opcode::RecvMulti::new(types::Fd(context.fd), 0)
                         .build()
                         .flags(io_uring::squeue::Flags::ASYNC)
-                        .user_data(e.user_data());
+                        .user_data(index.into());
 
-                    unsafe { sq.push(&recv).unwrap() };
+                    unsafe { sq.push(&recv)? };
                     need_submit = true;
                 }
                 libc::ECANCELED => {
-                    tracing::debug!("Rx task cancelled: {:?}", rx);
+                    bail!("Rx task cancelled: {:?}", index);
                 }
-                _unexpected => {
-                    tracing::debug!("Unexpected uring error: {}", _unexpected);
+                libc::EALREADY => {
+                    bail!("Operation already in progress for task {:?}", index);
+                }
+                unexpected => {
+                    bail!("Task-related uring error: {}, task {:?}", unexpected, index);
                 }
             }
         } else {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
-                    //        tracing::debug!( "Read multishot entry: {:?}", e);
+                    tracing::trace!("Read multishot entry: {:?}", e);
 
                     if !io_uring::cqueue::more(e.flags()) {
                         tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
-                        let recv = opcode::RecvMulti::new(types::Fd(rx.fd), 0)
+
+                        let recv = opcode::RecvMulti::new(types::Fd(context.fd), 0)
                             .build()
                             .flags(io_uring::squeue::Flags::ASYNC)
-                            .user_data(e.user_data());
-                        unsafe { sq.push(&recv).unwrap() };
+                            .user_data(index.into());
+
+                        unsafe { sq.push(&recv)? };
                         need_submit = true;
                     }
 
                     let buf_len = e.result() as usize;
-
-                    //        tracing::debug!( "buf_id: {buf_id}, buf_len: {buf_len}");
-
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
                         *ctr -= 1;
-                        rx.run_callback(rx_buffer);
+                        context.run_callback(rx_buffer);
                     } else {
                         tracing::debug!("zero buf len");
                     }
                 }
                 None => {
-                    tracing::debug!("no IORING_CQE_F_BUFFER: {:?}", e);
-
-                    tracing::debug!("Stopping read task");
-                    assert!(e.user_data() != 0);
-                    let rx: Arc<Rx> = unsafe { std::mem::transmute(e.user_data()) };
-                    rx.post_error(zerror!("Read task interrupt").into());
-                    drop(rx);
+                    bail!("no IORING_CQE_F_BUFFER: {:?}", e);
                 }
             };
         }
-        need_submit
+        Ok(need_submit)
     }
 }

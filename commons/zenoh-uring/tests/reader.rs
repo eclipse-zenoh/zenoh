@@ -163,7 +163,7 @@ impl ReaderTask {
         let c_iteration = iteration.clone();
 
         let mut i = 0u8;
-        let _read_handle = reader
+        let read_handle = reader
             .setup_fragmented_read(stream.as_raw_fd(), move |data| {
                 //            println!("Got {} bytes!", data.size());
 
@@ -183,11 +183,19 @@ impl ReaderTask {
             })
             .unwrap();
 
+        assert!(Arc::strong_count(&iteration) == 2);
+
         while !finished.load(std::sync::atomic::Ordering::Relaxed)
             && iteration.load(std::sync::atomic::Ordering::SeqCst) != iteration_count
         {
             std::thread::sleep(Duration::from_millis(100));
         }
+
+        drop(read_handle);
+
+        std::thread::sleep(Duration::from_millis(100));
+
+        assert!(Arc::strong_count(&iteration) == 1);
 
         Ok(())
     }
