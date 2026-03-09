@@ -65,6 +65,7 @@ impl Node {
         c.insert_json5("scouting/multicast/enabled", "false")
             .unwrap();
         c.insert_json5("adminspace/enabled", "true").unwrap();
+        c.insert_json5("timestamping/enabled", "true").unwrap();
         Node { c }
     }
 
@@ -236,6 +237,11 @@ impl UnboundedSink<Sample> {
             .filter(|s| s.kind() == kind)
             .unique_by(|s| s.payload().to_bytes())
             .count()
+    }
+
+    pub fn unique_timestamps(&self) -> bool {
+        let guard = self.0.read().unwrap();
+        guard.iter().filter_map(|s| s.timestamp()).all_unique()
     }
 }
 

@@ -143,6 +143,12 @@ async fn test_regions_scenario6_order1_putsub() {
         }
     });
 
+    assert!(
+        [&s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330]
+            .iter()
+            .all(|sub| sub.unique_timestamps())
+    );
+
     let s = STORAGE.lock();
 
     for zid in [
@@ -266,6 +272,12 @@ async fn test_regions_scenario6_order1_pubsub() {
             }
         }
     });
+
+    assert!(
+        [&s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330]
+            .iter()
+            .all(|sub| sub.unique_timestamps())
+    );
 
     let s = STORAGE.lock();
 
