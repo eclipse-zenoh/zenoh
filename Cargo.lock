@@ -6392,6 +6392,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-mem-transport"
+version = "1.7.2"
+dependencies = [
+ "tracing",
+ "zenoh-buffers",
+ "zenoh-cuda",
+ "zenoh-result",
+ "zenoh-shm",
+]
+
+[[package]]
 name = "zenoh-plugin-example"
 version = "1.7.2"
 dependencies = [
@@ -6605,6 +6616,7 @@ dependencies = [
  "zenoh-cuda",
  "zenoh-link",
  "zenoh-link-commons",
+ "zenoh-mem-transport",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",

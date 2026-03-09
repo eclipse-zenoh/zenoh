@@ -36,6 +36,24 @@ pub type CudaIpcHandle = [u8; 64];
 #[repr(C)]
 struct CudaIpcMemHandleFfi([u8; 64]);
 
+/// DLPack-compatible tensor metadata for typed GPU tensors.
+///
+/// Field semantics match DLPack's `DLTensor`:
+/// - `dtype_code`: 0=Int, 1=UInt, 2=Float, 4=BFloat16, 5=Complex
+/// - `dtype_bits`: element bit width (e.g. 32 for float32)
+/// - `dtype_lanes`: number of SIMD lanes (1 for scalar dtypes)
+/// - `strides`: None means C-contiguous (no strides on wire)
+#[derive(Debug, Clone)]
+pub struct TensorMeta {
+    pub ndim: i32,
+    pub shape: Vec<i64>,
+    pub dtype_code: u8,
+    pub dtype_bits: u8,
+    pub dtype_lanes: u16,
+    pub byte_offset: u64,
+    pub strides: Option<Vec<i64>>,
+}
+
 /// Discriminates how a [`CudaBufInner`] was allocated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CudaMemKind {
@@ -68,6 +86,8 @@ extern "C" {
     // SysV ABI (MEMORY class → 64 bytes on the stack), not pointer-passing.
     fn cudaIpcOpenMemHandle(dev_ptr: *mut *mut u8, handle: CudaIpcMemHandleFfi, flags: u32) -> i32;
     fn cudaIpcCloseMemHandle(dev_ptr: *mut u8) -> i32;
+    // cudaMemcpyKind: 2 = DeviceToHost
+    fn cudaMemcpy(dst: *mut u8, src: *const u8, count: usize, kind: u32) -> i32;
 }
 
 fn check_cuda(ret: i32, op: &'static str) -> ZResult<()> {
@@ -99,6 +119,16 @@ pub struct CudaBufInner {
     is_ipc_mapping: bool,
     /// False for borrowed pointers (e.g. from torch allocator) — Drop skips cudaFree.
     owns_allocation: bool,
+    /// Optional DLPack tensor metadata (shape, dtype, strides).
+    /// Present when this buffer was created with ZSliceKind::CudaTensor.
+    tensor_meta: Option<TensorMeta>,
+    /// Byte offset from `ptr` (IPC pool base) to the actual tensor data.
+    ///
+    /// PyTorch's caching allocator sub-allocates from large `cudaMalloc` pool blocks.
+    /// `cudaIpcOpenMemHandle` always returns the pool block base, not the tensor's
+    /// offset within the block.  `copy_to_host` applies this offset so the correct
+    /// bytes are read.  Set from `TensorMeta.byte_offset` on the subscriber side.
+    pub byte_offset: u64,
 }
 
 // SAFETY: CUDA IPC memory is not aliased between threads when accessed via
@@ -125,6 +155,8 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Pinned,
             is_ipc_mapping: false,
             owns_allocation: true,
+            tensor_meta: None,
+            byte_offset: 0,
         })
     }
 
@@ -149,6 +181,8 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Unified,
             is_ipc_mapping: false,
             owns_allocation: true,
+            tensor_meta: None,
+            byte_offset: 0,
         })
     }
 
@@ -171,6 +205,8 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: false,
             owns_allocation: true,
+            tensor_meta: None,
+            byte_offset: 0,
         })
     }
 
@@ -189,6 +225,8 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: false,
             owns_allocation: true,
+            tensor_meta: None,
+            byte_offset: 0,
         })
     }
 
@@ -214,7 +252,38 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: false,
             owns_allocation: false,
+            tensor_meta: None,
+            byte_offset: 0,
         })
+    }
+
+    /// Wrap an externally-owned device pointer with an explicit IPC handle and byte offset.
+    ///
+    /// Use this when the pointer is sub-allocated from a larger `cudaMalloc` pool block
+    /// (e.g. from the PyTorch CUDA caching allocator).  In that case:
+    /// - `ipc_handle` identifies the pool block (same handle as its base pointer)
+    /// - `byte_offset` = offset from the pool block base to the actual tensor data
+    ///
+    /// On the subscriber side, `cudaIpcOpenMemHandle` maps the pool block and returns
+    /// the pool base.  `copy_to_host` adds `byte_offset` to read the correct bytes.
+    pub fn from_device_ptr_borrowed_with_offset(
+        ptr: *mut u8,
+        len: usize,
+        ipc_handle: CudaIpcHandle,
+        device_id: i32,
+        byte_offset: u64,
+    ) -> Self {
+        Self {
+            ptr,
+            cuda_len: len,
+            ipc_handle,
+            device_id,
+            mem_kind: CudaMemKind::Device,
+            is_ipc_mapping: false,
+            owns_allocation: false,
+            tensor_meta: None,
+            byte_offset,
+        }
     }
 
     /// Reconstruct a buffer on the subscriber side by opening a CUDA IPC handle.
@@ -242,7 +311,39 @@ impl CudaBufInner {
             mem_kind: CudaMemKind::Device,
             is_ipc_mapping: true,
             owns_allocation: true,
+            tensor_meta: None,
+            byte_offset: 0,
         })
+    }
+
+    /// Reconstruct a typed tensor buffer on the subscriber side by opening a CUDA IPC handle.
+    ///
+    /// Like `from_ipc`, but also attaches `TensorMeta` so that the receiver can
+    /// reconstruct the correct shape and dtype without out-of-band convention.
+    /// The `TensorMeta.byte_offset` is applied by `copy_to_host` to account for
+    /// sub-allocation offsets within PyTorch's CUDA memory pool blocks.
+    pub fn from_ipc_tensor(
+        handle: CudaIpcHandle,
+        cuda_len: usize,
+        device_id: i32,
+        meta: TensorMeta,
+    ) -> ZResult<Self> {
+        let byte_offset = meta.byte_offset;
+        let mut base = Self::from_ipc(handle, cuda_len, device_id)?;
+        base.byte_offset = byte_offset;
+        base.tensor_meta = Some(meta);
+        Ok(base)
+    }
+
+    /// Attach DLPack tensor metadata to this buffer (builder pattern).
+    pub fn with_tensor_meta(mut self, meta: TensorMeta) -> Self {
+        self.tensor_meta = Some(meta);
+        self
+    }
+
+    /// Return the tensor metadata if present.
+    pub fn tensor_meta(&self) -> Option<&TensorMeta> {
+        self.tensor_meta.as_ref()
     }
 
     /// Return the raw device (or host, for pinned/unified) pointer.
@@ -259,6 +360,36 @@ impl CudaBufInner {
             check_cuda(cudaIpcGetMemHandle(handle.as_mut_ptr(), ptr), ctx)?;
         }
         Ok(handle)
+    }
+
+    /// Copy device memory to a host (CPU) buffer via `cudaMemcpy DeviceToHost`.
+    ///
+    /// Works for device-only, pinned, and unified memory. For pinned/unified,
+    /// a direct `copy_from_slice` on `as_slice()` is cheaper, but this method
+    /// works uniformly for all memory kinds and is used by the downgrade path
+    /// in [`zenoh_mem_transport::backends::cuda::CudaIpcBackend`].
+    ///
+    /// `dst` must be at least `self.cuda_len` bytes.
+    pub fn copy_to_host(&self, dst: &mut [u8]) -> ZResult<()> {
+        if dst.len() < self.cuda_len {
+            return Err(zerror!(
+                "copy_to_host: dst too small ({} < {})",
+                dst.len(),
+                self.cuda_len
+            )
+            .into());
+        }
+        // Apply byte_offset: ptr is the IPC pool block base; the actual tensor data
+        // is at ptr + byte_offset (set from TensorMeta.byte_offset on the wire).
+        let src = unsafe { self.ptr.add(self.byte_offset as usize) };
+        // cudaMemcpyKind = 2 (DeviceToHost)
+        unsafe {
+            check_cuda(
+                cudaMemcpy(dst.as_mut_ptr(), src as *const u8, self.cuda_len, 2),
+                "cudaMemcpy DeviceToHost",
+            )?;
+        }
+        Ok(())
     }
 }
 

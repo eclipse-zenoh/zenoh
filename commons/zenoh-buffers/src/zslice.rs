@@ -90,6 +90,10 @@ pub enum ZSliceKind {
     /// Device-only memory has len=0 in the ZSlice; use downcast_ref::<CudaBufInner>().cuda_len().
     #[cfg(feature = "cuda")]
     CudaPtr = 2,
+    /// CUDA IPC handle with DLPack tensor metadata (shape, dtype, strides).
+    /// Superset of CudaPtr; receiver can reconstruct a typed tensor via DLPack.
+    #[cfg(feature = "cuda")]
+    CudaTensor = 3,
 }
 
 /// A cloneable wrapper to a contiguous slice of bytes.

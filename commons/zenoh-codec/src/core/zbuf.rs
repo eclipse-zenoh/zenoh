@@ -111,6 +111,8 @@ mod shm {
     const SHM_PTR: u8 = 1;
     #[cfg(feature = "cuda")]
     const CUDA_PTR: u8 = 2;
+    #[cfg(feature = "cuda")]
+    const CUDA_TENSOR: u8 = 3;
 
     // Wire size for a CUDA IPC entry: kind(1) + handle(64) + len as u64(8) + device_id as i32(4)
     #[cfg(feature = "cuda")]
@@ -123,7 +125,9 @@ mod shm {
                     if self.is_sliced {
                         message.zslices().fold(0, |acc, x| {
                             #[cfg(feature = "cuda")]
-                            if x.kind == ZSliceKind::CudaPtr {
+                            if x.kind == ZSliceKind::CudaPtr || x.kind == ZSliceKind::CudaTensor {
+                                // For CudaTensor, we use CUDA_WIRE_SIZE as a minimum estimate.
+                                // The actual metadata overhead is small and bounded.
                                 return acc + CUDA_WIRE_SIZE;
                             }
                             acc + 1 + x.len()
@@ -176,6 +180,48 @@ mod shm {
                                     // device_id encoded as u32 (negative values not expected)
                                     self.codec.write(&mut *writer, cuda.device_id as u32)?;
                                 }
+                                #[cfg(feature = "cuda")]
+                                ZSliceKind::CudaTensor => {
+                                    use zenoh_cuda::CudaBufInner;
+                                    self.codec.write(&mut *writer, CUDA_TENSOR)?;
+                                    let cuda = zs
+                                        .downcast_ref::<CudaBufInner>()
+                                        .expect("CudaTensor ZSlice must contain CudaBufInner");
+                                    let meta = cuda
+                                        .tensor_meta()
+                                        .expect("CudaTensor ZSlice must have TensorMeta");
+                                    // IPC handle + len + device_id (same as CudaPtr)
+                                    writer
+                                        .write_exact(&cuda.ipc_handle)
+                                        .map_err(|_| DidntWrite)?;
+                                    self.codec.write(&mut *writer, cuda.cuda_len as u64)?;
+                                    self.codec.write(&mut *writer, cuda.device_id as u32)?;
+                                    // Tensor metadata
+                                    self.codec.write(&mut *writer, meta.ndim as u32)?;
+                                    for &s in &meta.shape {
+                                        self.codec.write(&mut *writer, s as u64)?;
+                                    }
+                                    self.codec.write(&mut *writer, meta.dtype_code)?;
+                                    self.codec.write(&mut *writer, meta.dtype_bits)?;
+                                    self.codec.write(&mut *writer, meta.dtype_lanes as u32)?;
+                                    self.codec.write(&mut *writer, meta.byte_offset)?;
+                                    match &meta.strides {
+                                        None => self.codec.write(&mut *writer, 0u8)?,
+                                        Some(strides) => {
+                                            self.codec.write(&mut *writer, 1u8)?;
+                                            for &s in strides {
+                                                self.codec.write(&mut *writer, s as u64)?;
+                                            }
+                                        }
+                                    }
+                                }
+                                // When zenoh-cuda is a workspace member it unconditionally
+                                // activates zenoh-buffers/cuda via Cargo feature unification,
+                                // making CudaPtr/CudaTensor visible here even when the codec's
+                                // own `cuda` feature is not enabled.  Return an error rather
+                                // than leaving the match non-exhaustive.
+                                #[cfg(not(feature = "cuda"))]
+                                _ => return Err(DidntWrite),
                             }
                         }
                     } else {
@@ -229,6 +275,59 @@ mod shm {
                                     })?;
                                     let mut zslice = ZSlice::from(Arc::new(cuda_buf));
                                     zslice.kind = ZSliceKind::CudaPtr;
+                                    zbuf.push_zslice(zslice);
+                                }
+                                #[cfg(feature = "cuda")]
+                                CUDA_TENSOR => {
+                                    use std::sync::Arc;
+                                    use zenoh_cuda::{CudaBufInner, TensorMeta};
+                                    let mut handle = [0u8; 64];
+                                    reader.read_exact(&mut handle).map_err(|_| DidntRead)?;
+                                    let len: u64 = self.codec.read(&mut *reader)?;
+                                    let device_id: u32 = self.codec.read(&mut *reader)?;
+                                    // Tensor metadata
+                                    let ndim: u32 = self.codec.read(&mut *reader)?;
+                                    let mut shape: Vec<i64> = Vec::with_capacity(ndim as usize);
+                                    for _ in 0..ndim {
+                                        let v: u64 = self.codec.read(&mut *reader)?;
+                                        shape.push(v as i64);
+                                    }
+                                    let dtype_code: u8 = self.codec.read(&mut *reader)?;
+                                    let dtype_bits: u8 = self.codec.read(&mut *reader)?;
+                                    let dtype_lanes: u32 = self.codec.read(&mut *reader)?;
+                                    let byte_offset: u64 = self.codec.read(&mut *reader)?;
+                                    let strides_present: u8 = self.codec.read(&mut *reader)?;
+                                    let strides = if strides_present == 1 {
+                                        let mut sv: Vec<i64> = Vec::with_capacity(ndim as usize);
+                                        for _ in 0..ndim {
+                                            let v: u64 = self.codec.read(&mut *reader)?;
+                                            sv.push(v as i64);
+                                        }
+                                        Some(sv)
+                                    } else {
+                                        None
+                                    };
+                                    let meta = TensorMeta {
+                                        ndim: ndim as i32,
+                                        shape,
+                                        dtype_code,
+                                        dtype_bits,
+                                        dtype_lanes: dtype_lanes as u16,
+                                        byte_offset,
+                                        strides,
+                                    };
+                                    let cuda_buf = CudaBufInner::from_ipc_tensor(
+                                        handle,
+                                        len as usize,
+                                        device_id as i32,
+                                        meta,
+                                    )
+                                    .map_err(|e| {
+                                        tracing::error!("CUDA_TENSOR IPC open failed (len={len}, device_id={device_id}): {e}");
+                                        DidntRead
+                                    })?;
+                                    let mut zslice = ZSlice::from(Arc::new(cuda_buf));
+                                    zslice.kind = ZSliceKind::CudaTensor;
                                     zbuf.push_zslice(zslice);
                                 }
                                 _ => return Err(DidntRead),

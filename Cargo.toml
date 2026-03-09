@@ -18,6 +18,7 @@ members = [
   "commons/zenoh-codec",
   "commons/zenoh-collections",
   "commons/zenoh-cuda",
+  "commons/zenoh-mem-transport",
   "commons/zenoh-config",
   "commons/zenoh-core",
   "commons/zenoh-crypto",
@@ -236,6 +237,7 @@ zenoh-macros = { version = "=1.7.2", path = "commons/zenoh-macros" }
 zenoh-plugin-trait = { version = "=1.7.2", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "=1.7.2", path = "commons/zenoh-protocol", default-features = false }
 zenoh-cuda = { version = "=1.7.2", path = "commons/zenoh-cuda" }
+zenoh-mem-transport = { version = "=1.7.2", path = "commons/zenoh-mem-transport", default-features = false }
 zenoh-result = { version = "=1.7.2", path = "commons/zenoh-result", default-features = false }
 zenoh-runtime = { version = "=1.7.2", path = "commons/zenoh-runtime" }
 zenoh-shm = { version = "=1.7.2", path = "commons/zenoh-shm" }
