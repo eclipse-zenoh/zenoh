@@ -1,0 +1,68 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+name: CI CUDA
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  CARGO_PROFILE_DEV_DEBUG: false
+
+jobs:
+  cuda:
+    # Validates compilation and linking against the CUDA SDK.
+    # Uses a pre-built container image (Ubuntu 24.04 + CUDA 12 + Rust) on a
+    # standard ubuntu-latest runner — no physical GPU is required for this job.
+    # Tests that require actual GPU hardware (cudaMalloc, IPC, etc.) are
+    # excluded here; run zenoh-cuda tests on a self-hosted runner with a GPU.
+    name: Build and check (CUDA SDK / Ubuntu 24.04)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/rust-gpu/rust-cuda-ubuntu24-cuda12:latest
+
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Rust version
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Build workspace with CUDA
+        run: cargo build --workspace --features cuda,shared-memory -j4
+
+      - name: Clippy with CUDA
+        run: |
+          cargo clippy --workspace --all-targets \
+            --features cuda,shared-memory,test \
+            -- --deny warnings
+
+      - name: Test workspace with CUDA SDK (no GPU required)
+        run: |
+          cargo nextest run --workspace \
+            --features cuda,shared-memory,test \
+            --exclude zenoh-cuda \
+            --exclude zenoh-examples \
+            --exclude zenoh-plugin-example

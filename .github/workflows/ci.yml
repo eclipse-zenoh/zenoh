@@ -141,14 +141,14 @@ jobs:
         run: cargo +stable clippy -p zenoh --all-targets --features unstable,shared-memory -- --deny warnings
 
       - name: Clippy workspace
-        run: cargo +stable clippy --all-targets --features test -- --deny warnings
+        run: cargo +stable clippy --all-targets --exclude zenoh-cuda --features test -- --deny warnings
 
       - name: Clippy workspace unstable
-        run: cargo +stable clippy --all-targets --features unstable,test -- --deny warnings
+        run: cargo +stable clippy --all-targets --exclude zenoh-cuda --features unstable,test -- --deny warnings
 
       - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
-        run: cargo +stable clippy --all-targets --all-features -- --deny warnings
+        run: cargo +stable clippy --all-targets --exclude zenoh-cuda --all-features -- --deny warnings
 
       - name: Install generic no_std target
         # Generic no_std target architecture is x86_64-unknown-none
@@ -260,13 +260,13 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           sudo cargo build -p zenoh-plugin-rest --lib
-          sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+          sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --exclude zenoh-cuda --workspace
 
       - name: Run tests with unstable
         if: ${{ matrix.os != 'macos-latest' }}
         run: |
           cargo build -p zenoh-plugin-rest --lib
-          cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+          cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --exclude zenoh-cuda --workspace
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
@@ -306,19 +306,19 @@ jobs:
 
       - name: Run tests with SHM (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: sudo cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --exclude zenoh-cuda --workspace
         env:
           RUST_BACKTRACE: 1
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'windows-latest' }}
-        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run -F test -F shared-memory -F unstable -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --exclude zenoh-cuda --workspace
 
       - name: Run tests with SHM + unixpipe
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
-          cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+          cargo nextest run -F test -F shared-memory -F unstable -F transport_unixpipe -E 'not (test(test_default_features) or test(test_adminspace_read))' --exclude zenoh-examples --exclude zenoh-plugin-example --exclude zenoh-cuda --workspace
 
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
@@ -435,6 +435,7 @@ jobs:
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
           cargo llvm-cov test --features unstable --features test --features shared-memory \
+          --exclude zenoh-cuda \
           ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
           --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \
           --skip test_default_features \
