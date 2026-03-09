@@ -153,8 +153,7 @@ fn test_r2r_inter_subregion_data_routing() {
     }
     .establish();
 
-    let mut bi_fwd_all =
-        || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
+    let mut bi_fwd_all = || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
 
     bi_fwd_all();
 
@@ -216,8 +215,7 @@ fn test_r2r_inter_subregion_query_routing() {
     }
     .establish();
 
-    let mut bi_fwd_all =
-        || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
+    let mut bi_fwd_all = || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
 
     bi_fwd_all();
 
