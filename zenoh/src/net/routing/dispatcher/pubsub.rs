@@ -276,19 +276,20 @@ fn get_data_route(
 
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &FaceState,
+    src_face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
     consume: bool,
 ) {
     let rtables = zread!(tables_ref.tables);
-    let Some(prefix) = rtables
-        .data
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+    let Some(prefix) =
+        rtables
+            .data
+            .get_mapping(src_face, &msg.wire_expr.scope, msg.wire_expr.mapping)
     else {
         tracing::error!(
             "{} Route data with unknown scope {}!",
-            face,
+            src_face,
             msg.wire_expr.scope
         );
         return;
@@ -296,7 +297,7 @@ pub fn route_data(
 
     tracing::trace!(
         "{} Route data for res {}{}",
-        face,
+        src_face,
         prefix.expr(),
         msg.wire_expr.suffix.as_ref()
     );
@@ -306,15 +307,26 @@ pub fn route_data(
     #[cfg(feature = "stats")]
     let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
     #[cfg(feature = "stats")]
-    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
+    payload_observer.observe_payload(zenoh_stats::Rx, src_face, msg);
     let mut builder = RouteBuilder::<Direction>::new();
 
+    let region = src_face.region;
+    let src_zid = rtables.hats[region].remote_node_id_to_zid(src_face, msg.ext_nodeid.node_id);
+
     for (region, hat) in rtables.hats.iter() {
-        if hat.ingress_filter(&rtables.data, face, &expr) {
-            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, region);
+        if hat.ingress_filter(&rtables.data, src_face, &expr) {
+            let route = get_data_route(&rtables, src_face, &expr, msg.ext_nodeid.node_id, region);
 
             for dir in route.iter() {
-                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
+                // TODO(regions): cache result by inputs?
+                if rtables.inter_region_filter(
+                    &src_face.region,
+                    &dir.dst_face.region,
+                    src_zid.as_ref(),
+                    &src_face.zid,
+                    &dir.dst_face.zid,
+                ) && hat.egress_filter(&rtables.data, src_face, &dir.dst_face, &expr)
+                {
                     builder.insert(dir.dst_face.id, || dir.clone());
                 }
             }
@@ -328,9 +340,9 @@ pub fn route_data(
         }
     };
 
-    let mut dirs = builder.build().into_iter();
-
+    let dirs = builder.build();
     tracing::trace!(?dirs);
+    let mut dirs = dirs.into_iter();
 
     if let Some(dir) = dirs.next() {
         treat_timestamp!(
@@ -338,11 +350,6 @@ pub fn route_data(
             msg.payload,
             rtables.data.drop_future_timestamp
         );
-
-        msg.wire_expr = dir.wire_expr.clone();
-        msg.ext_nodeid = ext::NodeIdType {
-            node_id: dir.node_id,
-        };
 
         drop(rtables);
 
@@ -368,6 +375,11 @@ pub fn route_data(
             msg_clone = msg.clone();
             msg = &mut msg_clone;
         }
+        msg.wire_expr = dir.wire_expr.clone();
+        msg.ext_nodeid = ext::NodeIdType {
+            node_id: dir.node_id,
+        };
+
         send_push(&dir.dst_face, msg, reliability);
     }
 }

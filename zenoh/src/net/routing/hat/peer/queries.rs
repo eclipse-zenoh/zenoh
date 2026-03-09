@@ -282,7 +282,7 @@ impl HatQueriesTrait for Hat {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
                 if self.region() != *src_region {
-                    if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
+                    if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region()) {
                         tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
                         route.push(qabl);
                     }
@@ -290,9 +290,12 @@ impl HatQueriesTrait for Hat {
             }
         }
 
-        if self.region.bound().is_north() && src_region.bound().is_south() {
+        if self.region().bound().is_north() && src_region.bound().is_south() {
             // TODO: BestMatching: What if there is a local compete ?
-            if let Some(face) = self.owned_faces(tables).find(|f| f.remote_bound.is_south()) {
+            for face in self
+                .owned_faces(tables)
+                .filter(|f| f.remote_bound.is_south())
+            {
                 let has_interest_finalized = expr
                     .resource()
                     .and_then(|res| res.face_ctxs.get(&face.id))
@@ -307,7 +310,7 @@ impl HatQueriesTrait for Hat {
                             node_id: DEFAULT_NODE_ID,
                         },
                         info: None,
-                        region: self.region,
+                        region: self.region(),
                     });
                 }
             }
@@ -324,7 +327,7 @@ impl HatQueriesTrait for Hat {
                         node_id: DEFAULT_NODE_ID,
                     },
                     info: None,
-                    region: self.region,
+                    region: self.region(),
                 });
             }
         }

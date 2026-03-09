@@ -31,8 +31,11 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{Region, WhatAmI, WhatAmIMatcher, ZenohIdProto},
-    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+    core::{Bound, WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    network::{
+        oam::{self, id::OAM_LINKSTATE},
+        NetworkBody, NetworkMessage, Oam,
+    },
 };
 use zenoh_transport::unicast::TransportUnicast;
 
@@ -61,11 +64,9 @@ pub(crate) struct Node {
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: u64,
     pub(crate) links: HashMap<ZenohIdProto, LinkEdgeWeight>,
-    /// Whether this node is the primary linkstate region gateway.
+    /// Whether this node is a router region gateway.
     ///
-    /// While other nodes may gateway for their own downstream networks, this flag
-    /// specifically the marks router responsible for inter-region traffic in this
-    /// node's linkstate topology.
+    /// Multiple nodes within the linkstate network may set this flag to `true`.
     pub(crate) is_gateway: bool,
 }
 
@@ -158,7 +159,7 @@ impl Network {
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
-        region: &Region,
+        bound: Bound,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -168,7 +169,7 @@ impl Network {
             locators: None,
             sn: 1,
             links: HashMap::new(),
-            is_gateway: region.bound().is_south(),
+            is_gateway: bound.is_south(),
         });
 
         Network {

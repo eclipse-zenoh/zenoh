@@ -33,7 +33,7 @@ use std::{
 
 use futures::executor::block_on;
 use tracing_subscriber::EnvFilter;
-use zenoh_config::Config;
+use zenoh_config::{Config, ZenohId};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{Bound, Region, Reliability, WhatAmI, ZenohIdProto},
@@ -636,6 +636,40 @@ impl Harness {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config.adminspace.set_enabled(false).unwrap();
         config.plugins_loading.set_enabled(false).unwrap();
+
+        let runtime = block_on(
+            RuntimeBuilder::new(crate::api::config::Config(config))
+                .subregions(subregions.to_vec())
+                .disable_async_tree_computation(true)
+                .build(),
+        )
+        .unwrap();
+        let gateway = Gateway {
+            tables: runtime.router().tables.clone(),
+        };
+        Self {
+            gateway,
+            _runtime: Some(runtime),
+        }
+    }
+
+    /// Build a gateway with a runtime (necessary for routers).
+    pub(crate) fn with_subregions2<const N: usize>(
+        id: ZenohId,
+        mode: WhatAmI,
+        subregions: [Region; N],
+    ) -> Self {
+        let mut config = Config::default();
+        config.set_id(Some(id)).unwrap();
+        config.set_mode(Some(mode)).unwrap();
+
+        // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.adminspace.set_enabled(false).unwrap();
+        config.plugins_loading.set_enabled(false).unwrap();
+        // config.scouting.gossip.set_multihop(Some(true)).unwrap();
 
         let runtime = block_on(
             RuntimeBuilder::new(crate::api::config::Config(config))

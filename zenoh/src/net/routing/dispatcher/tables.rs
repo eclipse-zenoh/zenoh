@@ -16,6 +16,7 @@ use std::{
     cell::OnceCell,
     collections::HashMap,
     fmt::Debug,
+    hash::Hasher,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -27,7 +28,7 @@ use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WireExpr, ZenohIdProto},
+    core::{Bound, ExprId, Region, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -287,6 +288,70 @@ pub struct Tables {
 }
 
 impl Tables {
+    /// Returns `false` if a `Push` or `Request` should be filtered out when routed from `src` to `dst`.
+    #[tracing::instrument(level = "trace", skip(self), ret)] // TODO(regions): move arguments into a struct with pub fields and a `.<unnamed>(&Tables) -> bool` method
+    pub(crate) fn inter_region_filter(
+        &self,
+        src: &Region,
+        dst: &Region,
+        src_zid: Option<&ZenohIdProto>,
+        fwd_zid: &ZenohIdProto,
+        dst_zid: &ZenohIdProto,
+    ) -> bool {
+        if src.bound() == dst.bound() {
+            // NOTE(regions): only messages traveling downstream/upstream need filtering, i.e. in
+            // the presence of multiple region gateways.
+            return true;
+        }
+
+        let gwys = match src.bound() {
+            Bound::North => self.hats[*dst].gateways_of(&self.data, dst_zid),
+            // NOTE(regions): in this case, we cannot have a link with `src_zid` if it were also a
+            // gateway so we check the "forwarder's" zid. This works for routers and peers alike.
+            // See `multiple_gateways_data_routing_r2r_upstream_gateway_source` for a test that
+            // fails when replacing `fwd_zid` with `src_zid`.
+            Bound::South => self.hats[*src].gateways_of(&self.data, fwd_zid),
+        };
+
+        let Some(gwys) = gwys else {
+            return true;
+        };
+
+        let Some(src_zid) = src_zid else {
+            bug!("Unknown source ZID");
+            return true;
+        };
+
+        // HACK(regions): this has the effect of filtering out messages originating from a router
+        // subregion from being re-routed to the north (router) region. As the router linkstate
+        // protocol is unimplemented, our hand is forced.
+        // TODO(regions): HashSet
+        if gwys.contains(src_zid) {
+            tracing::info!(?src_zid, ?dst_zid, ?src, ?dst, ?gwys, "BINGO");
+            return false;
+        }
+
+        // debug_assert!(gwys.contains(&self.data.zid));
+
+        let hash = |gwy: &ZenohIdProto| {
+            let mut hasher = ahash::AHasher::default();
+            // hasher.write(&src_zid.to_le_bytes());
+            hasher.write(&gwy.to_le_bytes());
+            hasher.finish()
+        };
+
+        let Some(primary) = gwys
+            .iter()
+            .max_by(|lhs, rhs| hash(lhs).cmp(&hash(rhs)))
+            .copied()
+        else {
+            // bug!("Empty region gateways list");
+            return true;
+        };
+
+        self.data.zid == primary
+    }
+
     #[allow(dead_code)] // FIXME(regions)
     pub(crate) fn disable_all_hat_routes(&mut self) {
         for hat in self.hats.values_mut() {
