@@ -148,6 +148,7 @@ impl FromStr for Region {
     }
 }
 
+#[derive(Debug)]
 pub enum InvalidRegionIdError {
     ExpectedSouth,
     ExpectedNumber,

@@ -31,6 +31,7 @@ use crate::net::routing::{
     dispatcher::{
         face::Face,
         local_resources::{LocalResourceInfoTrait, LocalResources},
+        tables::InterRegionFilter,
     },
     gateway::{get_or_set_route, node_id_as_source, Direction, RouteBuilder},
     hat::{DispatcherContext, SendDeclare},
@@ -313,19 +314,21 @@ fn get_data_route(
 
 pub fn route_data(
     tables_ref: &Arc<TablesLock>,
-    face: &FaceState,
+    src_face: &FaceState,
     msg: &mut Push,
     reliability: Reliability,
     consume: bool,
 ) {
     let rtables = zread!(tables_ref.tables);
-    let Some(prefix) = rtables
-        .data
-        .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
+    let tables = &*rtables;
+    let Some(prefix) =
+        rtables
+            .data
+            .get_mapping(src_face, &msg.wire_expr.scope, msg.wire_expr.mapping)
     else {
         tracing::error!(
             "{} Route data with unknown scope {}!",
-            face,
+            src_face,
             msg.wire_expr.scope
         );
         return;
@@ -333,7 +336,7 @@ pub fn route_data(
 
     tracing::trace!(
         "{} Route data for res {}{}",
-        face,
+        src_face,
         prefix.expr(),
         msg.wire_expr.suffix.as_ref()
     );
@@ -341,11 +344,11 @@ pub fn route_data(
     let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
 
     #[cfg(feature = "stats")]
-    let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
+    let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), tables);
     #[cfg(feature = "stats")]
-    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
+    payload_observer.observe_payload(zenoh_stats::Rx, src_face, msg);
 
-    if !rtables.ingress_filter(face) {
+    if !tables.ingress_filter(src_face) {
         return;
     }
 
@@ -356,7 +359,7 @@ pub fn route_data(
         }
     };
 
-    let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id);
+    let route = get_data_route(&rtables, src_face, &expr, msg.ext_nodeid.node_id);
 
     tracing::trace!(?route);
 
@@ -367,9 +370,25 @@ pub fn route_data(
             rtables.data.drop_future_timestamp
         );
 
+        let inter_region_filter = {
+            let src_zid = tables.hats[src_face.region]
+                .remote_node_id_to_zid(src_face, msg.ext_nodeid.node_id);
+            move |dir: &Direction| {
+                InterRegionFilter {
+                    src: &src_face.region,
+                    dst: &dir.dst_face.region,
+                    src_zid: src_zid.as_ref(),
+                    fwd_zid: Some(&src_face.zid),
+                    dst_zid: Some(&dir.dst_face.zid),
+                }
+                .resolve(tables)
+            }
+        };
+
         if route.len() == 1 {
             let dir = route.iter().next().unwrap();
-            if rtables.egress_filter(face, &dir.dst_face) {
+
+            if inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face) {
                 drop(rtables);
                 let mut msg_clone;
                 let mut msg = &mut *msg;
@@ -387,7 +406,9 @@ pub fn route_data(
         } else {
             let dirs = route
                 .iter()
-                .filter(|dir| rtables.egress_filter(face, &dir.dst_face))
+                .filter(|dir| {
+                    inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face)
+                })
                 .collect::<Vec<&Direction>>();
 
             drop(rtables);

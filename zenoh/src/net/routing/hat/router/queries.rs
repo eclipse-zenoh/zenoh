@@ -103,7 +103,7 @@ impl Hat {
                             .unwrap_or(true)
                         {
                             let key_expr = Resource::decl_key(res, &mut someface);
-
+                            tracing::trace!(dst = %someface);
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,

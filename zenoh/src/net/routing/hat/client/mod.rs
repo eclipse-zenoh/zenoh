@@ -47,7 +47,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, region::RegionMap},
-        gateway::FaceContext,
+        gateway::{FaceContext, DEFAULT_NODE_ID},
         hat::{DispatcherContext, Remote},
     },
     runtime::Runtime,
@@ -239,6 +239,22 @@ impl HatBaseTrait for Hat {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        debug_assert_eq!(node_id, DEFAULT_NODE_ID);
+
+        Some(src.zid)
+    }
+
+    fn gateways_of(&self, _tables: &TablesData, _zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
+        bug!("Unreachable");
+        None
+    }
+
+    fn gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+        bug!("Unreachable");
+        None
     }
 }
 

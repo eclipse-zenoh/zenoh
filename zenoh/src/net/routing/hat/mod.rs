@@ -249,6 +249,15 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn region(&self) -> Region;
 
+    /// Converts a message source [`NodeId`] and its source [`FaceState`] into the source [`ZenohIdProto`].
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto>;
+
+    /// Returns the list of `zid`'s gateways. Assumes the hat is south-bound.
+    fn gateways_of(&self, tables: &TablesData, zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>>;
+
+    /// Returns the list of this region's gateways. Assumes the hat is south-bound.
+    fn gateways(&self, tables: &TablesData) -> Option<Vec<ZenohIdProto>>;
+
     /// Returns `true` if `face` belongs to this [`Hat`].
     fn owns(&self, face: &FaceState) -> bool {
         if self.region() == face.region && face.remote_bound.is_north() {
@@ -646,6 +655,7 @@ pub(crate) trait HatTokenTrait {
 
     fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
+    // FIXME(regions): `other_tokens` is not necessary and should be removed
     /// Propagate a token entity.
     ///
     /// The callee hat will only push the subscriber if is the north hat.

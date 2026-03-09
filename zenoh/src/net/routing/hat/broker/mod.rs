@@ -47,7 +47,7 @@ use super::{
 use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, queries::LocalQueryables, region::RegionMap},
-        gateway::{FaceContext, LocalSubscribers},
+        gateway::{FaceContext, LocalSubscribers, DEFAULT_NODE_ID},
         hat::{DispatcherContext, Remote},
     },
     runtime::Runtime,
@@ -244,6 +244,22 @@ impl HatBaseTrait for Hat {
 
     fn region(&self) -> Region {
         self.region
+    }
+
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        debug_assert_eq!(node_id, DEFAULT_NODE_ID);
+
+        Some(src.zid)
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn gateways_of(&self, _tables: &TablesData, _zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
+        None
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+        None
     }
 }
 

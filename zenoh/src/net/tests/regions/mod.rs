@@ -22,8 +22,9 @@
 //! inject messages into those faces, and observe every message that the gateway routes to any other
 //! face.
 
+mod declare;
+mod forwarding;
 mod interest;
-mod routing;
 
 use std::{
     any::Any,
@@ -33,7 +34,7 @@ use std::{
 
 use futures::executor::block_on;
 use tracing_subscriber::EnvFilter;
-use zenoh_config::Config;
+use zenoh_config::{Config, ZenohId};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{Bound, Region, Reliability, WhatAmI, ZenohIdProto},
@@ -673,6 +674,40 @@ impl Harness {
         }
     }
 
+    /// Build a gateway with a runtime (necessary for routers).
+    pub(crate) fn with_subregions2<const N: usize>(
+        id: ZenohId,
+        mode: WhatAmI,
+        subregions: [Region; N],
+    ) -> Self {
+        let mut config = Config::default();
+        config.set_id(Some(id)).unwrap();
+        config.set_mode(Some(mode)).unwrap();
+
+        // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.adminspace.set_enabled(false).unwrap();
+        config.plugins_loading.set_enabled(false).unwrap();
+        // config.scouting.gossip.set_multihop(Some(true)).unwrap();
+
+        let runtime = block_on(
+            RuntimeBuilder::new(crate::api::config::Config(config))
+                .subregions(subregions.to_vec())
+                .disable_async_tree_computation(true)
+                .build(),
+        )
+        .unwrap();
+        let gateway = Gateway {
+            tables: runtime.router().tables.clone(),
+        };
+        Self {
+            gateway,
+            _runtime: Some(runtime),
+        }
+    }
+
     /// Build a gateway without a runtime.
     pub(crate) fn with_subregions_noruntime<const N: usize>(
         mode: WhatAmI,
@@ -710,7 +745,7 @@ impl Harness {
     ///
     /// For `Region::Local`, this calls [`Gateway::new_primitives`] directly.
     /// For all other regions, a mock transport unicast is used.
-    pub(crate) fn new_face(&self, cfg: FaceConfig) -> MockFace {
+    pub(crate) fn new_face(&self, cfg: FaceDef) -> MockFace {
         let recorder = Arc::new(RecordingPrimitives::new());
 
         assert_ne!(cfg.region, Region::Local);
@@ -753,14 +788,14 @@ impl Harness {
 
 /// Configures a face added to a [`Harness`] via [`Harness::new_face`].
 #[derive(Default, Clone, Copy)]
-pub(crate) struct FaceConfig {
+pub(crate) struct FaceDef {
     pub(crate) region: Region,
     pub(crate) mode: WhatAmI,
     pub(crate) remote_bound: Bound,
     pub(crate) zid: ZenohIdProto,
 }
 
-impl FaceConfig {
+impl FaceDef {
     pub(crate) fn region(mut self, region: Region) -> Self {
         self.region = region;
         self
@@ -798,11 +833,11 @@ pub(crate) struct Connection<'a> {
     /// Gateway A.
     pub(crate) a: &'a Harness,
     /// A's face for B.
-    pub(crate) ab: FaceConfig,
+    pub(crate) ab: FaceDef,
     /// Gateway B.
     pub(crate) b: &'a Harness,
     /// B's face for A.
-    pub(crate) ba: FaceConfig,
+    pub(crate) ba: FaceDef,
 }
 
 impl Connection<'_> {
@@ -817,6 +852,16 @@ impl Connection<'_> {
 }
 
 impl EstablishedConnection {
+    /// Messages recorded for transmission **from A to B**.
+    pub(crate) fn a2b(&self) -> &RecordingPrimitives {
+        self.ab.recorder()
+    }
+
+    /// Messages recorded for transmission **from B to A**.
+    pub(crate) fn b2a(&self) -> &RecordingPrimitives {
+        self.ba.recorder()
+    }
+
     /// Forward one pending message **from A to B**.
     #[tracing::instrument(level = "info", skip(self), fields(from = %self.ba.face, to = %self.ab.face.state.zid.short()), ret)]
     pub(crate) fn fwd1(&mut self) -> Option<Message> {

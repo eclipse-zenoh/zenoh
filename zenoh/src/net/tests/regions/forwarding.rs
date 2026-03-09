@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Tests involving [`zenoh_protocol::network::push`] & [`zenoh_protocol::network::request`], i.e.
+//! the data/forwarding plane.
+
 use std::str::FromStr;
 
 use zenoh_protocol::{
@@ -19,7 +22,7 @@ use zenoh_protocol::{
     network::interest::{InterestMode, InterestOptions},
 };
 
-use super::{try_init_tracing_subscriber, FaceConfig, Harness};
+use super::{try_init_tracing_subscriber, FaceDef, Harness};
 use crate::{
     key_expr::KeyExpr,
     net::tests::regions::{Connection, EstablishedConnection},
@@ -62,10 +65,10 @@ fn test_p2p_inter_subregion_data_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
-    let p0 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S1));
-    let p1 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S2));
+    let p0 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S1));
+    let p1 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S2));
 
     let ke = KeyExpr::from_str("k").unwrap();
 
@@ -94,10 +97,10 @@ fn test_p2p_inter_subregion_query_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
-    let p0 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S1));
-    let p1 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S2));
+    let p0 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S1));
+    let p1 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S2));
 
     let ke = KeyExpr::from_str("k").unwrap();
 
@@ -135,21 +138,21 @@ fn test_r2r_inter_subregion_data_routing() {
 
     let mut r0_g = Connection {
         a: &r0,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g,
-        ba: FaceConfig::default().mode(WhatAmI::Router).region(S1),
+        ba: FaceDef::default().mode(WhatAmI::Router).region(S1),
     }
     .establish();
 
     let mut r1_g = Connection {
         a: &r1,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g,
-        ba: FaceConfig::default().mode(WhatAmI::Router).region(S2),
+        ba: FaceDef::default().mode(WhatAmI::Router).region(S2),
     }
     .establish();
 
@@ -197,21 +200,21 @@ fn test_r2r_inter_subregion_query_routing() {
 
     let mut r0_g = Connection {
         a: &r0,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g,
-        ba: FaceConfig::default().mode(WhatAmI::Router).region(S1),
+        ba: FaceDef::default().mode(WhatAmI::Router).region(S1),
     }
     .establish();
 
     let mut r1_g = Connection {
         a: &r1,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g,
-        ba: FaceConfig::default().mode(WhatAmI::Router).region(S2),
+        ba: FaceDef::default().mode(WhatAmI::Router).region(S2),
     }
     .establish();
 
@@ -250,10 +253,10 @@ fn test_c2c_inter_subregion_data_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
-    let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
-    let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
+    let c0 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S1));
+    let c1 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S2));
 
     let ke = KeyExpr::from_str("k").unwrap();
 
@@ -264,7 +267,7 @@ fn test_c2c_inter_subregion_data_routing() {
     c1.put(&ke, vec![43]);
 
     assert_eq!(c0.recorder().pushes().len(), 1);
-    assert_eq!(c0.recorder().pushes().len(), 1);
+    assert_eq!(c1.recorder().pushes().len(), 1);
 }
 
 /// Tests query routing between client subregions.
@@ -282,10 +285,10 @@ fn test_c2c_inter_subregion_query_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
-    let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
-    let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
+    let c0 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S1));
+    let c1 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S2));
 
     let ke = KeyExpr::from_str("k").unwrap();
 
@@ -296,11 +299,11 @@ fn test_c2c_inter_subregion_query_routing() {
     c1.query(1, &ke);
 
     assert_eq!(c0.recorder().requests().len(), 1);
-    assert_eq!(c0.recorder().requests().len(), 1);
+    assert_eq!(c1.recorder().requests().len(), 1);
 }
 
 #[test]
-fn multiple_gateways_data_routing_r2p_downstream() {
+fn test_multiple_gateways_data_routing_r2p_downstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -313,27 +316,27 @@ fn multiple_gateways_data_routing_r2p_downstream() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -341,11 +344,11 @@ fn multiple_gateways_data_routing_r2p_downstream() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -374,7 +377,7 @@ fn multiple_gateways_data_routing_r2p_downstream() {
 }
 
 #[test]
-fn multiple_gateways_query_routing_r2p_downstream() {
+fn test_multiple_gateways_query_routing_r2p_downstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -387,27 +390,27 @@ fn multiple_gateways_query_routing_r2p_downstream() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -415,11 +418,11 @@ fn multiple_gateways_query_routing_r2p_downstream() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -448,40 +451,48 @@ fn multiple_gateways_query_routing_r2p_downstream() {
 }
 
 #[test]
-fn multiple_gateways_data_routing_r2r_downstream() {
+fn test_multiple_gateways_data_routing_r2r_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let g1 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
-    let s = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let g0 = Harness::with_subregions2(
+        "a0".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router)],
+    );
+    let g1 = Harness::with_subregions2(
+        "a1".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router)],
+    );
+    let n = Harness::with_subregions2("a".parse().unwrap(), WhatAmI::Router, [Region::Local]);
+    let s = Harness::with_subregions2("b".parse().unwrap(), WhatAmI::Router, [Region::Local]);
 
     let ss = s.new_session();
     let ns = n.new_session();
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -489,20 +500,18 @@ fn multiple_gateways_data_routing_r2r_downstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -524,7 +533,7 @@ fn multiple_gateways_data_routing_r2r_downstream() {
 }
 
 #[test]
-fn multiple_gateways_query_routing_r2r_downstream() {
+fn test_multiple_gateways_query_routing_r2r_downstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
@@ -537,27 +546,27 @@ fn multiple_gateways_query_routing_r2r_downstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -565,20 +574,18 @@ fn multiple_gateways_query_routing_r2r_downstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -600,7 +607,7 @@ fn multiple_gateways_query_routing_r2r_downstream() {
 }
 
 #[test]
-fn multiple_gateways_data_routing_p2r_upstream() {
+fn test_multiple_gateways_data_routing_p2r_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -613,27 +620,27 @@ fn multiple_gateways_data_routing_p2r_upstream() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -641,11 +648,11 @@ fn multiple_gateways_data_routing_p2r_upstream() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -675,7 +682,7 @@ fn multiple_gateways_data_routing_p2r_upstream() {
 }
 
 #[test]
-fn multiple_gateways_data_routing_p2r_upstream_with_interest() {
+fn test_multiple_gateways_data_routing_p2r_upstream_with_interest() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -688,27 +695,27 @@ fn multiple_gateways_data_routing_p2r_upstream_with_interest() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -716,11 +723,11 @@ fn multiple_gateways_data_routing_p2r_upstream_with_interest() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -757,7 +764,7 @@ fn multiple_gateways_data_routing_p2r_upstream_with_interest() {
 }
 
 #[test]
-fn multiple_gateways_query_routing_p2r_upstream() {
+fn test_multiple_gateways_query_routing_p2r_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -770,27 +777,27 @@ fn multiple_gateways_query_routing_p2r_upstream() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -798,11 +805,11 @@ fn multiple_gateways_query_routing_p2r_upstream() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -823,16 +830,16 @@ fn multiple_gateways_query_routing_p2r_upstream() {
     ps.query(1, &ke);
     bi_fwd_all();
 
-    assert_eq!(rs.recorder().requests().len(), 1);
-
     assert!(r_g0.is_bi_complete());
     assert!(r_g1.is_bi_complete());
     assert!(p_g0.is_bi_complete());
     assert!(p_g1.is_bi_complete());
+
+    assert_eq!(rs.recorder().requests().len(), 1);
 }
 
 #[test]
-fn multiple_gateways_query_routing_p2r_upstream_with_interest() {
+fn test_multiple_gateways_query_routing_p2r_upstream_with_interest() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Peer)]);
@@ -845,27 +852,27 @@ fn multiple_gateways_query_routing_p2r_upstream_with_interest() {
 
     let mut r_g0 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut r_g1 = Connection {
         a: &r,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut p_g0 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -873,11 +880,11 @@ fn multiple_gateways_query_routing_p2r_upstream_with_interest() {
 
     let mut p_g1 = Connection {
         a: &p,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -914,7 +921,7 @@ fn multiple_gateways_query_routing_p2r_upstream_with_interest() {
 }
 
 #[test]
-fn multiple_gateways_data_routing_r2r_upstream() {
+fn test_multiple_gateways_data_routing_r2r_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
@@ -927,27 +934,27 @@ fn multiple_gateways_data_routing_r2r_upstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -955,20 +962,18 @@ fn multiple_gateways_data_routing_r2r_upstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -990,7 +995,7 @@ fn multiple_gateways_data_routing_r2r_upstream() {
 }
 
 #[test]
-fn multiple_gateways_query_routing_r2r_upstream() {
+fn test_multiple_gateways_query_routing_r2r_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
@@ -1003,27 +1008,27 @@ fn multiple_gateways_query_routing_r2r_upstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Router),
+        ab: FaceDef::default().mode(WhatAmI::Router),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Router),
+        ba: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -1031,20 +1036,18 @@ fn multiple_gateways_query_routing_r2r_upstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
     .establish();
 
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_bounded::<_, 1_000>([
-            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1,
-        ])
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
     };
 
     bi_fwd_all();
@@ -1057,16 +1060,16 @@ fn multiple_gateways_query_routing_r2r_upstream() {
     ss.query(1, &ke);
     bi_fwd_all();
 
-    assert_eq!(ns.recorder().requests().len(), 1);
-
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+
+    assert_eq!(ns.recorder().requests().len(), 1);
 }
 
 #[test]
-fn multiple_gateways_data_routing_p2p_downstream() {
+fn test_multiple_gateways_data_routing_p2p_downstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1079,27 +1082,27 @@ fn multiple_gateways_data_routing_p2p_downstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1107,18 +1110,28 @@ fn multiple_gateways_data_routing_p2p_downstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1137,10 +1150,11 @@ fn multiple_gateways_data_routing_p2p_downstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
-fn multiple_gateways_query_routing_p2p_downstream() {
+fn test_multiple_gateways_query_routing_p2p_downstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1153,27 +1167,27 @@ fn multiple_gateways_query_routing_p2p_downstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1181,18 +1195,28 @@ fn multiple_gateways_query_routing_p2p_downstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1211,10 +1235,11 @@ fn multiple_gateways_query_routing_p2p_downstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
-fn multiple_gateways_data_routing_p2p_upstream() {
+fn test_multiple_gateways_data_routing_p2p_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1227,27 +1252,27 @@ fn multiple_gateways_data_routing_p2p_upstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1255,18 +1280,28 @@ fn multiple_gateways_data_routing_p2p_upstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1279,16 +1314,17 @@ fn multiple_gateways_data_routing_p2p_upstream() {
     ss.put(&ke, vec![0x42]);
     bi_fwd_all();
 
-    assert_eq!(ns.recorder().pushes().len(), 1);
-
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
+
+    assert_eq!(ns.recorder().pushes().len(), 1);
 }
 
 #[test]
-fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
+fn test_multiple_gateways_data_routing_p2p_upstream_with_interest() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1301,27 +1337,27 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1329,18 +1365,28 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1367,10 +1413,11 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
-fn multiple_gateways_query_routing_p2p_upstream() {
+fn test_multiple_gateways_query_routing_p2p_upstream() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1383,27 +1430,27 @@ fn multiple_gateways_query_routing_p2p_upstream() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1411,18 +1458,28 @@ fn multiple_gateways_query_routing_p2p_upstream() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1441,10 +1498,11 @@ fn multiple_gateways_query_routing_p2p_upstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
 }
 
 #[test]
-fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
+fn test_multiple_gateways_query_routing_p2p_upstream_with_interest() {
     try_init_tracing_subscriber();
 
     let g0 = Harness::with_subregions(WhatAmI::Peer, [Region::default_south(WhatAmI::Peer)]);
@@ -1457,27 +1515,27 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
 
     let mut n_g0 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g0,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut n_g1 = Connection {
         a: &n,
-        ab: FaceConfig::default().mode(WhatAmI::Peer),
+        ab: FaceDef::default().mode(WhatAmI::Peer),
         b: &g1,
-        ba: FaceConfig::default().mode(WhatAmI::Peer),
+        ba: FaceDef::default().mode(WhatAmI::Peer),
     }
     .establish();
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
@@ -1485,18 +1543,28 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
 
     let mut s_g1 = Connection {
         a: &s,
-        ab: FaceConfig::default()
+        ab: FaceDef::default()
             .mode(WhatAmI::Peer)
             .remote_bound(Bound::South),
         b: &g1,
-        ba: FaceConfig::default()
+        ba: FaceDef::default()
             .mode(WhatAmI::Peer)
             .region(Region::default_south(WhatAmI::Peer)),
     }
     .establish();
 
+    let mut g0_g1 = Connection {
+        a: &g0,
+        ab: FaceDef::default().mode(WhatAmI::Peer),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Peer),
+    }
+    .establish();
+
     let mut bi_fwd_all = || {
-        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1])
+        EstablishedConnection::bi_fwd_many_unbounded([
+            &mut n_g0, &mut n_g1, &mut s_g0, &mut s_g1, &mut g0_g1,
+        ])
     };
 
     bi_fwd_all();
@@ -1523,4 +1591,173 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+    assert!(g0_g1.is_bi_complete());
+}
+
+/// Regression test for `inter_region_filter` using `src_zid` instead of `fwd_zid` when
+/// `src.bound() == South`.
+///
+/// ```text
+///           n            ← subscriber ns
+///         /   \
+///       g1     g2        ← two router gateways, each with a South{Router} sub-region
+///         \   /
+///           m            ← intermediate south-region router (Region::Local)
+/// ```
+#[test]
+fn test_multiple_gateways_data_routing_r2r_upstream_gateway_source() {
+    try_init_tracing_subscriber();
+
+    // g1 needs Region::Local so it can host a session (g1s).
+    let g1 = Harness::with_subregions(
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router), Region::Local],
+    );
+    let g2 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
+    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let m = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+
+    let ns = n.new_session();
+    let g1s = g1.new_session();
+
+    // North side: n connects to both gateways.
+    let mut n_g1 = Connection {
+        a: &n,
+        ab: FaceDef::default().mode(WhatAmI::Router),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    let mut n_g2 = Connection {
+        a: &n,
+        ab: FaceDef::default().mode(WhatAmI::Router),
+        b: &g2,
+        ba: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    // South side: m connects to both gateways, bridging their south sub-regions.
+    let mut m_g1 = Connection {
+        a: &m,
+        ab: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g1,
+        ba: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .region(Region::default_south(WhatAmI::Router)),
+    }
+    .establish();
+
+    let mut m_g2 = Connection {
+        a: &m,
+        ab: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g2,
+        ba: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .region(Region::default_south(WhatAmI::Router)),
+    }
+    .establish();
+
+    let mut bi_fwd_all = || {
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g1, &mut n_g2, &mut m_g1, &mut m_g2])
+    };
+
+    bi_fwd_all();
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    ns.declare_subscriber(None, 1, &ke);
+    bi_fwd_all();
+
+    g1s.put(&ke, vec![0x42]);
+    bi_fwd_all();
+
+    assert_eq!(ns.recorder().pushes().len(), 1);
+
+    assert!(n_g1.is_bi_complete());
+    assert!(n_g2.is_bi_complete());
+    assert!(m_g1.is_bi_complete());
+    assert!(m_g2.is_bi_complete());
+}
+
+/// Same as [`multiple_gateways_data_routing_r2r_upstream_gateway_source`] but for queries.
+#[test]
+fn test_multiple_gateways_query_routing_r2r_upstream_gateway_source() {
+    try_init_tracing_subscriber();
+
+    let g1 = Harness::with_subregions(
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router), Region::Local],
+    );
+    let g2 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
+    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let m = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+
+    let ns = n.new_session();
+    let g1s = g1.new_session();
+
+    let mut n_g1 = Connection {
+        a: &n,
+        ab: FaceDef::default().mode(WhatAmI::Router),
+        b: &g1,
+        ba: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    let mut n_g2 = Connection {
+        a: &n,
+        ab: FaceDef::default().mode(WhatAmI::Router),
+        b: &g2,
+        ba: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    let mut m_g1 = Connection {
+        a: &m,
+        ab: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g1,
+        ba: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .region(Region::default_south(WhatAmI::Router)),
+    }
+    .establish();
+
+    let mut m_g2 = Connection {
+        a: &m,
+        ab: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g2,
+        ba: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .region(Region::default_south(WhatAmI::Router)),
+    }
+    .establish();
+
+    let mut bi_fwd_all = || {
+        EstablishedConnection::bi_fwd_many_unbounded([&mut n_g1, &mut n_g2, &mut m_g1, &mut m_g2])
+    };
+
+    bi_fwd_all();
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    ns.declare_queryable(None, 1, &ke);
+    bi_fwd_all();
+
+    g1s.query(1, &ke);
+    bi_fwd_all();
+
+    assert_eq!(ns.recorder().requests().len(), 1);
+
+    assert!(n_g1.is_bi_complete());
+    assert!(n_g2.is_bi_complete());
+    assert!(m_g1.is_bi_complete());
+    assert!(m_g2.is_bi_complete());
 }

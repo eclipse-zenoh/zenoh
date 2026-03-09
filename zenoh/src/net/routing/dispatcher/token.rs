@@ -26,7 +26,7 @@ use zenoh_protocol::{
 
 use super::tables::{NodeId, TablesLock};
 use crate::net::routing::{
-    dispatcher::face::Face,
+    dispatcher::{face::Face, tables::InterRegionFilter},
     gateway::{node_id_as_source, Resource},
     hat::{DispatcherContext, RouteCurrentDeclareResult, SendDeclare},
 };
@@ -87,37 +87,57 @@ impl Face {
 
                 let tables = &mut *wtables;
 
-                let hats = &mut tables.hats;
                 let region = self.state.region;
 
-                let mut ctx = DispatcherContext {
-                    tables_lock: &self.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut self.state.clone(),
-                    send_declare,
-                };
+                macro_rules! ctx {
+                    () => {
+                        DispatcherContext {
+                            tables_lock: &self.tables,
+                            tables: &mut tables.data,
+                            src_face: &mut self.state.clone(),
+                            send_declare,
+                        }
+                    };
+                }
 
-                match interest_id
-                    .map(|id| hats[region].route_current_token(ctx.reborrow(), id, res.clone()))
-                {
+                let src_zid = tables.hats[region].remote_node_id_to_zid(ctx!().src_face, node_id);
+
+                match interest_id.map(|id| {
+                    tables.hats[region].route_current_token(ctx!().reborrow(), id, res.clone())
+                }) {
                     Some(RouteCurrentDeclareResult::Noop) => {} // ¯\_(ツ)_/¯
                     Some(RouteCurrentDeclareResult::Breadcrumb { interest }) => {
                         if interest.mode.is_future() {
-                            hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+                            tables.hats[region].register_token(ctx!(), id, res.clone(), node_id);
                         }
 
-                        hats[interest.src_region].propagate_current_token(ctx, res, interest);
+                        tables.hats[interest.src_region].propagate_current_token(
+                            ctx!(),
+                            res,
+                            interest,
+                        );
                     }
                     Some(RouteCurrentDeclareResult::NoBreadcrumb) | None => {
-                        hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
+                        tables.hats[region].register_token(ctx!(), id, res.clone(), node_id);
 
-                        for region in hats.regions().collect_vec() {
-                            let other_tokens = hats
+                        for dst in tables.hats.regions().collect_vec() {
+                            let other_tokens = tables
+                                .hats
                                 .values()
-                                .filter(|hat| hat.region() != region)
+                                .filter(|hat| hat.region() != dst)
                                 .any(|hat| hat.remote_tokens_of(&res));
 
-                            hats[region].propagate_token(ctx.reborrow(), res.clone(), other_tokens);
+                            let filter = InterRegionFilter {
+                                src: &region,
+                                dst: &dst,
+                                src_zid: src_zid.as_ref(),
+                                fwd_zid: Some(&self.state.zid),
+                                dst_zid: None,
+                            };
+
+                            if filter.resolve(tables) {
+                                tables.hats[dst].propagate_token(ctx!(), res.clone(), other_tokens);
+                            }
                         }
                     }
                 }

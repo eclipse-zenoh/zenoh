@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Tests involving [`zenoh_protocol::network::interest`].
+
 use zenoh_protocol::{
     core::{Bound, Region, WhatAmI},
     network::{
@@ -20,9 +22,8 @@ use zenoh_protocol::{
     },
 };
 
+use super::{try_init_tracing_subscriber, Connection, FaceDef, Harness};
 use crate::key_expr::KeyExpr;
-
-use super::{try_init_tracing_subscriber, Connection, FaceConfig, Harness};
 
 /// Test that current tokens are re-propagated even if they've already been propagated in future
 /// mode.
@@ -50,12 +51,12 @@ fn test_current_token_repropagation() {
     let s1 = c1.new_session();
     let s2 = c1.new_session();
 
-    let r_face = FaceConfig::default()
+    let r_face = FaceDef::default()
         .region(Region::North)
         .remote_bound(Bound::South)
         .mode(WhatAmI::Router);
 
-    let c_face = FaceConfig::default()
+    let c_face = FaceDef::default()
         .mode(WhatAmI::Client)
         .region(Region::default_south(WhatAmI::Client));
 
@@ -136,8 +137,8 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
 
     let p = Harness::with_subregions(WhatAmI::Peer, []);
 
-    let p0 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
-    let p1 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+    let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
+    let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
 
     p0.interest(42, InterestMode::Current, InterestOptions::TOKENS, None);
 
@@ -151,8 +152,8 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
 fn test_p2p_interest_routing_with_finalized_initial_interests() {
     let p = Harness::with_subregions(WhatAmI::Peer, []);
 
-    let p0 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
-    let p1 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+    let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
+    let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
 
     p0.declare_final(0);
     p1.declare_final(0);
@@ -172,10 +173,10 @@ fn test_concurrent_current_future_interests(north: WhatAmI, south: WhatAmI) {
     try_init_tracing_subscriber();
 
     let r = Region::default_south(south);
-    let g = Harness::with_subregions_noruntime(north, [r]);
-    let n = g.new_face(FaceConfig::default().remote_bound(Bound::South));
-    let s0 = g.new_face(FaceConfig::default().mode(south).region(r));
-    let s1 = g.new_face(FaceConfig::default().mode(south).region(r));
+    let g = Harness::with_subregions(north, [r]);
+    let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
+    let s0 = g.new_face(FaceDef::default().mode(south).region(r));
+    let s1 = g.new_face(FaceDef::default().mode(south).region(r));
 
     assert_eq!(n.recorder().interests().len(), 0);
 
@@ -195,7 +196,7 @@ fn test_concurrent_current_future_interests(north: WhatAmI, south: WhatAmI) {
 
     assert_eq!(n.recorder().interests().len(), 2);
 
-    n.declare_subscriber(Some(42), 1999, &KeyExpr::dummy());
+    n.declare_subscriber(Some(42), 1999, &"k".parse::<KeyExpr>().unwrap());
 
     assert_eq!(s0.recorder().subscribers().len(), 1);
     assert_eq!(s1.recorder().subscribers().len(), 1);
@@ -213,8 +214,8 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     try_init_tracing_subscriber();
 
     let r = Region::default_south(south);
-    let g = Harness::with_subregions_noruntime(north, [r]);
-    let s = g.new_face(FaceConfig::default().mode(south).region(r));
+    let g = Harness::with_subregions(north, [r]);
+    let s = g.new_face(FaceDef::default().mode(south).region(r));
 
     s.interest(
         42,
@@ -223,12 +224,12 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
         None,
     );
 
-    let n = g.new_face(FaceConfig::default().remote_bound(Bound::South));
+    let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
 
     assert_eq!(n.recorder().interests().len(), 1);
     assert_eq!(s.recorder().queryables().len(), 0);
 
-    n.declare_queryable(Some(42), 1999, &KeyExpr::dummy());
+    n.declare_queryable(Some(42), 1999, &"k".parse::<KeyExpr>().unwrap());
 
     assert_eq!(s.recorder().queryables().len(), 1);
 }

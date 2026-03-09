@@ -100,6 +100,7 @@ impl TreesComputationWorker {
 pub(crate) struct Hat {
     region: Region,
     router_subs: HashSet<Arc<Resource>>,
+    /// All tokens declared by routers in the network.
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>, // TODO(regions): remove Option?
@@ -264,7 +265,7 @@ impl HatBaseTrait for Hat {
             gossip_target,
             autoconnect,
             link_weights_from_config(router_link_weights, ROUTERS_NET_NAME)?,
-            &self.region,
+            self.region().bound(),
         ));
         Ok(())
     }
@@ -537,11 +538,46 @@ impl HatBaseTrait for Hat {
     fn region(&self) -> Region {
         self.region
     }
+
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+        self.get_router(src, node_id)
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn gateways_of(&self, _tables: &TablesData, zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
+        debug_assert!(self.region().bound().is_south());
+
+        let node = self.net().graph.node_weights().find(|n| &n.zid == zid)?;
+
+        let gwys = self
+            .net()
+            .graph
+            .node_weights()
+            .filter_map(|n| (n.is_gateway && node.links.contains_key(&n.zid)).then_some(n.zid))
+            .collect_vec();
+
+        Some(gwys)
+    }
+
+    #[tracing::instrument(level = "trace", skip(_tables), ret)]
+    fn gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+        debug_assert!(self.region().bound().is_south());
+
+        let gwys = self
+            .net()
+            .graph
+            .node_weights()
+            .filter_map(|n| n.is_gateway.then_some(n.zid))
+            .collect();
+
+        Some(gwys)
+    }
 }
 
 struct HatContext {
     router_subs: HashSet<ZenohIdProto>,
     router_qabls: HashMap<ZenohIdProto, QueryableInfoType>,
+    /// Routers that have declared a token on the given resource.
     router_tokens: HashSet<ZenohIdProto>,
 }
 

@@ -27,7 +27,7 @@ use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{ExprId, WireExpr, ZenohIdProto},
+    core::{Bound, ExprId, Region, WireExpr, ZenohIdProto},
     network::Mapping,
 };
 use zenoh_result::ZResult;
@@ -364,6 +364,133 @@ impl Tables {
     pub(crate) fn egress_filter(&self, src_face: &FaceState, out_face: &Arc<FaceState>) -> bool {
         src_face.id != out_face.id
             && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
+    }
+}
+
+/// Inter-region filter.
+///
+/// We reject messages in two scenarios:
+/// 1. The source node is a gateway.
+/// 2. We are not the primary gateway.
+///
+/// # South-to-North
+///
+/// ```text
+///   fwd_zid = Some(F)                        fwd_zid = None
+///   ┌───────────────────┐                    ┌───────────────────┐
+///   │                   │                    │                   │
+///   │     G   ...  G'   │                    │     G  ...  G'    │
+///   └─────/─────────\───┘                    └─────/─────────\───┘
+///   ┌────/───────────\──┐                    ┌────/───────────\──┐
+///   │   G     ...    G' │                    │   G     ...    G' │
+///   │    \          /   │                    │                   │
+///   │     F ─ ─ ─ ─     │  fwd (south)       │     F             │  fwd (south)
+///   │     |             │                    │                   │
+///   │     S             │  src (south)       │     S             │  src (south)
+///   └───────────────────┘                    └───────────────────┘
+///
+///   gwys = gateways known to F                gwys = all region gateways
+/// ```
+///
+/// # North-to-South
+///
+/// ```text
+///   dst_zid = Some(D)                        dst_zid = None
+///   ┌───────────────────┐                    ┌───────────────────┐
+///   │       S           │  src               │       S           │  src
+///   │                   │                    │                   │
+///   │     G  ...  G'    │                    │     G   ...   G'  │
+///   └─────/─────────\───┘                    └─────/─────────\───┘
+///   ┌────/───────────\──┐                    ┌────/───────────\──┐
+///   │   G0    ...    G1 │                    │   G     ...    G' │
+///   │    \          /   │                    │                   │
+///   │     D ─ ─ ─ ─     │  dst (south)       │     D             │ dst (south)
+///   └───────────────────┘                    └───────────────────┘
+///
+///   gwys = gateways known to D                gwys = all region gateways
+/// ```
+///
+/// In both cases: `primary = max(gwys)`, allow iff `self.zid == primary`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct InterRegionFilter<'a> {
+    /// Source region.
+    pub src: &'a Region,
+    /// Destination region.
+    pub dst: &'a Region,
+    /// ZID of the source node which is potentially different than [`InterRegionFilter::fwd_zid`] in
+    /// linkstate.
+    pub src_zid: Option<&'a ZenohIdProto>,
+    /// ZID of the source face.
+    pub fwd_zid: Option<&'a ZenohIdProto>,
+    /// ZID of the destination node.
+    pub dst_zid: Option<&'a ZenohIdProto>,
+}
+
+impl InterRegionFilter<'_> {
+    /// Returns `false` if a `Push` or `Request` should be filtered out when routed from `src` to `dst`.
+    pub(crate) fn resolve(&self, tables: &Tables) -> bool {
+        // NOTE(regions): we initialize the tracing span iff the TRACE level is enabled and we use
+        // aux to trace the filtering event.
+
+        let _span = tracing::enabled!(tracing::Level::TRACE).then(|| {
+            tracing::trace_span!(
+                "inter_region_filter",
+                src = %self.src,
+                dst = %self.dst,
+                src_zid = ?self.src_zid.map(|zid| zid.short()),
+                fwd_zid = ?self.fwd_zid.map(|zid| zid.short()),
+                dst_zid = ?self.dst_zid.map(|zid| zid.short()),
+            )
+            .entered()
+        });
+
+        let ret = aux(self, tables);
+        tracing::trace!(return = ret);
+        return ret;
+
+        fn aux(this: &InterRegionFilter<'_>, tables: &Tables) -> bool {
+            if this.src.bound() == this.dst.bound() {
+                // NOTE(regions): only messages traveling downstream/upstream need filtering, i.e. in
+                // the presence of multiple region gateways.
+                return true;
+            }
+
+            let gwys = match this.src.bound() {
+                Bound::North => this
+                    .dst_zid
+                    .map(|dst_zid| tables.hats[this.dst].gateways_of(&tables.data, dst_zid))
+                    .unwrap_or_else(|| tables.hats[this.dst].gateways(&tables.data)),
+                // NOTE(regions): in this case, we cannot have a link with `src_zid` if it were also a
+                // gateway so we check the "forwarder's" zid. This works for routers and peers alike.
+                // See `multiple_gateways_data_routing_r2r_upstream_gateway_source` in
+                // net::tests::regions::routing.
+                Bound::South => this
+                    .fwd_zid
+                    .map(|fwd_zid| tables.hats[this.src].gateways_of(&tables.data, fwd_zid))
+                    .unwrap_or_else(|| tables.hats[this.src].gateways(&tables.data)),
+            };
+
+            let Some(gwys) = gwys.filter(|g| !g.is_empty()) else {
+                return true;
+            };
+
+            let Some(src_zid) = this.src_zid else {
+                bug!("Unknown source ZID");
+                return true;
+            };
+
+            // HACK(regions): this has the effect of filtering out messages originating from a router
+            // subregion from being re-routed to the north (router) region. As the router linkstate
+            // protocol is unimplemented, our hand is forced.
+            if gwys.contains(src_zid) {
+                return false;
+            }
+
+            // SAFETY: gwys is guaranteed non-empty by the filter above.
+            let primary = gwys.iter().max().unwrap();
+
+            &tables.data.zid == primary
+        }
     }
 }
 

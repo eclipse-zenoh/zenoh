@@ -78,12 +78,12 @@ impl Hat {
         &self,
         tables: &TablesData,
         net: &Network,
-        clildren: &[NodeIndex],
+        children: &[NodeIndex],
         res: &Arc<Resource>,
         src_face: Option<&Arc<FaceState>>,
         routing_context: NodeId,
     ) {
-        for child in clildren {
+        for child in children {
             if net.graph.contains_node(*child) {
                 match self.face(tables, &net.graph[*child].zid).cloned() {
                     Some(mut someface) => {
@@ -359,9 +359,8 @@ impl HatTokenTrait for Hat {
         mut res: Arc<Resource>,
         other_tokens: bool,
     ) {
-        if !other_tokens {
+        if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::register_token
-            debug_assert!(self.owns(ctx.src_face));
             return;
         };
 

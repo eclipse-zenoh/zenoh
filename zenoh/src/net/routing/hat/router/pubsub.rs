@@ -47,7 +47,7 @@ use crate::zenoh_core::polyfill::*;
 
 impl Hat {
     pub(super) fn pubsub_tree_change(
-        &mut self,
+        &self,
         tables: &mut TablesData,
         new_children: &[Vec<NodeIndex>],
     ) {
