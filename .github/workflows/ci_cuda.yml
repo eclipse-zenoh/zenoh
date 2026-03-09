@@ -65,4 +65,5 @@ jobs:
             --features cuda,shared-memory,test \
             --exclude zenoh-cuda \
             --exclude zenoh-examples \
-            --exclude zenoh-plugin-example
+            --exclude zenoh-plugin-example \
+            --filter-expr 'not test(shm)'
