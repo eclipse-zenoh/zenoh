@@ -23,8 +23,9 @@ use arc_swap::ArcSwapOption;
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
+use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{Bound, ExprId, Region, Reliability, WhatAmI, ZenohIdProto},
+    core::{Bound, ExprId, Region, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         interest::{InterestId, InterestMode, InterestOptions},
         Mapping, Push, Request, RequestId, Response, ResponseFinal,
@@ -48,6 +49,7 @@ use crate::net::{
                 route_send_response_final, Query,
             },
             region::RegionMap,
+            tables::Tables,
         },
         hat::DispatcherContext,
         interceptor::{
@@ -401,6 +403,138 @@ impl Face {
             interest.rejection_token.cancel();
         }
     }
+
+    /// Resolves `expr` to a [`Resource`] (creating it if needed), acquires the [`Tables`] write
+    /// lock, then calls `f(tables, resource)`.
+    ///
+    /// Returns early without calling `f` if the wire-expr scope is unknown.
+    /// Use this for **declare** operations where the resource must exist after the call.
+    pub(crate) fn with_mapped_expr<F>(&self, expr: &WireExpr<'_>, mut f: F)
+    where
+        F: FnMut(&mut Tables, Arc<Resource>),
+    {
+        let rtables = self.tables.tables.read().unwrap();
+        let Some(mut prefix) = rtables
+            .data
+            .get_mapping(&self.state, &expr.scope, expr.mapping)
+            .cloned()
+        else {
+            tracing::error!(?expr.scope, ?expr.mapping, "Unknown wire expr");
+            return;
+        };
+
+        let (res, mut wtables) = if let Some(res) =
+            Resource::get_resource(&prefix, &expr.suffix).filter(|r| r.ctx.is_some())
+        {
+            drop(rtables);
+            (res, self.tables.tables.write().unwrap())
+        } else {
+            let mut fullexpr = prefix.expr().to_string();
+            fullexpr.push_str(expr.suffix.as_ref());
+            let mut matches = keyexpr::new(fullexpr.as_str())
+                .map(|ke| Resource::get_matches(&rtables.data, ke))
+                .unwrap_or_default();
+            drop(rtables);
+            let mut wtables = self.tables.tables.write().unwrap();
+            let tables = &mut *wtables;
+            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
+            matches.push(Arc::downgrade(&res));
+            Resource::match_resource(&tables.data, &mut res, matches);
+            (res, wtables)
+        };
+
+        tracing::debug!(?expr, expr.mapped = ?res);
+
+        let tables = &mut *wtables;
+        f(tables, res) // TODO(regions): construct DispatcherContext here?
+
+        // wtables is dropped
+    }
+
+    /// Like [`Face::with_mapped_expr`], but `expr` may be absent.
+    ///
+    /// If `expr` is `Some`, resolves it to a resource (creating it if needed) and calls
+    /// `f(tables, Some(resource))`.  If `expr` is `None`, acquires the write lock and calls
+    /// `f(tables, None)` directly.
+    pub(crate) fn with_mapped_optional_expr<F>(&self, expr: Option<&WireExpr<'_>>, mut f: F)
+    where
+        F: FnMut(&mut Tables, Option<Arc<Resource>>),
+    {
+        match expr {
+            Some(expr) => self.with_mapped_expr(expr, |tables, res| f(tables, Some(res))),
+            None => {
+                let mut wtables = self.tables.tables.write().unwrap();
+                let tables = &mut *wtables;
+
+                f(tables, None)
+
+                // wtables is dropped
+            }
+        }
+    }
+
+    /// Like [`Face::with_mapped_expr`], but `expr` may be empty (as in undeclare messages).
+    ///
+    /// If `expr` is non-empty, looks up the resource and calls `f(tables, Some(resource))`.
+    /// If `expr` is empty, acquires the write lock and calls `f(tables, None)`.
+    /// Returns early without calling `f` if the mapping is unknown.
+    ///
+    /// When `make_if_unknown` is `false`, the resource must already exist; returns early if not
+    /// found.  When `true`, an unknown resource is created (and matched) before calling `f`.
+    pub(crate) fn with_mapped_nullable_expr<F>(
+        &self,
+        expr: &WireExpr<'_>,
+        make_if_unknown: bool,
+        mut f: F,
+    ) where
+        F: FnMut(&mut Tables, Option<Arc<Resource>>),
+    {
+        let (res, mut wtables) = if !expr.is_empty() {
+            let rtables = self.tables.tables.read().unwrap();
+
+            let Some(mut prefix) = rtables
+                .data
+                .get_mapping(&self.state, &expr.scope, expr.mapping)
+                .cloned()
+            else {
+                tracing::error!(?expr.scope, ?expr.mapping, "Unknown wire expr");
+                return;
+            };
+
+            // NOTE(regions): this block differs from `with_mapped_expr` in that (1) is doesn't
+            // check `Resource::ctx` and (2) doesn't unconditionally make unknown resources.
+            if let Some(res) = Resource::get_resource(&prefix, &expr.suffix) {
+                drop(rtables);
+                (Some(res), self.tables.tables.write().unwrap())
+            } else if make_if_unknown {
+                let mut fullexpr = prefix.expr().to_string();
+                fullexpr.push_str(expr.suffix.as_ref());
+                let mut matches = keyexpr::new(fullexpr.as_str())
+                    .map(|ke| Resource::get_matches(&rtables.data, ke))
+                    .unwrap_or_default();
+                drop(rtables);
+                let mut wtables = self.tables.tables.write().unwrap();
+                let mut res =
+                    Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                matches.push(Arc::downgrade(&res));
+                Resource::match_resource(&wtables.data, &mut res, matches);
+                (Some(res), wtables)
+            } else {
+                tracing::error!(?prefix, suffix = ?expr.suffix, "Unknown resource");
+                return;
+            }
+        } else {
+            (None, self.tables.tables.write().unwrap())
+        };
+
+        tracing::debug!(?expr, expr.mapped = ?res);
+
+        let tables = &mut *wtables;
+
+        f(tables, res)
+
+        // wtables is dropped
+    }
 }
 
 impl Primitives for Face {
@@ -457,7 +591,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 let mut declares = vec![];
                 self.declare_queryable(
-                    &self.tables,
                     m.id,
                     &m.wire_expr,
                     &m.ext_info,
@@ -472,7 +605,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 let mut declares = vec![];
                 self.undeclare_queryable(
-                    &self.tables,
                     m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -486,7 +618,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::DeclareToken(m) => {
                 let mut declares = vec![];
                 self.declare_token(
-                    &self.tables,
                     m.id,
                     &m.wire_expr,
                     msg.ext_nodeid.node_id,
@@ -501,7 +632,6 @@ impl Primitives for Face {
             zenoh_protocol::network::DeclareBody::UndeclareToken(m) => {
                 let mut declares = vec![];
                 self.undeclare_token(
-                    &self.tables,
                     m.id,
                     &m.ext_wire_expr,
                     msg.ext_nodeid.node_id,

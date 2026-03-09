@@ -309,11 +309,14 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let (broker_hat, other_hats) = tables.hats.partition(&Region::Local);
+        let (broker_hat, other_hats) = tables
+            .hats
+            .partition(&Region::Local)
+            .expect("the local region should always have a corresponding hat");
         let local_broker = broker_hat
             .as_any()
             .downcast_ref::<hat::broker::Hat>()
-            .unwrap();
+            .expect("the local region's hat should always be the broker hat");
 
         let key_expr = match &ns_key_expr {
             Some(ns_ke) => ns_ke,

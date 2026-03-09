@@ -77,7 +77,7 @@ impl<D> RegionMap<D> {
             .filter_map(|(i, v)| v.as_mut().map(|v| (Self::index_to_region(i), v)))
     }
 
-    pub(crate) fn partition_mut(&mut self, region: &Region) -> (&mut D, RegionMap<&mut D>) {
+    pub(crate) fn partition_mut(&mut self, region: &Region) -> Option<(&mut D, RegionMap<&mut D>)> {
         let mut main = None;
         let mut others = vec![];
         others.resize_with(self.buf.len(), || None);
@@ -90,12 +90,10 @@ impl<D> RegionMap<D> {
             }
         }
 
-        let Some(north) = main else { unreachable!() };
-
-        (north, RegionMap { buf: others })
+        Some((main?, RegionMap { buf: others }))
     }
 
-    pub(crate) fn partition(&self, region: &Region) -> (&D, RegionMap<&D>) {
+    pub(crate) fn partition(&self, region: &Region) -> Option<(&D, RegionMap<&D>)> {
         let mut main = None;
         let mut others = vec![];
         others.resize_with(self.buf.len(), || None);
@@ -108,9 +106,7 @@ impl<D> RegionMap<D> {
             }
         }
 
-        let Some(north) = main else { unreachable!() };
-
-        (north, RegionMap { buf: others })
+        Some((main?, RegionMap { buf: others }))
     }
 
     pub(crate) fn regions(&self) -> impl Iterator<Item = Region> + '_ {

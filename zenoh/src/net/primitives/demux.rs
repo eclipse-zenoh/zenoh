@@ -192,8 +192,10 @@ impl TransportPeerEventHandler for DeMux {
                         send_declare: &mut |p, m| declares.push((p.clone(), m)),
                     };
 
-                    let (owner_hat, other_hats) =
-                        tables.hats.partition_mut(&self.face.state.region);
+                    let (owner_hat, other_hats) = tables
+                        .hats
+                        .partition_mut(&self.face.state.region)
+                        .expect("face region should have a corresponding hat");
 
                     owner_hat.handle_oam(
                         ctx,

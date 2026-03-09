@@ -21,7 +21,6 @@ use std::{
 
 use async_trait::async_trait;
 use tokio_util::sync::CancellationToken;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::Region,
     network::{
@@ -233,6 +232,8 @@ impl Face {
             return;
         }
 
+        let msg = &*msg;
+
         let Interest {
             id,
             mode,
@@ -250,135 +251,92 @@ impl Face {
             );
         }
 
-        let (res, mut wtables) = if let Some(expr) = wire_expr {
-            let rtables = zread!(&self.tables.tables);
-            match rtables
-                .data
-                .get_mapping(&self.state, &expr.scope, expr.mapping)
-                .cloned()
-            {
-                Some(mut prefix) => {
-                    let res = Resource::get_resource(&prefix, &expr.suffix);
-                    if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
-                        drop(rtables);
-                        let wtables = zwrite!(self.tables.tables);
-                        (Some(res.unwrap()), wtables)
-                    } else {
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables.data, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut wtables = zwrite!(self.tables.tables);
-                        let tables = &mut *wtables;
-                        let mut res =
-                            Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&tables.data, &mut res, matches);
-                        (Some(res), wtables)
-                    }
-                }
-                None => {
-                    tracing::error!(
-                        "{} Declare interest {} for unknown scope {}!",
-                        &self.state,
-                        id,
-                        expr.scope
+        self.with_mapped_optional_expr(wire_expr.as_ref(), |tables, res| {
+            let hats = &mut tables.hats;
+
+            let mut ctx = DispatcherContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut self.state.clone(),
+                send_declare,
+            };
+
+            let Some(remote) = hats[region].new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
+                return;
+            };
+
+            let resolved_interest_opt =
+                hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
+
+            if msg.mode.is_current() {
+                if msg.options.subscribers() {
+                    let other_sub_matches = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .flat_map(|hat| {
+                            hat.remote_subscribers_matching(ctx.tables, res.as_deref())
+                                .into_iter()
+                        })
+                        .collect::<HashMap<_, _>>();
+
+                    hats[region].send_current_subscribers(
+                        ctx.reborrow(),
+                        msg,
+                        res.clone(),
+                        other_sub_matches,
                     );
-                    return;
+                }
+
+                if msg.options.queryables() {
+                    let other_qabl_matches = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .flat_map(|hat| {
+                            hat.remote_queryables_matching(ctx.tables, res.as_deref())
+                                .into_iter()
+                        })
+                        .collect::<HashMap<_, _>>();
+                    hats[region].send_current_queryables(
+                        ctx.reborrow(),
+                        msg,
+                        res.clone(),
+                        other_qabl_matches,
+                    );
+                }
+
+                if msg.options.tokens() {
+                    let other_token_matches = hats
+                        .values()
+                        .filter(|hat| hat.region() != region)
+                        .flat_map(|hat| {
+                            hat.remote_tokens_matching(ctx.tables, res.as_deref())
+                                .into_iter()
+                        })
+                        .collect::<HashSet<_>>();
+                    hats[region].send_current_tokens(
+                        ctx.reborrow(),
+                        msg,
+                        res.clone(),
+                        other_token_matches,
+                    );
                 }
             }
-        } else {
-            (None, zwrite!(self.tables.tables))
-        };
 
-        let tables = &mut *wtables;
-
-        let mut ctx = DispatcherContext {
-            tables_lock: &self.tables,
-            tables: &mut tables.data,
-            src_face: &mut self.state.clone(),
-            send_declare,
-        };
-
-        let hats = &mut tables.hats;
-
-        let Some(remote) = hats[region].new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
-            return;
-        };
-
-        let resolved_interest_opt =
-            hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
-
-        if msg.mode.is_current() {
-            if msg.options.subscribers() {
-                let other_sub_matches = hats
-                    .values()
-                    .filter(|hat| hat.region() != region)
-                    .flat_map(|hat| {
-                        hat.remote_subscribers_matching(ctx.tables, res.as_deref())
-                            .into_iter()
-                    })
-                    .collect::<HashMap<_, _>>();
-
-                hats[region].send_current_subscribers(
-                    ctx.reborrow(),
-                    msg,
-                    res.clone(),
-                    other_sub_matches,
-                );
+            if msg.mode.is_future() {
+                hats[region].register_interest(ctx.reborrow(), msg, res);
             }
 
-            if msg.options.queryables() {
-                let other_qabl_matches = hats
-                    .values()
-                    .filter(|hat| hat.region() != region)
-                    .flat_map(|hat| {
-                        hat.remote_queryables_matching(ctx.tables, res.as_deref())
-                            .into_iter()
-                    })
-                    .collect::<HashMap<_, _>>();
-                hats[region].send_current_queryables(
+            if let Some(resolved_interest) = resolved_interest_opt {
+                tracing::trace!(
+                    "Resolving current interest; it was not propagated in the north region"
+                );
+                hats[region].send_declare_final(
                     ctx.reborrow(),
-                    msg,
-                    res.clone(),
-                    other_qabl_matches,
+                    resolved_interest.src_interest_id,
+                    &resolved_interest.src,
                 );
             }
-
-            if msg.options.tokens() {
-                let other_token_matches = hats
-                    .values()
-                    .filter(|hat| hat.region() != region)
-                    .flat_map(|hat| {
-                        hat.remote_tokens_matching(ctx.tables, res.as_deref())
-                            .into_iter()
-                    })
-                    .collect::<HashSet<_>>();
-                hats[region].send_current_tokens(
-                    ctx.reborrow(),
-                    msg,
-                    res.clone(),
-                    other_token_matches,
-                );
-            }
-        }
-
-        if msg.mode.is_future() {
-            hats[region].register_interest(ctx.reborrow(), msg, res);
-        }
-
-        if let Some(resolved_interest) = resolved_interest_opt {
-            tracing::trace!(
-                "Resolving current interest; it was not propagated in the north region"
-            );
-            hats[region].send_declare_final(
-                ctx.reborrow(),
-                resolved_interest.src_interest_id,
-                &resolved_interest.src,
-            );
-        }
+        });
     }
 
     #[tracing::instrument(

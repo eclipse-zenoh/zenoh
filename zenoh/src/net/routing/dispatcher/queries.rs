@@ -21,7 +21,6 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{Encoding, Region, WireExpr, ZenohIdProto},
     network::{
@@ -59,7 +58,7 @@ pub(crate) struct Query {
 impl Face {
     #[tracing::instrument(
         level = "debug",
-        skip(self, tables, send_declare, qabl_info),
+        skip(self, send_declare, qabl_info),
         fields(
             expr = %expr,
             node_id = node_id_as_source(node_id),
@@ -70,199 +69,128 @@ impl Face {
     )]
     pub(crate) fn declare_queryable(
         &self,
-        tables: &TablesLock,
         id: QueryableId,
         expr: &WireExpr,
         qabl_info: &QueryableInfoType,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        let rtables = zread!(tables.tables);
-        match rtables
-            .data
-            .get_mapping(&self.state, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                let res = Resource::get_resource(&prefix, &expr.suffix);
+        self.with_mapped_expr(expr, |tables, mut res| {
+            let region = self.state.region;
 
-                let (mut res, mut wtables) =
-                    if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
-                        drop(rtables);
-                        let wtables = zwrite!(tables.tables);
-                        (res.unwrap(), wtables)
-                    } else {
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables.data, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut tables_wguard = zwrite!(tables.tables);
-                        let tables = &mut *tables_wguard;
-                        let mut res =
-                            Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&tables.data, &mut res, matches);
-                        (res, tables_wguard)
-                    };
+            let mut ctx = DispatcherContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut self.state.clone(),
+                send_declare,
+            };
 
-                let tables = &mut *wtables;
-
-                let hats = &mut tables.hats;
-                let region = self.state.region;
-
-                let mut ctx = DispatcherContext {
-                    tables_lock: &self.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut self.state.clone(),
-                    send_declare,
-                };
-
-                hats[region].register_queryable(
-                    ctx.reborrow(),
-                    id,
-                    res.clone(),
-                    node_id,
-                    qabl_info,
-                );
-
-                hats[region].disable_query_routes(ctx.tables, &mut res);
-
-                for region in hats.regions().collect_vec() {
-                    let other_info = hats
-                        .values()
-                        .filter(|hat| hat.region() != region)
-                        .flat_map(|hat| hat.remote_queryables_of(&res))
-                        .reduce(merge_qabl_infos);
-
-                    hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
-                }
-
-                drop(wtables);
-            }
-            None => tracing::error!(
-                "{} Declare queryable {} for unknown scope {}",
-                &self.state,
+            tables.hats[region].register_queryable(
+                ctx.reborrow(),
                 id,
-                expr.scope
-            ),
-        }
+                res.clone(),
+                node_id,
+                qabl_info,
+            );
+
+            tables.hats[region].disable_query_routes(ctx.tables, &mut res);
+
+            for region in tables.hats.regions().collect_vec() {
+                let other_info = tables
+                    .hats
+                    .values()
+                    .filter(|hat| hat.region() != region)
+                    .flat_map(|hat| hat.remote_queryables_of(&res))
+                    .reduce(merge_qabl_infos);
+
+                tables.hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+            }
+        });
     }
 
     #[tracing::instrument(
         level = "debug",
-        skip(self, tables, send_declare),
+        skip(self, send_declare),
         fields(expr = %expr, node_id = node_id_as_source(node_id)),
         ret
     )]
     pub(crate) fn undeclare_queryable(
         &self,
-        tables: &TablesLock,
         id: QueryableId,
         expr: &WireExpr,
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        let res = if expr.is_empty() {
-            None
-        } else {
-            let rtables = zread!(tables.tables);
-            match rtables
-                .data
-                .get_mapping(&self.state, &expr.scope, expr.mapping)
+        self.with_mapped_nullable_expr(expr, /* make_if_unknown */ false, |tables, res| {
+            let region = self.state.region;
+
+            let mut ctx = DispatcherContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut self.state.clone(),
+                send_declare,
+            };
+
+            match tables.hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id)
             {
-                Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-                    Some(res) => Some(res),
-                    None => {
-                        tracing::error!(
-                            "{} Undeclare unknown queryable {} ({}{})",
-                            &self.state,
-                            id,
-                            prefix.expr(),
-                            expr.suffix
+                UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
+                UnregisterEntityResult::InfoUpdate { mut res } => {
+                    tables.hats[region].disable_query_routes(ctx.tables, &mut res);
+
+                    for region in tables.hats.regions().collect_vec() {
+                        let other_info = tables
+                            .hats
+                            .values()
+                            .filter(|hat| hat.region() != region)
+                            .filter_map(|hat| hat.remote_queryables_of(&res))
+                            .reduce(merge_qabl_infos);
+
+                        tables.hats[region].propagate_queryable(
+                            ctx.reborrow(),
+                            res.clone(),
+                            other_info,
                         );
-                        return;
                     }
-                },
-                None => {
-                    tracing::error!(
-                        "{} Undeclare queryable {} with unknown scope {}",
-                        &self.state,
-                        id,
-                        expr.scope
-                    );
-                    return;
                 }
-            }
-        };
+                UnregisterEntityResult::LastUnregistered { mut res } => {
+                    tables.hats[region].disable_query_routes(ctx.tables, &mut res);
 
-        let mut wtables = zwrite!(tables.tables);
-        let tables = &mut *wtables;
-
-        let hats = &mut tables.hats;
-        let region = self.state.region;
-
-        let mut ctx = DispatcherContext {
-            tables_lock: &self.tables,
-            tables: &mut tables.data,
-            src_face: &mut self.state.clone(),
-            send_declare,
-        };
-
-        match hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id) {
-            UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
-            UnregisterEntityResult::InfoUpdate { mut res } => {
-                hats[region].disable_query_routes(ctx.tables, &mut res);
-
-                for region in hats.regions().collect_vec() {
-                    let other_info = hats
+                    let remainder = tables
+                        .hats
                         .values()
-                        .filter(|hat| hat.region() != region)
-                        .filter_map(|hat| hat.remote_queryables_of(&res))
-                        .reduce(merge_qabl_infos);
+                        .filter_map(|hat| {
+                            (hat.region() != region)
+                                .then(|| hat.remote_queryables_of(&res))
+                                .flatten()
+                                .map(|info| (hat.region(), info))
+                        })
+                        .collect_vec();
 
-                    hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
-                }
-            }
-            UnregisterEntityResult::LastUnregistered { mut res } => {
-                hats[region].disable_query_routes(ctx.tables, &mut res);
-
-                let remainder = hats
-                    .values()
-                    .filter_map(|hat| {
-                        (hat.region() != region)
-                            .then(|| hat.remote_queryables_of(&res))
-                            .flatten()
-                            .map(|info| (hat.region(), info))
-                    })
-                    .collect_vec();
-
-                match &*remainder {
-                    [] => {
-                        for hat in hats.values_mut() {
-                            hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                    match &*remainder {
+                        [] => {
+                            for hat in tables.hats.values_mut() {
+                                hat.unpropagate_queryable(ctx.reborrow(), res.clone());
+                            }
+                            Resource::clean(&mut res);
                         }
-                        Resource::clean(&mut res);
-                    }
-                    [(last_owner, _)] => {
-                        hats[last_owner].unpropagate_last_non_owned_queryable(ctx, res.clone())
-                    }
-                    _ => {
-                        for hat in hats.values_mut() {
-                            let other_info = remainder
-                                .iter()
-                                .filter_map(|(region, info)| {
-                                    (region != &hat.region()).then_some(*info)
-                                })
-                                .reduce(merge_qabl_infos);
+                        [(last_owner, _)] => tables.hats[last_owner]
+                            .unpropagate_last_non_owned_queryable(ctx, res.clone()),
+                        _ => {
+                            for hat in tables.hats.values_mut() {
+                                let other_info = remainder
+                                    .iter()
+                                    .filter_map(|(region, info)| {
+                                        (region != &hat.region()).then_some(*info)
+                                    })
+                                    .reduce(merge_qabl_infos);
 
-                            hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                                hat.propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                            }
                         }
                     }
                 }
             }
-        }
+        });
     }
 
     pub fn route_query(&self, msg: &mut Request) {

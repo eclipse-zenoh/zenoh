@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use zenoh_core::zread;
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{Region, Reliability, WireExpr},
     network::{declare::SubscriberId, push::ext, Push},
@@ -55,76 +54,31 @@ impl Face {
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        let rtables = zread!(self.tables.tables);
-        match rtables
-            .data
-            .get_mapping(&self.state, &expr.scope, expr.mapping)
-            .cloned()
-        {
-            Some(mut prefix) => {
-                let res = Resource::get_resource(&prefix, &expr.suffix);
-                let (mut res, mut wtables) =
-                    if res.as_ref().map(|r| r.ctx.is_some()).unwrap_or(false) {
-                        drop(rtables);
-                        let tables_wguard = zwrite!(self.tables.tables);
-                        (res.unwrap(), tables_wguard)
-                    } else {
-                        let mut fullexpr = prefix.expr().to_string();
-                        fullexpr.push_str(expr.suffix.as_ref());
-                        let mut matches = keyexpr::new(fullexpr.as_str())
-                            .map(|ke| Resource::get_matches(&rtables.data, ke))
-                            .unwrap_or_default();
-                        drop(rtables);
-                        let mut tables_wguard = zwrite!(self.tables.tables);
-                        let tables = &mut *tables_wguard;
-                        let mut res =
-                            Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-                        matches.push(Arc::downgrade(&res));
-                        Resource::match_resource(&tables.data, &mut res, matches);
-                        (res, tables_wguard)
-                    };
+        self.with_mapped_expr(expr, |tables, mut res| {
+            let hats = &mut tables.hats;
+            let region = self.state.region;
 
-                let tables = &mut *wtables;
+            let mut ctx = DispatcherContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut self.state.clone(),
+                send_declare,
+            };
 
-                let hats = &mut tables.hats;
-                let region = self.state.region;
+            hats[region].register_subscriber(ctx.reborrow(), id, res.clone(), node_id, sub_info);
 
-                let mut ctx = DispatcherContext {
-                    tables_lock: &self.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut self.state.clone(),
-                    send_declare,
-                };
+            hats[region].disable_data_routes(ctx.tables, &mut res);
 
-                hats[region].register_subscriber(
-                    ctx.reborrow(),
-                    id,
-                    res.clone(),
-                    node_id,
-                    sub_info,
-                );
+            for region in hats.regions().collect_vec() {
+                let other_info = hats
+                    .values()
+                    .filter(|hat| hat.region() != region)
+                    .flat_map(|hat| hat.remote_subscribers_of(&res))
+                    .reduce(|_, _| SubscriberInfo);
 
-                hats[region].disable_data_routes(ctx.tables, &mut res);
-
-                for region in hats.regions().collect_vec() {
-                    let other_info = hats
-                        .values()
-                        .filter(|hat| hat.region() != region)
-                        .flat_map(|hat| hat.remote_subscribers_of(&res))
-                        .reduce(|_, _| SubscriberInfo);
-
-                    hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
-                }
-
-                drop(wtables);
+                hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
             }
-            None => tracing::error!(
-                "{} Declare subscriber {} for unknown scope {}!",
-                self.state,
-                id,
-                expr.scope
-            ),
-        }
+        });
     }
 
     #[tracing::instrument(
@@ -140,74 +94,37 @@ impl Face {
         node_id: NodeId,
         send_declare: &mut SendDeclare,
     ) {
-        let res = if expr.is_empty() {
-            None
-        } else {
-            let rtables = zread!(self.tables.tables);
-            match rtables
-                .data
-                .get_mapping(&self.state, &expr.scope, expr.mapping)
+        self.with_mapped_nullable_expr(expr, /* make_if_unknown */ false, |tables, res| {
+            let region = self.state.region;
+
+            let mut ctx = DispatcherContext {
+                tables_lock: &self.tables,
+                tables: &mut tables.data,
+                src_face: &mut self.state.clone(),
+                send_declare,
+            };
+
+            if let Some(mut res) =
+                tables.hats[region].unregister_subscriber(ctx.reborrow(), id, res.clone(), node_id)
             {
-                Some(prefix) => {
-                    tracing::debug!(keyexpr = [prefix.expr(), expr.suffix.as_ref()].concat());
+                tables.hats[region].disable_data_routes(ctx.tables, &mut res);
 
-                    match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-                        Some(res) => Some(res),
-                        None => {
-                            tracing::error!(
-                                "{} Undeclare unknown subscriber {}{}!",
-                                self.state,
-                                prefix.expr(),
-                                expr.suffix
-                            );
-                            return;
-                        }
+                let mut remaining = tables
+                    .hats
+                    .values_mut()
+                    .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                    .collect_vec();
+
+                if (*remaining).is_empty() {
+                    for hat in tables.hats.values_mut() {
+                        hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                     }
-                }
-                None => {
-                    tracing::error!(
-                        "{} Undeclare subscriber with unknown scope {}",
-                        self.state,
-                        expr.scope
-                    );
-                    return;
+                    Resource::clean(&mut res);
+                } else if let [last_owner] = &mut *remaining {
+                    last_owner.unpropagate_last_non_owned_subscriber(ctx, res.clone())
                 }
             }
-        };
-
-        let mut wtables = zwrite!(self.tables.tables);
-        let tables = &mut *wtables;
-
-        let hats = &mut tables.hats;
-        let region = self.state.region;
-
-        let mut ctx = DispatcherContext {
-            tables_lock: &self.tables,
-            tables: &mut tables.data,
-            src_face: &mut self.state.clone(),
-            send_declare,
-        };
-
-        if let Some(mut res) =
-            hats[region].unregister_subscriber(ctx.reborrow(), id, res.clone(), node_id)
-        {
-            hats[region].disable_data_routes(ctx.tables, &mut res);
-
-            let mut remaining = tables
-                .hats
-                .values_mut()
-                .filter(|hat| hat.remote_subscribers_of(&res).is_some())
-                .collect_vec();
-
-            if (*remaining).is_empty() {
-                for hat in tables.hats.values_mut() {
-                    hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
-                }
-                Resource::clean(&mut res);
-            } else if let [last_owner] = &mut *remaining {
-                last_owner.unpropagate_last_non_owned_subscriber(ctx, res.clone())
-            }
-        }
+        });
     }
 }
 

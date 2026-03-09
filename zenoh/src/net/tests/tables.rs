@@ -408,7 +408,6 @@ async fn clean_test() {
         },
     );
     face0.declare_token(
-        &tables,
         5,
         &WireExpr::from(4),
         NodeId::default(),
@@ -420,7 +419,6 @@ async fn clean_test() {
         },
     );
     face0.declare_token(
-        &tables,
         4,
         &"todrop8".into(),
         NodeId::default(),
@@ -664,7 +662,6 @@ fn test_response_wireexpr() {
     );
 
     face0.declare_queryable(
-        &tables,
         0,
         &WireExpr::from(11).with_suffix("/**"),
         &qinfo,

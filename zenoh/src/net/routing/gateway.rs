@@ -329,7 +329,10 @@ impl Gateway {
         let _ = mux.face.set(Face::downgrade(&face));
 
         let mut declares = vec![];
-        let (owner_hat, other_hats) = tables.hats.partition_mut(&region);
+        let (owner_hat, other_hats) = tables
+            .hats
+            .partition_mut(&region)
+            .expect("computed transport region should have a corresponding hat");
         let ctx = DispatcherContext {
             tables_lock: &face.tables,
             tables: &mut tables.data,

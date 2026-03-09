@@ -427,7 +427,7 @@ pub(crate) struct InterRegionFilter<'a> {
 }
 
 impl InterRegionFilter<'_> {
-    /// Returns `false` if a `Push` or `Request` should be filtered out when routed from `src` to `dst`.
+    /// Returns `false` if a `Push` or `Request` should be filtered out.
     pub(crate) fn resolve(&self, tables: &Tables) -> bool {
         // NOTE(regions): we initialize the tracing span iff the TRACE level is enabled and we use
         // aux to trace the filtering event.
