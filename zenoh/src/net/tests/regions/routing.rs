@@ -111,6 +111,196 @@ fn test_p2p_inter_subregion_query_routing() {
     assert_eq!(p0.recorder().requests().len(), 1);
 }
 
+/// Tests data routing between router subregions.
+#[test]
+fn test_r2r_inter_subregion_data_routing() {
+    try_init_tracing_subscriber();
+
+    const S1: Region = Region::South {
+        id: 0,
+        mode: WhatAmI::Router,
+    };
+
+    const S2: Region = Region::South {
+        id: 1,
+        mode: WhatAmI::Router,
+    };
+
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
+    let r0 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let r1 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+
+    let r0s = r0.new_session();
+    let r1s = r1.new_session();
+
+    let mut r0_g = Connection {
+        a: &r0,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g,
+        ba: FaceConfig::default().mode(WhatAmI::Router).region(S1),
+    }
+    .establish();
+
+    let mut r1_g = Connection {
+        a: &r1,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g,
+        ba: FaceConfig::default().mode(WhatAmI::Router).region(S2),
+    }
+    .establish();
+
+    let mut bi_fwd_all =
+        || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
+
+    bi_fwd_all();
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    r0s.declare_subscriber(1, &ke);
+    r1s.declare_subscriber(1, &ke);
+    bi_fwd_all();
+
+    r0s.put(&ke, vec![42]);
+    bi_fwd_all();
+
+    r1s.put(&ke, vec![43]);
+    bi_fwd_all();
+
+    assert_eq!(r1s.recorder().pushes().len(), 1);
+    assert_eq!(r0s.recorder().pushes().len(), 1);
+}
+
+/// Tests query routing between router subregions.
+#[test]
+fn test_r2r_inter_subregion_query_routing() {
+    try_init_tracing_subscriber();
+
+    const S1: Region = Region::South {
+        id: 0,
+        mode: WhatAmI::Router,
+    };
+
+    const S2: Region = Region::South {
+        id: 1,
+        mode: WhatAmI::Router,
+    };
+
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
+    let r0 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let r1 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+
+    let r0s = r0.new_session();
+    let r1s = r1.new_session();
+
+    let mut r0_g = Connection {
+        a: &r0,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g,
+        ba: FaceConfig::default().mode(WhatAmI::Router).region(S1),
+    }
+    .establish();
+
+    let mut r1_g = Connection {
+        a: &r1,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g,
+        ba: FaceConfig::default().mode(WhatAmI::Router).region(S2),
+    }
+    .establish();
+
+    let mut bi_fwd_all =
+        || EstablishedConnection::bi_fwd_many_unbounded([&mut r0_g, &mut r1_g]);
+
+    bi_fwd_all();
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    r0s.declare_queryable(1, &ke);
+    r1s.declare_queryable(1, &ke);
+    bi_fwd_all();
+
+    r0s.query(1, &ke);
+    bi_fwd_all();
+
+    r1s.query(1, &ke);
+    bi_fwd_all();
+
+    assert_eq!(r1s.recorder().requests().len(), 1);
+    assert_eq!(r0s.recorder().requests().len(), 1);
+}
+
+/// Tests data routing between client subregions.
+#[test]
+fn test_c2c_inter_subregion_data_routing() {
+    try_init_tracing_subscriber();
+
+    const S1: Region = Region::South {
+        id: 0,
+        mode: WhatAmI::Client,
+    };
+
+    const S2: Region = Region::South {
+        id: 1,
+        mode: WhatAmI::Client,
+    };
+
+    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+
+    let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
+    let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    c0.declare_subscriber(1, &ke);
+    c1.declare_subscriber(1, &ke);
+
+    c0.put(&ke, vec![42]);
+    c1.put(&ke, vec![43]);
+
+    assert_eq!(c0.recorder().pushes().len(), 1);
+    assert_eq!(c0.recorder().pushes().len(), 1);
+}
+
+/// Tests query routing between client subregions.
+#[test]
+fn test_c2c_inter_subregion_query_routing() {
+    try_init_tracing_subscriber();
+
+    const S1: Region = Region::South {
+        id: 0,
+        mode: WhatAmI::Client,
+    };
+
+    const S2: Region = Region::South {
+        id: 1,
+        mode: WhatAmI::Client,
+    };
+
+    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+
+    let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
+    let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
+
+    let ke = KeyExpr::from_str("k").unwrap();
+
+    c0.declare_queryable(1, &ke);
+    c1.declare_queryable(1, &ke);
+
+    c0.query(1, &ke);
+    c1.query(1, &ke);
+
+    assert_eq!(c0.recorder().requests().len(), 1);
+    assert_eq!(c0.recorder().requests().len(), 1);
+}
+
 #[test]
 fn multiple_gateways_data_routing_r2p_downstream() {
     try_init_tracing_subscriber();
