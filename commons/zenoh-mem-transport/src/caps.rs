@@ -254,8 +254,9 @@ impl MemInitExt {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{DowngradePath, NegotiationResult};
+
+    use super::*;
 
     // ── MemInitExt wire format ────────────────────────────────────────────────
 
