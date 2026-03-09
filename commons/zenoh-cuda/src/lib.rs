@@ -455,7 +455,7 @@ mod tests {
     #[test]
     #[ignore = "requires CUDA device"]
     fn test_pinned_alloc_roundtrip() {
-        let mut buf = CudaBufInner::alloc_pinned(1024, 0).unwrap();
+        let buf = CudaBufInner::alloc_pinned(1024, 0).unwrap();
         // Write via CPU
         let slice = unsafe { std::slice::from_raw_parts_mut(buf.as_device_ptr(), buf.cuda_len) };
         slice[0] = 0xDE;

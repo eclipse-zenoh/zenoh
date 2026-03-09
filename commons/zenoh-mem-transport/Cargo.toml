@@ -35,3 +35,7 @@ zenoh-result = { workspace = true }
 tracing = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-cuda = { workspace = true, optional = true }
+
+[[example]]
+name = "registry_negotiate"
+required-features = ["shared-memory"]
