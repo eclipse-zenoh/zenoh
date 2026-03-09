@@ -15,6 +15,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio_util::sync::CancellationToken;
 #[cfg(feature = "uring")]
 use zenoh_buffers::ZSlice;
 use zenoh_buffers::ZSliceBuffer;
@@ -132,13 +133,13 @@ impl TransportLinkUnicastUniversal {
         let mut tx = self.link.tx();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
-        let tc = self.task_controller.clone();
+        let ct = self.task_controller.get_cancellation_token();
         let task = async move {
             let res = tx_task(
                 consumer,
                 &mut tx,
                 keep_alive,
-                tc,
+                ct,
                 #[cfg(feature = "stats")]
                 stats,
             )
@@ -162,22 +163,25 @@ impl TransportLinkUnicastUniversal {
         let priorities = self.link.config.priorities.clone();
         let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
+        let cancellation_token = self.task_controller.get_cancellation_token();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = rx_task(
-                &mut rx,
-                transport.clone(),
-                lease,
-                transport.manager.config.link_rx_buffer_size,
-                #[cfg(feature = "stats")]
-                stats,
-            )
-            .await;
+            let res = cancellation_token
+                .run_until_cancelled(rx_task(
+                    &mut rx,
+                    transport.clone(),
+                    lease,
+                    transport.manager.config.link_rx_buffer_size,
+                    #[cfg(feature = "stats")]
+                    stats,
+                ))
+                .await;
 
             // TODO(yuyuan): improve this callback
-            if let Err(e) = res {
+            if let Some(Err(e)) = res {
+                // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
                 // Spawn a task to avoid a deadlock waiting for this same task
@@ -200,7 +204,7 @@ impl TransportLinkUnicastUniversal {
         };
         // WARN: If this is on ZRuntime::TX, a deadlock would occur.
         self.task_controller
-            .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::RX, task);
+            .spawn_with_rt(zenoh_runtime::ZRuntime::RX, task);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
@@ -219,7 +223,7 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
-    task_controller: TaskController,
+    cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     let task = async {
@@ -260,7 +264,7 @@ async fn tx_task(
         }
         ZResult::Ok(())
     };
-    if let Ok(result) = task_controller.into_abortable(task).await {
+    if let Some(result) = cancellation_token.run_until_cancelled(task).await {
         result?;
     }
 
