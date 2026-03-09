@@ -449,6 +449,7 @@ impl fmt::Debug for CudaBufInner {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
     use zenoh_buffers::{ZSlice, ZSliceKind};
 
     use super::*;
