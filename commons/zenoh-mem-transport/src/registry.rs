@@ -93,7 +93,7 @@ impl MemRegistry {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "shared-memory"))]
 mod tests {
     use zenoh_buffers::ZSliceKind;
 
