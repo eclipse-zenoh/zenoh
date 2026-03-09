@@ -95,8 +95,6 @@ impl MemRegistry {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use zenoh_buffers::ZSliceKind;
 
     use super::*;

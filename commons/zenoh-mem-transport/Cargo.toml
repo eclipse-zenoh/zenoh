@@ -30,7 +30,7 @@ shared-memory = ["zenoh-buffers/shared-memory", "dep:zenoh-shm"]
 cuda = ["shared-memory", "zenoh-buffers/cuda", "dep:zenoh-cuda"]
 
 [dependencies]
-zenoh-buffers = { workspace = true, default-features = false }
+zenoh-buffers = { workspace = true, default-features = false, features = ["shared-memory"] }
 zenoh-result = { workspace = true }
 tracing = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }

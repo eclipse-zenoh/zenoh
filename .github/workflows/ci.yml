@@ -434,7 +434,7 @@ jobs:
           RUST_LOG: None
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
-          cargo llvm-cov test --features unstable --features test --features shared-memory \
+          cargo llvm-cov test --workspace --features unstable --features test --features shared-memory \
           --exclude zenoh-cuda \
           ${{ matrix.rust == 'nightly' && '--doctests' || '' }} --lcov --output-path lcov.info \
           --no-cfg-coverage --no-cfg-coverage-nightly --ignore-run-fail -- \

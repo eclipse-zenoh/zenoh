@@ -21,7 +21,7 @@ use zenoh_result::ZResult;
 
 use crate::api::{
     handlers::{locked, Callback, DefaultHandler, IntoHandler},
-    scouting::{Scout, _scout},
+    scouting::{_scout, Scout},
 };
 
 /// A builder for initializing a [`Scout`], returned by the

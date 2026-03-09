@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn mem_init_ext_skips_unknown_backend_id() {
         // Manually craft a payload with an unknown backend id (0x42)
-        let mut bytes = vec![
+        let bytes = vec![
             1u8,  // version
             2u8,  // n_backends = 2
             0x42, // unknown id
@@ -361,7 +361,6 @@ mod tests {
             1, 0,   // len = 1
             0u8, // n_devices = 0
         ];
-        let _ = bytes; // suppress unused warning; use directly
         let decoded = MemInitExt::from_bytes(&bytes).expect("should succeed, skipping unknown");
         // Only the known CudaIpc backend should appear
         assert_eq!(decoded.backends.len(), 1);
