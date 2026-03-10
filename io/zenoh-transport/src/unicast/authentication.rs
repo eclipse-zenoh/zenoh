@@ -17,7 +17,7 @@ use zenoh_protocol::core::ZenohIdProto;
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub struct TransportAuthId {
     username: Option<String>,
     zid: ZenohIdProto,
@@ -47,6 +47,10 @@ impl TransportAuthId {
         } else {
             None
         }
+    }
+
+    pub(crate) fn set_link_auth_ids(&mut self, link_ids: Vec<LinkAuthId>) {
+        self.link_auth_ids = link_ids;
     }
 
     pub(crate) fn push_link_auth_id(&mut self, link_auth_id: LinkAuthId) {

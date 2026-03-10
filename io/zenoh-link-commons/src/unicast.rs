@@ -137,7 +137,7 @@ pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub enum LinkAuthId {
     Tls(Option<String>),
     Quic(Option<String>),

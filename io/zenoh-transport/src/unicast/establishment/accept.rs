@@ -684,9 +684,9 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: None,
         reliability: None,
     };
-    let mut link = TransportLinkUnicast::new(link, config);
+    let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
     let mut fsm = AcceptLink {
-        link: &mut link,
+        link: &mut link_unicast,
         prng: &manager.prng,
         cipher: &manager.cipher,
         ext_qos: ext::qos::QoSFsm::new(),
@@ -713,7 +713,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 Ok(output) => output,
                 Err((e, reason)) => {
                     tracing::debug!("{}", e);
-                    let _ = link.close(reason).await;
+                    let _ = link_unicast.close(reason).await;
                     return Err(e);
                 }
             }
@@ -825,9 +825,36 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
     };
-    let a_link = link.reconfigure(a_config);
+    let a_link = link_unicast.reconfigure(a_config);
     let s_link = format!("{a_link:?}");
-    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack));
+    // Handle MixedReliability links
+    let best_effort_link = match link.0 {
+        zenoh_link::NewLink::MixedReliability { best_effort, .. } => {
+            #[allow(clippy::unnecessary_min_or_max)]
+            let mtu = manager
+                .config
+                .batch_size
+                .min(best_effort.get_mtu())
+                .min(batch_size::UNICAST);
+
+            let o_config = TransportLinkUnicastConfig {
+                direction,
+                batch: BatchConfig {
+                    mtu,
+                    is_streamed: best_effort.is_streamed(),
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: state.link.ext_compression.is_compression(),
+                },
+                priorities: state.transport.ext_qos.priorities(),
+                // NOTE: this isn't possible since mixed-rel uses the `rel` locator config
+                reliability: state.transport.ext_qos.reliability(),
+            };
+            let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
+            Some(link)
+        }
+        zenoh_link::NewLink::Single(_) => None,
+    };
+    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack), best_effort_link);
     let _transport = manager
         .init_transport_unicast(
             config,

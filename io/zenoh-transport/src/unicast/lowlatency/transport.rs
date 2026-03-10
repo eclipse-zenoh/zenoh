@@ -263,7 +263,15 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                 close::reason::GENERIC,
             ));
         }
-        let (link, ack) = link.unpack();
+        // TODO: support mixed-reliability in lowlatency transport?
+        let (link, ack, asl) = link.unpack();
+        if asl.is_some() {
+            return Err((
+                zerror!("Lowlatency transport does not support mixed-reliability links").into(),
+                link,
+                close::reason::GENERIC,
+            ));
+        }
         #[cfg(feature = "stats")]
         self.link_stats
             .set(

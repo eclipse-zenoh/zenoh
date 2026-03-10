@@ -321,20 +321,35 @@ impl MaybeOpenAck {
 pub(crate) struct LinkUnicastWithOpenAck {
     pub(crate) link: TransportLinkUnicast,
     ack: Option<OpenAck>,
+    pub(crate) associated_link: Option<TransportLinkUnicast>,
 }
 
 impl LinkUnicastWithOpenAck {
-    pub(crate) fn new(link: TransportLinkUnicast, ack: Option<OpenAck>) -> Self {
-        Self { link, ack }
+    pub(crate) fn new(
+        link: TransportLinkUnicast,
+        ack: Option<OpenAck>,
+        associated_link: Option<TransportLinkUnicast>,
+    ) -> Self {
+        Self {
+            link,
+            ack,
+            associated_link,
+        }
     }
 
     pub(crate) fn inner_config(&self) -> &TransportLinkUnicastConfig {
         &self.link.config
     }
 
-    pub(crate) fn unpack(self) -> (TransportLinkUnicast, MaybeOpenAck) {
+    pub(crate) fn unpack(
+        self,
+    ) -> (
+        TransportLinkUnicast,
+        MaybeOpenAck,
+        Option<TransportLinkUnicast>,
+    ) {
         let ack = MaybeOpenAck::new(&self.link, self.ack);
-        (self.link, ack)
+        (self.link, ack, self.associated_link)
     }
 
     pub(crate) fn fail(self) -> TransportLinkUnicast {
