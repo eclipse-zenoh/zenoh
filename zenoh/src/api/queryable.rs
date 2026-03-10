@@ -547,7 +547,7 @@ impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
         let c = zcondfeat!(
             "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
+            !self._accepts_any_replies(),
             true
         );
         if c && !self.key_expr().intersects(&sample.key_expr) {
