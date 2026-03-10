@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use arc_swap::ArcSwapOption;
+use hazarc::AtomicOptionArc;
 use zenoh_protocol::{
     core::Reliability,
     network::{
@@ -30,14 +30,14 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
-    interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
+    interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     router::{InterceptorCacheValueType, Resource},
     RoutingContext,
 };
 
 pub struct Mux {
     pub handler: TransportUnicast,
-    pub(crate) interceptor: ArcSwapOption<InterceptorsChain>,
+    pub(crate) interceptor: AtomicOptionArc<InterceptorsChain>,
     pub(crate) face: OnceLock<WeakFace>,
 }
 
@@ -46,16 +46,13 @@ impl Mux {
         Mux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwapOption::new(interceptor.into()),
+            interceptor: AtomicOptionArc::new(interceptor.into()),
         }
     }
 
     #[inline(always)]
     fn can_schedule(&self, msg: &mut NetworkMessageMut) -> bool {
-        if !has_interceptor(&self.interceptor) {
-            return true;
-        }
-        match self.interceptor.load().as_ref() {
+        match self.interceptor.load() {
             Some(interceptor) => interceptor.intercept(
                 msg,
                 &mut MuxContext {
@@ -123,8 +120,7 @@ impl InterceptorContext for MuxContext<'_> {
                         .mux
                         .interceptor
                         .load()
-                        .as_ref()
-                        .and_then(|i| prefix.get_egress_cache(&face, i))
+                        .and_then(|i| prefix.get_egress_cache(&face, &i))
                     {
                         self.cache.set(cache).ok();
                     }
@@ -148,7 +144,11 @@ impl EPrimitives for Mux {
             full_expr: ctx.full_expr,
         };
 
-        if self.interceptor.load().intercept(&mut msg, &mut ctx) {
+        if self
+            .interceptor
+            .load()
+            .map_or(true, |i| i.intercept(&mut msg, &mut ctx))
+        {
             self.handler.schedule(msg).unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
@@ -169,7 +169,9 @@ impl EPrimitives for Mux {
             full_expr: ctx.full_expr,
         };
 
-        self.interceptor.load().intercept(&mut msg, &mut ctx)
+        self.interceptor
+            .load()
+            .map_or(true, |i| i.intercept(&mut msg, &mut ctx))
             && self.handler.schedule(msg).unwrap_or(false)
     }
 
@@ -227,7 +229,7 @@ impl EPrimitives for Mux {
 pub struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) face: OnceLock<Face>,
-    pub(crate) interceptor: ArcSwapOption<InterceptorsChain>,
+    pub(crate) interceptor: AtomicOptionArc<InterceptorsChain>,
 }
 
 impl McastMux {
@@ -235,13 +237,13 @@ impl McastMux {
         McastMux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwapOption::new(interceptor.into()),
+            interceptor: AtomicOptionArc::new(interceptor.into()),
         }
     }
 
     #[inline(always)]
     fn can_schedule(&self, msg: &mut NetworkMessageMut) -> bool {
-        match self.interceptor.load().as_ref() {
+        match self.interceptor.load() {
             Some(interceptor) => interceptor.intercept(
                 msg,
                 &mut McastMuxContext {
@@ -309,8 +311,7 @@ impl InterceptorContext for McastMuxContext<'_> {
                         .mux
                         .interceptor
                         .load()
-                        .as_ref()
-                        .and_then(|i| prefix.get_egress_cache(face, i))
+                        .and_then(|i| prefix.get_egress_cache(face, &i))
                     {
                         self.cache.set(cache).ok();
                     }
@@ -334,7 +335,11 @@ impl EPrimitives for McastMux {
             full_expr: ctx.full_expr,
         };
 
-        if self.interceptor.load().intercept(&mut msg, &mut ctx) {
+        if self
+            .interceptor
+            .load()
+            .map_or(true, |i| i.intercept(&mut msg, &mut ctx))
+        {
             self.handler.schedule(msg).unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
@@ -355,7 +360,11 @@ impl EPrimitives for McastMux {
             full_expr: ctx.full_expr,
         };
 
-        if self.interceptor.load().intercept(&mut msg, &mut ctx) {
+        if self
+            .interceptor
+            .load()
+            .map_or(true, |i| i.intercept(&mut msg, &mut ctx))
+        {
             self.handler.schedule(msg).unwrap_or(false)
         } else {
             false

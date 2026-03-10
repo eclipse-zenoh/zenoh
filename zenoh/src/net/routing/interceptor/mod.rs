@@ -24,15 +24,7 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::{
-    any::Any,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
-};
-
-use arc_swap::ArcSwapOption;
+use std::{any::Any, sync::Arc};
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -211,14 +203,6 @@ impl InterceptorTrait for Option<Arc<InterceptorsChain>> {
             None => true,
         }
     }
-}
-
-// TODO temporary hack waiting for https://github.com/vorner/arc-swap/issues/194
-pub(crate) fn has_interceptor(interceptor: &ArcSwapOption<InterceptorsChain>) -> bool {
-    let atomic_ptr = unsafe {
-        std::mem::transmute::<&ArcSwapOption<InterceptorsChain>, &AtomicPtr<()>>(interceptor)
-    };
-    !atomic_ptr.load(Ordering::Relaxed).is_null()
 }
 
 struct ChainContext<'a> {
