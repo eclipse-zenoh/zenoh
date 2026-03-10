@@ -545,11 +545,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies(),
-            true
-        );
+        let c = zcondfeat!("unstable", !self._accepts_any_replies(), true);
         if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
