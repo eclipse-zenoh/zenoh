@@ -24,15 +24,9 @@ use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
 
 mod authorization;
-use std::{
-    any::Any,
-    sync::{
-        atomic::{AtomicPtr, Ordering},
-        Arc,
-    },
-};
+use std::{any::Any, sync::Arc};
 
-use arc_swap::ArcSwapOption;
+use hazarc::ArcBorrow;
 
 mod low_pass;
 use low_pass::low_pass_interceptor_factories;
@@ -200,25 +194,14 @@ impl InterceptorTrait for InterceptorsChain {
     }
 }
 
-impl InterceptorTrait for Option<Arc<InterceptorsChain>> {
+impl InterceptorTrait for Option<ArcBorrow<InterceptorsChain>> {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         self.as_ref()?.compute_keyexpr_cache(key_expr)
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        match self.as_ref() {
-            Some(chain) => chain.intercept(msg, ctx),
-            None => true,
-        }
+        self.as_ref().map_or(true, |i| i.intercept(msg, ctx))
     }
-}
-
-// TODO temporary hack waiting for https://github.com/vorner/arc-swap/issues/194
-pub(crate) fn has_interceptor(interceptor: &ArcSwapOption<InterceptorsChain>) -> bool {
-    let atomic_ptr = unsafe {
-        std::mem::transmute::<&ArcSwapOption<InterceptorsChain>, &AtomicPtr<()>>(interceptor)
-    };
-    !atomic_ptr.load(Ordering::Relaxed).is_null()
 }
 
 struct ChainContext<'a> {
