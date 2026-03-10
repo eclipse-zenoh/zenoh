@@ -6206,6 +6206,7 @@ dependencies = [
  "tracing",
  "zenoh-core",
  "zenoh-link-commons",
+ "zenoh-link-quic_datagram",
  "zenoh-protocol",
  "zenoh-result",
 ]

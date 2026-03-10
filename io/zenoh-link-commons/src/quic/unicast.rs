@@ -17,8 +17,9 @@ use std::{
     collections::HashMap,
     future::{Future, IntoFuture},
     net::SocketAddr,
+    ops::Deref,
     pin::Pin,
-    sync::Arc,
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use futures::FutureExt;
@@ -35,14 +36,46 @@ use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_quic_addr, get_quic_host,
+        get_quic_addr, get_quic_host, parse_mixed_reliability_config,
         plaintext::{PlainTextClientConfig, PlainTextServerConfig},
         socket::QuicSocketConfig,
         QuicMtuConfig, QuicTransportConfigurator, TlsClientConfig, TlsServerConfig,
         PROTOCOL_LEGACY, PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
     },
-    LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkUnicast, NewLinkChannelSender,
 };
+
+#[derive(Clone)]
+pub struct QuicConnection {
+    conn: quinn::Connection,
+    closed: Arc<AtomicBool>,
+}
+
+impl QuicConnection {
+    fn new(conn: quinn::Connection) -> Self {
+        Self {
+            conn,
+            closed: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// returns `true` if this call closed the connection, `false` if the connection was already closed.
+    pub fn close(&self) -> bool {
+        let closed = self.closed.swap(true, std::sync::atomic::Ordering::Relaxed);
+        if !closed {
+            self.conn.close(quinn::VarInt::from_u32(0), &[0]);
+        }
+        !closed
+    }
+}
+
+impl Deref for QuicConnection {
+    type Target = quinn::Connection;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
+}
 
 /// Quic endpoint `multistream` config
 pub(crate) enum MultiStreamConfig {
@@ -247,6 +280,9 @@ impl<F: AcceptorCallback> QuicServer<F> {
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
 
+        let is_mixed_rel = parse_mixed_reliability_config(endpoint.metadata())
+            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
+
         // Server config
         let mut server_crypto = TlsServerConfig::new(&epconf, is_secure)
             .await
@@ -316,6 +352,7 @@ impl<F: AcceptorCallback> QuicServer<F> {
                 quic_endpoint,
                 tls_close_link_on_expiration: server_crypto.tls_close_link_on_expiration,
                 is_streamed,
+                is_mixed_rel,
                 inner: acceptor_params,
             },
             locator,
@@ -365,10 +402,11 @@ impl<'a> IntoFuture for QuicClientBuilder<'a> {
     }
 }
 pub struct QuicClient {
-    pub quic_conn: quinn::Connection,
+    pub quic_conn: QuicConnection,
     pub streams: Option<QuicStreams>,
     pub src_addr: SocketAddr,
     pub dst_addr: SocketAddr,
+    pub is_mixed_rel: bool,
     pub tls_close_link_on_expiration: bool,
 }
 
@@ -378,6 +416,9 @@ impl QuicClient {
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
+
+        let is_mixed_rel = parse_mixed_reliability_config(endpoint.metadata())
+            .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf, is_secure)
@@ -460,10 +501,11 @@ impl QuicClient {
         }
 
         Ok(Self {
-            quic_conn,
+            quic_conn: QuicConnection::new(quic_conn),
             streams,
             src_addr,
             dst_addr,
+            is_mixed_rel,
             tls_close_link_on_expiration: client_crypto.tls_close_link_on_expiration,
         })
     }
@@ -471,12 +513,12 @@ impl QuicClient {
 
 // Boilerplate to avoid repeating the Fn bound in all generics that require it
 pub trait AcceptorCallback:
-    Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + Sync + 'static
+    Fn(QuicLinkMaterial) -> ZResult<LinkUnicast> + Send + Sync + 'static
 {
 }
 
-impl<T: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + Sync + 'static>
-    AcceptorCallback for T
+impl<T: Fn(QuicLinkMaterial) -> ZResult<LinkUnicast> + Send + Sync + 'static> AcceptorCallback
+    for T
 {
 }
 
@@ -491,6 +533,7 @@ pub struct QuicAcceptor<F: AcceptorCallback> {
     quic_endpoint: quinn::Endpoint,
     tls_close_link_on_expiration: bool,
     is_streamed: bool,
+    is_mixed_rel: bool,
     inner: QuicAcceptorParams<F>,
 }
 
@@ -566,7 +609,7 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
         &self,
         quic_conn: quinn::Connection,
         src_addr: &SocketAddr,
-    ) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+    ) -> ZResult<LinkUnicast> {
         let streams = if self.is_streamed {
             Some(
                 QuicStreams::accept(&quic_conn)
@@ -584,10 +627,11 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
 
         let tls_close_link_on_expiration = self.tls_close_link_on_expiration;
         let link = (self.inner.make_link)(QuicLinkMaterial {
-            quic_conn,
+            quic_conn: QuicConnection::new(quic_conn),
             src_addr,
             dst_addr,
             streams,
+            is_mixed_rel: self.is_mixed_rel,
             tls_close_link_on_expiration,
         })?;
 
@@ -597,10 +641,11 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
 
 /// Material for building a link after accepting a new connection on a QUIC listener
 pub struct QuicLinkMaterial {
-    pub quic_conn: quinn::Connection,
+    pub quic_conn: QuicConnection,
     pub src_addr: SocketAddr,
     pub dst_addr: SocketAddr,
     pub streams: Option<QuicStreams>,
+    pub is_mixed_rel: bool,
     pub tls_close_link_on_expiration: bool,
 }
 

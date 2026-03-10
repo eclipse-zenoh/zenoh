@@ -476,18 +476,16 @@ impl TransportLinks {
         TransportLinkUnicastUniversal,
         Option<TransportLinkUnicastUniversal>,
     )> {
-        let get_link_index = |link: &Link| {
-            self.inner.iter().position(|tl| {
-                // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-                Link::new_unicast(
-                    &tl.link.link,
-                    tl.link.config.priorities.clone(),
-                    tl.link.config.reliability,
-                )
-                .eq(link)
-            })
+        let link_equality = |tl: &TransportLinkUnicastUniversal, link: &Link| {
+            // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+            Link::new_unicast(
+                &tl.link.link,
+                tl.link.config.priorities.clone(),
+                tl.link.config.reliability,
+            )
+            .eq(link)
         };
-        let Some(index) = get_link_index(&link) else {
+        let Some(index) = self.inner.iter().position(|tl| link_equality(tl, link)) else {
             return None;
         };
 
@@ -496,7 +494,10 @@ impl TransportLinks {
         let stl = links.remove(index);
         // Remove associated link (if applicable)
         let asl = if let Some((associated_link, _)) = self.associations.remove(link) {
-            let index = get_link_index(&associated_link).expect("associated link should exist");
+            let index = links
+                .iter()
+                .position(|tl| link_equality(tl, &associated_link))
+                .expect("associated link should exist");
             Some(links.remove(index))
         } else {
             None

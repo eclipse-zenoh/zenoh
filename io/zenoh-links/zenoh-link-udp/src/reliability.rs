@@ -16,10 +16,10 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use zenoh_core::zerror;
 use zenoh_link_commons::{
     quic::unicast::{
-        QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicLinkMaterial, QuicServer,
-        QuicServerBuilder, QuicStreams,
+        QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicConnection, QuicLinkMaterial,
+        QuicServer, QuicServerBuilder, QuicStreams,
     },
-    LinkUnicastTrait,
+    LinkUnicast, LinkUnicastTrait,
 };
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
@@ -32,7 +32,7 @@ use crate::{
 };
 
 pub(crate) struct LinkUnicastQuicUnsecure {
-    connection: quinn::Connection,
+    connection: QuicConnection,
     streams: QuicStreams,
 }
 
@@ -45,6 +45,7 @@ impl LinkUnicastQuicUnsecure {
             streams,
             src_addr,
             dst_addr,
+            is_mixed_rel: _,
             tls_close_link_on_expiration: _,
         } = QuicClientBuilder::new(endpoint).security(false).await?;
         let streams = streams.expect("QUIC streams should be initialized");
@@ -148,26 +149,26 @@ impl LinkUnicastQuicUnsecure {
     }
 
     pub(crate) fn close(&self) {
-        self.connection.close(quinn::VarInt::from_u32(0), &[0])
+        self.connection.close();
     }
 
     pub(crate) fn supports_priorities(&self) -> bool {
         self.streams.is_multistream
     }
 
-    fn make_link(quic_link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+    fn make_link(quic_link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
         let quic_link = Self {
             connection: quic_link_material.quic_conn,
             streams: quic_link_material
                 .streams
                 .expect("QUIC streams should be initialized"),
         };
-        let link = LinkUnicastUdp::new(
+        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUdp::new(
             quic_link_material.src_addr,
             quic_link_material.dst_addr,
             LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
-        );
-        Ok(Arc::new(link))
+        ));
+        Ok(LinkUnicast::from(link))
     }
 }
 

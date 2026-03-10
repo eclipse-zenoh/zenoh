@@ -35,7 +35,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_config::Config as ZenohConfig;
 use zenoh_protocol::core::{
     endpoint::{Address, Config},
-    parameters,
+    parameters, Metadata,
 };
 use zenoh_result::{bail, zerror, ZError, ZResult};
 
@@ -718,5 +718,23 @@ impl QuicTransportConfigurator<'_> {
     pub(crate) fn configure_mtu(self, mtu_config: &QuicMtuConfig) -> Self {
         mtu_config.apply_to_transport(self.0);
         self
+    }
+}
+
+pub(crate) fn parse_mixed_reliability_config(metadata: Metadata<'_>) -> ZResult<bool> {
+    let Some(s) = metadata.get(Metadata::MIXED_RELIABILITY) else {
+        return Ok(false);
+    };
+
+    let Ok(mixed_rel) = s.parse::<u8>() else {
+        bail!("invalid `mixed_rel` config: expected 0 or 1, found {s}");
+    };
+
+    if mixed_rel == 1 {
+        Ok(true)
+    } else if mixed_rel == 0 {
+        Ok(false)
+    } else {
+        bail!("invalid `mixed_rel` config: expected 0 or 1, found {s}")
     }
 }
