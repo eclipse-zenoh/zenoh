@@ -420,13 +420,13 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 }
 
-#[derive(Default)]
 /// Container for Transport links that manages link associations (namely for mixed-reliability).
 /// Manages insertion/removal of links and their potential associated links while providing the
 /// following:
 /// - Evaluate multilink limit by considering each link association as a single link
 /// - Expose a read-only view on links that mixes associations in the same set (as if they were
 /// seperate links) for message scheduling based on QoS
+#[derive(Default)]
 pub(super) struct TransportLinks {
     pub(super) inner: Box<[TransportLinkUnicastUniversal]>,
     // TODO: memory usage of associations can probably be optimized
