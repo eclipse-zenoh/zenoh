@@ -13,7 +13,7 @@
 //
 use std::{any::Any, cell::OnceCell, sync::Arc};
 
-use arc_swap::ArcSwapOption;
+use hazarc::AtomicOptionArc;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::ZenohIdProto,
@@ -30,14 +30,14 @@ use crate::net::routing::{
     dispatcher::face::Face,
     gateway::{InterceptorCacheValueType, Resource},
     hat::{DispatcherContext, HatTrait},
-    interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
+    interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
 
 pub struct DeMux {
     pub(crate) face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) interceptor: Arc<ArcSwapOption<InterceptorsChain>>,
+    pub(crate) interceptor: Arc<AtomicOptionArc<InterceptorsChain>>,
     zid: ZenohIdProto,
 }
 
@@ -45,7 +45,7 @@ impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        interceptor: Arc<ArcSwapOption<InterceptorsChain>>,
+        interceptor: Arc<AtomicOptionArc<InterceptorsChain>>,
         zid: ZenohIdProto,
     ) -> Self {
         Self {
@@ -127,54 +127,52 @@ impl TransportPeerEventHandler for DeMux {
             .entered()
         });
 
-        if has_interceptor(&self.interceptor) {
-            if let Some(interceptor) = self.interceptor.load().as_ref() {
-                let mut ctx = DeMuxContext {
-                    demux: self,
-                    cache: OnceCell::new(),
-                    expr: OnceCell::new(),
-                };
+        if let Some(interceptor) = self.interceptor.load() {
+            let mut ctx = DeMuxContext {
+                demux: self,
+                cache: OnceCell::new(),
+                expr: OnceCell::new(),
+            };
 
-                match &msg.body {
-                    NetworkBodyMut::Request(request) => {
-                        let request_id = request.id;
-                        let qos = request.ext_qos;
-                        if !interceptor.intercept(&mut msg, &mut ctx) {
-                            // request was blocked by an interceptor, we need to send response final to avoid timeout error
-                            self.face
-                                .state
-                                .primitives
-                                .send_response_final(&mut ResponseFinal {
-                                    rid: request_id,
-                                    ext_qos: qos,
-                                    ext_tstamp: None,
-                                });
-                            return Ok(());
-                        }
+            match &msg.body {
+                NetworkBodyMut::Request(request) => {
+                    let request_id = request.id;
+                    let qos = request.ext_qos;
+                    if !interceptor.intercept(&mut msg, &mut ctx) {
+                        // request was blocked by an interceptor, we need to send response final to avoid timeout error
+                        self.face
+                            .state
+                            .primitives
+                            .send_response_final(&mut ResponseFinal {
+                                rid: request_id,
+                                ext_qos: qos,
+                                ext_tstamp: None,
+                            });
+                        return Ok(());
                     }
-                    NetworkBodyMut::Interest(interest) => {
-                        let interest_id = interest.id;
-                        if !interceptor.intercept(&mut msg, &mut ctx) {
-                            // request was blocked by an interceptor, we need to send declare final to avoid timeout error
-                            self.face.state.primitives.send_declare(RoutingContext::new(
-                                &mut Declare {
-                                    interest_id: Some(interest_id),
-                                    ext_qos: ext::QoSType::DECLARE,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::DEFAULT,
-                                    body: DeclareBody::DeclareFinal(DeclareFinal),
-                                },
-                            ));
-                            return Ok(());
-                        }
+                }
+                NetworkBodyMut::Interest(interest) => {
+                    let interest_id = interest.id;
+                    if !interceptor.intercept(&mut msg, &mut ctx) {
+                        // request was blocked by an interceptor, we need to send declare final to avoid timeout error
+                        self.face.state.primitives.send_declare(RoutingContext::new(
+                            &mut Declare {
+                                interest_id: Some(interest_id),
+                                ext_qos: ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::DeclareFinal(DeclareFinal),
+                            },
+                        ));
+                        return Ok(());
                     }
-                    _ => {
-                        if !interceptor.intercept(&mut msg, &mut ctx) {
-                            return Ok(());
-                        }
+                }
+                _ => {
+                    if !interceptor.intercept(&mut msg, &mut ctx) {
+                        return Ok(());
                     }
-                };
-            }
+                }
+            };
         }
 
         match msg.body {

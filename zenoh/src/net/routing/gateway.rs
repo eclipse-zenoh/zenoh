@@ -16,7 +16,7 @@ use std::{
     sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
 
-use arc_swap::ArcSwapOption;
+use hazarc::AtomicOptionArc;
 use uhlc::HLC;
 use zenoh_config::{
     gateway::{GatewayPresetConf, GatewaySouthConf},
@@ -276,7 +276,7 @@ impl Gateway {
         let zid = transport.get_zid()?;
         let this_zid = tables.data.zid;
 
-        let ingress = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
+        let ingress = Arc::new(AtomicOptionArc::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
 
         let newface = tables
@@ -406,7 +406,7 @@ impl Gateway {
         let tables = &mut *wtables;
 
         let fid = tables.data.new_face_id();
-        let interceptor = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
+        let interceptor = Arc::new(AtomicOptionArc::new(InterceptorsChain::empty().into()));
         let this_zid = tables.data.zid;
 
         #[cfg(feature = "stats")]

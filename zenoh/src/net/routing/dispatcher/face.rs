@@ -19,7 +19,7 @@ use std::{
     time::Duration,
 };
 
-use arc_swap::ArcSwapOption;
+use hazarc::AtomicOptionArc;
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_collections::IntHashMap;
@@ -133,7 +133,7 @@ pub struct FaceState {
     /// acquiring the lock.
     pub(crate) pending_queries: HashMap<RequestId, (Arc<Query>, CancellationToken)>,
     pub(crate) mcast_group: Option<TransportMulticast>,
-    pub(crate) in_interceptors: Option<Arc<ArcSwapOption<InterceptorsChain>>>,
+    pub(crate) in_interceptors: Option<Arc<AtomicOptionArc<InterceptorsChain>>>,
     /// Map from `Region` to `HatFace`.
     pub(crate) hats: RegionMap<Box<dyn Any + Send + Sync>>,
     pub(crate) task_controller: TaskController,
@@ -184,7 +184,7 @@ impl FaceStateBuilder {
 
     pub(crate) fn ingress_interceptors(
         mut self,
-        in_interceptors: Arc<ArcSwapOption<InterceptorsChain>>,
+        in_interceptors: Arc<AtomicOptionArc<InterceptorsChain>>,
     ) -> Self {
         self.0.in_interceptors = Some(in_interceptors);
         self
@@ -263,16 +263,12 @@ impl FaceState {
             .primitives
             .as_any()
             .downcast_ref::<Mux>()
-            .map(|mux| mux.interceptor.load())
+            .and_then(|mux| mux.interceptor.load())
         {
-            if let Some(interceptor) = interceptor.as_ref() {
-                if let Some(expr) = res.keyexpr() {
-                    let cache = interceptor.compute_keyexpr_cache(expr);
-                    get_mut_unchecked(
-                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
-                    )
+            if let Some(expr) = res.keyexpr() {
+                let cache = interceptor.compute_keyexpr_cache(expr);
+                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
-                }
             }
         }
 
@@ -280,16 +276,12 @@ impl FaceState {
             .primitives
             .as_any()
             .downcast_ref::<McastMux>()
-            .map(|mux| mux.interceptor.load())
+            .and_then(|mux| mux.interceptor.load())
         {
-            if let Some(interceptor) = interceptor.as_ref() {
-                if let Some(expr) = res.keyexpr() {
-                    let cache = interceptor.compute_keyexpr_cache(expr);
-                    get_mut_unchecked(
-                        get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap(),
-                    )
+            if let Some(expr) = res.keyexpr() {
+                let cache = interceptor.compute_keyexpr_cache(expr);
+                get_mut_unchecked(get_mut_unchecked(res).face_ctxs.get_mut(&self.id).unwrap())
                     .e_interceptor_cache = InterceptorCache::new(cache, interceptor.version);
-                }
             }
         }
     }

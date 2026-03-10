@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use arc_swap::ArcSwapOption;
+use hazarc::AtomicOptionArc;
 use zenoh_protocol::{
     core::Reliability,
     network::{
@@ -31,13 +31,13 @@ use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::face::{Face, WeakFace},
     gateway::{InterceptorCacheValueType, Resource},
-    interceptor::{has_interceptor, InterceptorContext, InterceptorTrait, InterceptorsChain},
+    interceptor::{InterceptorContext, InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
 
 pub struct Mux {
     pub handler: TransportUnicast,
-    pub(crate) interceptor: ArcSwapOption<InterceptorsChain>,
+    pub(crate) interceptor: AtomicOptionArc<InterceptorsChain>,
     pub(crate) face: OnceLock<WeakFace>,
 }
 
@@ -46,26 +46,22 @@ impl Mux {
         Mux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwapOption::new(interceptor.into()),
+            interceptor: AtomicOptionArc::new(interceptor.into()),
         }
     }
 
     #[inline(always)]
     fn can_schedule(&self, msg: &mut NetworkMessageMut) -> bool {
-        if !has_interceptor(&self.interceptor) {
-            return true;
-        }
-        match self.interceptor.load().as_ref() {
-            Some(interceptor) => interceptor.intercept(
+        self.interceptor.load().map_or(true, |i| {
+            i.intercept(
                 msg,
                 &mut MuxContext {
                     mux: self,
                     cache: OnceCell::new(),
                     expr: OnceCell::new(),
                 },
-            ),
-            None => true,
-        }
+            )
+        })
     }
 
     #[inline(always)]
@@ -229,7 +225,7 @@ impl EPrimitives for Mux {
 pub struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) face: OnceLock<Face>,
-    pub(crate) interceptor: ArcSwapOption<InterceptorsChain>,
+    pub(crate) interceptor: AtomicOptionArc<InterceptorsChain>,
 }
 
 impl McastMux {
@@ -237,7 +233,7 @@ impl McastMux {
         McastMux {
             handler,
             face: OnceLock::new(),
-            interceptor: ArcSwapOption::new(interceptor.into()),
+            interceptor: AtomicOptionArc::new(interceptor.into()),
         }
     }
 
