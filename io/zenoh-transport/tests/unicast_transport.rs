@@ -1995,13 +1995,10 @@ async fn transport_unicast_multistream_quic_default() {
 async fn transport_unicast_multistream_quic_enabled() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10469?multistream=true");
+    let endpoint_quic = quic_endpoint("quic/localhost:10469?multistream=1");
     let endpoint = std::slice::from_ref(&endpoint_quic);
     let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
-    assert!(
-        is_multistream,
-        "'?multistream=true' should enable multistream"
-    );
+    assert!(is_multistream, "'?multistream=1' should enable multistream");
 }
 
 #[cfg(feature = "transport_quic")]
@@ -2009,12 +2006,12 @@ async fn transport_unicast_multistream_quic_enabled() {
 async fn transport_unicast_multistream_quic_disabled() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10470?multistream=false");
+    let endpoint_quic = quic_endpoint("quic/localhost:10470?multistream=0");
     let endpoint = std::slice::from_ref(&endpoint_quic);
     let is_mutlistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' should disable multistream"
+        "'?multistream=0' should disable multistream"
     );
 }
 
@@ -2026,7 +2023,7 @@ async fn transport_unicast_multistream_quic_auto_explicit() {
     let port = 10471;
     let is_mutlistream = run_multistream_test(
         &[quic_endpoint(&format!(
-            "quic/localhost:{port}?multistream=true"
+            "quic/localhost:{port}?multistream=1"
         ))],
         &[quic_endpoint(&format!("quic/localhost:{port}"))],
         false,
@@ -2034,13 +2031,13 @@ async fn transport_unicast_multistream_quic_auto_explicit() {
     .await;
     assert!(
         is_mutlistream,
-        "'?multistream=true' with auto listener should enable multistream"
+        "'?multistream=1' with auto listener should enable multistream"
     );
 
     let port = 10472;
     let is_mutlistream = run_multistream_test(
         &[quic_endpoint(&format!(
-            "quic/localhost:{port}?multistream=false"
+            "quic/localhost:{port}?multistream=0"
         ))],
         &[quic_endpoint(&format!("quic/localhost:{port}"))],
         false,
@@ -2048,35 +2045,35 @@ async fn transport_unicast_multistream_quic_auto_explicit() {
     .await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' with auto listener should disable multistream"
+        "'?multistream=0' with auto listener should disable multistream"
     );
 
     let port = 10473;
     let is_mutlistream = run_multistream_test(
         &[quic_endpoint(&format!("quic/localhost:{port}"))],
         &[quic_endpoint(&format!(
-            "quic/localhost:{port}?multistream=true"
+            "quic/localhost:{port}?multistream=1"
         ))],
         false,
     )
     .await;
     assert!(
         is_mutlistream,
-        "'?multistream=true' with auto connect should enable multistream"
+        "'?multistream=1' with auto connect should enable multistream"
     );
 
     let port = 10474;
     let is_mutlistream = run_multistream_test(
         &[quic_endpoint(&format!("quic/localhost:{port}"))],
         &[quic_endpoint(&format!(
-            "quic/localhost:{port}?multistream=false"
+            "quic/localhost:{port}?multistream=0"
         ))],
         false,
     )
     .await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' with auto connect should disable multistream"
+        "'?multistream=0' with auto connect should disable multistream"
     );
 }
 
@@ -2105,10 +2102,10 @@ fn transport_unicast_multistream_quic_incompatible() {
             .unwrap()
             .block_on(run_multistream_test(
                 &[quic_endpoint(&format!(
-                    "quic/localhost:{port}?multistream=true"
+                    "quic/localhost:{port}?multistream=1"
                 ))],
                 &[quic_endpoint(&format!(
-                    "quic/localhost:{port}?multistream=false"
+                    "quic/localhost:{port}?multistream=0"
                 ))],
                 false,
             ))
@@ -2124,10 +2121,10 @@ fn transport_unicast_multistream_quic_incompatible() {
             .unwrap()
             .block_on(run_multistream_test(
                 &[quic_endpoint(&format!(
-                    "quic/localhost:{port}?multistream=false"
+                    "quic/localhost:{port}?multistream=0"
                 ))],
                 &[quic_endpoint(&format!(
-                    "quic/localhost:{port}?multistream=true"
+                    "quic/localhost:{port}?multistream=1"
                 ))],
                 false,
             ))
@@ -2143,7 +2140,7 @@ fn transport_unicast_multistream_quic_incompatible() {
 async fn transport_unicast_multistream_quic_lowlatency() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10478?multistream=true");
+    let endpoint_quic = quic_endpoint("quic/localhost:10478?multistream=1");
     let endpoint = std::slice::from_ref(&endpoint_quic);
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
@@ -2151,7 +2148,7 @@ async fn transport_unicast_multistream_quic_lowlatency() {
         "lowlatency should not support priority-based multistream"
     );
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10479?multistream=false");
+    let endpoint_quic = quic_endpoint("quic/localhost:10479?multistream=0");
     let endpoint = std::slice::from_ref(&endpoint_quic);
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
@@ -2165,14 +2162,9 @@ async fn transport_unicast_multistream_quic_lowlatency() {
 async fn transport_unicast_multistream_udp_enabled() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = ["udp/localhost:10480?rel=1;multistream=true"
-        .parse()
-        .unwrap()];
+    let endpoint = ["udp/localhost:10480?rel=1;multistream=1".parse().unwrap()];
     let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
-    assert!(
-        is_multistream,
-        "'?multistream=true' should enable multistream"
-    );
+    assert!(is_multistream, "'?multistream=1' should enable multistream");
 }
 
 #[cfg(feature = "transport_udp")]
@@ -2180,13 +2172,11 @@ async fn transport_unicast_multistream_udp_enabled() {
 async fn transport_unicast_multistream_udp_disabled() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = ["udp/localhost:10481?rel=1;multistream=false"
-        .parse()
-        .unwrap()];
+    let endpoint = ["udp/localhost:10481?rel=1;multistream=0".parse().unwrap()];
     let is_mutlistream = run_multistream_test(&endpoint, &endpoint, false).await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' should disable multistream"
+        "'?multistream=0' should disable multistream"
     );
 }
 
@@ -2197,7 +2187,7 @@ async fn transport_unicast_multistream_udp_auto_explicit() {
 
     let port = 10482;
     let is_mutlistream = run_multistream_test(
-        &[format!("udp/localhost:{port}?rel=1;multistream=true")
+        &[format!("udp/localhost:{port}?rel=1;multistream=1")
             .parse()
             .unwrap()],
         &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
@@ -2206,12 +2196,12 @@ async fn transport_unicast_multistream_udp_auto_explicit() {
     .await;
     assert!(
         is_mutlistream,
-        "'?multistream=true' with auto listener should enable multistream"
+        "'?multistream=1' with auto listener should enable multistream"
     );
 
     let port = 10483;
     let is_mutlistream = run_multistream_test(
-        &[format!("udp/localhost:{port}?rel=1;multistream=false")
+        &[format!("udp/localhost:{port}?rel=1;multistream=0")
             .parse()
             .unwrap()],
         &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
@@ -2220,13 +2210,13 @@ async fn transport_unicast_multistream_udp_auto_explicit() {
     .await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' with auto listener should disable multistream"
+        "'?multistream=0' with auto listener should disable multistream"
     );
 
     let port = 10484;
     let is_mutlistream = run_multistream_test(
         &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
-        &[format!("udp/localhost:{port}?rel=1;multistream=true")
+        &[format!("udp/localhost:{port}?rel=1;multistream=1")
             .parse()
             .unwrap()],
         false,
@@ -2234,13 +2224,13 @@ async fn transport_unicast_multistream_udp_auto_explicit() {
     .await;
     assert!(
         is_mutlistream,
-        "'?multistream=true' with auto connect should enable multistream"
+        "'?multistream=1' with auto connect should enable multistream"
     );
 
     let port = 10485;
     let is_mutlistream = run_multistream_test(
         &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
-        &[format!("udp/localhost:{port}?rel=1;multistream=false")
+        &[format!("udp/localhost:{port}?rel=1;multistream=0")
             .parse()
             .unwrap()],
         false,
@@ -2248,7 +2238,7 @@ async fn transport_unicast_multistream_udp_auto_explicit() {
     .await;
     assert!(
         !is_mutlistream,
-        "'?multistream=false' with auto connect should disable multistream"
+        "'?multistream=0' with auto connect should disable multistream"
     );
 }
 
@@ -2277,10 +2267,10 @@ fn transport_unicast_multistream_udp_incompatible() {
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(run_multistream_test(
-                &[format!("udp/localhost:{port}?rel=1;multistream=true")
+                &[format!("udp/localhost:{port}?rel=1;multistream=1")
                     .parse()
                     .unwrap()],
-                &[format!("udp/localhost:{port}?rel=1;multistream=false")
+                &[format!("udp/localhost:{port}?rel=1;multistream=0")
                     .parse()
                     .unwrap()],
                 false,
@@ -2296,10 +2286,10 @@ fn transport_unicast_multistream_udp_incompatible() {
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(run_multistream_test(
-                &[format!("udp/localhost:{port}?rel=1;multistream=false")
+                &[format!("udp/localhost:{port}?rel=1;multistream=0")
                     .parse()
                     .unwrap()],
-                &[format!("udp/localhost:{port}?rel=1;multistream=true")
+                &[format!("udp/localhost:{port}?rel=1;multistream=1")
                     .parse()
                     .unwrap()],
                 false,
@@ -2316,18 +2306,14 @@ fn transport_unicast_multistream_udp_incompatible() {
 async fn transport_unicast_multistream_udp_lowlatency() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint = ["udp/localhost:10489?rel=1;multistream=true"
-        .parse()
-        .unwrap()];
+    let endpoint = ["udp/localhost:10489?rel=1;multistream=1".parse().unwrap()];
     let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
     assert!(
         !is_multistream,
         "lowlatency should not support priority-based multistream"
     );
 
-    let endpoint = ["udp/localhost:10490?rel=1;multistream=false"
-        .parse()
-        .unwrap()];
+    let endpoint = ["udp/localhost:10490?rel=1;multistream=0".parse().unwrap()];
     let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
     assert!(
         !is_multistream,

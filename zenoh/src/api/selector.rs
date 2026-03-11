@@ -135,14 +135,16 @@ impl<'a> From<&'a Selector<'a>> for (&'a KeyExpr<'a>, &'a Parameters<'a>) {
     }
 }
 
+pub(crate) const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
+#[zenoh_macros::unstable]
+pub(crate) const TIME_RANGE_KEY: &str = "_time";
+
 #[zenoh_macros::unstable]
 /// The trait allows setting/reading parameters processed by the Zenoh library itself.
 pub trait ZenohParameters {
     /// These parameter names are not part of the public API. They are exposed only to provide information about current parameter
     /// names, allowing users to avoid conflicts with custom parameters. It's also possible that some of these Zenoh-specific parameters,
     /// which are now stored as key-value pairs, will later be passed in some other way, while keeping the same get/set interface functions.
-    const REPLY_KEY_EXPR_ANY_SEL_PARAM: &'static str = "_anyke";
-    const TIME_RANGE_KEY: &'static str = "_time";
     /// Sets the time range targeted by the selector parameters.
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T);
     /// Sets the parameter allowing replies from queryables not matching
@@ -169,28 +171,28 @@ impl ZenohParameters for Parameters<'_> {
     fn set_time_range<T: Into<Option<TimeRange>>>(&mut self, time_range: T) {
         let mut time_range: Option<TimeRange> = time_range.into();
         match time_range.take() {
-            Some(tr) => self.insert(Self::TIME_RANGE_KEY, format!("{tr}")),
-            None => self.remove(Self::TIME_RANGE_KEY),
+            Some(tr) => self.insert(TIME_RANGE_KEY, format!("{tr}")),
+            None => self.remove(TIME_RANGE_KEY),
         };
     }
 
     /// Sets the parameter allowing the querier to reply to this request even
     /// if the requested key expression does not match the reply key expression.
     fn set_reply_key_expr_any(&mut self) {
-        self.insert(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
+        self.insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
     }
 
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
     fn time_range(&self) -> Option<ZResult<TimeRange>> {
-        self.get(Self::TIME_RANGE_KEY)
+        self.get(TIME_RANGE_KEY)
             .map(|tr| tr.parse().map_err(Into::into))
     }
 
     /// Returns true if the `_anyke` parameter is present in the selector parameters
     fn reply_key_expr_any(&self) -> bool {
-        self.contains_key(Self::REPLY_KEY_EXPR_ANY_SEL_PARAM)
+        self.contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 }
 
@@ -339,8 +341,7 @@ fn selector_accessors() {
 
         assert_eq!(parameters.get("_timetrick").unwrap(), "");
 
-        const TIME_RANGE_KEY: &str = Parameters::TIME_RANGE_KEY;
-        const ANYKE: &str = Parameters::REPLY_KEY_EXPR_ANY_SEL_PARAM;
+        const ANYKE: &str = REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
         let time_range = "[now(-2s)..now(2s)]";
         zcondfeat!(

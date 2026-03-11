@@ -147,7 +147,7 @@ async fn test_qos_overwrite_get_reply() {
             r#"[
                 {
                     messages: ["query"],
-                    key_exprs: ["a/**"],
+                    key_exprs: ["a/test"],
                     overwrite: {
                         priority: "real_time",
                         congestion_control: "block",
@@ -155,14 +155,6 @@ async fn test_qos_overwrite_get_reply() {
                     },
                     flows: ["egress"]
                 },
-                {
-                    messages: ["reply"],
-                    key_exprs: ["a/b/**"],
-                    overwrite: {
-                        priority: "interactive_high",
-                    },
-                    flows: ["egress"]
-                }
             ]"#,
         )
         .unwrap();
@@ -184,20 +176,15 @@ async fn test_qos_overwrite_get_reply() {
         .await
         .unwrap();
     let query = queryable.recv_async().await.unwrap();
-    //assert_eq!(query.priority(), Priority::RealTime);
-    //assert_eq!(query.congestion_control(), CongestionControl::Block);
-    //assert!(query.express());
+    assert_eq!(query.priority(), Priority::RealTime);
+    assert_eq!(query.congestion_control(), CongestionControl::Block);
+    assert!(query.express());
 
-    query
-        .reply("a/test", "reply")
-        .priority(Priority::DataHigh)
-        .congestion_control(CongestionControl::Drop)
-        .express(false)
-        .await
-        .unwrap();
+    query.reply("a/test", "reply").express(false).await.unwrap();
     std::mem::drop(query);
     let reply = replies.recv_async().await.unwrap();
-    assert_eq!(reply.result().unwrap().priority(), Priority::DataHigh);
+    // Reply inherits the QoS of the original query
+    assert_eq!(reply.result().unwrap().priority(), Priority::DataLow);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
         CongestionControl::Drop
@@ -212,24 +199,20 @@ async fn test_qos_overwrite_get_reply() {
         .await
         .unwrap();
     let query = queryable.recv_async().await.unwrap();
-    //assert_eq!(query.priority(), Priority::RealTime);
-    //assert_eq!(query.congestion_control(), CongestionControl::Block);
-    //assert!(query.express());
+    assert_eq!(query.priority(), Priority::DataLow);
+    assert_eq!(query.congestion_control(), CongestionControl::Drop);
+    assert!(!query.express());
 
     query
         .reply("a/b/test", "reply")
-        .priority(Priority::DataHigh)
-        .congestion_control(CongestionControl::Drop)
         .express(false)
         .await
         .unwrap();
     std::mem::drop(query);
 
     let reply = replies.recv_async().await.unwrap();
-    assert_eq!(
-        reply.result().unwrap().priority(),
-        Priority::InteractiveHigh
-    );
+    // Reply inherits the QoS of the original query
+    assert_eq!(reply.result().unwrap().priority(), Priority::DataLow);
     assert_eq!(
         reply.result().unwrap().congestion_control(),
         CongestionControl::Drop
@@ -260,7 +243,7 @@ fn qos_overwrite_config_error_repeated_id() {
                 },
                 {
                     id: "REPEATED",
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -285,7 +268,7 @@ fn qos_overwrite_config_error_wrong_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -309,7 +292,7 @@ fn qos_overwrite_config_error_empty_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -358,7 +341,7 @@ fn qos_overwrite_config_error_empty_interface() {
               [
                 {
                     interfaces: [],
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",
@@ -382,7 +365,7 @@ fn qos_overwrite_config_ok_no_flow() {
             r#"
               [
                 {
-                    messages: ["reply"],
+                    messages: ["put"],
                     key_exprs: ["a/b/**"],
                     overwrite: {
                         priority: "interactive_high",

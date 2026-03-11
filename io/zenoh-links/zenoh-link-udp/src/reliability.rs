@@ -86,7 +86,7 @@ impl LinkUnicastQuicUnsecure {
             endpoint.config(),
         )?;
 
-        let task = async move { quic_acceptor.await };
+        let task = async move { quic_acceptor.accept_task().await };
         manager
             .listeners
             .add_listener(endpoint, local_addr, task, token)

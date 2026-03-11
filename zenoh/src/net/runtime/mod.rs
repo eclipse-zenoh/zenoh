@@ -146,6 +146,8 @@ pub trait IRuntime: Send + Sync {
 
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
 
+    fn get_transports_blocking(&self) -> Vec<Transport>;
+
     fn get_links(
         &self,
         transport: Option<&Transport>,
@@ -248,6 +250,22 @@ impl IRuntime for RuntimeState {
             .map(|ref peer| Transport::new(peer, true));
 
         Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_transports_blocking(&self) -> Vec<Transport> {
+        self.manager
+            .get_transports_unicast_blocking()
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .map(|peer| Transport::new(&peer, false))
+            .chain(
+                self.manager
+                    .get_transports_multicast_blocking()
+                    .into_iter()
+                    .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+                    .map(|peer| Transport::new(&peer, true)),
+            )
+            .collect()
     }
 
     fn get_links(
@@ -366,7 +384,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -377,7 +395,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -706,7 +724,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -716,7 +734,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,

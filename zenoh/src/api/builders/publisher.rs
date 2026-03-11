@@ -144,7 +144,6 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
     /// that have the given [`Locality`](crate::sample::Locality).
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
