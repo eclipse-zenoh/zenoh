@@ -12,4 +12,5 @@ Closee = "Closee"         # Closee
 closee = "closee"         # closee
 controllen = "controllen" # From libc
 mis = "mis"               # mismatch
+pn_offset = "pn_offset"   # Packet Number Offset (QUIC)
 thr = "thr"               # throughput
