@@ -15,7 +15,6 @@
 use std::{
     convert::TryInto,
     future::{IntoFuture, Ready},
-    time::Duration,
 };
 
 use tracing::error;
@@ -193,19 +192,10 @@ impl<'a> Liveliness<'a> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
-        let timeout = {
-            Duration::from_millis(
-                self.session
-                    .0
-                    .runtime
-                    .get_config()
-                    .queries_default_timeout_ms(),
-            )
-        };
         LivelinessGetBuilder {
             session: self.session,
             key_expr,
-            timeout,
+            timeout: self.session.queries_default_timeout(),
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             cancellation_token: None,

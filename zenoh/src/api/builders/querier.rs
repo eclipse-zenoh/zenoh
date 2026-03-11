@@ -25,13 +25,9 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::CancellationTokenBuilderTrait;
-#[cfg(feature = "unstable")]
-use crate::api::query::ReplyKeyExpr;
+use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
-#[cfg(feature = "unstable")]
-use crate::query::ZenohParameters;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
@@ -40,11 +36,12 @@ use crate::{
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         querier::Querier,
         sample::{Locality, QoSBuilder},
+        selector::REPLY_KEY_EXPR_ANY_SEL_PARAM,
     },
     bytes::OptionZBytes,
     key_expr::KeyExpr,
     qos::Priority,
-    query::{QueryConsolidation, Reply},
+    query::{QueryConsolidation, Reply, ReplyKeyExpr},
     Session,
 };
 
@@ -83,7 +80,6 @@ pub struct QuerierBuilder<'a, 'b> {
     pub(crate) qos: QoSBuilder,
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
-    #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
 }
 
@@ -157,7 +153,6 @@ impl QuerierBuilder<'_, '_> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
-    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
             accept_replies: accept,
@@ -176,7 +171,6 @@ impl Wait for QuerierBuilder<'_, '_> {
         key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_querier_inner(key_expr.clone(), self.destination)?;
         Ok(Querier {
             session: self.session.downgrade(),
@@ -188,9 +182,10 @@ impl Wait for QuerierBuilder<'_, '_> {
             target: self.target,
             consolidation: self.consolidation,
             timeout: self.timeout,
-            #[cfg(feature = "unstable")]
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
+            #[cfg(feature = "unstable")]
+            callback_sync_group: SyncGroup::default(),
         })
     }
 }
@@ -473,55 +468,34 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[allow(unused_mut)] // mut is needed only for unstable cancellation_token
-        let (mut callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
-        let cancellation_token = if let Some(ct) = self.cancellation_token {
-            if let Some(notifier) = ct.notifier() {
-                callback.set_on_drop_notifier(notifier);
-                Some(ct)
-            } else {
-                return Ok(receiver);
-            }
-        } else {
-            None
-        };
+        let (callback, receiver) = self.handler.into_handler();
         #[allow(unused_mut)]
         // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
-        #[cfg(feature = "unstable")]
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
-            parameters.set_reply_key_expr_any();
+            parameters.insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
         }
         #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
-        self.querier
-            .session
-            .query(
-                &self.querier.key_expr,
-                &parameters,
-                self.querier.target,
-                self.querier.consolidation,
-                self.querier.qos,
-                self.querier.destination,
-                self.querier.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|qid| {
-                #[cfg(feature = "unstable")]
-                if let Some(cancellation_token) = cancellation_token {
-                    let weak_session = self.querier.session.clone();
-                    let on_cancel = move || {
-                        let _ = weak_session.cancel_query(qid); // fails only if no associated query exists - likely because it was already finalized
-                        Ok(())
-                    };
-                    cancellation_token.add_on_cancel_handler(Box::new(on_cancel));
-                }
-                receiver
-            })
+        self.querier.session.query(
+            &self.querier.key_expr,
+            &parameters,
+            self.querier.target,
+            self.querier.consolidation,
+            self.querier.qos,
+            self.querier.destination,
+            self.querier.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            Some(self.querier.id),
+            #[cfg(feature = "unstable")]
+            self.querier.callback_sync_group.notifier(),
+        )?;
+        Ok(receiver)
     }
 }
 

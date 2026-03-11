@@ -47,8 +47,9 @@ prost = "=0.14.1"
 prost-derive = "=0.14.1"
 serde_spanned = "=1.0.1"
 serde_with = "=3.14.1"
-serde_with_macros = "3.14.1"
+serde_with_macros = "=3.14.1"
 static_init = "=1.0.3"
+tempfile = "=3.24.0"
 thread-priority = "=1.2.0"
 time = "=0.3.41"
 tinystr = "=0.8.0"
@@ -59,7 +60,12 @@ toml_parser = "=1.0.2"
 toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
 unzip-n = "=0.1.2"
+uuid = "=1.20.0"
 zerofrom = "=0.1.5"
+
+# dependency for macos only
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.6.0"
 
 [package.metadata.cargo-machete]
 ignored = [
@@ -81,10 +87,12 @@ ignored = [
   "potential_utf",
   "prost",
   "prost-derive",
+  "security-framework",
   "serde_spanned",
   "serde_with",
   "serde_with_macros",
   "static_init",
+  "tempfile",
   "thread-priority",
   "time",
   "tinystr",
@@ -95,5 +103,6 @@ ignored = [
   "toml_writer",
   "twox-hash",
   "unzip-n",
+  "uuid",
   "zerofrom",
 ]

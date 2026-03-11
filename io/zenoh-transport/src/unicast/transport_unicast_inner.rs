@@ -42,11 +42,17 @@ pub(crate) type AddLinkResult<'a> = Result<
         Box<dyn FnOnce() + Send + Sync + 'a>,
         Box<dyn FnOnce() + Send + Sync + 'a>,
         MaybeOpenAck,
-        Option<AsyncMutexGuard<'a, ()>>,
+        AsyncMutexGuard<'a, TransportStatus>,
     ),
     LinkError,
 >;
 pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
+
+pub(crate) enum TransportStatus {
+    Uninitialized,
+    Alive,
+    Closed,
+}
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -58,7 +64,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus>;
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;

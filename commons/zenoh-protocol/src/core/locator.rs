@@ -68,6 +68,12 @@ impl Locator {
     pub fn to_endpoint(&self) -> EndPoint {
         self.0.clone()
     }
+
+    /// Constructs an uninitialized empty Locator.
+    #[zenoh_macros::internal]
+    pub fn empty() -> Self {
+        Locator(EndPoint::empty())
+    }
 }
 
 impl From<EndPoint> for Locator {

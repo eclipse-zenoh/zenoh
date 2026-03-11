@@ -8,6 +8,7 @@ jobs:
   verify:
     name: Verify
     permissions:
+      pull-requests: read
       statuses: write
       contents: read
     uses: eclipse-zenoh/ci/.github/workflows/pr-label-checklists-verify.yml@main

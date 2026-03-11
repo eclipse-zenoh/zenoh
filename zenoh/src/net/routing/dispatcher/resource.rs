@@ -565,6 +565,7 @@ impl Resource {
     /// Suffix usually starts with '/', so this first slash is kept as part of the split chunk.
     /// The rest will contain the slash of the split.
     /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
+    #[inline(always)]
     fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
         if suffix.is_empty() {
             return None;
@@ -932,9 +933,17 @@ pub(crate) fn register_expr(
 }
 
 pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
-    let wtables = zwrite!(tables.tables);
+    let mut wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
-        Some(mut res) => Resource::clean(&mut res),
+        Some(mut res) => {
+            if let Some(ctx) = get_mut_unchecked(&mut res).session_ctxs.get_mut(&face.id) {
+                get_mut_unchecked(ctx).remote_expr_id = None;
+            }
+            disable_matches_data_routes(&mut wtables, &mut res);
+            disable_matches_query_routes(&mut wtables, &mut res);
+            face.update_interceptors_caches(&mut res);
+            Resource::clean(&mut res);
+        }
         None => tracing::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);

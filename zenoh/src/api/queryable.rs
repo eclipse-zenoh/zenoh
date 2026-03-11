@@ -19,7 +19,7 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::{
     core::{EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
@@ -27,15 +27,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
-use {
-    crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
+#[cfg(feature = "unstable")]
+use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
-#[zenoh_macros::unstable]
-use crate::api::selector::ZenohParameters;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 use crate::{
@@ -45,8 +42,9 @@ use crate::{
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
-        sample::{Locality, Sample, SampleKind},
-        selector::Selector,
+        query::ReplyKeyExpr,
+        sample::{Locality, QoS, Sample, SampleKind},
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
@@ -54,14 +52,73 @@ use crate::{
     net::primitives::Primitives,
 };
 
+pub(crate) struct LocalReplyPrimitives {
+    session: WeakSession,
+}
+
+pub(crate) struct RemoteReplyPrimitives {
+    pub(crate) session: Option<WeakSession>,
+    pub(crate) primitives: Arc<dyn Primitives>,
+}
+
+pub(crate) enum ReplyPrimitives {
+    Local(LocalReplyPrimitives),
+    Remote(RemoteReplyPrimitives),
+}
+
+impl ReplyPrimitives {
+    pub(crate) fn new_local(session: WeakSession) -> Self {
+        ReplyPrimitives::Local(LocalReplyPrimitives { session })
+    }
+
+    pub(crate) fn new_remote(
+        session: Option<WeakSession>,
+        primitives: Arc<dyn Primitives>,
+    ) -> Self {
+        ReplyPrimitives::Remote(RemoteReplyPrimitives {
+            session,
+            primitives,
+        })
+    }
+
+    pub(crate) fn send_response_final(&self, msg: &mut ResponseFinal) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response_final(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response_final(msg),
+        }
+    }
+
+    pub(crate) fn send_response(&self, msg: &mut Response) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response(msg),
+        }
+    }
+
+    pub(crate) fn keyexpr_to_wire(&self, key_expr: &KeyExpr) -> WireExpr<'static> {
+        match self {
+            ReplyPrimitives::Local(local) => key_expr.to_wire_local(&local.session).to_owned(),
+            ReplyPrimitives::Remote(remote) => match &remote.session {
+                Some(s) => key_expr.to_wire(s).to_owned(),
+                None => WireExpr {
+                    scope: 0,
+                    suffix: std::borrow::Cow::Owned(key_expr.as_str().into()),
+                    mapping: Mapping::Sender,
+                },
+            },
+        }
+    }
+}
+
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
+    pub(crate) qos: QoS,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
-    pub(crate) primitives: Arc<dyn Primitives>,
+    pub(crate) primitives: ReplyPrimitives,
 }
 
 impl QueryInner {
@@ -72,9 +129,10 @@ impl QueryInner {
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
-            primitives: Arc::new(DummyPrimitives),
+            primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
         }
     }
 }
@@ -83,7 +141,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+            ext_qos: self.qos.into(),
             ext_tstamp: None,
         });
     }
@@ -315,6 +373,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply<'b, TryIntoKeyExpr, IntoZBytes>(
         &self,
@@ -330,6 +390,8 @@ impl Query {
     }
 
     /// Sends a [`ReplyError`](crate::query::ReplyError) as a reply to this Query.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -344,6 +406,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_del<'b, TryIntoKeyExpr>(
         &self,
@@ -373,19 +437,15 @@ impl Query {
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
     /// # }
-    #[zenoh_macros::unstable]
-    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
-        self._accepts_any_replies().map(|any| {
-            if any {
-                ReplyKeyExpr::Any
-            } else {
-                ReplyKeyExpr::MatchingQuery
-            }
-        })
+    pub fn accepts_replies(&self) -> ReplyKeyExpr {
+        if self._accepts_any_replies() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        }
     }
-    #[cfg(feature = "unstable")]
-    fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().reply_key_expr_any())
+    fn _accepts_any_replies(&self) -> bool {
+        self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
@@ -403,6 +463,27 @@ impl Query {
             value: None,
             attachment: None,
         }
+    }
+
+    /// Gets the Priority policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn priority(&self) -> crate::qos::Priority {
+        self.inner.qos.priority()
+    }
+
+    /// Gets the CongestionControl policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn congestion_control(&self) -> crate::qos::CongestionControl {
+        self.inner.qos.congestion_control()
+    }
+
+    /// Gets the Express policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn express(&self) -> bool {
+        self.inner.qos.express()
     }
 }
 
@@ -464,11 +545,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
-            true
-        );
+        let c = zcondfeat!("unstable", !self._accepts_any_replies(), true);
         if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
@@ -478,11 +555,7 @@ impl Query {
         let ext_sinfo = sample.source_info.map(Into::into);
         self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
-                mapping: Mapping::Sender,
-            },
+            wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
             payload: ResponseBody::Reply(zenoh::Reply {
                 consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],
@@ -554,7 +627,20 @@ pub(crate) struct QueryableInner {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
+pub struct QueryableUndeclaration<Handler> {
+    queryable: Queryable<Handler>,
+    #[cfg(feature = "unstable")]
+    wait_callbacks: bool,
+}
+
+impl<Handler> QueryableUndeclaration<Handler> {
+    /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
+    #[zenoh_macros::unstable]
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
     type To = ZResult<()>;
@@ -562,7 +648,12 @@ impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
 
 impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.queryable.undeclare_impl()?;
+        #[cfg(feature = "unstable")]
+        if self.wait_callbacks {
+            self.queryable.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -633,6 +724,8 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
+    #[cfg(feature = "unstable")]
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl<Handler> Queryable<Handler> {
@@ -706,7 +799,7 @@ impl<Handler> Queryable<Handler> {
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>>
+    pub fn undeclare(self) -> QueryableUndeclaration<Handler>
     where
         Handler: Send,
     {
@@ -770,7 +863,11 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
     type Undeclaration = QueryableUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        QueryableUndeclaration(self)
+        QueryableUndeclaration {
+            queryable: self,
+            #[cfg(feature = "unstable")]
+            wait_callbacks: false,
+        }
     }
 }
 

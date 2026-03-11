@@ -146,7 +146,9 @@ impl Task {
                         }
                     }
                 }
-                println!("Get got sufficient amount of messages. Done.");
+                if counter >= MSG_COUNT {
+                    println!("Get got sufficient amount of messages. Done.");
+                }
             }
 
             // The Liveliness task.
@@ -180,7 +182,9 @@ impl Task {
                         }
                     }
                 }
-                println!("LivelinessGet got sufficient amount of messages. Done.");
+                if counter >= MSG_COUNT {
+                    println!("LivelinessGet got sufficient amount of messages. Done.");
+                }
             }
 
             // The LivelinessLoop task.

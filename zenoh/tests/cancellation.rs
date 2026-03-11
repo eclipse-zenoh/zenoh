@@ -16,23 +16,37 @@
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
-use zenoh::Session;
+use zenoh::{handlers::CallbackDrop, Session};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-async fn create_peer_client_pair(locator: &str) -> (Session, Session) {
+async fn create_peer_client_pair() -> (Session, Session) {
+    // Create a session that listens on an auto assigned TCP port
     let config1 = {
         let mut config = zenoh::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .listen
             .endpoints
-            .set(vec![locator.parse().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
             .unwrap();
         config
     };
+    let session1 = zenoh::open(config1).await.unwrap();
+
+    // Extract the actual TCP endpoint that session1 is listening on
+    let locator = session1
+        .info()
+        .locators()
+        .await
+        .into_iter()
+        .find(|l| l.protocol().as_str() == "tcp")
+        .expect("Expected at least one TCP locator")
+        .to_string();
+
+    // Create a session that connects to the first session
     let mut config2 = zenoh::Config::default();
     config2.set_mode(Some(WhatAmI::Client)).unwrap();
     config2.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -41,7 +55,6 @@ async fn create_peer_client_pair(locator: &str) -> (Session, Session) {
         .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
         .unwrap();
 
-    let session1 = zenoh::open(config1).await.unwrap();
     let session2 = zenoh::open(config2).await.unwrap();
     (session1, session2)
 }
@@ -49,7 +62,7 @@ async fn create_peer_client_pair(locator: &str) -> (Session, Session) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50001"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let queryable = ztimeout!(session1.declare_queryable("test/query_cancellation")).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -91,18 +104,28 @@ async fn test_cancellation_get() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(session2
+    assert!(ztimeout!(session2
         .get("test/query_cancellation")
-        .cancellation_token(cancellation_token.clone()))
-    .unwrap();
-    assert!(replies.is_disconnected());
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_liveliness_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50002"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let _token = ztimeout!(session1
         .liveliness()
         .declare_token("test/liveliness_query_cancellation"))
@@ -127,19 +150,29 @@ async fn test_cancellation_liveliness_get() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 
     // check that cancelled token cancels operation automatically
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(session2
+    assert!(ztimeout!(session2
         .liveliness()
         .get("test/liveliness_query_cancellation")
-        .cancellation_token(cancellation_token.clone()))
-    .unwrap();
-    assert!(replies.is_disconnected());
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_querier_get() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50003"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let queryable = ztimeout!(session1.declare_queryable("test/querier_cancellation")).unwrap();
 
     let querier = ztimeout!(session2.declare_querier("test/querier_cancellation")).unwrap();
@@ -181,14 +214,27 @@ async fn test_cancellation_querier_get() {
 
     // check that cancelled token cancels operation automatically
     assert!(cancellation_token.is_cancelled());
-    let replies = ztimeout!(querier.get().cancellation_token(cancellation_token.clone())).unwrap();
-    assert!(replies.is_disconnected());
+    let n = Arc::new(AtomicBool::new(false));
+    let n_clone = n.clone();
+    let cb = CallbackDrop {
+        callback: |_| {},
+        drop: move || {
+            std::thread::sleep(Duration::from_secs(5));
+            n_clone.fetch_or(true, std::sync::atomic::Ordering::SeqCst);
+        },
+    };
+    assert!(ztimeout!(querier
+        .get()
+        .cancellation_token(cancellation_token.clone())
+        .with(cb))
+    .is_err());
+    assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_does_not_prevent_session_from_close() {
     zenoh::init_log_from_env_or("error");
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:50004"));
+    let (session1, session2) = ztimeout!(create_peer_client_pair());
     let cancellation_token = zenoh::cancellation::CancellationToken::default();
 
     let ke = "test/query_cancellation_does_not_prevent_session_from_close";

@@ -34,7 +34,7 @@ use zenoh::{
     liveliness::LivelinessToken,
     pubsub::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
-        PublisherBuilder,
+        PublisherBuilder, PublisherUndeclaration,
     },
     qos::{CongestionControl, Priority, Reliability},
     sample::{Locality, SourceInfo},
@@ -660,7 +660,7 @@ impl<'a> AdvancedPublisher<'a> {
     /// # }
     /// ```
     #[zenoh_macros::unstable]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> PublisherUndeclaration<'a> {
         tracing::debug!(
             "AdvancedPublisher{{key_expr: {}}}: Undeclare",
             self.key_expr()
