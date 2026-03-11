@@ -27,17 +27,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
-use {
-    crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 #[cfg(feature = "unstable")]
 use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
-#[zenoh_macros::unstable]
-use crate::api::selector::ZenohParameters;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 use crate::{
@@ -47,8 +42,9 @@ use crate::{
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
-        sample::{Locality, Sample, SampleKind},
-        selector::Selector,
+        query::ReplyKeyExpr,
+        sample::{Locality, QoS, Sample, SampleKind},
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
@@ -119,6 +115,7 @@ pub(crate) struct QueryInner {
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
+    pub(crate) qos: QoS,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: ReplyPrimitives,
@@ -132,6 +129,7 @@ impl QueryInner {
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
             primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
@@ -143,7 +141,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+            ext_qos: self.qos.into(),
             ext_tstamp: None,
         });
     }
@@ -375,6 +373,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply<'b, TryIntoKeyExpr, IntoZBytes>(
         &self,
@@ -390,6 +390,8 @@ impl Query {
     }
 
     /// Sends a [`ReplyError`](crate::query::ReplyError) as a reply to this Query.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -404,6 +406,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_del<'b, TryIntoKeyExpr>(
         &self,
@@ -433,19 +437,15 @@ impl Query {
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
     /// # }
-    #[zenoh_macros::unstable]
-    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
-        self._accepts_any_replies().map(|any| {
-            if any {
-                ReplyKeyExpr::Any
-            } else {
-                ReplyKeyExpr::MatchingQuery
-            }
-        })
+    pub fn accepts_replies(&self) -> ReplyKeyExpr {
+        if self._accepts_any_replies() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        }
     }
-    #[cfg(feature = "unstable")]
-    fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().reply_key_expr_any())
+    fn _accepts_any_replies(&self) -> bool {
+        self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
@@ -463,6 +463,27 @@ impl Query {
             value: None,
             attachment: None,
         }
+    }
+
+    /// Gets the Priority policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn priority(&self) -> crate::qos::Priority {
+        self.inner.qos.priority()
+    }
+
+    /// Gets the CongestionControl policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn congestion_control(&self) -> crate::qos::CongestionControl {
+        self.inner.qos.congestion_control()
+    }
+
+    /// Gets the Express policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn express(&self) -> bool {
+        self.inner.qos.express()
     }
 }
 
@@ -524,11 +545,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
-            true
-        );
+        let c = zcondfeat!("unstable", !self._accepts_any_replies(), true);
         if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }

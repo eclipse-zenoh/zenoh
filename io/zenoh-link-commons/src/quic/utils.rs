@@ -45,7 +45,7 @@ use crate::{
 };
 
 // ALPN protocols
-/// Protocol used by zenoh <= 1.6.2
+/// Protocol used by zenoh <= 1.8.0
 pub const PROTOCOL_LEGACY: &[u8] = b"hq-29";
 /// Zenoh single stream
 pub const PROTOCOL_SINGLE_STREAM: &[u8] = b"zenoh";
