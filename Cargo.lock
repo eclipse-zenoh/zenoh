@@ -6214,7 +6214,6 @@ name = "zenoh-link-quic"
 version = "1.7.2"
 dependencies = [
  "async-trait",
- "quinn",
  "rustls-webpki",
  "time 0.3.47",
  "tracing",
@@ -6230,7 +6229,6 @@ name = "zenoh-link-quic_datagram"
 version = "1.7.2"
 dependencies = [
  "async-trait",
- "quinn",
  "rustls-webpki",
  "time 0.3.47",
  "tokio-util",
@@ -6308,7 +6306,6 @@ version = "1.7.2"
 dependencies = [
  "async-trait",
  "libc",
- "quinn",
  "socket2 0.5.10",
  "tokio",
  "tokio-util",
