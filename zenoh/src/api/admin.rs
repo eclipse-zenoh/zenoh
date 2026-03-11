@@ -251,7 +251,8 @@ pub(crate) fn init(session: WeakSession) {
             let transport_zid = &event.link.zid;
             let transport = session
                 .runtime()
-                .get_transports()
+                .get_transports_blocking()
+                .into_iter()
                 .find(|t| t.zid == *transport_zid);
 
             if let Some(transport) = transport {

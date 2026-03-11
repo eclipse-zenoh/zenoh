@@ -88,10 +88,10 @@ impl crypto::PacketKey for NoOpEncryptionKeys<Box<dyn crypto::PacketKey>> {
 
 impl crypto::HeaderKey for NoOpEncryptionKeys<Box<dyn crypto::HeaderKey>> {
     // No ECB decryption
-    fn decrypt(&self, _pn_offset: usize, _packet: &mut [u8]) {}
+    fn decrypt(&self, _offset: usize, _packet: &mut [u8]) {}
 
     // No ECB encryption
-    fn encrypt(&self, _pn_offset: usize, _packet: &mut [u8]) {}
+    fn encrypt(&self, _offset: usize, _packet: &mut [u8]) {}
 
     fn sample_size(&self) -> usize {
         // No header encryption: set sample_size to 0 to avoid unnecessary padding of payloads

@@ -90,17 +90,11 @@ pub(crate) enum MultiStreamConfig {
 impl MultiStreamConfig {
     /// Parse multistream configuration.
     fn new(metadata: Metadata) -> ZResult<Self> {
-        let multistream = metadata.get(Metadata::MULTISTREAM).unwrap_or("auto");
-        if multistream == "auto" {
-            return Ok(Self::Auto);
-        }
-        if multistream
-            .parse()
-            .map_err(|_| zerror!("Invalid multistream config:  {multistream}"))?
-        {
-            Ok(Self::Enabled)
-        } else {
-            Ok(Self::Disabled)
+        match metadata.get(Metadata::MULTISTREAM).unwrap_or("auto") {
+            "auto" => Ok(Self::Auto),
+            "0" => Ok(Self::Disabled),
+            "1" => Ok(Self::Enabled),
+            s => Err(zerror!("Invalid multistream config:  {s}").into()),
         }
     }
 
@@ -537,18 +531,8 @@ pub struct QuicAcceptor<F: AcceptorCallback> {
     inner: QuicAcceptorParams<F>,
 }
 
-impl<F: AcceptorCallback> IntoFuture for QuicAcceptor<F> {
-    type Output = ZResult<()>;
-
-    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        Box::pin(self.accept_task())
-    }
-}
-
 impl<F: AcceptorCallback> QuicAcceptor<F> {
-    async fn accept_task(self) -> ZResult<()> {
+    pub async fn accept_task(self) -> ZResult<()> {
         async fn accept_connection(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
             let qc = acceptor
                 .await

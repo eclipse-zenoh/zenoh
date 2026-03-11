@@ -23,9 +23,7 @@ use std::{
 
 use zenoh_result::ZResult;
 
-use crate::api::handlers::{
-    callback::Callback, CallbackParameter, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE,
-};
+use crate::api::handlers::{callback::Callback, IntoHandler, API_DATA_RECEPTION_CHANNEL_SIZE};
 
 /// A handler implementing FIFO semantics.
 ///
@@ -55,7 +53,7 @@ impl Default for FifoChannel {
 #[derive(Debug, Clone)]
 pub struct FifoChannelHandler<T>(flume::Receiver<T>);
 
-impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for FifoChannel {
+impl<T: Send + 'static> IntoHandler<T> for FifoChannel {
     type Handler = FifoChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
@@ -348,7 +346,7 @@ impl<T> futures::stream::FusedStream for RecvStream<'_, T> {
     }
 }
 
-impl<T: CallbackParameter + Clone + Send + Sync + 'static> IntoHandler<T>
+impl<T: Clone + Send + Sync + 'static> IntoHandler<T>
     for (std::sync::mpsc::SyncSender<T>, std::sync::mpsc::Receiver<T>)
 {
     type Handler = std::sync::mpsc::Receiver<T>;

@@ -23,7 +23,7 @@ use std::{
 
 use futures::{future::select_all, task::AtomicWaker};
 use tokio::task::JoinHandle;
-use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tokio_util::sync::CancellationToken;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::Priority,
@@ -33,6 +33,7 @@ use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
+use zenoh_task::TaskController;
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -54,8 +55,7 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The transmission pipeline
     pub(super) pipeline: TransmissionPipelineProducer,
     // The task handling substruct
-    tracker: TaskTracker,
-    token: CancellationToken,
+    task_controller: TaskController,
     #[cfg(feature = "unstable")]
     // Notifier for a BlockFirst message to be ready to be sent
     // (after the previous one has been sent)
@@ -116,8 +116,7 @@ impl TransportLinkUnicastUniversal {
         let result = Self {
             link,
             pipeline: producer,
-            tracker: TaskTracker::new(),
-            token: CancellationToken::new(),
+            task_controller: TaskController::default(),
             #[cfg(feature = "unstable")]
             block_first_notifiers: block_first_notifiers.try_into().ok().unwrap(),
             #[cfg(feature = "unstable")]
@@ -137,15 +136,15 @@ impl TransportLinkUnicastUniversal {
     ) {
         // Spawn the TX task
         let mut tx = self.link.tx();
-        let token = self.token.clone();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
+        let ct = self.task_controller.get_cancellation_token();
         let task = async move {
             let res = tx_task(
                 consumer,
                 &mut tx,
                 keep_alive,
-                token,
+                ct,
                 #[cfg(feature = "stats")]
                 stats,
             )
@@ -161,31 +160,34 @@ impl TransportLinkUnicastUniversal {
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::TX, task);
     }
 
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
         let priorities = self.link.config.priorities.clone();
         let reliability = self.link.config.reliability;
         let mut rx = self.link.rx();
-        let token = self.token.clone();
+        let cancellation_token = self.task_controller.get_cancellation_token();
         #[cfg(feature = "stats")]
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = rx_task(
-                &mut rx,
-                transport.clone(),
-                lease,
-                transport.manager.config.link_rx_buffer_size,
-                token,
-                #[cfg(feature = "stats")]
-                stats,
-            )
-            .await;
+            let res = cancellation_token
+                .run_until_cancelled(rx_task(
+                    &mut rx,
+                    transport.clone(),
+                    lease,
+                    transport.manager.config.link_rx_buffer_size,
+                    cancellation_token.clone(),
+                    #[cfg(feature = "stats")]
+                    stats,
+                ))
+                .await;
 
             // TODO(yuyuan): improve this callback
-            if let Err(e) = res {
+            if let Some(Err(e)) = res {
+                // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
                 // Spawn a task to avoid a deadlock waiting for this same task
@@ -207,16 +209,14 @@ impl TransportLinkUnicastUniversal {
             }
         };
         // WARN: If this is on ZRuntime::TX, a deadlock would occur.
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
+        self.task_controller
+            .spawn_with_rt(zenoh_runtime::ZRuntime::RX, task);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
         tracing::trace!("{}: closing", self.link);
-
-        self.tracker.close();
-        self.token.cancel();
+        self.task_controller.terminate_all_async().await;
         self.pipeline.disable();
-        self.tracker.wait().await;
 
         self.link.close(None).await
     }
@@ -229,14 +229,14 @@ async fn tx_task(
     pipeline: TransmissionPipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
-    token: CancellationToken,
+    cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     let keep_alive_tracker = TimeoutTracker::new(keep_alive);
     if link.inner.link.supports_priorities() {
         let (res, _, _) = select_all(pipeline.split().into_iter().map(|pipeline| {
             let mut link = link.clone();
-            let token = token.clone();
+            let cancellation_token = cancellation_token.clone();
             let keep_alive_tracker = keep_alive_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
@@ -246,7 +246,7 @@ async fn tx_task(
                     pipeline,
                     &mut link,
                     keep_alive_tracker,
-                    token,
+                    cancellation_token,
                     #[cfg(feature = "stats")]
                     stats,
                 )
@@ -261,7 +261,7 @@ async fn tx_task(
             pipeline,
             link,
             keep_alive_tracker,
-            token,
+            cancellation_token,
             #[cfg(feature = "stats")]
             stats,
         )
@@ -275,46 +275,51 @@ async fn write_loop(
     mut pipeline: impl PipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive_tracker: TimeoutTracker,
-    token: CancellationToken,
+    cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    loop {
-        tokio::select! {
-            pull = pipeline.pull() => {
-                let Some((mut batch, priority)) = pull else {
-                    // The queue has been disabled: break the tx loop, drain the queue, and exit
-                    break
-                };
-                debug_assert!(write_priority.is_none() || write_priority == Some(priority));
-                link.send_batch(&mut batch, write_priority).await?;
-                // inform the latest message tracker that a message has been sent
-                keep_alive_tracker.reset();
+    let task = async {
+        loop {
+            tokio::select! {
+                pull = pipeline.pull() => {
+                    let Some((mut batch, priority)) = pull else {
+                        // The queue has been disabled: break the tx loop, drain the queue, and exit
+                        break
+                    };
+                    debug_assert!(write_priority.is_none() || write_priority == Some(priority));
+                    link.send_batch(&mut batch, write_priority).await?;
+                    // inform the latest message tracker that a message has been sent
+                    keep_alive_tracker.reset();
 
-                #[cfg(feature = "stats")]
-                {
-                    stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
-                    stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
-                }
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_bytes(zenoh_stats::Tx, batch.len() as u64);
+                        stats.inc_transport_message(zenoh_stats::Tx, batch.stats.t_msgs as u64);
+                    }
 
-                // Reinsert the batch into the queue
-                pipeline.refill(batch, priority);
-            },
-            _ = keep_alive_tracker.wait_if(write_priority.unwrap_or(Priority::Control) == Priority::Control) => {
-                // A timeout occurred, no control/data messages have been sent during
-                // the keep_alive period, we need to send a KeepAlive message
-                let message: TransportMessage = KeepAlive.into();
+                    // Reinsert the batch into the queue
+                    pipeline.refill(batch, priority);
+                },
+                _ = keep_alive_tracker.wait_if(write_priority.unwrap_or(Priority::Control) == Priority::Control) => {
+                    // A timeout occurred, no control/data messages have been sent during
+                    // the keep_alive period, we need to send a KeepAlive message
+                    let message: TransportMessage = KeepAlive.into();
 
-                #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.send(&message, Some(Priority::Control)).await?;
+                    #[allow(unused_variables)] // Used when stats feature is enabled
+                    let n = link.send(&message, Some(Priority::Control)).await?;
 
-                #[cfg(feature = "stats")]
-                {
-                    stats.inc_bytes(zenoh_stats::Tx, n as u64);
-                    stats.inc_transport_message(zenoh_stats::Tx, 1);
+                    #[cfg(feature = "stats")]
+                    {
+                        stats.inc_bytes(zenoh_stats::Tx, n as u64);
+                        stats.inc_transport_message(zenoh_stats::Tx, 1);
+                    }
                 }
             }
-            _ = token.cancelled() => break
         }
+        ZResult::Ok(())
+    };
+    if let Some(result) = cancellation_token.run_until_cancelled(task).await {
+        result?;
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
@@ -347,7 +352,7 @@ async fn rx_task(
     transport: TransportUnicastUniversal,
     lease: Duration,
     rx_buffer_size: usize,
-    token: CancellationToken,
+    cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     // The pool of buffers
@@ -364,34 +369,34 @@ async fn rx_task(
         let (res, _, _) = select_all((Priority::MAX as u8..=Priority::MIN as u8).map(|prio| {
             let mut link = link.clone();
             let transport = transport.clone();
-            let token = token.clone();
+            let cancellation_token = cancellation_token.clone();
             let lease_tracker = lease_tracker.clone();
             #[cfg(feature = "stats")]
             let stats = stats.clone();
             let pool = pool.clone();
             zenoh_runtime::ZRuntime::RX.spawn(async move {
-                read_loop(
-                    Some(Priority::try_from(prio).unwrap()),
-                    &mut link,
-                    transport,
-                    lease_tracker,
-                    token,
-                    #[cfg(feature = "stats")]
-                    stats,
-                    &pool,
-                )
-                .await
+                cancellation_token
+                    .run_until_cancelled(read_loop(
+                        Some(Priority::try_from(prio).unwrap()),
+                        &mut link,
+                        transport,
+                        lease_tracker,
+                        #[cfg(feature = "stats")]
+                        stats,
+                        &pool,
+                    ))
+                    .await
             })
         }))
         .await;
-        res.unwrap()
+        res.unwrap().transpose()?;
+        Ok(())
     } else {
         read_loop(
             None,
             link,
             transport,
             lease_tracker,
-            token,
             #[cfg(feature = "stats")]
             stats,
             &pool,
@@ -405,7 +410,6 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease_tracker: TimeoutTracker,
-    token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
     pool: &RecyclingObjectPool<Box<[u8]>, F>,
 ) -> ZResult<()> {
@@ -440,7 +444,6 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
             _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());
             }
-            _ = token.cancelled() => return Ok(()),
         }
     }
 }
