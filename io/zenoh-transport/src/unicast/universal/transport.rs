@@ -384,20 +384,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
-
-        let mut link_ids = {
-            let transport_links = zread!(self.links);
-            let mut link_ids = Vec::with_capacity(transport_links.inner.len());
-            // Convert LinkUnicast auth ids to AuthId
-            transport_links.inner.iter().for_each(|l| {
-                link_ids.push(l.link.link.get_auth_id().clone());
-            });
-            link_ids
-        };
-        // Dedup because mixed-reliability links yield duplicate LinkAuthId
-        link_ids.sort_unstable();
-        link_ids.dedup();
-        transport_auth_id.set_link_auth_ids(link_ids);
+        // Convert LinkUnicast auth ids to AuthId
+        zread!(self.links)
+            .inner
+            .iter()
+            .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
         // Convert usrpwd auth id to AuthId
         #[cfg(feature = "auth_usrpwd")]

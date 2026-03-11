@@ -49,10 +49,6 @@ impl TransportAuthId {
         }
     }
 
-    pub(crate) fn set_link_auth_ids(&mut self, link_ids: Vec<LinkAuthId>) {
-        self.link_auth_ids = link_ids;
-    }
-
     pub(crate) fn push_link_auth_id(&mut self, link_auth_id: LinkAuthId) {
         self.link_auth_ids.push(link_auth_id);
     }
