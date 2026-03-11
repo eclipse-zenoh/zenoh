@@ -430,9 +430,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 /// Container for Transport links that manages link associations (namely for mixed-reliability).
 /// Manages insertion/removal of links and their potential associated links while providing the
 /// following:
-/// - Evaluate multilink limit by considering each link association as a single link
+/// - Evaluate multilink limit by considering each link association as a single link.
 /// - Expose a read-only view on links that mixes associations in the same set (as if they were
-/// separate links) for message scheduling based on QoS
+///   separate links) for message scheduling based on QoS.
 #[derive(Default)]
 pub(super) struct TransportLinks {
     inner: Box<[TransportLinkUnicastUniversal]>,
@@ -495,9 +495,7 @@ impl TransportLinks {
             )
             .eq(link)
         };
-        let Some(index) = self.inner.iter().position(|tl| link_equality(tl, link)) else {
-            return None;
-        };
+        let index = self.inner.iter().position(|tl| link_equality(tl, link))?;
 
         // Remove the link
         let mut links = self.inner.to_vec();
