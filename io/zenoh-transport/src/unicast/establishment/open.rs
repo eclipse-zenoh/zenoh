@@ -736,6 +736,8 @@ pub(crate) async fn open_link(
         }
         zenoh_link::NewLink::Single(_) => None,
     };
+    let s_best_effort = best_effort_link.as_ref().map(|l| format!("{l:?}"));
+
     let o_link = LinkUnicastWithOpenAck::new(o_link, None, best_effort_link);
     let transport = manager
         .init_transport_unicast(
@@ -747,10 +749,15 @@ pub(crate) async fn open_link(
         .await?;
 
     tracing::debug!(
-        "New transport link opened from {} to {}: {}.",
+        "New transport link opened from {} to {}: {} {}",
         manager.config.zid,
         iack_out.other_zid,
         s_link,
+        if let Some(s) = s_best_effort {
+            format!(" with associated link {s}")
+        } else {
+            "".into()
+        }
     );
 
     Ok(transport)

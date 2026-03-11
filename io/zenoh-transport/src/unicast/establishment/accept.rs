@@ -853,6 +853,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         }
         zenoh_link::NewLink::Single(_) => None,
     };
+    let s_best_effort = best_effort_link.as_ref().map(|l| format!("{l:?}"));
+
     let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack), best_effort_link);
     let _transport = manager
         .init_transport_unicast(
@@ -864,10 +866,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         .await?;
 
     tracing::debug!(
-        "New transport link accepted from {} to {}: {}",
+        "New transport link accepted from {} to {}: {} {}",
         osyn_out.other_zid,
         manager.config.zid,
         s_link,
+        if let Some(s) = s_best_effort {
+            format!(" with associated link {s}")
+        } else {
+            "".into()
+        }
     );
 
     Ok(())
