@@ -51,9 +51,9 @@ use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
 /// Quic endpoint `multistream` config
 enum MultiStreamConfig {
-    /// `multistream=false`
+    /// `multistream=0`
     Disabled,
-    /// `multistream=true`
+    /// `multistream=1`
     Enabled,
     /// default, or `multistream=auto`
     Auto,
