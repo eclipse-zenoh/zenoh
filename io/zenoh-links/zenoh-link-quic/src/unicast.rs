@@ -62,17 +62,11 @@ enum MultiStreamConfig {
 impl MultiStreamConfig {
     /// Parse multistream configuration.
     fn new(metadata: Metadata) -> ZResult<Self> {
-        let multistream = metadata.get(Metadata::MULTISTREAM).unwrap_or("auto");
-        if multistream == "auto" {
-            return Ok(Self::Auto);
-        }
-        if multistream
-            .parse()
-            .map_err(|_| zerror!("Invalid multistream config:  {multistream}"))?
-        {
-            Ok(Self::Enabled)
-        } else {
-            Ok(Self::Disabled)
+        match metadata.get(Metadata::MULTISTREAM).unwrap_or("auto") {
+            "auto" => Ok(Self::Auto),
+            "0" => Ok(Self::Disabled),
+            "1" => Ok(Self::Enabled),
+            s => Err(zerror!("Invalid multistream config:  {s}").into()),
         }
     }
 
