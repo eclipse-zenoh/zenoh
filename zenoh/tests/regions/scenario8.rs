@@ -16,13 +16,14 @@
 //  R R    R R    R R
 // R R R  R R R  R R R
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
+use futures::StreamExt;
 use predicates::Predicate;
 use zenoh::{
     query::{ConsolidationMode, QueryTarget},
     sample::SampleKind,
-    Wait,
+    Session, Wait,
 };
 use zenoh_config::WhatAmI::Router;
 use zenoh_core::{lazy_static, ztimeout};
@@ -53,7 +54,7 @@ async fn test_regions_scenario8_order1_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "81aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "81aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -63,7 +64,7 @@ async fn test_regions_scenario8_order1_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "81aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "81aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -73,40 +74,49 @@ async fn test_regions_scenario8_order1_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "81aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "81aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "81aa9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "81aa9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "81aa9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "81aa9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "81aa9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "81aa9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "81aa9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "81aa9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "81aa9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -120,6 +130,20 @@ async fn test_regions_scenario8_order1_putsub() {
         let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
     }
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     ztimeout!(async {
         loop {
@@ -148,7 +172,11 @@ async fn test_regions_scenario8_order1_putsub() {
     assert!(
         [&s9110, &s9120, &s9130, &s9210, &s9220, &s9230, &s9310, &s9320, &s9330]
             .iter()
-            .all(|sub| sub.unique_timestamps())
+            .all(|sub| if !sub.unique_timestamps() {
+                panic!("{}", sub.id().zid());
+            } else {
+                true
+            })
     );
 
     let s = STORAGE.lock();
@@ -161,7 +189,7 @@ async fn test_regions_scenario8_order1_putsub() {
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            2
+            3
         );
     }
 }
@@ -175,7 +203,7 @@ async fn test_regions_scenario8_order1_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "81ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "81ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -185,7 +213,7 @@ async fn test_regions_scenario8_order1_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "81ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "81ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -195,40 +223,49 @@ async fn test_regions_scenario8_order1_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "81ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "81ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "81ab9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "81ab9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "81ab9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "81ab9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "81ab9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "81ab9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "81ab9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "81ab9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "81ab9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -252,6 +289,18 @@ async fn test_regions_scenario8_order1_pubsub() {
     let p9310 = z9310.declare_publisher("test").await.unwrap();
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -307,7 +356,7 @@ async fn test_regions_scenario8_order1_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "81ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "81ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -317,7 +366,7 @@ async fn test_regions_scenario8_order1_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "81ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "81ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -327,38 +376,47 @@ async fn test_regions_scenario8_order1_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "81ac9301")
+    let z9301 = ztimeout!(Node::new(Router, "81ac9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "81ac9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "81ac9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "81ac9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "81ac9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "81ac9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "81ac9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "81ac9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "81ac9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "81ac9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -371,6 +429,18 @@ async fn test_regions_scenario8_order1_getque() {
         let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
         let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
     }
 
     skip_fmt! {ztimeout!(async {
@@ -401,7 +471,7 @@ async fn test_regions_scenario8_order1_getque() {
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            2
+            3
         );
     }
 }
@@ -415,7 +485,7 @@ async fn test_regions_scenario8_order1_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "81ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "81ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -425,7 +495,7 @@ async fn test_regions_scenario8_order1_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "81ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "81ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -435,38 +505,47 @@ async fn test_regions_scenario8_order1_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "81ad9301")
+    let z9301 = ztimeout!(Node::new(Router, "81ad9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "81ad9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "81ad9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "81ad9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "81ad9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "81ad9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "81ad9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "81ad9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "81ad9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "81ad9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -489,6 +568,18 @@ async fn test_regions_scenario8_order1_queque() {
         let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
         let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
     }
 
     ztimeout!(async {
@@ -533,7 +624,7 @@ async fn test_regions_scenario8_order1_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "81ae9101")
+    let z9101 = ztimeout!(Node::new(Router, "81ae9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -543,7 +634,7 @@ async fn test_regions_scenario8_order1_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "81ae9201")
+    let z9201 = ztimeout!(Node::new(Router, "81ae9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -553,40 +644,49 @@ async fn test_regions_scenario8_order1_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "81ae9301")
+    let z9301 = ztimeout!(Node::new(Router, "81ae9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "81ae9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "81ae9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "81ae9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "81ae9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "81ae9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "81ae9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "81ae9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "81ae9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "81ae9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -660,30 +760,30 @@ async fn test_regions_scenario8_order2_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "82aa9120")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "82aa9130")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9120)])
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "82aa9210")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "82aa9220")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "82aa9230")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9220)])
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "82aa9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "82aa9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "82aa9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -699,35 +799,81 @@ async fn test_regions_scenario8_order2_putsub() {
     }
 
     let z9100 = ztimeout!(Node::new(Router, "82aa9100")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "82aa9101")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+    let z9101 = ztimeout!(Node::new(Router, "82aa9101")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9110), loc!(z9120), loc!(z9130)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9200 = ztimeout!(Node::new(Router, "82aa9200")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "82aa9201")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
+    let z9201 = ztimeout!(Node::new(Router, "82aa9201")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9200),
+                loc!(z9100),
+                loc!(z9210),
+                loc!(z9220),
+                loc!(z9230)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9300 = ztimeout!(Node::new(Router, "82aa9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "82aa9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "82aa9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -782,30 +928,30 @@ async fn test_regions_scenario8_order2_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "82ab9120")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "82ab9130")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9120)])
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "82ab9210")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "82ab9220")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "82ab9230")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9220)])
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "82ab9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "82ab9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "82ab9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -831,35 +977,81 @@ async fn test_regions_scenario8_order2_pubsub() {
     let p9330 = z9330.declare_publisher("test").await.unwrap();
 
     let z9100 = ztimeout!(Node::new(Router, "82ab9100")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "82ab9101")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+    let z9101 = ztimeout!(Node::new(Router, "82ab9101")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9110), loc!(z9120), loc!(z9130)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9200 = ztimeout!(Node::new(Router, "82ab9200")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "82ab9201")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
+    let z9201 = ztimeout!(Node::new(Router, "82ab9201")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9200),
+                loc!(z9100),
+                loc!(z9210),
+                loc!(z9220),
+                loc!(z9230)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9300 = ztimeout!(Node::new(Router, "82ab9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "82ab9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "82ab9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -914,28 +1106,28 @@ async fn test_regions_scenario8_order2_getque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "82ac9120")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "82ac9130")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9120)])
         .open());
     let z9210 = ztimeout!(Node::new(Router, "82ac9210")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "82ac9220")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "82ac9230")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9220)])
         .open());
     let z9310 = ztimeout!(Node::new(Router, "82ac9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "82ac9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "82ac9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -951,35 +1143,81 @@ async fn test_regions_scenario8_order2_getque() {
     }
 
     let z9100 = ztimeout!(Node::new(Router, "82ac9100")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "82ac9101")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+    let z9101 = ztimeout!(Node::new(Router, "82ac9101")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9110), loc!(z9120), loc!(z9130)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9200 = ztimeout!(Node::new(Router, "82ac9200")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "82ac9201")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
+    let z9201 = ztimeout!(Node::new(Router, "82ac9201")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9200),
+                loc!(z9100),
+                loc!(z9210),
+                loc!(z9220),
+                loc!(z9230)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9300 = ztimeout!(Node::new(Router, "82ac9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "82ac9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "82ac9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     skip_fmt! {ztimeout!(async {
         loop {
@@ -1022,28 +1260,28 @@ async fn test_regions_scenario8_order2_queque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "82ad9120")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "82ad9130")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9120)])
         .open());
     let z9210 = ztimeout!(Node::new(Router, "82ad9210")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "82ad9220")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "82ad9230")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9220)])
         .open());
     let z9310 = ztimeout!(Node::new(Router, "82ad9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "82ad9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "82ad9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1069,35 +1307,81 @@ async fn test_regions_scenario8_order2_queque() {
     }
 
     let z9100 = ztimeout!(Node::new(Router, "82ad9100")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "82ad9101")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+    let z9101 = ztimeout!(Node::new(Router, "82ad9101")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9110), loc!(z9120), loc!(z9130)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9200 = ztimeout!(Node::new(Router, "82ad9200")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "82ad9201")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
+    let z9201 = ztimeout!(Node::new(Router, "82ad9201")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9200),
+                loc!(z9100),
+                loc!(z9210),
+                loc!(z9220),
+                loc!(z9230)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9300 = ztimeout!(Node::new(Router, "82ad9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "82ad9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "82ad9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -1140,30 +1424,30 @@ async fn test_regions_scenario8_order2_toksub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "82ae9120")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "82ae9130")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9120)])
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "82ae9210")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "82ae9220")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "82ae9230")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9220)])
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "82ae9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "82ae9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "82ae9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1179,32 +1463,66 @@ async fn test_regions_scenario8_order2_toksub() {
     }
 
     let z9100 = ztimeout!(Node::new(Router, "82ae9100")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9110), loc!(z9120), loc!(z9130)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "82ae9101")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+    let z9101 = ztimeout!(Node::new(Router, "82ae9101")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9110), loc!(z9120), loc!(z9130)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9200 = ztimeout!(Node::new(Router, "82ae9200")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9210), loc!(z9220), loc!(z9230)]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "82ae9201")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
+    let z9201 = ztimeout!(Node::new(Router, "82ae9201")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9200),
+                loc!(z9100),
+                loc!(z9210),
+                loc!(z9220),
+                loc!(z9230)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
     let z9300 = ztimeout!(Node::new(Router, "82ae9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "82ae9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "82ae9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
@@ -1269,7 +1587,7 @@ async fn test_regions_scenario8_order3_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "83aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "83aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1279,40 +1597,46 @@ async fn test_regions_scenario8_order3_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "83aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "83aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "83aa9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "83aa9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "83aa9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "83aa9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "83aa9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "83aa9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "83aa9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "83aa9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "83aa9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1328,15 +1652,46 @@ async fn test_regions_scenario8_order3_putsub() {
     }
 
     let z9300 = ztimeout!(Node::new(Router, "83aa9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "83aa9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "83aa9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -1392,7 +1747,7 @@ async fn test_regions_scenario8_order3_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "83ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "83ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1402,40 +1757,46 @@ async fn test_regions_scenario8_order3_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "83ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "83ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "83ab9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "83ab9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "83ab9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "83ab9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "83ab9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "83ab9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "83ab9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "83ab9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "83ab9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1461,15 +1822,46 @@ async fn test_regions_scenario8_order3_pubsub() {
     let p9330 = z9330.declare_publisher("test").await.unwrap();
 
     let z9300 = ztimeout!(Node::new(Router, "83ab9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "83ab9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "83ab9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -1525,7 +1917,7 @@ async fn test_regions_scenario8_order3_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "83ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "83ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1535,38 +1927,44 @@ async fn test_regions_scenario8_order3_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "83ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "83ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "83ac9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "83ac9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "83ac9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "83ac9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "83ac9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "83ac9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "83ac9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "83ac9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "83ac9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1582,15 +1980,46 @@ async fn test_regions_scenario8_order3_getque() {
     }
 
     let z9300 = ztimeout!(Node::new(Router, "83ac9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "83ac9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "83ac9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     skip_fmt! {ztimeout!(async {
         loop {
@@ -1634,7 +2063,7 @@ async fn test_regions_scenario8_order3_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "83ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "83ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1644,38 +2073,44 @@ async fn test_regions_scenario8_order3_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "83ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "83ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "83ad9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "83ad9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "83ad9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "83ad9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "83ad9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "83ad9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "83ad9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "83ad9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "83ad9330")
-        .endpoints("tcp/0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1701,15 +2136,46 @@ async fn test_regions_scenario8_order3_queque() {
     }
 
     let z9300 = ztimeout!(Node::new(Router, "83ad9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "83ad9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "83ad9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -1753,7 +2219,7 @@ async fn test_regions_scenario8_order3_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "83ae9101")
+    let z9101 = ztimeout!(Node::new(Router, "83ae9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1763,40 +2229,46 @@ async fn test_regions_scenario8_order3_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "83ae9201")
+    let z9201 = ztimeout!(Node::new(Router, "83ae9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "83ae9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "83ae9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "83ae9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "83ae9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "83ae9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "83ae9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "83ae9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "83ae9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "83ae9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -1811,6 +2283,36 @@ async fn test_regions_scenario8_order3_toksub() {
         let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
     }
 
+    let z9300 = ztimeout!(Node::new(Router, "83ae9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
+        .open());
+    let z9301 = ztimeout!(Node::new(Router, "83ae9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
+        .open());
+
     let t9110 = z9110.liveliness().declare_token("test/9110").await.unwrap();
     let t9120 = z9120.liveliness().declare_token("test/9120").await.unwrap();
     let t9130 = z9130.liveliness().declare_token("test/9130").await.unwrap();
@@ -1820,17 +2322,6 @@ async fn test_regions_scenario8_order3_toksub() {
     let t9310 = z9310.liveliness().declare_token("test/9310").await.unwrap();
     let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
     let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
-
-    let z9300 = ztimeout!(Node::new(Router, "83ae9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
-        .region("main")
-        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
-        .open());
-    let _z9301 = ztimeout!(Node::new(Router, "83ae9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
-        .region("main")
-        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
-        .open());
 
     ztimeout!(async {
         loop {
@@ -1882,7 +2373,7 @@ async fn test_regions_scenario8_order4_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "84aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "84aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -1892,30 +2383,36 @@ async fn test_regions_scenario8_order4_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "84aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "84aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "84aa9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "84aa9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "84aa9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "84aa9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "84aa9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "84aa9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     skip_fmt! {
@@ -1932,26 +2429,41 @@ async fn test_regions_scenario8_order4_putsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "84aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "84aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "84aa9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "84aa9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "84aa9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
         let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+    }
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
     }
 
     ztimeout!(async {
@@ -2008,7 +2520,7 @@ async fn test_regions_scenario8_order4_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "84ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "84ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -2018,30 +2530,36 @@ async fn test_regions_scenario8_order4_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "84ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "84ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "84ab9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "84ab9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "84ab9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "84ab9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "84ab9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "84ab9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     skip_fmt! {
@@ -2065,20 +2583,23 @@ async fn test_regions_scenario8_order4_pubsub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "84ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "84ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "84ab9310")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301)])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "84ab9320")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9301), loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "84ab9330")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9310), loc!(z9320)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9300), loc!(z9301), loc!(z9310), loc!(z9320)]
+        )
         .open());
 
     skip_fmt! {
@@ -2090,6 +2611,18 @@ async fn test_regions_scenario8_order4_pubsub() {
     let p9310 = z9310.declare_publisher("test").await.unwrap();
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -2145,7 +2678,7 @@ async fn test_regions_scenario8_order4_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "84ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "84ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -2155,38 +2688,44 @@ async fn test_regions_scenario8_order4_getque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "84ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "84ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "84ac9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "84ac9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "84ac9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "84ac9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "84ac9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "84ac9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "84ac9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "84ac9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "84ac9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -2202,15 +2741,46 @@ async fn test_regions_scenario8_order4_getque() {
     }
 
     let z9300 = ztimeout!(Node::new(Router, "84ac9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "84ac9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "84ac9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     skip_fmt! {ztimeout!(async {
         loop {
@@ -2254,7 +2824,7 @@ async fn test_regions_scenario8_order4_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "84ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "84ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -2264,38 +2834,44 @@ async fn test_regions_scenario8_order4_queque() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "84ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "84ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "84ad9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "84ad9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "84ad9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
     let z9210 = ztimeout!(Node::new(Router, "84ad9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "84ad9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "84ad9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
     let z9310 = ztimeout!(Node::new(Router, "84ad9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "84ad9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "84ad9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -2321,15 +2897,46 @@ async fn test_regions_scenario8_order4_queque() {
     }
 
     let z9300 = ztimeout!(Node::new(Router, "84ad9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "84ad9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+    let z9301 = ztimeout!(Node::new(Router, "84ad9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
+
+    for s in [&z9110, &z9120, &z9130] {
+        wait_for_routers(s, &[&z9100, &z9101]).await
+    }
+
+    for s in [&z9210, &z9220, &z9230] {
+        wait_for_routers(s, &[&z9200, &z9201]).await
+    }
+
+    for s in [&z9310, &z9320, &z9330] {
+        wait_for_routers(s, &[&z9300, &z9301]).await
+    }
 
     ztimeout!(async {
         loop {
@@ -2373,7 +2980,7 @@ async fn test_regions_scenario8_order4_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "84ae9101")
+    let z9101 = ztimeout!(Node::new(Router, "84ae9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
@@ -2383,40 +2990,46 @@ async fn test_regions_scenario8_order4_toksub() {
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "84ae9201")
+    let z9201 = ztimeout!(Node::new(Router, "84ae9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .region("main")
         .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
         .open());
 
     let z9110 = ztimeout!(Node::new(Router, "84ae9110")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101)])
         .open());
     let z9120 = ztimeout!(Node::new(Router, "84ae9120")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9101), loc!(z9110)])
         .open());
     let z9130 = ztimeout!(Node::new(Router, "84ae9130")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9110), loc!(z9120)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9100), loc!(z9101), loc!(z9110), loc!(z9120)]
+        )
         .open());
 
     let z9210 = ztimeout!(Node::new(Router, "84ae9210")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201)])
         .open());
     let z9220 = ztimeout!(Node::new(Router, "84ae9220")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9201), loc!(z9210)])
         .open());
     let z9230 = ztimeout!(Node::new(Router, "84ae9230")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9210), loc!(z9220)])
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[loc!(z9200), loc!(z9201), loc!(z9210), loc!(z9220)]
+        )
         .open());
 
     let z9310 = ztimeout!(Node::new(Router, "84ae9310")
         .endpoints("tcp/0.0.0.0:0", &[])
         .open());
     let z9320 = ztimeout!(Node::new(Router, "84ae9320")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9310)])
         .open());
     let z9330 = ztimeout!(Node::new(Router, "84ae9330")
-        .endpoints("tcp/0.0.0.0:0", &[])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9320)])
         .open());
 
     skip_fmt! {
@@ -2431,6 +3044,36 @@ async fn test_regions_scenario8_order4_toksub() {
         let s9330 = z9330.liveliness().declare_subscriber("test/**").history(true).with(unbounded_sink()).await.unwrap();
     }
 
+    let z9300 = ztimeout!(Node::new(Router, "84ae9300")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
+        .open());
+    let z9301 = ztimeout!(Node::new(Router, "84ae9301")
+        .endpoints(
+            "tcp/0.0.0.0:0",
+            &[
+                loc!(z9300),
+                loc!(z9100),
+                loc!(z9200),
+                loc!(z9310),
+                loc!(z9320),
+                loc!(z9330)
+            ]
+        )
+        .region("main")
+        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
+        .open());
+
     let t9110 = z9110.liveliness().declare_token("test/9110").await.unwrap();
     let t9120 = z9120.liveliness().declare_token("test/9120").await.unwrap();
     let t9130 = z9130.liveliness().declare_token("test/9130").await.unwrap();
@@ -2440,17 +3083,6 @@ async fn test_regions_scenario8_order4_toksub() {
     let t9310 = z9310.liveliness().declare_token("test/9310").await.unwrap();
     let t9320 = z9320.liveliness().declare_token("test/9320").await.unwrap();
     let t9330 = z9330.liveliness().declare_token("test/9330").await.unwrap();
-
-    let z9300 = ztimeout!(Node::new(Router, "84ae9300")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
-        .region("main")
-        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
-        .open());
-    let _z9301 = ztimeout!(Node::new(Router, "84ae9301")
-        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
-        .region("main")
-        .gateway("{south:[{filters:[{negated:true,region_names:[\"main\"]}]}]}")
-        .open());
 
     ztimeout!(async {
         loop {
@@ -2491,4 +3123,28 @@ async fn test_regions_scenario8_order4_toksub() {
             }
         }
     });
+}
+
+#[tracing::instrument(level = "info", skip(others), ret)]
+async fn wait_for_routers(this: &Session, others: &[&Session]) {
+    let listener = this
+        .info()
+        .transport_events_listener()
+        .history(true)
+        .await
+        .unwrap();
+    let mut stream = listener.stream();
+
+    let mut zids = others.iter().map(|s| s.zid()).collect::<HashSet<_>>();
+
+    while let Some(event) = stream.next().await {
+        assert_eq!(event.kind(), SampleKind::Put);
+        assert!(event.transport().whatami().is_router());
+
+        zids.remove(event.transport().zid());
+
+        if zids.is_empty() {
+            break;
+        }
+    }
 }

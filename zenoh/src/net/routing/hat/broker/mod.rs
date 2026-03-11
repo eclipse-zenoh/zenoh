@@ -246,14 +246,14 @@ impl HatBaseTrait for Hat {
         self.region
     }
 
-    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
         debug_assert_eq!(node_id, DEFAULT_NODE_ID);
 
         Some(src.zid)
     }
 
     #[tracing::instrument(level = "trace", skip(_tables), ret)]
-    fn region_gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
+    fn gateways_of(&self, _tables: &TablesData, _zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
         None
     }
 }

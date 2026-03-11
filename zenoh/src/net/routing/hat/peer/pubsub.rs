@@ -264,7 +264,7 @@ impl HatPubSubTrait for Hat {
             }
         }
 
-        if self.region.bound().is_north() && src_region.bound().is_south() {
+        if self.region().bound().is_north() && src_region.bound().is_south() {
             for face in self
                 .owned_faces(tables)
                 .filter(|f| f.remote_bound.is_south())

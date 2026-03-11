@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, convert::TryInto};
+use std::convert::TryInto;
 
-use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use vec_map::VecMap;
 use zenoh_buffers::{
@@ -21,6 +20,8 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_codec::WCodec;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
@@ -35,110 +36,9 @@ use zenoh_transport::unicast::TransportUnicast;
 use crate::net::{
     codec::Zenoh080Routing,
     common::AutoConnect,
-    protocol::{
-        linkstate::{LinkState, LinkStateList},
-        network::Network,
-    },
+    protocol::linkstate::{LinkState, LinkStateList},
     runtime::{Runtime, WeakRuntime},
 };
-
-pub(crate) enum Gossip {
-    Gossip(GossipNet),
-    Network(Network),
-}
-
-impl Gossip {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
-        name: String,
-        zid: ZenohIdProto,
-        runtime: Runtime,
-        gossip: bool,
-        gossip_multihop: bool,
-        gossip_target: WhatAmIMatcher,
-        autoconnect: AutoConnect,
-        wait_declares: bool,
-        bound: Bound,
-    ) -> Self {
-        if gossip_multihop {
-            Self::Network(Network::new(
-                name,
-                zid,
-                runtime,
-                false,
-                gossip,
-                gossip_multihop,
-                gossip_target,
-                autoconnect,
-                HashMap::new(),
-                bound,
-            ))
-        } else {
-            Self::Gossip(GossipNet::new(
-                name,
-                zid,
-                runtime,
-                gossip,
-                gossip_target,
-                autoconnect,
-                wait_declares,
-                bound,
-            ))
-        }
-    }
-
-    pub(crate) fn dot(&self) -> String {
-        match self {
-            Self::Gossip(n) => n.dot(),
-            Self::Network(n) => n.dot(),
-        }
-    }
-
-    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
-        match self {
-            Self::Gossip(n) => n.add_link(transport),
-            Self::Network(n) => n.add_link(transport),
-        }
-    }
-
-    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
-        match self {
-            Self::Gossip(n) => n.remove_link(zid),
-            Self::Network(n) => n.remove_link(zid),
-        }
-    }
-
-    pub(crate) fn link_states(
-        &mut self,
-        link_states: Vec<LinkState>,
-        src: ZenohIdProto,
-        src_whatami: WhatAmI,
-    ) {
-        match self {
-            Self::Gossip(n) => {
-                n.link_states(link_states, src, src_whatami);
-            }
-            Self::Network(n) => {
-                n.link_states(link_states, src);
-            }
-        }
-    }
-
-    pub(crate) fn region_gateways(&self) -> Vec<ZenohIdProto> {
-        match self {
-            Gossip::Gossip(gossip) => gossip
-                .graph
-                .node_weights()
-                .filter_map(|n| n.is_gateway.then_some(n.zid))
-                .collect_vec(),
-            Gossip::Network(network) => network
-                .graph
-                .node_weights()
-                .filter_map(|n| n.is_gateway.then_some(n.zid))
-                .collect_vec(),
-        }
-    }
-}
 
 #[derive(Clone)]
 struct Details {
@@ -148,15 +48,15 @@ struct Details {
 }
 
 #[derive(Clone)]
-struct Node {
-    zid: ZenohIdProto,
-    whatami: Option<WhatAmI>,
-    locators: Option<Vec<Locator>>,
-    sn: u64,
+pub(crate) struct Node {
+    pub(crate) zid: ZenohIdProto,
+    pub(crate) whatami: Option<WhatAmI>,
+    pub(crate) locators: Option<Vec<Locator>>,
+    pub(crate) sn: u64,
     /// Whether this node is a peer region gateway.
     ///
     /// Multiple nodes within the peer-to-peer network may set this flag to `true`.
-    is_gateway: bool,
+    pub(crate) is_gateway: bool,
 }
 
 impl std::fmt::Debug for Node {
@@ -165,21 +65,23 @@ impl std::fmt::Debug for Node {
     }
 }
 
-struct Link {
+pub(crate) struct Link {
     transport: TransportUnicast,
     zid: ZenohIdProto,
     mappings: VecMap<ZenohIdProto>,
     local_mappings: VecMap<u64>,
+    remote_bound: Bound,
 }
 
 impl Link {
-    fn new(transport: TransportUnicast) -> Self {
+    fn new(transport: TransportUnicast, remote_bound: Bound) -> Self {
         let zid = transport.get_zid().unwrap();
         Link {
             transport,
             zid,
             mappings: VecMap::new(),
             local_mappings: VecMap::new(),
+            remote_bound,
         }
     }
 
@@ -200,29 +102,26 @@ impl Link {
     }
 }
 
-pub(crate) struct GossipNet {
-    name: String,
-    gossip: bool,
-    gossip_target: WhatAmIMatcher,
-    autoconnect: AutoConnect,
-    wait_declares: bool,
-    idx: NodeIndex,
-    links: VecMap<Link>,
-    graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    runtime: WeakRuntime,
+pub(crate) struct Gossip {
+    pub(crate) name: String,
+    pub(crate) gossip_target: WhatAmIMatcher,
+    pub(crate) autoconnect: AutoConnect,
+    pub(crate) wait_declares: bool,
+    pub(crate) idx: NodeIndex,
+    pub(crate) links: VecMap<Link>,
+    pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
+    pub(crate) runtime: WeakRuntime,
 }
 
-impl GossipNet {
+impl Gossip {
     #[allow(clippy::too_many_arguments)]
-    fn new(
+    pub(crate) fn new(
         name: String,
         zid: ZenohIdProto,
         runtime: Runtime,
-        gossip: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         wait_declares: bool,
-        bound: Bound,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -231,11 +130,10 @@ impl GossipNet {
             whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
-            is_gateway: bound.is_south(),
+            is_gateway: false,
         });
-        GossipNet {
+        Gossip {
             name,
-            gossip,
             gossip_target,
             autoconnect,
             wait_declares,
@@ -246,7 +144,7 @@ impl GossipNet {
         }
     }
 
-    fn dot(&self) -> String {
+    pub(crate) fn dot(&self) -> String {
         std::format!("{:?}", petgraph::dot::Dot::new(&self.graph))
     }
 
@@ -308,7 +206,7 @@ impl GossipNet {
             },
             links,
             link_weights: None,
-            is_gateway: false, // TODO(regions): should this be aligned with the South ext?
+            is_gateway: self.graph[idx].is_gateway,
         }
     }
 
@@ -368,7 +266,7 @@ impl GossipNet {
         }
     }
 
-    fn link_states(
+    pub(crate) fn link_states(
         &mut self,
         link_states: Vec<LinkState>,
         src: ZenohIdProto,
@@ -468,24 +366,23 @@ impl GossipNet {
                             .flatten()
                     }
                 };
-                if self.gossip {
-                    if let Some(idx) = idx {
-                        self.send_on_links(
-                            vec![(
-                                idx,
-                                Details {
-                                    zid: true,
-                                    locators: true,
-                                    links: false,
-                                },
-                            )],
-                            |link| link.zid != zid,
-                        );
-                    }
+
+                if let Some(idx) = idx {
+                    self.send_on_links(
+                        vec![(
+                            idx,
+                            Details {
+                                zid: true,
+                                locators: true,
+                                links: false,
+                            },
+                        )],
+                        |link| link.zid != zid,
+                    );
                 }
             }
 
-            if self.gossip && self.autoconnect.should_autoconnect(zid, whatami) {
+            if self.autoconnect.should_autoconnect(zid, whatami) {
                 // Connect discovered peers
                 zenoh_runtime::ZRuntime::Net.block_in_place(
                     strong_runtime
@@ -522,7 +419,8 @@ impl GossipNet {
         }
     }
 
-    fn add_link(&mut self, transport: TransportUnicast) -> usize {
+    #[allow(clippy::incompatible_msrv)]
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast, remote_bound: Bound) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -530,7 +428,74 @@ impl GossipNet {
             }
             i
         };
-        self.links.insert(free_index, Link::new(transport.clone()));
+        self.links
+            .insert(free_index, Link::new(transport.clone(), remote_bound));
+
+        let zid = transport.get_zid().unwrap();
+        let whatami = transport.get_whatami().unwrap();
+
+        let (idx, new) = match self.get_idx(&zid) {
+            Some(idx) => (idx, false),
+            None => {
+                tracing::debug!(
+                    ?zid,
+                    ?whatami,
+                    ?remote_bound,
+                    "{} Add node (link)",
+                    self.name
+                );
+                (
+                    self.add_node(Node {
+                        zid,
+                        whatami: Some(whatami),
+                        locators: None,
+                        sn: 0,
+                        is_gateway: remote_bound.is_south(),
+                    }),
+                    true,
+                )
+            }
+        };
+        self.graph[self.idx].sn += 1;
+
+        // Send updated self linkstate on all existing links except new one
+        self.links
+            .values()
+            .filter(|link| link.zid != zid && link.remote_bound.is_south())
+            .for_each(|link| {
+                self.send_on_link(
+                    if new {
+                        vec![
+                            (
+                                idx,
+                                Details {
+                                    zid: true,
+                                    locators: false,
+                                    links: false,
+                                },
+                            ),
+                            (
+                                self.idx,
+                                Details {
+                                    zid: false,
+                                    locators: true,
+                                    links: true,
+                                },
+                            ),
+                        ]
+                    } else {
+                        vec![(
+                            self.idx,
+                            Details {
+                                zid: false,
+                                locators: true,
+                                links: true,
+                            },
+                        )]
+                    },
+                    &link.transport,
+                )
+            });
 
         // Send all nodes linkstate on new link
         let idxs = self
@@ -542,16 +507,20 @@ impl GossipNet {
                     Details {
                         zid: true,
                         locators: true,
-                        links: false,
+                        // NOTE(regions): peer gateway hats need link information to de-duplicate
+                        // data/queries in the presence of multiple gateways. Links information is
+                        // ignored by non-gateway peer remotes.
+                        links: remote_bound.is_south(),
                     },
                 )
             })
             .collect();
+
         self.send_on_link(idxs, &transport);
         free_index
     }
 
-    fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
+    pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
 

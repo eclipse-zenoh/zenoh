@@ -21,14 +21,16 @@ use std::{
     any::Any,
     collections::HashMap,
     fmt::Debug,
-    mem,
+    mem::{self},
     sync::{atomic::AtomicU32, Arc},
 };
 
-use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI};
+use itertools::Itertools;
+use petgraph::graph::NodeIndex;
+use zenoh_config::{unwrap_or_default, ModeDependent};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{Region, ZenohIdProto},
+    core::{Bound, Region, WhatAmI, ZenohIdProto},
     network::{
         declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
         interest::{InterestId, InterestOptions},
@@ -49,7 +51,11 @@ use super::{
 };
 use crate::net::{
     codec::Zenoh080Routing,
-    protocol::{gossip::Gossip, linkstate::LinkStateList},
+    protocol::{
+        gossip::Gossip,
+        linkstate::{LinkState, LinkStateList},
+        network::Network,
+    },
     routing::{
         dispatcher::{
             face::InterestState, interests::RemoteInterest, queries::LocalQueryables,
@@ -69,32 +75,43 @@ mod token;
 
 use crate::net::common::AutoConnect;
 
-pub(crate) struct Hat {
-    region: Region,
-    gossip: Option<Gossip>,
+pub(crate) enum Hat {
+    /// Uninitalized value.
+    Uninit(Region),
+    /// Used for north-bound hats w/o gossip or w/ non-multihop gossip.
+    Gossip { gossip: Option<Gossip> },
+    /// Used for north-bound hats with multihop gossip or south-bound hats (i.e. peer region
+    /// gateways).
+    ///
+    /// Note that [`Gossip`] interoperates w/ [`Network`]: both implementations use the same
+    /// linkstate underlying protocol. Inter-region filtering is possible as [`Gossip`] propagates
+    /// its own linkstate info, even though this information is not reflected in
+    /// [`crate::net::protocol::gossip::Node`] and is only stored in
+    /// [`crate::net::protocol::network::Node`].
+    Network {
+        region: Region,
+        network: Option<Network>,
+    },
 }
 
 impl Debug for Hat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.region)
+        write!(f, "{}", self.region())
     }
 }
 
 impl Hat {
     #[tracing::instrument(level = "trace")]
     pub(crate) fn new(region: Region) -> Self {
-        Self {
-            region,
-            gossip: None,
-        }
+        Self::Uninit(region)
     }
 
     pub(self) fn face_hat<'f>(&self, face_state: &'f Arc<FaceState>) -> &'f HatFace {
-        face_state.hats[self.region].downcast_ref().unwrap()
+        face_state.hats[self.region()].downcast_ref().unwrap()
     }
 
     pub(self) fn face_hat_mut<'f>(&self, face_state: &'f mut Arc<FaceState>) -> &'f mut HatFace {
-        get_mut_unchecked(face_state).hats[self.region]
+        get_mut_unchecked(face_state).hats[self.region()]
             .downcast_mut()
             .unwrap()
     }
@@ -137,7 +154,23 @@ impl Hat {
         &self,
         tables: &'t TablesData,
     ) -> impl Iterator<Item = &'t Arc<FaceState>> {
-        tables.hats[self.region].mcast_groups.iter()
+        tables.hats[self.region()].mcast_groups.iter()
+    }
+
+    pub(crate) fn net(&self) -> Option<Net<'_>> {
+        match self {
+            Self::Uninit(..) => unreachable!(),
+            Self::Gossip { gossip } => gossip.as_ref().map(Net::Gossip),
+            Self::Network { network, .. } => Some(Net::Network(network.as_ref().unwrap())),
+        }
+    }
+
+    pub(crate) fn net_mut(&mut self) -> Option<NetMut<'_>> {
+        match self {
+            Self::Uninit(..) => unreachable!(),
+            Self::Gossip { gossip } => gossip.as_mut().map(NetMut::Gossip),
+            Self::Network { network, .. } => Some(NetMut::Network(network.as_mut().unwrap())),
+        }
     }
 }
 
@@ -146,13 +179,13 @@ impl HatBaseTrait for Hat {
         let config_guard = runtime.config().lock();
         let config = &config_guard;
         let whatami = config.mode();
-        let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
-        let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
+        let is_gossip_enabled = unwrap_or_default!(config.scouting().gossip().enabled());
+        let is_gossip_multihop_enabled = unwrap_or_default!(config.scouting().gossip().multihop());
         let gossip_target = *unwrap_or_default!(config.scouting().gossip().target().get(whatami));
         if gossip_target.matches(WhatAmI::Client) {
             bail!("\"client\" is not allowed as gossip target")
         }
-        let autoconnect = if gossip {
+        let autoconnect = if is_gossip_enabled {
             AutoConnect::gossip(config, whatami, runtime.zid().into())
         } else {
             AutoConnect::disabled()
@@ -160,19 +193,69 @@ impl HatBaseTrait for Hat {
         let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
         drop(config_guard);
 
-        if gossip {
-            self.gossip = Some(Gossip::new(
-                "[Gossip]".to_string(),
-                tables.zid,
-                runtime,
-                gossip,
-                gossip_multihop,
-                gossip_target,
-                autoconnect,
-                wait_declares,
-                self.region().bound(),
-            ));
+        let Self::Uninit(region) = *self else {
+            unreachable!()
+        };
+
+        const NAME: &str = "[Gossip]";
+
+        match region.bound() {
+            Bound::North => {
+                if is_gossip_enabled {
+                    if is_gossip_multihop_enabled {
+                        *self = Self::Network {
+                            region,
+                            network: Some(Network::new(
+                                NAME.to_string(),
+                                tables.zid,
+                                runtime,
+                                false,
+                                is_gossip_enabled,
+                                is_gossip_multihop_enabled,
+                                gossip_target,
+                                autoconnect,
+                                HashMap::new(),
+                                Bound::North,
+                            )),
+                        };
+                    } else {
+                        *self = Self::Gossip {
+                            gossip: Some(Gossip::new(
+                                NAME.to_string(),
+                                tables.zid,
+                                runtime,
+                                gossip_target,
+                                autoconnect,
+                                wait_declares,
+                            )),
+                        };
+                    }
+                } else {
+                    tracing::warn!(
+                        "Gossip is disabled: cannot de-duplicate data traversing region gateways"
+                    );
+                    *self = Self::Gossip { gossip: None };
+                }
+            }
+            Bound::South => {
+                *self = Self::Network {
+                    region,
+                    network: Some(Network::new(
+                        NAME.to_string(),
+                        tables.zid,
+                        runtime,
+                        true,
+                        is_gossip_enabled,
+                        is_gossip_multihop_enabled,
+                        gossip_target,
+                        autoconnect,
+                        HashMap::new(),
+                        Bound::South,
+                    )),
+                };
+            }
         }
+
         Ok(())
     }
 
@@ -205,8 +288,8 @@ impl HatBaseTrait for Hat {
     ) -> ZResult<()> {
         debug_assert!(self.owns(ctx.src_face));
 
-        if let Some(net) = self.gossip.as_mut() {
-            net.add_link(transport.clone());
+        if let Some(net) = self.net_mut() {
+            net.add_link(transport.clone(), ctx.src_face.remote_bound);
         }
 
         // NOTE(regions): we only send/recv initial interests between peers that are mutually north-bound,
@@ -252,7 +335,7 @@ impl HatBaseTrait for Hat {
 
         let mut face_clone = ctx.src_face.clone();
         let face = get_mut_unchecked(&mut face_clone);
-        let hat_face = match face.hats[self.region].downcast_mut::<HatFace>() {
+        let hat_face = match face.hats[self.region()].downcast_mut::<HatFace>() {
             Some(hate_face) => hate_face,
             None => {
                 tracing::error!("Error downcasting face hat in close_face!");
@@ -265,7 +348,7 @@ impl HatBaseTrait for Hat {
         hat_face.local_qabls.clear();
         hat_face.local_tokens.clear();
 
-        if let Some(net) = self.gossip.as_mut() {
+        if let Some(net) = self.net_mut() {
             net.remove_link(&face.zid);
         }
     }
@@ -286,7 +369,7 @@ impl HatBaseTrait for Hat {
             );
 
             if let ZExtBody::ZBuf(buf) = mem::take(&mut oam.body) {
-                if let Some(net) = self.gossip.as_mut() {
+                if let Some(net) = self.net_mut() {
                     use zenoh_buffers::reader::HasReader;
                     use zenoh_codec::RCodec;
                     let codec = Zenoh080Routing::new();
@@ -333,7 +416,7 @@ impl HatBaseTrait for Hat {
     }
 
     fn info(&self) -> String {
-        self.gossip
+        self.net()
             .as_ref()
             .map(|net| net.dot())
             .unwrap_or_else(|| "graph {}".to_string())
@@ -352,25 +435,49 @@ impl HatBaseTrait for Hat {
     }
 
     fn region(&self) -> Region {
-        self.region
+        match self {
+            Self::Uninit(..) => unreachable!(),
+            Self::Gossip { .. } => Region::North,
+            Self::Network { region, .. } => *region,
+        }
     }
 
-    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
         debug_assert_eq!(node_id, DEFAULT_NODE_ID);
 
         Some(src.zid)
     }
 
     #[tracing::instrument(level = "trace", skip(_tables), ret)]
-    fn region_gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
-        let Some(gossip) = self.gossip.as_ref() else {
-            tracing::error!(
-                "Gossip is disabled: cannot de-duplicate data traversing region gateways"
-            );
+    fn gateways_of(&self, _tables: &TablesData, zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
+        debug_assert!(self.region().bound().is_south());
+
+        let Self::Network {
+            network: Some(net), ..
+        } = self
+        else {
+            bug!("Invalid peer hat");
             return None;
         };
 
-        Some(gossip.region_gateways())
+        tracing::info!(net = ?net.graph
+            .node_weights()
+            .map(|n| (&n.zid, &n.is_gateway, &n.whatami, &n.links))
+            .collect_vec());
+
+        let links = net
+            .graph
+            .node_weights()
+            .find(|n| &n.zid == zid)
+            .map(|n| &n.links)?;
+
+        let gwys = net
+            .graph
+            .node_weights()
+            .filter_map(|n| (n.is_gateway && links.contains_key(&n.zid)).then_some(n.zid))
+            .collect_vec();
+
+        Some(gwys)
     }
 }
 
@@ -422,3 +529,54 @@ fn initial_interest(face: &FaceState) -> Option<&InterestState> {
 }
 
 type HatRemote = Arc<FaceState>;
+
+pub(crate) enum Net<'a> {
+    Gossip(&'a Gossip),
+    Network(&'a Network),
+}
+
+impl Net<'_> {
+    pub(crate) fn dot(&self) -> String {
+        match self {
+            Self::Gossip(n) => n.dot(),
+            Self::Network(n) => n.dot(),
+        }
+    }
+}
+
+pub(crate) enum NetMut<'a> {
+    Gossip(&'a mut Gossip),
+    Network(&'a mut Network),
+}
+
+impl NetMut<'_> {
+    pub(crate) fn add_link(self, transport: TransportUnicast, remote_bound: Bound) -> usize {
+        match self {
+            Self::Gossip(n) => n.add_link(transport, remote_bound),
+            Self::Network(n) => n.add_link(transport),
+        }
+    }
+
+    pub(crate) fn remove_link(self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
+        match self {
+            Self::Gossip(n) => n.remove_link(zid),
+            Self::Network(n) => n.remove_link(zid),
+        }
+    }
+
+    pub(crate) fn link_states(
+        self,
+        link_states: Vec<LinkState>,
+        src: ZenohIdProto,
+        src_whatami: WhatAmI,
+    ) {
+        match self {
+            Self::Gossip(n) => {
+                n.link_states(link_states, src, src_whatami);
+            }
+            Self::Network(n) => {
+                n.link_states(link_states, src);
+            }
+        }
+    }
+}

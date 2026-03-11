@@ -308,14 +308,8 @@ impl Face {
                             region,
                         );
 
-                        let src_zid = rtables.hats[self.state.region].node_id_to_zid(
-                            &self.state,
-                            rtables.hats[self.state.region].map_routing_context(
-                                &rtables.data,
-                                &self.state,
-                                msg.ext_nodeid.node_id,
-                            ),
-                        );
+                        let src_zid = rtables.hats[self.state.region]
+                            .remote_node_id_to_zid(&self.state, msg.ext_nodeid.node_id);
 
                         compute_final_route(
                             &rtables,
@@ -433,10 +427,14 @@ fn compute_final_route(
 ) {
     match target {
         QueryTarget::All => {
-            for qabl in qabls
-                .iter()
-                .filter(|q| tables.inter_region_filter(&src_face.region, &q.region, src_zid))
-            {
+            for qabl in qabls.iter().filter(|q| {
+                tables.inter_region_filter(
+                    &src_face.region,
+                    &q.region,
+                    src_zid,
+                    &q.dir.dst_face.zid,
+                )
+            }) {
                 if tables.hats[qabl.region].egress_filter(
                     &tables.data,
                     src_face,
@@ -459,10 +457,14 @@ fn compute_final_route(
             }
         }
         QueryTarget::AllComplete => {
-            for qabl in qabls
-                .iter()
-                .filter(|q| tables.inter_region_filter(&src_face.region, &q.region, src_zid))
-            {
+            for qabl in qabls.iter().filter(|q| {
+                tables.inter_region_filter(
+                    &src_face.region,
+                    &q.region,
+                    src_zid,
+                    &q.dir.dst_face.zid,
+                )
+            }) {
                 if qabl.info.map(|info| info.complete).unwrap_or(true)
                     && tables.hats[qabl.region].egress_filter(
                         &tables.data,
@@ -490,7 +492,12 @@ fn compute_final_route(
             if let Some(qabl) = qabls.iter().find(|q| {
                 q.dir.dst_face.id != src_face.id
                     && q.info.is_some_and(|info| info.complete)
-                    && tables.inter_region_filter(&src_face.region, &q.region, src_zid)
+                    && tables.inter_region_filter(
+                        &src_face.region,
+                        &q.region,
+                        src_zid,
+                        &q.dir.dst_face.zid,
+                    )
             }) {
                 route.insert(qabl.dir.dst_face.id, || {
                     let mut dir = qabl.dir.clone();

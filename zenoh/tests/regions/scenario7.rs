@@ -18,6 +18,7 @@
 
 use std::time::Duration;
 
+use futures::StreamExt;
 use predicates::Predicate;
 use zenoh::{
     query::{ConsolidationMode, QueryTarget},
@@ -52,7 +53,7 @@ async fn test_regions_scenario7_order1_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.1.1:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "71aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "71aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.1:9100")
         .open());
@@ -60,7 +61,7 @@ async fn test_regions_scenario7_order1_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.1:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "71aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "71aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.1.1:9200")
         .open());
@@ -68,7 +69,7 @@ async fn test_regions_scenario7_order1_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.1:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "71aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "71aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.1:9300")
         .open());
@@ -113,6 +114,31 @@ async fn test_regions_scenario7_order1_putsub() {
         let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+    }
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
     }
 
     ztimeout!(async {
@@ -168,7 +194,7 @@ async fn test_regions_scenario7_order1_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.1.2:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "71ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "71ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.2:9100")
         .open());
@@ -176,7 +202,7 @@ async fn test_regions_scenario7_order1_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.2:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "71ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "71ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.1.2:9200")
         .open());
@@ -184,7 +210,7 @@ async fn test_regions_scenario7_order1_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.2:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "71ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "71ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.2:9300")
         .open());
@@ -241,6 +267,31 @@ async fn test_regions_scenario7_order1_pubsub() {
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
 
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
+
     ztimeout!(async {
         loop {
             p9110.put("9110").await.unwrap();
@@ -281,7 +332,7 @@ async fn test_regions_scenario7_order1_pubsub() {
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -294,7 +345,7 @@ async fn test_regions_scenario7_order1_getque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.1.3:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "71ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "71ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.3:9100")
         .open());
@@ -302,7 +353,7 @@ async fn test_regions_scenario7_order1_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.3:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "71ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "71ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.1.3:9200")
         .open());
@@ -310,7 +361,7 @@ async fn test_regions_scenario7_order1_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.3:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "71ac9301")
+    let z9301 = ztimeout!(Node::new(Router, "71ac9301")
         .endpoints("tcp/0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.3:9300")
         .open());
@@ -355,6 +406,31 @@ async fn test_regions_scenario7_order1_getque() {
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
     }
 
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
+
     skip_fmt! {ztimeout!(async {
         loop {
             if z9110.get("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap().iter().count() == 9
@@ -396,7 +472,7 @@ async fn test_regions_scenario7_order1_queque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.1.4:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "71ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "71ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.4:9100")
         .open());
@@ -404,7 +480,7 @@ async fn test_regions_scenario7_order1_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.1.4:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "71ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "71ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.1.4:9200")
         .open());
@@ -412,7 +488,7 @@ async fn test_regions_scenario7_order1_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.4:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "71ad9301")
+    let z9301 = ztimeout!(Node::new(Router, "71ad9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.4:9300")
         .open());
@@ -467,6 +543,31 @@ async fn test_regions_scenario7_order1_queque() {
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
     }
 
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
+
     ztimeout!(async {
         loop {
             if q9110.get().await.unwrap().iter().count() == 9
@@ -495,7 +596,7 @@ async fn test_regions_scenario7_order1_queque() {
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -672,7 +773,7 @@ async fn test_regions_scenario7_order2_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.2.1:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "72aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "72aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.1:9100")
         .open());
@@ -680,7 +781,7 @@ async fn test_regions_scenario7_order2_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.1:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "72aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "72aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.2.1:9200")
         .open());
@@ -688,10 +789,35 @@ async fn test_regions_scenario7_order2_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.1:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "72aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "72aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.1:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -798,7 +924,7 @@ async fn test_regions_scenario7_order2_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.2.2:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "72ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "72ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.2:9100")
         .open());
@@ -806,7 +932,7 @@ async fn test_regions_scenario7_order2_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.2:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "72ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "72ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.2.2:9200")
         .open());
@@ -814,10 +940,35 @@ async fn test_regions_scenario7_order2_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.2:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "72ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "72ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.2:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -859,7 +1010,7 @@ async fn test_regions_scenario7_order2_pubsub() {
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -912,7 +1063,7 @@ async fn test_regions_scenario7_order2_getque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.2.3:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "72ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "72ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.3:9100")
         .open());
@@ -920,7 +1071,7 @@ async fn test_regions_scenario7_order2_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.3:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "72ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "72ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.2.3:9200")
         .open());
@@ -928,10 +1079,35 @@ async fn test_regions_scenario7_order2_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.3:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "72ac9301")
+    let z9301 = ztimeout!(Node::new(Router, "72ac9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.3:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     skip_fmt! {ztimeout!(async {
         loop {
@@ -1024,7 +1200,7 @@ async fn test_regions_scenario7_order2_queque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.2.4:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "72ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "72ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.4:9100")
         .open());
@@ -1032,7 +1208,7 @@ async fn test_regions_scenario7_order2_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.2.4:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "72ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "72ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.2.4:9200")
         .open());
@@ -1040,10 +1216,35 @@ async fn test_regions_scenario7_order2_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.4:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "72ad9301")
+    let z9301 = ztimeout!(Node::new(Router, "72ad9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.2.4:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -1073,7 +1274,7 @@ async fn test_regions_scenario7_order2_queque() {
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -1208,7 +1409,7 @@ async fn test_regions_scenario7_order3_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.3.1:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "73aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "73aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.1:9100")
         .open());
@@ -1216,7 +1417,7 @@ async fn test_regions_scenario7_order3_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.1:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "73aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "73aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.3.1:9200")
         .open());
@@ -1267,10 +1468,35 @@ async fn test_regions_scenario7_order3_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.1:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "73aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "73aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.1:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -1325,7 +1551,7 @@ async fn test_regions_scenario7_order3_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.3.2:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "73ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "73ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.2:9100")
         .open());
@@ -1333,7 +1559,7 @@ async fn test_regions_scenario7_order3_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.2:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "73ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "73ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.3.2:9200")
         .open());
@@ -1394,10 +1620,35 @@ async fn test_regions_scenario7_order3_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.2:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "73ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "73ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.2:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -1439,7 +1690,7 @@ async fn test_regions_scenario7_order3_pubsub() {
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -1452,7 +1703,7 @@ async fn test_regions_scenario7_order3_getque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.3.3:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "73ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "73ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.3:9100")
         .open());
@@ -1460,7 +1711,7 @@ async fn test_regions_scenario7_order3_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.3:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "73ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "73ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.3.3:9200")
         .open());
@@ -1509,10 +1760,35 @@ async fn test_regions_scenario7_order3_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.3:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "73ac9301")
+    let z9301 = ztimeout!(Node::new(Router, "73ac9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.3:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     skip_fmt! {ztimeout!(async {
         loop {
@@ -1555,7 +1831,7 @@ async fn test_regions_scenario7_order3_queque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.3.4:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "73ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "73ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.4:9100")
         .open());
@@ -1563,7 +1839,7 @@ async fn test_regions_scenario7_order3_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.3.4:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "73ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "73ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.3.4:9200")
         .open());
@@ -1622,10 +1898,35 @@ async fn test_regions_scenario7_order3_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.4:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "73ad9301")
+    let z9301 = ztimeout!(Node::new(Router, "73ad9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.3.4:9300")
         .open());
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -1655,7 +1956,7 @@ async fn test_regions_scenario7_order3_queque() {
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -1791,7 +2092,7 @@ async fn test_regions_scenario7_order4_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.4.1:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "74aa9101")
+    let z9101 = ztimeout!(Node::new(Router, "74aa9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.1:9100")
         .open());
@@ -1799,7 +2100,7 @@ async fn test_regions_scenario7_order4_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.1:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "74aa9201")
+    let z9201 = ztimeout!(Node::new(Router, "74aa9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.4.1:9200")
         .open());
@@ -1837,7 +2138,7 @@ async fn test_regions_scenario7_order4_putsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.1:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "74aa9301")
+    let z9301 = ztimeout!(Node::new(Router, "74aa9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.1:9300")
         .open());
@@ -1856,6 +2157,31 @@ async fn test_regions_scenario7_order4_putsub() {
         let s9310 = z9310.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9320 = z9320.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
         let s9330 = z9330.declare_subscriber("test").with(unbounded_sink()).await.unwrap();
+    }
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
     }
 
     ztimeout!(async {
@@ -1911,7 +2237,7 @@ async fn test_regions_scenario7_order4_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.4.2:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "74ab9101")
+    let z9101 = ztimeout!(Node::new(Router, "74ab9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.2:9100")
         .open());
@@ -1919,7 +2245,7 @@ async fn test_regions_scenario7_order4_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.2:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "74ab9201")
+    let z9201 = ztimeout!(Node::new(Router, "74ab9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.4.2:9200")
         .open());
@@ -1964,7 +2290,7 @@ async fn test_regions_scenario7_order4_pubsub() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.2:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "74ab9301")
+    let z9301 = ztimeout!(Node::new(Router, "74ab9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.2:9300")
         .open());
@@ -1988,6 +2314,31 @@ async fn test_regions_scenario7_order4_pubsub() {
     let p9310 = z9310.declare_publisher("test").await.unwrap();
     let p9320 = z9320.declare_publisher("test").await.unwrap();
     let p9330 = z9330.declare_publisher("test").await.unwrap();
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
+    }
 
     ztimeout!(async {
         loop {
@@ -2029,7 +2380,7 @@ async fn test_regions_scenario7_order4_pubsub() {
             s.all_events()
                 .filter(|e| predicates_ext::register_subscriber(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }
@@ -2042,7 +2393,7 @@ async fn test_regions_scenario7_order4_getque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.4.3:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "74ac9101")
+    let z9101 = ztimeout!(Node::new(Router, "74ac9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.3:9100")
         .open());
@@ -2050,7 +2401,7 @@ async fn test_regions_scenario7_order4_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.3:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "74ac9201")
+    let z9201 = ztimeout!(Node::new(Router, "74ac9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.4.3:9200")
         .open());
@@ -2087,7 +2438,7 @@ async fn test_regions_scenario7_order4_getque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.3:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "74ac9301")
+    let z9301 = ztimeout!(Node::new(Router, "74ac9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.3:9300")
         .open());
@@ -2106,6 +2457,31 @@ async fn test_regions_scenario7_order4_getque() {
         let _q9310 = z9310.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9310")).unwrap()).await.unwrap();
         let _q9320 = z9320.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9320")).unwrap()).await.unwrap();
         let _q9330 = z9330.declare_queryable("test").callback(|q| Wait::wait(q.reply("test", "9330")).unwrap()).await.unwrap();
+    }
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
     }
 
     skip_fmt! {ztimeout!(async {
@@ -2149,7 +2525,7 @@ async fn test_regions_scenario7_order4_queque() {
         .endpoints("tcp/0.0.0.0:0", &[])
         .multicast("224.7.4.4:9100")
         .open());
-    let _z9101 = ztimeout!(Node::new(Router, "74ad9101")
+    let z9101 = ztimeout!(Node::new(Router, "74ad9101")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.4:9100")
         .open());
@@ -2157,7 +2533,7 @@ async fn test_regions_scenario7_order4_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100)])
         .multicast("224.7.4.4:9200")
         .open());
-    let _z9201 = ztimeout!(Node::new(Router, "74ad9201")
+    let z9201 = ztimeout!(Node::new(Router, "74ad9201")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9200), loc!(z9100)])
         .multicast("224.7.4.4:9200")
         .open());
@@ -2201,7 +2577,7 @@ async fn test_regions_scenario7_order4_queque() {
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.4:9300")
         .open());
-    let _z9301 = ztimeout!(Node::new(Router, "74ad9301")
+    let z9301 = ztimeout!(Node::new(Router, "74ad9301")
         .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.4.4:9300")
         .open());
@@ -2224,6 +2600,31 @@ async fn test_regions_scenario7_order4_queque() {
         let q9310 = z9310.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
         let q9320 = z9320.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
         let q9330 = z9330.declare_querier("test").target(QueryTarget::All).consolidation(ConsolidationMode::None).await.unwrap();
+    }
+
+    for z in [&z9100, &z9101, &z9200, &z9201, &z9300, &z9301] {
+        let listener = z
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
+
+        let mut n = 0;
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            if event.transport().whatami().is_peer() {
+                n += 1;
+            }
+
+            assert!(n <= 3);
+
+            if n == 3 {
+                break;
+            }
+        }
     }
 
     ztimeout!(async {
@@ -2254,7 +2655,7 @@ async fn test_regions_scenario7_order4_queque() {
             s.all_events()
                 .filter(|e| predicates_ext::register_queryable(zid, "test").eval(e))
                 .count(),
-            3
+            4
         );
     }
 }

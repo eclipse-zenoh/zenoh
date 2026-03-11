@@ -310,10 +310,7 @@ pub fn route_data(
     let mut builder = RouteBuilder::<Direction>::new();
 
     let region = face.region;
-    let src_zid = rtables.hats[region].node_id_to_zid(
-        face,
-        rtables.hats[region].map_routing_context(&rtables.data, face, msg.ext_nodeid.node_id),
-    );
+    let src_zid = rtables.hats[region].remote_node_id_to_zid(face, msg.ext_nodeid.node_id);
 
     for (region, hat) in rtables.hats.iter() {
         if hat.ingress_filter(&rtables.data, face, &expr) {
@@ -321,8 +318,12 @@ pub fn route_data(
 
             for dir in route.iter() {
                 // TODO(regions): cache result by inputs?
-                if rtables.inter_region_filter(&face.region, &dir.dst_face.region, src_zid.as_ref())
-                    && hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr)
+                if rtables.inter_region_filter(
+                    &face.region,
+                    &dir.dst_face.region,
+                    src_zid.as_ref(),
+                    &dir.dst_face.zid,
+                ) && hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr)
                 {
                     builder.insert(dir.dst_face.id, || dir.clone());
                 }

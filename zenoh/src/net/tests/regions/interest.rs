@@ -116,3 +116,53 @@ fn test_current_token_propagation() {
         ]
     );
 }
+
+/// Concurrent current-future interest in two-region hierarchies.
+///
+/// ```d2
+/// shape: sequence_diagram
+///
+/// S -> G: Open
+///
+/// S -> G.x1: Interest id=X mode=CF
+/// G.x1 -> S: DeclareFinal iid=X
+///
+/// G -> N: Open
+///
+/// G -> N: Interest id=X' mode=CF
+///
+/// S -> G.x3: Interest id=Y mode=C
+/// G.x3 -> N: Interest id=Y' mode=CF
+///
+/// N -> G.x2: Declare iid=X'
+/// G.x2 -> NS Declare iid=None
+///
+/// N -> G.x4: Declare iid=Y'
+/// G.x4 -> S: Declare iid=Y
+/// G.x4 -> S: DeclareFinal iid=Y
+/// ```
+///
+/// From the perspective of G, declaration w/ interest id SHOULD not imply the existence of a
+/// breadcrumb. This observation led to a correction of the previous model where token declarations
+/// with interest set where expected to correspond to a pending current interest. This fix is
+/// codified into the `RouteCurrentEntityResult` data structure.
+#[ignore]
+#[test]
+fn test_concurrent_cf_interests() {
+    const S: Region = Region::default_south(WhatAmI::Peer);
+
+    let g = Harness::with_subregions_noruntime(
+        WhatAmI::default(),
+        [S], // TODO(regions): make test cases for all south modes.
+    );
+
+    let _n = g.new_face(
+        FaceConfig::default()
+            .mode(WhatAmI::default())
+            .remote_bound(Bound::South),
+    );
+
+    let _s = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S));
+
+    todo!()
+}

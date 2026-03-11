@@ -70,6 +70,7 @@ impl Node {
             .unwrap();
         c.insert_json5("adminspace/enabled", "true").unwrap();
         c.insert_json5("timestamping/enabled", "true").unwrap();
+        // c.insert_json5("scouting/gossip/multihop", "true").unwrap();
         Node { c }
     }
 

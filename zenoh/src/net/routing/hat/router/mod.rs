@@ -538,19 +538,24 @@ impl HatBaseTrait for Hat {
         self.region
     }
 
-    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto> {
         self.get_router(src, node_id)
     }
 
     #[tracing::instrument(level = "trace", skip(_tables), ret)]
-    fn region_gateways(&self, _tables: &TablesData) -> Option<Vec<ZenohIdProto>> {
-        Some(
-            self.net()
-                .graph
-                .node_weights()
-                .filter_map(|n| n.is_gateway.then_some(n.zid))
-                .collect_vec(),
-        )
+    fn gateways_of(&self, _tables: &TablesData, zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>> {
+        debug_assert!(self.region().bound().is_south());
+
+        let node = self.net().graph.node_weights().find(|n| &n.zid == zid)?;
+
+        let gwys = self
+            .net()
+            .graph
+            .node_weights()
+            .filter_map(|n| (n.is_gateway && node.links.contains_key(&n.zid)).then_some(n.zid))
+            .collect_vec();
+
+        Some(gwys)
     }
 }
 

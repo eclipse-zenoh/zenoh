@@ -288,13 +288,14 @@ pub struct Tables {
 }
 
 impl Tables {
-    /// Returns `false` if a `Push` or `Request` should be filtered out if routed from `src` to `dst`.
+    /// Returns `false` if a `Push` or `Request` should be filtered out when routed from `src` to `dst`.
     #[tracing::instrument(level = "trace", skip(self), ret)]
     pub(crate) fn inter_region_filter(
         &self,
         src: &Region,
         dst: &Region,
         src_zid: Option<&ZenohIdProto>,
+        dst_zid: &ZenohIdProto,
     ) -> bool {
         if src.bound() == dst.bound() {
             // NOTE(regions): only messages traveling downstream/upstream need filtering, i.e. in
@@ -302,26 +303,34 @@ impl Tables {
             return true;
         }
 
+        let Some(src_zid) = src_zid else {
+            bug!("Unknown source ZID");
+            return true;
+        };
+
         let gwys = match src.bound() {
-            Bound::North => self.hats[*dst].region_gateways(&self.data),
-            Bound::South => self.hats[*src].region_gateways(&self.data),
+            Bound::North => self.hats[*dst].gateways_of(&self.data, dst_zid),
+            Bound::South => self.hats[*src].gateways_of(&self.data, src_zid),
         };
 
         let Some(gwys) = gwys else {
-            tracing::debug!("Could not compute region gateways");
+            // TODO(regions): HashSet
             return true;
         };
 
-        debug_assert!(gwys.contains(&self.data.zid));
+        // HACK(regions): this has the effect of filtering out messages originating from a router
+        // subregion from being re-routed to the north (router) region. As the router linkstate
+        // protocol is unimplemented, our hand is forced.
+        if gwys.contains(src_zid) {
+            tracing::info!(?src_zid, ?dst_zid, ?src, ?dst, ?gwys, "BINGO");
+            return false;
+        }
 
-        let Some(src_zid) = src_zid else {
-            bug!("Unknown src zid");
-            return true;
-        };
+        // debug_assert!(gwys.contains(&self.data.zid));
 
         let hash = |gwy: &ZenohIdProto| {
             let mut hasher = ahash::AHasher::default();
-            hasher.write(&src_zid.to_le_bytes());
+            // hasher.write(&src_zid.to_le_bytes());
             hasher.write(&gwy.to_le_bytes());
             hasher.finish()
         };
@@ -331,7 +340,7 @@ impl Tables {
             .max_by(|lhs, rhs| hash(lhs).cmp(&hash(rhs)))
             .copied()
         else {
-            bug!("Empty region gateways list");
+            // bug!("Empty region gateways list");
             return true;
         };
 

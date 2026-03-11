@@ -250,10 +250,10 @@ pub(crate) trait HatBaseTrait: Any {
     fn region(&self) -> Region;
 
     /// Converts a message source [`NodeId`] and its source [`FaceState`] into the source [`ZenohIdProto`].
-    fn node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto>;
+    fn remote_node_id_to_zid(&self, src: &FaceState, node_id: NodeId) -> Option<ZenohIdProto>;
 
-    /// Returns the list of [`Self::region`]'s gateways.
-    fn region_gateways(&self, tables: &TablesData) -> Option<Vec<ZenohIdProto>>;
+    /// Returns the list of `zid`'s gateways. Assumes the hat is south-bound.
+    fn gateways_of(&self, tables: &TablesData, zid: &ZenohIdProto) -> Option<Vec<ZenohIdProto>>;
 
     /// Returns `true` if `face` belongs to this [`Hat`].
     fn owns(&self, face: &FaceState) -> bool {

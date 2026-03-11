@@ -62,7 +62,7 @@ fn test_p2p_inter_subregion_data_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
     let p0 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S1));
     let p1 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S2));
@@ -94,7 +94,7 @@ fn test_p2p_inter_subregion_query_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
     let p0 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S1));
     let p1 = g.new_face(FaceConfig::default().mode(WhatAmI::Peer).region(S2));
@@ -250,7 +250,7 @@ fn test_c2c_inter_subregion_data_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
     let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
     let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
@@ -282,7 +282,7 @@ fn test_c2c_inter_subregion_query_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = Harness::with_subregions_noruntime(WhatAmI::default(), [S1, S2]);
+    let g = Harness::with_subregions(WhatAmI::default(), [S1, S2]);
 
     let c0 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S1));
     let c1 = g.new_face(FaceConfig::default().mode(WhatAmI::Client).region(S2));
@@ -451,10 +451,18 @@ fn multiple_gateways_query_routing_r2p_downstream() {
 fn multiple_gateways_data_routing_r2r_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let g1 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
-    let s = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let g0 = Harness::with_subregions2(
+        "a0".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router)],
+    );
+    let g1 = Harness::with_subregions2(
+        "a1".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Router)],
+    );
+    let n = Harness::with_subregions2("a".parse().unwrap(), WhatAmI::Router, [Region::Local]);
+    let s = Harness::with_subregions2("b".parse().unwrap(), WhatAmI::Router, [Region::Local]);
 
     let ss = s.new_session();
     let ns = n.new_session();
@@ -1581,4 +1589,52 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
     assert!(g0_g1.is_bi_complete());
+}
+
+#[test]
+fn tmp() {
+    try_init_tracing_subscriber();
+
+    let g0 = Harness::with_subregions2(
+        "a0".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Peer)],
+    );
+    let g1 = Harness::with_subregions2(
+        "a1".parse().unwrap(),
+        WhatAmI::Router,
+        [Region::default_south(WhatAmI::Peer)],
+    );
+    let p = Harness::with_subregions2("b".parse().unwrap(), WhatAmI::Peer, [Region::Local]);
+
+    let mut p_g0 = Connection {
+        a: &p,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g0,
+        ba: FaceConfig::default()
+            .mode(WhatAmI::Peer)
+            .region(Region::default_south(WhatAmI::Peer)),
+    }
+    .establish();
+
+    let mut p_g1 = Connection {
+        a: &p,
+        ab: FaceConfig::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b: &g1,
+        ba: FaceConfig::default()
+            .mode(WhatAmI::Peer)
+            .region(Region::default_south(WhatAmI::Peer)),
+    }
+    .establish();
+
+    let mut bi_fwd_all = || EstablishedConnection::bi_fwd_many_unbounded([&mut p_g0, &mut p_g1]);
+
+    bi_fwd_all();
+
+    assert!(p_g0.is_bi_complete());
+    assert!(p_g1.is_bi_complete());
 }
