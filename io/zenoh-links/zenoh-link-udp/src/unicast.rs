@@ -522,16 +522,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                 zerror!("Failed to parse reliability config for UDP endpoint '{endpoint}': {e:?}")
             })?;
         if is_reliable {
-            let (quic_link, src_addr, dst_addr) =
-                LinkUnicastQuicUnsecure::connect(&endpoint).await?;
-            let link = LinkUnicastUdp::new(
-                src_addr,
-                dst_addr,
-                LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
-            );
-            Ok(LinkUnicast::from(
-                Arc::new(link) as Arc<dyn LinkUnicastTrait>
-            ))
+            LinkUnicastQuicUnsecure::connect(&endpoint).await
         } else {
             self.new_udp_link(endpoint).await
         }

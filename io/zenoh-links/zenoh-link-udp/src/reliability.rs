@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use zenoh_core::zerror;
 use zenoh_link_commons::{
@@ -19,8 +19,9 @@ use zenoh_link_commons::{
         QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicConnection, QuicLinkMaterial,
         QuicServer, QuicServerBuilder, QuicStreams,
     },
-    LinkUnicast, LinkUnicastTrait,
+    LinkAuthId, LinkUnicast, LinkUnicastTrait,
 };
+use zenoh_link_quic_datagram::LinkUnicastQuicDatagram;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
     transport::BatchSize,
@@ -29,6 +30,7 @@ use zenoh_result::ZResult;
 
 use crate::{
     LinkManagerUnicastUdp, LinkUnicastUdp, LinkUnicastUdpVariant, UDP_ACCEPT_THROTTLE_TIME,
+    UDP_LOCATOR_PREFIX,
 };
 
 pub(crate) struct LinkUnicastQuicUnsecure {
@@ -37,26 +39,41 @@ pub(crate) struct LinkUnicastQuicUnsecure {
 }
 
 impl LinkUnicastQuicUnsecure {
-    pub(crate) async fn connect(
-        endpoint: &EndPoint,
-    ) -> ZResult<(LinkUnicastQuicUnsecure, SocketAddr, SocketAddr)> {
+    pub(crate) async fn connect(endpoint: &EndPoint) -> ZResult<LinkUnicast> {
         let QuicClient {
             quic_conn,
             streams,
             src_addr,
             dst_addr,
-            is_mixed_rel: _,
+            is_mixed_rel,
             tls_close_link_on_expiration: _,
         } = QuicClientBuilder::new(endpoint).security(false).await?;
         let streams = streams.expect("QUIC streams should be initialized");
-        Ok((
-            Self {
-                connection: quic_conn,
-                streams,
-            },
+        let quic_link = Self {
+            connection: quic_conn.clone(),
+            streams,
+        };
+        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUdp::new(
             src_addr,
             dst_addr,
-        ))
+            LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
+        ));
+        if is_mixed_rel {
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+                quic_conn,
+                src_addr,
+                endpoint.clone().into(),
+                LinkAuthId::Udp,
+                UDP_LOCATOR_PREFIX,
+                None,
+            ));
+            Ok(LinkUnicast(zenoh_link_commons::NewLink::MixedReliability {
+                reliable: link,
+                best_effort,
+            }))
+        } else {
+            Ok(LinkUnicast::from(link))
+        }
     }
 
     pub(crate) async fn listen(
@@ -157,18 +174,40 @@ impl LinkUnicastQuicUnsecure {
     }
 
     fn make_link(quic_link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
+        let QuicLinkMaterial {
+            quic_conn,
+            src_addr,
+            dst_addr,
+            streams,
+            is_mixed_rel,
+            tls_close_link_on_expiration: _,
+        } = quic_link_material;
         let quic_link = Self {
-            connection: quic_link_material.quic_conn,
-            streams: quic_link_material
-                .streams
-                .expect("QUIC streams should be initialized"),
+            connection: quic_conn.clone(),
+            streams: streams.expect("QUIC streams should be initialized"),
         };
         let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUdp::new(
-            quic_link_material.src_addr,
-            quic_link_material.dst_addr,
+            src_addr,
+            dst_addr,
             LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
         ));
-        Ok(LinkUnicast::from(link))
+        if is_mixed_rel {
+            let dst_locator = Locator::new(UDP_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+                quic_conn,
+                src_addr,
+                dst_locator,
+                LinkAuthId::Udp,
+                UDP_LOCATOR_PREFIX,
+                None,
+            ));
+            Ok(LinkUnicast(zenoh_link_commons::NewLink::MixedReliability {
+                reliable: link,
+                best_effort,
+            }))
+        } else {
+            Ok(LinkUnicast::from(link))
+        }
     }
 }
 
