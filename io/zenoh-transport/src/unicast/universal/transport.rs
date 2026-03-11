@@ -432,7 +432,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 /// following:
 /// - Evaluate multilink limit by considering each link association as a single link
 /// - Expose a read-only view on links that mixes associations in the same set (as if they were
-/// seperate links) for message scheduling based on QoS
+/// separate links) for message scheduling based on QoS
 #[derive(Default)]
 pub(super) struct TransportLinks {
     inner: Box<[TransportLinkUnicastUniversal]>,
