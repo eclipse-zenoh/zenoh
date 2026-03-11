@@ -105,7 +105,7 @@ impl Face {
 
                 hats[region].disable_data_routes(ctx.tables, &mut res);
 
-                for region in hats.regions().copied().collect_vec() {
+                for region in hats.regions().collect_vec() {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -285,7 +285,7 @@ fn get_data_route(
         let mut builder = RouteBuilder::<Direction>::new();
 
         for (region, _) in tables.hats.iter() {
-            let route = get_hat_data_route(tables, src_face, expr, node_id, region);
+            let route = get_hat_data_route(tables, src_face, expr, node_id, &region);
 
             for dir in route.iter() {
                 builder.insert(dir.dst_face.id, || dir.clone());

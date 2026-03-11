@@ -392,7 +392,7 @@ impl HatBaseTrait for Hat {
                     let remaining = hats
                         .iter()
                         .filter_map(|(rgn, hat)| {
-                            hat.remote_queryables_of(&res).map(|info| (*rgn, info))
+                            hat.remote_queryables_of(&res).map(|info| (rgn, info))
                         })
                         .collect_vec();
 

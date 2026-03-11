@@ -40,6 +40,10 @@ pub struct ChunkHeaderType {
     len: AtomicUsize,
 }
 
+// SAFETY: all fields are atomic types which are Send
+// This prevents the Rust trait solver to out of recursion budget
+unsafe impl Send for ChunkHeaderType {}
+
 impl ChunkHeaderType {
     pub fn len(&self) -> NonZeroUsize {
         // SAFETY: this is safe because Write access to self.len is available only from set_data_descriptor

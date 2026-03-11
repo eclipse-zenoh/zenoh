@@ -129,7 +129,7 @@ impl Face {
 
                 hats[region].disable_query_routes(ctx.tables, &mut res);
 
-                for region in hats.regions().copied().collect_vec() {
+                for region in hats.regions().collect_vec() {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -215,7 +215,7 @@ impl Face {
             UnregisterEntityResult::InfoUpdate { mut res } => {
                 hats[region].disable_query_routes(ctx.tables, &mut res);
 
-                for region in hats.regions().copied().collect_vec() {
+                for region in hats.regions().collect_vec() {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -305,7 +305,7 @@ impl Face {
                             &self.state,
                             &expr,
                             msg.ext_nodeid.node_id,
-                            region,
+                            &region,
                         );
 
                         compute_final_route(

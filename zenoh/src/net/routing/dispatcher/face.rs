@@ -603,7 +603,7 @@ impl Primitives for Face {
 
             let remaining = hats
                 .iter()
-                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
+                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (rgn, info)))
                 .collect_vec();
 
             match &*remaining {
