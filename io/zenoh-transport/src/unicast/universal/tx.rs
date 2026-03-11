@@ -119,7 +119,7 @@ impl TransportUnicastUniversal {
             .expect("reading `TransportUnicastUniversal::links` should not fail");
 
         let Some(transport_link_index) = Self::select(
-            transport_links.inner.iter().map(|tl| {
+            transport_links.get_links().iter().map(|tl| {
                 (
                     tl.link
                         .config
@@ -142,7 +142,7 @@ impl TransportUnicastUniversal {
         };
 
         let transport_link = transport_links
-            .inner
+            .get_links()
             .get(transport_link_index)
             .expect("transport link index should be valid");
 

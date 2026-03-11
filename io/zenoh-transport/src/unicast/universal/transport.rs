@@ -353,7 +353,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
         let mut pipelines = zread!(self.links)
-            .inner
+            .get_links()
             .iter()
             .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
@@ -376,7 +376,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn get_links(&self) -> Vec<Link> {
         zread!(self.links)
-            .inner
+            .get_links()
             .iter()
             .map(|l| l.link.link())
             .collect()
@@ -386,7 +386,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
         zread!(self.links)
-            .inner
+            .get_links()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
@@ -419,13 +419,17 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 /// seperate links) for message scheduling based on QoS
 #[derive(Default)]
 pub(super) struct TransportLinks {
-    pub(super) inner: Box<[TransportLinkUnicastUniversal]>,
+    inner: Box<[TransportLinkUnicastUniversal]>,
     // TODO: memory usage of associations can probably be optimized
     /// associations of links that internally use a shared state (namely mixed-reliability links)
     associations: HashMap<Link, (Link, TransportLinkUnicastDirection)>,
 }
 
 impl TransportLinks {
+    pub(super) fn get_links(&self) -> &[TransportLinkUnicastUniversal] {
+        &self.inner
+    }
+
     fn push_link(
         &mut self,
         link: TransportLinkUnicastUniversal,
