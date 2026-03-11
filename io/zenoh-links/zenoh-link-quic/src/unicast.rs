@@ -520,7 +520,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .client_config
             .try_into()
             .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
-        quic_endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
+        let mut transport_config = quinn::TransportConfig::default();
+        transport_config.max_concurrent_bidi_streams(1u8.into());
+        transport_config.max_concurrent_uni_streams(multistream.max_concurrent_uni_streams());
+        let mut quic_config = quinn::ClientConfig::new(Arc::new(quic_config));
+        quic_config.transport_config(Arc::new(transport_config));
+        quic_endpoint.set_default_client_config(quic_config);
 
         let src_addr = quic_endpoint
             .local_addr()
@@ -538,8 +543,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             })?
             .await
             .map_err(|e| zerror!("Can not create a new QUIC link bound to {}: {}", host, e))?;
-        quic_conn.set_max_concurrent_bi_streams(1u8.into());
-        quic_conn.set_max_concurrent_uni_streams(multistream.max_concurrent_uni_streams());
 
         let (send, recv) = quic_conn
             .open_bi()
