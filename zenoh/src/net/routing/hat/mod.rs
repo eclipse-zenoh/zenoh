@@ -267,11 +267,15 @@ pub(crate) trait HatBaseTrait: Any {
     fn disable_data_routes(&mut self, _tables: &mut TablesData, res: &mut Arc<Resource>) {
         if res.ctx.is_some() {
             get_mut_unchecked(res).context_mut().hats[self.region()].disable_data_routes();
+            get_mut_unchecked(res).context_mut().disable_data_routes();
 
             for match_ in &res.context().matches {
                 let mut match_ = match_.upgrade().unwrap();
                 if !Arc::ptr_eq(&match_, res) {
                     get_mut_unchecked(&mut match_).context_mut().hats[self.region()]
+                        .disable_data_routes();
+                    get_mut_unchecked(&mut match_)
+                        .context_mut()
                         .disable_data_routes();
                 }
             }
@@ -295,7 +299,9 @@ pub(crate) trait HatBaseTrait: Any {
 
     /// Disables this hat's data and query routes **for all resources**.
     fn disable_all_routes(&mut self, tables: &mut TablesData) {
-        let routes_version = &mut tables.hats[self.region()].routes_version;
+        let hat_routes_version = &mut tables.hats[self.region()].routes_version;
+        *hat_routes_version = hat_routes_version.saturating_add(1);
+        let routes_version = &mut tables.routes_version;
         *routes_version = routes_version.saturating_add(1);
     }
 }

@@ -144,6 +144,7 @@ pub(crate) struct TablesData {
     pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
 
     pub(crate) hats: RegionMap<HatTablesData>,
+    pub(crate) routes_version: RoutesVersion,
 }
 
 impl Debug for TablesData {
@@ -208,6 +209,7 @@ impl TablesData {
             stats_keys,
             #[cfg(feature = "stats")]
             stats,
+            routes_version: 0,
         })
     }
 
@@ -352,6 +354,17 @@ impl Tables {
                     .or_insert(src);
                 acc
             })
+    }
+
+    #[inline]
+    pub(crate) fn ingress_filter(&self, _src_face: &FaceState) -> bool {
+        true
+    }
+
+    #[inline]
+    pub(crate) fn egress_filter(&self, src_face: &FaceState, out_face: &Arc<FaceState>) -> bool {
+        src_face.id != out_face.id
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 }
 
