@@ -289,7 +289,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.config(),
         )?;
 
-        let task = async move { quic_acceptor.await };
+        let task = async move { quic_acceptor.accept_task().await };
         // Initialize the QuicAcceptor
         self.listeners
             .add_listener(endpoint, local_addr, task, token)

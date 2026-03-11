@@ -12,14 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    cell::UnsafeCell,
-    collections::HashMap,
-    future::{Future, IntoFuture},
-    net::SocketAddr,
-    pin::Pin,
-    sync::Arc,
-};
+use std::{cell::UnsafeCell, collections::HashMap, net::SocketAddr, sync::Arc};
 
 use futures::FutureExt;
 use quinn::{
@@ -390,18 +383,8 @@ pub struct QuicAcceptor<F: AcceptorCallback> {
     inner: QuicAcceptorParams<F>,
 }
 
-impl<F: AcceptorCallback> IntoFuture for QuicAcceptor<F> {
-    type Output = ZResult<()>;
-
-    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send>>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        Box::pin(self.accept_task())
-    }
-}
-
 impl<F: AcceptorCallback> QuicAcceptor<F> {
-    async fn accept_task(self) -> ZResult<()> {
+    pub async fn accept_task(self) -> ZResult<()> {
         async fn accept_connection(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
             let qc = acceptor
                 .await
