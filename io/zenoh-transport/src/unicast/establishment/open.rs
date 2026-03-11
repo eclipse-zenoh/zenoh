@@ -729,7 +729,6 @@ pub(crate) async fn open_link(
                     is_compression: state.link.ext_compression.is_compression(),
                 },
                 priorities: state.transport.ext_qos.priorities(),
-                // NOTE: this isn't possible since mixed-rel uses the `rel` locator config
                 reliability: state.transport.ext_qos.reliability(),
             };
             let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);

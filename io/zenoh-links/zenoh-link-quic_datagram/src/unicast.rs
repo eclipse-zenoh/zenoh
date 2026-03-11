@@ -45,6 +45,7 @@ pub struct LinkUnicastQuicDatagram {
     src_locator: Locator,
     dst_locator: Locator,
     auth_identifier: LinkAuthId,
+    mtu: BatchSize,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
@@ -57,6 +58,13 @@ impl LinkUnicastQuicDatagram {
         locator_prefix: &str,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuicDatagram {
+        // Zenoh Transport assumes calls to `LinkUnicastTrait::get_mtu` always yield the same
+        // value. Therefore cache the initial MTU value (which is used in batch-size negotiation)
+        let mtu = connection
+            .max_datagram_size()
+            .map(|mtu| mtu as BatchSize)
+            .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU);
+
         // Build the Quic object
         LinkUnicastQuicDatagram {
             connection,
@@ -64,6 +72,7 @@ impl LinkUnicastQuicDatagram {
             src_locator: Locator::new(locator_prefix, src_addr.to_string(), "rel=0").unwrap(),
             dst_locator,
             auth_identifier,
+            mtu,
             expiration_manager,
         }
     }
@@ -136,10 +145,8 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        self.connection
-            .max_datagram_size()
-            .map(|mtu| mtu as BatchSize)
-            .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU)
+        // Zenoh Transport assumes `LinkUnicastTrait::get_mtu` always yields the same value
+        self.mtu
     }
 
     #[inline(always)]

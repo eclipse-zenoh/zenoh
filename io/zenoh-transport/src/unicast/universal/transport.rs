@@ -440,15 +440,14 @@ impl TransportLinks {
         link: TransportLinkUnicastUniversal,
         associated_link: Option<TransportLinkUnicastUniversal>,
     ) {
-        let mut links = Vec::with_capacity(
-            self.inner.len() + associated_link.is_some().then(|| 2).unwrap_or(1),
-        );
+        let mut links =
+            Vec::with_capacity(self.inner.len() + if associated_link.is_some() { 2 } else { 1 });
         links.extend_from_slice(&self.inner);
         links.push(link.clone());
 
         if let Some(l) = associated_link {
             links.push(l.clone());
-            // add association to HashMap
+            // add associations to HashMap
             let l1 = Link::new_unicast(
                 &link.link.link,
                 link.link.config.priorities.clone(),
@@ -492,18 +491,30 @@ impl TransportLinks {
         // Remove the link
         let mut links = self.inner.to_vec();
         let stl = links.remove(index);
+
         // Remove associated link (if applicable)
         let asl = if let Some((associated_link, _)) = self.associations.remove(link) {
-            let index = links
+            // Remove opposite association
+            self.associations.remove(&associated_link);
+            // Remove associated link from links vec
+            match links
                 .iter()
                 .position(|tl| link_equality(tl, &associated_link))
-                .expect("associated link should exist");
-            Some(links.remove(index))
+            {
+                Some(index) => Some(links.remove(index)),
+                None => {
+                    // this is possible if link equality cannot be guaranteed between now and
+                    // when the link was originally inserted. RX or TX task will fail and remove
+                    // it once its internal connection is closed by the associated link.
+                    tracing::debug!("Associated link not found while removing link {link}");
+                    None
+                }
+            }
         } else {
             None
         };
-        self.inner = links.into_boxed_slice();
 
+        self.inner = links.into_boxed_slice();
         Some((self.inner.is_empty(), stl, asl))
     }
 
