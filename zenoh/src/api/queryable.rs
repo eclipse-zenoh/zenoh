@@ -437,17 +437,15 @@ impl Query {
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
     /// # }
-    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
-        self._accepts_any_replies().map(|any| {
-            if any {
-                ReplyKeyExpr::Any
-            } else {
-                ReplyKeyExpr::MatchingQuery
-            }
-        })
+    pub fn accepts_replies(&self) -> ReplyKeyExpr {
+        if self._accepts_any_replies() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        }
     }
-    fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM))
+    fn _accepts_any_replies(&self) -> bool {
+        self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
@@ -547,11 +545,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
-            true
-        );
+        let c = zcondfeat!("unstable", !self._accepts_any_replies(), true);
         if c && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
