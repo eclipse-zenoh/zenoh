@@ -729,7 +729,8 @@ pub(crate) async fn open_link(
                     is_compression: state.link.ext_compression.is_compression(),
                 },
                 priorities: state.transport.ext_qos.priorities(),
-                reliability: state.transport.ext_qos.reliability(),
+                // Do not apply reliability override to MixedReliability associated links
+                reliability: None,
             };
             let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
             Some(link)
