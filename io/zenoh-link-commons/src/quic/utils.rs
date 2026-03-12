@@ -725,16 +725,9 @@ pub(crate) fn parse_mixed_reliability_config(metadata: Metadata<'_>) -> ZResult<
     let Some(s) = metadata.get(Metadata::MIXED_RELIABILITY) else {
         return Ok(false);
     };
-
-    let Ok(mixed_rel) = s.parse::<u8>() else {
-        bail!("invalid `mixed_rel` config: expected 0 or 1, found {s}");
-    };
-
-    if mixed_rel == 1 {
-        Ok(true)
-    } else if mixed_rel == 0 {
-        Ok(false)
-    } else {
-        bail!("invalid `mixed_rel` config: expected 0 or 1, found {s}")
+    match s {
+        "1" => Ok(true),
+        "0" => Ok(false),
+        _ => bail!("invalid `mixed_rel` config: expected 0 or 1, found {s}"),
     }
 }
