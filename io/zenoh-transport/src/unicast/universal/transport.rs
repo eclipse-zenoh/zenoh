@@ -177,24 +177,19 @@ impl TransportUnicastUniversal {
             .await?;
         }
 
-        let res = {
-            // Associated link must also be closed. run both close calls, return whichever failed first
-            let r1 = stl.close().await;
-            let r2 = if let Some(asl) = associated_link {
-                asl.close().await
-            } else {
-                Ok(())
-            };
-            match r1 {
-                r1 @ Err(_) => r1,
-                Ok(_) => r2,
+        // Associated link must also be closed. run both close calls, return whichever failed first
+        let close_asl = async {
+            match associated_link {
+                Some(asl) => asl.close().await,
+                None => Ok(()),
             }
         };
+        let (close_stl_res, close_asl_res) = tokio::join!(stl.close(), close_asl);
 
         if is_last {
             self.delete().await?;
         }
-        res
+        close_stl_res.and(close_asl_res)
     }
 
     async fn sync(
