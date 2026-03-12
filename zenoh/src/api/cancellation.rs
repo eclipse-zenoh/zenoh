@@ -28,6 +28,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Debug)]
@@ -72,7 +73,7 @@ impl SyncGroup {
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
         let s = self.semaphore.clone();
-        let _p = futures::executor::block_on(s.acquire_many(Self::max_permits()));
+        let _p = ZRuntime::Application.block_in_place(s.acquire_many(Self::max_permits()));
         self.close();
     }
 
