@@ -215,14 +215,12 @@ where
         key_expr = self.session.declare_nonwild_prefix(key_expr)?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
         let callback_sync_group = crate::api::cancellation::SyncGroup::default();
         session
             .declare_subscriber_inner(
                 &key_expr,
                 self.origin,
                 callback,
-                #[cfg(feature = "unstable")]
                 callback_sync_group.notifier(),
             )
             .map(|sub_state| Subscriber {
@@ -234,7 +232,6 @@ where
                     undeclare_on_drop: true,
                 },
                 handler: receiver,
-                #[cfg(feature = "unstable")]
                 callback_sync_group,
             })
     }
@@ -261,13 +258,8 @@ impl Wait for SubscriberBuilder<'_, '_, Callback<Sample>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
         key_expr = self.session.declare_nonwild_prefix(key_expr)?;
-        self.session.declare_subscriber_inner(
-            &key_expr,
-            self.origin,
-            self.handler,
-            #[cfg(feature = "unstable")]
-            None,
-        )?;
+        self.session
+            .declare_subscriber_inner(&key_expr, self.origin, self.handler, None)?;
         Ok(())
     }
 }

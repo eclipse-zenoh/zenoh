@@ -29,8 +29,6 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
 #[zenoh_macros::internal]
@@ -39,6 +37,7 @@ use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
@@ -629,13 +628,12 @@ pub(crate) struct QueryableInner {
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryableUndeclaration<Handler> {
     queryable: Queryable<Handler>,
-    #[cfg(feature = "unstable")]
     wait_callbacks: bool,
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
-    #[zenoh_macros::unstable]
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;
         self
@@ -649,7 +647,6 @@ impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
 impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.undeclare_impl()?;
-        #[cfg(feature = "unstable")]
         if self.wait_callbacks {
             self.queryable.callback_sync_group.wait();
         }
@@ -724,7 +721,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
-    #[cfg(feature = "unstable")]
     pub(crate) callback_sync_group: SyncGroup,
 }
 
@@ -865,7 +861,6 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         QueryableUndeclaration {
             queryable: self,
-            #[cfg(feature = "unstable")]
             wait_callbacks: false,
         }
     }
