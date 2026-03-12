@@ -20,6 +20,8 @@ use zenoh_result::ZResult;
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "shared-memory")]
 use crate::shm::map_zmsg_to_partner;
+#[cfg(all(feature = "shared-memory", feature = "cuda"))]
+use crate::shm::map_zmsg_to_partner_with_caps;
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
@@ -28,6 +30,18 @@ impl TransportUnicastLowlatency {
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
+            #[cfg(feature = "cuda")]
+            if let Some(negotiated) = &self.config.negotiated_mem {
+                map_zmsg_to_partner_with_caps(
+                    &mut msg,
+                    &shm_context.shm_config,
+                    &shm_context.shm_provider,
+                    negotiated,
+                );
+            } else {
+                map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
+            }
+            #[cfg(not(feature = "cuda"))]
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
 
