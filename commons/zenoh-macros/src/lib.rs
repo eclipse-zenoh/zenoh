@@ -756,7 +756,7 @@ pub fn internal_or_unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStr
             item_modified = Item::Type(item_type_modified);
             item_type.attrs.splice(0..0, vec![unstable_feature_gate]);
         }
-        _ => panic!("pub_visibility_if_internal only works with struct, type and fn"),
+        _ => panic!("internal_or_unstable only works with struct, type and fn"),
     }
     let ts: TokenStream = item_original.into_token_stream().into();
     out.extend(ts);
