@@ -116,3 +116,86 @@ impl ZeroMemTransport for CudaIpcBackend {
         }
     }
 }
+
+#[cfg(all(test, feature = "cuda"))]
+mod tests {
+    use std::sync::Arc;
+
+    use zenoh_buffers::{ZSlice, ZSliceBuffer, ZSliceKind};
+    use zenoh_cuda::CudaBufInner;
+
+    use super::{CudaIpcBackend, DowngradePath, ZeroMemTransport};
+
+    // ── cross-capability: CUDA device memory → raw bytes via cudaMemcpy ──────
+    //
+    // Simulates the TX path when the peer does not support CUDA IPC: the
+    // publisher's CUDA ZSlice is downgraded to raw host bytes before sending.
+    //
+    // cudaMalloc returns zero-initialised memory, so the expected bytes are all
+    // zero.  We use this to avoid needing a cudaMemcpy HostToDevice in the test.
+    #[test]
+    #[ignore = "requires CUDA device"]
+    fn test_cuda_downgrade_to_raw() {
+        const LEN: usize = 128;
+
+        // Allocate zeroed device memory and wrap as a ZSlice.
+        let buf = CudaBufInner::alloc_device(LEN, 0).expect("cudaMalloc");
+        let arc: Arc<dyn ZSliceBuffer> = Arc::new(buf);
+        let zs = ZSlice::new(arc.clone(), 0, LEN).expect("ZSlice::new");
+        // Confirm the kind is CudaPtr (set by ZBuf::from_cuda; here we set it
+        // directly since we're below the ZBuf layer).
+        let mut zs = zs;
+        zs.kind = ZSliceKind::CudaPtr;
+
+        let backend = CudaIpcBackend::new(vec![]);
+        let raw = backend
+            .downgrade(&zs, DowngradePath::ToRaw)
+            .expect("downgrade should succeed for device memory");
+
+        assert!(
+            raw.kind == ZSliceKind::Raw,
+            "downgraded slice must be ZSliceKind::Raw"
+        );
+        assert_eq!(raw.len(), LEN, "byte count must be preserved");
+        assert!(
+            raw.as_slice().iter().all(|&b| b == 0),
+            "cudaMalloc-zeroed device memory must round-trip as zero bytes"
+        );
+    }
+
+    // ── negotiate: no peer caps → Fallback(ToRaw) ─────────────────────────────
+    //
+    // Tests the capability negotiation logic without a GPU: when the peer
+    // advertises no CUDA caps, the backend must request a ToRaw downgrade.
+    // This is a pure-logic test (no CUDA device needed).
+    #[test]
+    fn test_negotiate_no_peer_falls_back_to_raw() {
+        use crate::transport::NegotiationResult;
+
+        let backend = CudaIpcBackend::new(vec![]);
+        let result = backend.negotiate(None);
+        assert!(
+            matches!(result, NegotiationResult::Fallback(DowngradePath::ToRaw)),
+            "no peer caps should produce Fallback(ToRaw), got {result:?}"
+        );
+    }
+
+    // ── negotiate: matching CUDA peer → Native ────────────────────────────────
+    #[test]
+    fn test_negotiate_cuda_peer_native() {
+        use crate::{
+            caps::{CudaIpcCaps, MemBackendCaps},
+            transport::NegotiationResult,
+        };
+
+        let backend = CudaIpcBackend::new(vec![0]);
+        let peer = MemBackendCaps::CudaIpc(CudaIpcCaps {
+            device_ids: vec![0],
+        });
+        let result = backend.negotiate(Some(&peer));
+        assert!(
+            matches!(result, NegotiationResult::Native),
+            "matching CUDA peer should be Native, got {result:?}"
+        );
+    }
+}
