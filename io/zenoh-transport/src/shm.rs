@@ -563,3 +563,147 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
 
     Ok(())
 }
+
+#[cfg(all(test, feature = "shared-memory", feature = "cuda"))]
+mod tests {
+    use std::sync::Arc;
+
+    use zenoh_buffers::{ZBuf, ZSlice, ZSliceKind, buffer::SplitBuffer};
+    use zenoh_cuda::CudaBufInner;
+    use zenoh_mem_transport::{DowngradePath, NegotiatedMemCaps, NegotiationResult};
+    use zenoh_protocol::{
+        core::Reliability,
+        network::{NetworkBody, NetworkBodyMut, NetworkMessage, Push},
+        zenoh::{PushBody, Put},
+    };
+
+    use super::{map_zmsg_to_partner_with_caps, PartnerShmConfig, ProtocolID};
+
+    // Minimal ShmCfg that advertises no SHM protocols.
+    struct NoShm;
+    impl PartnerShmConfig for NoShm {
+        fn supports_protocol(&self, _: ProtocolID) -> bool {
+            false
+        }
+    }
+
+    /// Build a `zenoh_buffers::ZBuf` carrying a single `CudaPtr` ZSlice.
+    fn cuda_zbuf(len: usize) -> ZBuf {
+        let cuda = CudaBufInner::alloc_device(len, 0).expect("cudaMalloc");
+        let mut zs = ZSlice::from(Arc::new(cuda) as Arc<dyn zenoh_buffers::ZSliceBuffer>);
+        zs.kind = ZSliceKind::CudaPtr;
+        let mut zbuf = ZBuf::empty();
+        zbuf.push_zslice(zs);
+        zbuf
+    }
+
+    // ── TX path: CUDA ZSlice downgraded to raw when peer has no CUDA caps ────
+    //
+    // Exercises the new `map_zmsg_to_partner_with_caps` branch.  Constructs a
+    // Put message carrying a CudaPtr ZBuf and confirms the payload becomes a
+    // Raw slice after the downgrade.
+    //
+    // cudaMalloc zero-initialises device memory so we verify the resulting
+    // bytes are all zero without needing an explicit HostToDevice memcpy.
+    #[test]
+    #[ignore = "requires CUDA device"]
+    fn test_tx_cuda_downgrade_to_raw_via_map_zmsg() {
+        const LEN: usize = 128;
+
+        let mut msg = NetworkMessage {
+            body: NetworkBody::Push(Push {
+                wire_expr: zenoh_protocol::core::WireExpr::empty(),
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+                ext_nodeid: Default::default(),
+                payload: PushBody::Put(Put {
+                    payload: cuda_zbuf(LEN),
+                    ..Default::default()
+                }),
+            }),
+            reliability: Reliability::Reliable,
+        };
+
+        let mut negotiated = NegotiatedMemCaps::new();
+        negotiated.set(
+            ZSliceKind::CudaPtr,
+            NegotiationResult::Fallback(DowngradePath::ToRaw),
+        );
+
+        map_zmsg_to_partner_with_caps(&mut msg.as_mut(), &NoShm, &None, &negotiated);
+
+        let NetworkBodyMut::Push(push) = msg.as_mut().body else {
+            panic!("expected Push body");
+        };
+        let PushBody::Put(ref put_out) = push.payload else {
+            panic!("expected Put payload");
+        };
+
+        let first_kind = put_out
+            .payload
+            .zslices()
+            .next()
+            .map(|s| s.kind)
+            .expect("payload must not be empty after downgrade");
+        assert!(first_kind == ZSliceKind::Raw, "payload must be Raw after downgrade");
+
+        let bytes = put_out.payload.contiguous();
+        assert_eq!(bytes.len(), LEN, "byte count must be preserved");
+        assert!(
+            bytes.as_ref().iter().all(|&b| b == 0),
+            "zeroed device memory must round-trip as zero bytes"
+        );
+    }
+
+    // ── TX path: CUDA ZSlice kept native when peer has matching CUDA caps ─────
+    //
+    // When NegotiatedMemCaps says Native for CudaPtr, the ZSlice kind must
+    // remain CudaPtr and ext_shm must be set (signals codec to write IPC handle).
+    #[test]
+    #[ignore = "requires CUDA device"]
+    fn test_tx_cuda_native_path_preserved() {
+        const LEN: usize = 64;
+
+        let mut msg = NetworkMessage {
+            body: NetworkBody::Push(Push {
+                wire_expr: zenoh_protocol::core::WireExpr::empty(),
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+                ext_nodeid: Default::default(),
+                payload: PushBody::Put(Put {
+                    payload: cuda_zbuf(LEN),
+                    ..Default::default()
+                }),
+            }),
+            reliability: Reliability::Reliable,
+        };
+
+        let mut negotiated = NegotiatedMemCaps::new();
+        negotiated.set(ZSliceKind::CudaPtr, NegotiationResult::Native);
+
+        map_zmsg_to_partner_with_caps(&mut msg.as_mut(), &NoShm, &None, &negotiated);
+
+        let NetworkBodyMut::Push(push) = msg.as_mut().body else {
+            panic!("expected Push body");
+        };
+        let PushBody::Put(ref put_out) = push.payload else {
+            panic!("expected Put payload");
+        };
+
+        let first_kind = put_out
+            .payload
+            .zslices()
+            .next()
+            .map(|s| s.kind)
+            .expect("payload must not be empty");
+        assert!(
+            first_kind == ZSliceKind::CudaPtr,
+            "payload must remain CudaPtr on native path"
+        );
+        // ext_shm must be set so the codec writes the IPC handle.
+        assert!(
+            put_out.ext_shm.is_some(),
+            "ext_shm must be Some to signal IPC encoding"
+        );
+    }
+}
