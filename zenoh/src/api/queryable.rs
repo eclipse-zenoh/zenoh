@@ -632,6 +632,7 @@ pub struct QueryableUndeclaration<Handler> {
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;

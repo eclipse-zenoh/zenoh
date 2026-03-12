@@ -240,6 +240,7 @@ pub struct TransportEventsListenerUndeclaration<Handler> {
 
 #[zenoh_macros::unstable]
 impl<Handler> TransportEventsListenerUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of transport events listener callback (if any) return.
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;

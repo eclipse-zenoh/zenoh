@@ -232,6 +232,7 @@ pub(crate) trait Closeable {
 }
 
 impl CloseBuilder<crate::Session> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running zenoh entities' callbacks (if any) return.
     pub fn wait_callbacks(mut self) -> Self {
         self.close_args.wait_callbacks = true;

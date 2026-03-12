@@ -718,3 +718,49 @@ pub fn pub_visibility_if_internal(_attr: TokenStream, tokens: TokenStream) -> To
     out.extend(ts);
     out
 }
+
+// applies zenoh_macros::internal if unstable feature is disabled, otherwise applies zenoh_macros::unstable
+#[proc_macro_attribute]
+pub fn internal_or_unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut item_original: syn::Item = syn::parse(tokens).expect("failed to parse input");
+    let item_modified;
+    let non_unstable_feature_gate: Attribute = parse_quote!(#[cfg(not(feature = "unstable"))]);
+    let internal_feature_gate: Attribute = parse_quote!(#[zenoh_macros::internal]);
+    let unstable_feature_gate: Attribute = parse_quote!(#[zenoh_macros::unstable]);
+    match &mut item_original {
+        Item::Fn(item_fn) => {
+            let mut item_fn_modified = item_fn.clone();
+            item_fn_modified.vis = syn::Visibility::Public(syn::token::Pub(item_fn.span()));
+            item_fn_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_modified = Item::Fn(item_fn_modified);
+            item_fn.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        Item::Struct(item_struct) => {
+            let mut item_struct_modified = item_struct.clone();
+            item_struct_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_struct_modified.vis = syn::Visibility::Public(syn::token::Pub(item_struct.span()));
+            item_modified = Item::Struct(item_struct_modified);
+            item_struct.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        Item::Type(item_type) => {
+            let mut item_type_modified = item_type.clone();
+            item_type_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_type_modified.vis = syn::Visibility::Public(syn::token::Pub(item_type.span()));
+            item_modified = Item::Type(item_type_modified);
+            item_type.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        _ => panic!("pub_visibility_if_internal only works with struct, type and fn"),
+    }
+    let ts: TokenStream = item_original.into_token_stream().into();
+    out.extend(ts);
+    let ts: TokenStream = item_modified.into_token_stream().into();
+    out.extend(ts);
+    out
+}

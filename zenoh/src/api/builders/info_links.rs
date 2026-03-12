@@ -279,6 +279,7 @@ impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
 
 #[zenoh_macros::unstable]
 impl<Handler> LinkEventsListenerUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of link events listener callback (if any) return.
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;

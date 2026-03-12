@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(any(feature = "unstable", feature = "internal"))]
 #[allow(dead_code)]
 #[path = "common/mod.rs"]
 mod common;
