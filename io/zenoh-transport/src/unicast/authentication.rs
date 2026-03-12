@@ -17,7 +17,7 @@ use zenoh_protocol::core::ZenohIdProto;
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportAuthId {
     username: Option<String>,
     zid: ZenohIdProto,
