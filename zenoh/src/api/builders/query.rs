@@ -392,7 +392,6 @@ where
             #[cfg(feature = "unstable")]
             self.cancellation_token,
             None,
-            #[cfg(feature = "unstable")]
             None,
         )?;
         Ok(receiver)
