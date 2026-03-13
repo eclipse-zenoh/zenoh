@@ -13,13 +13,14 @@
 //
 use std::{
     cell::UnsafeCell,
+    num::{NonZeroU32, NonZeroU64},
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
     sync::{atomic::AtomicBool, mpsc::Sender, Arc},
     u64,
 };
 
-use io_uring::{opcode, squeue::Flags, types, EnterFlags, IoUring, SubmissionQueue};
+use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
@@ -69,7 +70,7 @@ impl Rx {
     }
 
     fn post_error(&self, error: zenoh_result::Error) {
-        tracing::debug!("Read task error: {error}");
+        tracing::error!("Read task error: {error}");
         let _ = self.error_sender.send(error);
     }
 }
@@ -198,6 +199,7 @@ impl ReaderInner {
 
 impl Drop for ReaderInner {
     fn drop(&mut self) {
+        tracing::debug!("Drop ReaderInner: {:?}", self);
         self.exit_flag
             .store(true, std::sync::atomic::Ordering::SeqCst);
         let _ = self.submitter.wake_reader_thread();
@@ -578,10 +580,7 @@ impl ReservableArenaInner {
                     1,
                 ))
             }
-            None => {
-                //None
-                self.arena.allocate_more_batches()
-            }
+            None => self.arena.allocate_more_batches(),
         }
     }
 }
@@ -604,31 +603,39 @@ impl ReservableArena {
 
 struct RxContextCell {
     context: Option<Arc<Rx>>,
-    generation: u32,
+    generation: NonZeroU32,
 }
 
 impl RxContextCell {
-    fn new(context: Arc<Rx>, generation: u32) -> Self {
+    fn new(context: Arc<Rx>, generation: NonZeroU32) -> Self {
         Self {
             context: Some(context),
             generation,
         }
     }
 
-    fn get(&self, generation: u32) -> Option<&Rx> {
+    fn get(&self, generation: NonZeroU32) -> Option<&Rx> {
         if self.generation == generation {
             return (self.context.as_ref()).map(|val| val.deref());
         }
         None
     }
 
-    fn free(&mut self, generation: u32) {
+    fn free(&mut self, generation: NonZeroU32) {
         if self.generation == generation {
-            self.context = None;
+            if let Some(context) = self.context.take() {
+                tracing::debug!("Spawning async RxContext destroy {:?}", context);
+                ZRuntime::Net.spawn_blocking(move || {
+                    tracing::debug!("Begin RxContext destroy {:?}", context);
+                    assert!(Arc::strong_count(&context) == 1);
+                    drop(context);
+                    tracing::debug!("End RxContext destroy!");
+                });
+            }
         }
     }
 
-    fn try_alloc(&mut self, generation: u32, context: &Arc<Rx>) -> bool {
+    fn try_alloc(&mut self, generation: NonZeroU32, context: &Arc<Rx>) -> bool {
         if self.context.is_none() {
             self.context = Some(context.clone());
             self.generation = generation;
@@ -640,7 +647,7 @@ impl RxContextCell {
 
 struct RxContextStorage {
     data: Vec<RxContextCell>,
-    next_generation: u32,
+    next_generation: NonZeroU32,
 }
 
 impl RxContextStorage {
@@ -650,7 +657,7 @@ impl RxContextStorage {
 
         Self {
             data,
-            next_generation: 0,
+            next_generation: NonZeroU32::MIN,
         }
     }
 
@@ -663,7 +670,11 @@ impl RxContextStorage {
     }
 
     fn alloc(&mut self, context: Arc<Rx>) -> IndexGeneration {
-        self.next_generation = self.next_generation.wrapping_add(1);
+        self.next_generation = self.next_generation.saturating_add(1);
+        if self.next_generation == NonZeroU32::MAX {
+            self.next_generation = NonZeroU32::MIN;
+        }
+
         let mut index = 0;
         for cell in &mut self.data {
             if cell.try_alloc(self.next_generation, &context) {
@@ -680,50 +691,44 @@ impl RxContextStorage {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IndexGeneration(u64);
+pub struct IndexGeneration(NonZeroU64);
 
 impl IndexGeneration {
+    pub const INVALID_MIN: u64 = 0;
+    pub const INVALID_MAX: u64 = u64::MAX;
+
     #[inline]
-    pub const fn new(index: u32, generation: u32) -> Self {
-        Self(((generation as u64) << 32) | (index as u64))
+    pub const fn new(index: u32, generation: NonZeroU32) -> Self {
+        // SAFETY: this is safe because generation is NonZeroU32
+        Self(unsafe {
+            NonZeroU64::new_unchecked(((generation.get() as u64) << 32) | (index as u64))
+        })
+    }
+
+    #[inline]
+    pub const unsafe fn new_unchecked(val: u64) -> Self {
+        Self(NonZeroU64::new_unchecked(val))
     }
 
     #[inline]
     pub const fn index(self) -> u32 {
-        self.0 as u32
+        self.0.get() as u32
     }
 
     #[inline]
-    pub const fn generation(self) -> u32 {
-        (self.0 >> 32) as u32
-    }
-
-    #[inline]
-    pub const fn as_u64(self) -> u64 {
-        self.0
-    }
-
-    #[inline]
-    pub const fn from_u64(value: u64) -> Self {
-        Self(value)
-    }
-}
-
-impl From<u64> for IndexGeneration {
-    #[inline]
-    fn from(value: u64) -> Self {
-        Self(value)
+    pub const fn generation(self) -> NonZeroU32 {
+        unsafe { NonZeroU32::new_unchecked((self.0.get() >> 32) as u32) }
     }
 }
 
 impl From<IndexGeneration> for u64 {
     #[inline]
     fn from(value: IndexGeneration) -> Self {
-        value.0
+        value.0.get()
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Reader {
     inner: Arc<ReaderInner>,
     receiver: tokio::sync::watch::Receiver<String>,
@@ -812,7 +817,7 @@ impl Reader {
             let waker_read =
                 opcode::Read::new(types::Fd(c_waker.as_raw_fd()), dummy_mem.as_mut_ptr(), 8)
                     .build()
-                    .user_data(u64::MAX)
+                    .user_data(IndexGeneration::INVALID_MAX)
                     .flags(io_uring::squeue::Flags::ASYNC);
 
             unsafe { ring.submission_shared().push(&waker_read)? };
@@ -875,48 +880,40 @@ impl Reader {
 
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
-                    //        tracing::debug!( "e: {:?}", e);
-
                     let mut sq = unsafe { ring.submission_shared() };
 
                     roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
+                    roll_cmds(&receiver, &mut context_storage, &mut sq)?;
 
                     match e.user_data() {
-                        0 => {
+                        IndexGeneration::INVALID_MIN => {
                             tracing::debug!("Zero-user-data entry: {:?}", e);
                         }
-                        u64::MAX => {
+                        IndexGeneration::INVALID_MAX => {
                             tracing::debug!("Waker event: {:?}", e);
                             unsafe { sq.push(&waker_read)? };
-                            roll_cmds(&receiver, &mut context_storage, &mut sq)?;
                         }
                         index => {
-                            if let Some(context) = context_storage.get(index.into()) {
-                                match Reader::read_multi(
-                                    &e,
-                                    index.into(),
-                                    context,
-                                    &arena,
-                                    &mut sq,
-                                    &mut batch_ctr,
-                                ) {
-                                    Ok(true) => {
-                                        let len = sq.len() as u32;
-                                        drop(sq);
-                                        unsafe {
-                                            ring.submitter().enter::<libc::sigset_t>(
-                                                len,
-                                                0,
-                                                EnterFlags::GETEVENTS.bits(),
-                                                None,
-                                            )?;
-                                        }
-                                    }
-                                    Ok(false) => {}
-                                    Err(e) => {
-                                        context.post_error(e);
-                                    }
-                                }
+                            let index = unsafe { IndexGeneration::new_unchecked(index) };
+                            if Reader::multi(
+                                &context_storage,
+                                &e,
+                                index,
+                                &arena,
+                                &mut sq,
+                                &mut batch_ctr,
+                            )? {
+                                //let len = sq.len() as u32;
+                                drop(sq);
+                                ring.submit()?;
+                                //unsafe {
+                                //    ring.submitter().enter::<libc::sigset_t>(
+                                //        len,
+                                //        0,
+                                //        EnterFlags::GETEVENTS.bits(),
+                                //        None,
+                                //    )?;
+                                //}
                             }
                         }
                     }
@@ -1010,6 +1007,29 @@ impl Reader {
         }
     }
 
+    fn multi(
+        context_storage: &RxContextStorage,
+        e: &io_uring::cqueue::Entry,
+        index: IndexGeneration,
+        arena: &ReservableArena,
+        sq: &mut SubmissionQueue<'_>,
+        ctr: &mut i32,
+    ) -> ZResult<bool> {
+        match context_storage.get(index) {
+            Some(context) => match Reader::read_multi(&e, index, context, arena, sq, ctr) {
+                Ok(val) => Ok(val),
+                Err(e) => {
+                    context.post_error(e);
+                    Ok(false)
+                }
+            },
+            None => {
+                Self::utilize_multi(e, arena, ctr)?;
+                Ok(true)
+            }
+        }
+    }
+
     fn read_multi(
         e: &io_uring::cqueue::Entry,
         index: IndexGeneration,
@@ -1050,6 +1070,8 @@ impl Reader {
                 Some(buf_id) => {
                     tracing::trace!("Read multishot entry: {:?}", e);
 
+                    *ctr -= 1;
+
                     if !io_uring::cqueue::more(e.flags()) {
                         tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
 
@@ -1065,9 +1087,9 @@ impl Reader {
                     let buf_len = e.result() as usize;
                     if buf_len > 0 {
                         let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
-                        *ctr -= 1;
                         context.run_callback(rx_buffer);
                     } else {
+                        arena.inner.recycle_batch(buf_id);
                         tracing::debug!("zero buf len");
                     }
                 }
@@ -1077,5 +1099,25 @@ impl Reader {
             };
         }
         Ok(need_submit)
+    }
+
+    fn utilize_multi(
+        e: &io_uring::cqueue::Entry,
+        arena: &ReservableArena,
+        ctr: &mut i32,
+    ) -> ZResult<()> {
+        if e.result() >= 0 {
+            match io_uring::cqueue::buffer_select(e.flags()) {
+                Some(buf_id) => {
+                    tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
+                    *ctr -= 1;
+                    arena.inner.recycle_batch(buf_id);
+                }
+                None => {
+                    bail!("no IORING_CQE_F_BUFFER: {:?}", e);
+                }
+            };
+        }
+        Ok(())
     }
 }

@@ -168,19 +168,19 @@ impl TransportLinkUnicastUniversal {
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = cancellation_token
-                .run_until_cancelled(rx_task(
-                    &mut rx,
-                    transport.clone(),
-                    lease,
-                    transport.manager.config.link_rx_buffer_size,
-                    #[cfg(feature = "stats")]
-                    stats,
-                ))
-                .await;
+            let res = rx_task(
+                &mut rx,
+                transport.clone(),
+                lease,
+                transport.manager.config.link_rx_buffer_size,
+                #[cfg(feature = "stats")]
+                stats,
+                cancellation_token,
+            )
+            .await;
 
             // TODO(yuyuan): improve this callback
-            if let Some(Err(e)) = res {
+            if let Err(e) = res {
                 // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
@@ -291,6 +291,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
 ) -> ZResult<()> {
     #[cfg(feature = "uring")]
     if link.link.get_fd().is_ok() {
@@ -301,19 +302,22 @@ async fn rx_task(
             rx_buffer_size,
             #[cfg(feature = "stats")]
             stats,
+            cancellation_token,
         )
         .await;
     }
 
-    rx_task_non_uring(
-        link,
-        transport.clone(),
-        lease,
-        rx_buffer_size,
-        #[cfg(feature = "stats")]
-        stats,
-    )
-    .await
+    cancellation_token
+        .run_until_cancelled(rx_task_non_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+        .await
+        .unwrap_or(Ok(()))
 }
 
 async fn rx_task_non_uring(
@@ -398,6 +402,7 @@ async fn rx_task_uring(
     _lease: Duration,
     rx_buffer_size: usize,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
 ) -> ZResult<()> {
     // The pool of buffers
     let mtu = link.config.batch.mtu as usize;
@@ -497,7 +502,7 @@ async fn rx_task_uring(
     tokio::select! {
         e = uring_read_task.read_error() => {
             tracing::debug!("Uring RX task stopped by uring task error event");
-            return Err(e);
+            Err(e)
         },
         finished = transport
                     .manager
@@ -505,9 +510,11 @@ async fn rx_task_uring(
                     .uring
                     .reader.wait_finished() => {
                         tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
-                        finished?;
+                        finished
                     }
+        _ = cancellation_token.cancelled() => {
+            tracing::debug!("Uring RX task stopped by cancellation event");
+            Ok(())
+        }
     }
-
-    Ok(())
 }

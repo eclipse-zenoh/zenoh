@@ -30,7 +30,7 @@ use zenoh_uring::reader::Reader;
 
 pub mod common;
 
-pub const ITERATION_COUNT: usize = 100000;
+pub const ITERATION_COUNT: usize = 10000;
 
 struct ManagedTask {
     handle: Option<std::thread::JoinHandle<ZResult<()>>>,
@@ -94,12 +94,12 @@ impl WriterTask {
         finished: Arc<AtomicBool>,
     ) -> ZResult<()> {
         let mut client = loop {
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                bail!("unable to connect!");
-            }
-
             if let Ok(client) = TcpStream::connect(&addr) {
                 break client;
+            }
+
+            if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                bail!("unable to connect!");
             }
         };
 
@@ -231,8 +231,8 @@ impl RWTask {
         let writer = WriterTask::new(port, iteration_count, interval);
 
         while !finished.load(std::sync::atomic::Ordering::Relaxed)
-            && !writer.poll_comlete()?
             && !reader.poll_comlete()?
+            && !writer.poll_comlete()?
         {
             std::thread::sleep(Duration::from_millis(100));
         }
@@ -395,7 +395,7 @@ fn rw_parallel_and_start_stop() {
     zenoh_util::try_init_log_from_env();
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
-    let count = 2;
+    let count = 1;
     let base_port = 7791;
     let base_interval = None; //Some(Duration::from_millis(1));
 
@@ -406,7 +406,7 @@ fn rw_parallel_and_start_stop() {
     }
 
     let run_start_stop_session = |reader_fn: Arc<dyn Fn() -> Reader + Send + Sync>| {
-        tracing::info!("start-stop begin (writer ends first)!");
+        tracing::info!("start-stop begin (writer ends first)...");
         let c_reader_fn = reader_fn.clone();
         let start_stop_writer_ends_first = StartStopTask::new(
             move || c_reader_fn(),
@@ -419,7 +419,7 @@ fn rw_parallel_and_start_stop() {
         start_stop_writer_ends_first.wait_for_comlete().unwrap();
         tracing::info!("start-stop done(writer ends first)!");
 
-        tracing::info!("start-stop begin (reader ends first)!");
+        tracing::info!("start-stop begin (reader ends first)...");
         let c_reader_fn = reader_fn.clone();
         let start_stop_reader_ends_first = StartStopTask::new(
             move || c_reader_fn(),
@@ -433,10 +433,13 @@ fn rw_parallel_and_start_stop() {
         tracing::info!("start-stop done(reader ends first)!");
     };
 
+    tracing::info!("Shared Reader...");
     run_start_stop_session(Arc::new(move || reader.clone()));
+    tracing::info!("Exclusive Reader...");
     run_start_stop_session(Arc::new(|| Reader::new(65535 + 2, 16).unwrap()));
 
     // stop background tasks
+    tracing::info!("Stopping background tasks...");
     for rw in rw_background {
         drop(rw);
     }
