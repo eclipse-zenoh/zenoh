@@ -108,7 +108,7 @@ use crate::{
         },
         queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
-        selector::Selector,
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         subscriber::{SubscriberKind, SubscriberState},
         Id,
     },
@@ -3239,9 +3239,9 @@ impl Primitives for WeakSession {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        let c =
-                            zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
-                        if c && !query.key_expr.intersects(&key_expr) {
+                        if !query.parameters.contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
+                            && !query.key_expr.intersects(&key_expr)
+                        {
                             tracing::warn!(
                                 "Received Reply for `{}` from `{:?}`, which didn't match query `{}?{}`: dropping Reply.",
                                 key_expr,
