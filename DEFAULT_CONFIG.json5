@@ -113,6 +113,9 @@
       /// increase factor for the next timeout until next try
       period_increase_factor: 2,
     },
+    /// Interval in millisecond to check if the listening endpoints changed (i.e. when listening on 0.0.0.0 or [::]).
+    /// Also update the multicast scouting listening interfaces. Use -1 to disable.
+    endpoint_poll_interval_ms: 10000,
   },
 
   /// Configure the session open behavior.
