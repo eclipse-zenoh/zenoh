@@ -184,15 +184,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
-name = "arc-swap"
-version = "1.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f3647c145568cec02c42054e07bdf9a5a698e15b466fb2341bfc393cd24aa5"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "array-init"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1753,6 +1744,15 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.2.0",
+]
+
+[[package]]
+name = "hazarc"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7ba4340463c67ba476bb834950decb0bc3615ef5b0f30ef96d0a4b21c6bdb9a"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -5916,7 +5916,6 @@ name = "zenoh"
 version = "1.7.2"
 dependencies = [
  "ahash",
- "arc-swap",
  "async-trait",
  "bytes",
  "const_format",
@@ -5924,6 +5923,7 @@ dependencies = [
  "flume",
  "futures",
  "git-version",
+ "hazarc",
  "itertools 0.14.0",
  "json5",
  "lazy_static",
@@ -6545,9 +6545,9 @@ dependencies = [
 name = "zenoh-sync"
 version = "1.7.2"
 dependencies = [
- "arc-swap",
  "event-listener 5.4.1",
  "futures",
+ "hazarc",
  "tokio",
  "zenoh-buffers",
  "zenoh-collections",
