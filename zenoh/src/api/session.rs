@@ -1709,15 +1709,12 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         tracing::trace!("declare_subscriber({:?})", key_expr);
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
-        if state.primitives.is_none() {
-            return Err(SessionClosedError.into());
-        }
+        let primitives = state.primitives()?;
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
         if let Some(key_expr) = declared_sub {
-            let primitives = state.primitives()?;
             drop(state);
             let wire_expr = key_expr.to_wire(self).to_owned();
             primitives.send_declare(&mut Declare {
@@ -1841,11 +1838,9 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<QueryableState>> {
         tracing::trace!("declare_queryable({:?})", key_expr);
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
-        if state.primitives.is_none() {
-            return Err(SessionClosedError.into());
-        }
+        let primitives = state.primitives()?;
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1857,7 +1852,6 @@ impl Session {
 
         state.queryables.insert(id, qable_state.clone());
         if origin != Locality::SessionLocal {
-            let primitives = state.primitives()?;
             drop(state);
             let qabl_info = QueryableInfoType {
                 complete,
@@ -1959,11 +1953,9 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         trace!("declare_liveliness_subscriber({:?})", key_expr);
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
-        if state.primitives.is_none() {
-            return Err(SessionClosedError.into());
-        }
+        let primitives = state.primitives()?;
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let sub_state = SubscriberState {
             id,
@@ -2013,7 +2005,6 @@ impl Session {
             vec![]
         };
 
-        let primitives = state.primitives()?;
         drop(state);
 
         if !known_tokens.is_empty() {
@@ -2088,11 +2079,11 @@ impl Session {
             match_type,
             key_expr
         );
-        self.register_callback_drop_notifier(callback_sync_group_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
         if state.primitives.is_none() {
             return Err(SessionClosedError.into());
         }
+        self.register_callback_drop_notifier(callback_sync_group_notifier, &mut callback);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: Mutex::new(false),
@@ -2251,11 +2242,11 @@ impl Session {
     ) -> ZResult<Arc<TransportEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
         if state.primitives.is_none() {
             return Err(SessionClosedError.into());
         }
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
         state
@@ -2326,11 +2317,11 @@ impl Session {
     ) -> ZResult<Arc<LinkEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let mut state = zwrite!(self.0.state);
         if state.primitives.is_none() {
             return Err(SessionClosedError.into());
         }
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(LinkEventsListenerState {
             id,
             callback,
@@ -2616,6 +2607,7 @@ impl Session {
             mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
+        let primitives = state.primitives()?;
         self.register_query_cancellation(
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -2630,7 +2622,6 @@ impl Session {
             },
             &mut callback,
         )?;
-        let primitives = state.primitives()?;
 
         let nb_final = match destination {
             Locality::Any => 2,
@@ -2758,6 +2749,7 @@ impl Session {
         // This is because both query's id and subscriber's id are used as interest id,
         // so both must not overlap.
         let id = self.0.runtime.next_id();
+        let primitives = state.primitives()?;
         self.register_query_cancellation(
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -2772,7 +2764,6 @@ impl Session {
             },
             &mut callback,
         )?;
-        let primitives = state.primitives()?;
         let token = self.0.task_controller.get_cancellation_token();
         self.0.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
