@@ -172,7 +172,6 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &prefix, &prefix, q)
         }),
-        #[cfg(feature = "unstable")]
         None,
     );
 
@@ -187,7 +186,6 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
-        #[cfg(feature = "unstable")]
         None,
     );
 
@@ -232,12 +230,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_events_listener_inner(
-        callback,
-        false,
-        #[cfg(feature = "unstable")]
-        None,
-    ) {
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false, None) {
         tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
@@ -251,7 +244,8 @@ pub(crate) fn init(session: WeakSession) {
             let transport_zid = &event.link.zid;
             let transport = session
                 .runtime()
-                .get_transports()
+                .get_transports_blocking()
+                .into_iter()
                 .find(|t| t.zid == *transport_zid);
 
             if let Some(transport) = transport {
@@ -293,13 +287,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_links_listener_inner(
-        callback,
-        false,
-        None,
-        #[cfg(feature = "unstable")]
-        None,
-    ) {
+    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None, None) {
         tracing::error!("Unable to subscribe to link events: {}", e);
     }
 }

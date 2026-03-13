@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
-#[cfg(feature = "unstable")]
 use serde::Deserialize;
 #[cfg(feature = "unstable")]
 use zenoh_config::wrappers::EntityGlobalId;
@@ -247,7 +246,6 @@ pub(crate) struct QueryState {
 ///
 /// The [`Queryable`](crate::query::Queryable) may check this parameter with
 /// [`Query::accepts_replies`](crate::query::Query::accepts_replies).
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.

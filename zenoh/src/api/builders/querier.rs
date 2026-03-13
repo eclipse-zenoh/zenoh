@@ -25,26 +25,24 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
-#[cfg(feature = "unstable")]
-use crate::api::query::ReplyKeyExpr;
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
-#[cfg(feature = "unstable")]
-use crate::query::ZenohParameters;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         querier::Querier,
         sample::{Locality, QoSBuilder},
+        selector::REPLY_KEY_EXPR_ANY_SEL_PARAM,
     },
     bytes::OptionZBytes,
     key_expr::KeyExpr,
     qos::Priority,
-    query::{QueryConsolidation, Reply},
+    query::{QueryConsolidation, Reply, ReplyKeyExpr},
     Session,
 };
 
@@ -83,7 +81,6 @@ pub struct QuerierBuilder<'a, 'b> {
     pub(crate) qos: QoSBuilder,
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
-    #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
 }
 
@@ -157,7 +154,6 @@ impl QuerierBuilder<'_, '_> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
-    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
             accept_replies: accept,
@@ -187,10 +183,8 @@ impl Wait for QuerierBuilder<'_, '_> {
             target: self.target,
             consolidation: self.consolidation,
             timeout: self.timeout,
-            #[cfg(feature = "unstable")]
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
-            #[cfg(feature = "unstable")]
             callback_sync_group: SyncGroup::default(),
         })
     }
@@ -478,11 +472,9 @@ where
         #[allow(unused_mut)]
         // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
-        #[cfg(feature = "unstable")]
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
-            parameters.set_reply_key_expr_any();
+            parameters.insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
         }
-        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.querier.session.query(
             &self.querier.key_expr,
             &parameters,
@@ -499,7 +491,6 @@ where
             #[cfg(feature = "unstable")]
             self.cancellation_token,
             Some(self.querier.id),
-            #[cfg(feature = "unstable")]
             self.querier.callback_sync_group.notifier(),
         )?;
         Ok(receiver)
