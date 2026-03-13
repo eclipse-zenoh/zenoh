@@ -30,6 +30,7 @@ maintenance = { status = "actively-developed" }
 async-lock = "=3.4.1"
 base64ct = "=1.6.0"
 clap_lex = "=1.0.0"
+clap_builder = "=4.5.60"
 derive_more = { version = "=2.0.1", features = ["as_ref"] }
 generic-array = "=0.14.7"
 home = "=0.5.9"
@@ -73,6 +74,7 @@ ignored = [
   "async-lock",
   "base64ct",
   "clap_lex",
+  "clap_builder",
   "derive_more",
   "generic-array",
   "home",
