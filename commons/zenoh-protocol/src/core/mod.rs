@@ -178,7 +178,7 @@ impl FromStr for ZenohIdProto {
         }
         let u: uhlc::ID = s
             .parse()
-            .map_err(|e: uhlc::ParseIDError| zerror!("Invalid id: {} - {}", s, e.cause))?;
+            .map_err(|e: uhlc::ParseIDError| zerror!("Invalid id: {s} - {e}"))?;
         Ok(ZenohIdProto(u))
     }
 }
