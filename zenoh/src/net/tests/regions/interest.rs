@@ -1,0 +1,118 @@
+//
+// Copyright (c) 2026 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
+use zenoh_protocol::{
+    core::{Bound, Region, WhatAmI},
+    network::{
+        declare::{DeclareToken, TokenId},
+        interest::{InterestMode, InterestOptions},
+    },
+};
+
+use super::{try_init_tracing_subscriber, Connection, FaceConfig, Harness};
+
+/// Current token propagation.
+///
+/// ```d2
+/// shape: sequence_diagram
+///
+/// C1 -> R: Interest id=1 mode=F
+///
+/// C2 -> R.1: DeclareToken iid=None
+/// R.1 -> C1: DeclareToken iid=None
+///
+/// C1 -> R.2: Interest id=2 mode=C
+/// R.2 -> C1: DeclareToken iid=2
+/// R.2 -> C1: DeclareFinal iid=2
+/// ```
+#[test]
+fn test_current_token_propagation() {
+    try_init_tracing_subscriber();
+
+    let r = Harness::new_router();
+    let c1 = Harness::new_client();
+    let c2 = Harness::new_client();
+
+    let s1 = c1.new_session();
+    let s2 = c1.new_session();
+
+    let r_face = FaceConfig::default()
+        .region(Region::North)
+        .remote_bound(Bound::South)
+        .mode(WhatAmI::Router);
+
+    let c_face = FaceConfig::default()
+        .mode(WhatAmI::Client)
+        .region(Region::default_south(WhatAmI::Client));
+
+    let mut c1_r = Connection {
+        a: &c1,
+        ab: r_face,
+        b: &r,
+        ba: c_face,
+    }
+    .establish();
+    c1_r.bi_fwd();
+
+    let mut c2_r = Connection {
+        a: &c2,
+        ab: r_face,
+        b: &r,
+        ba: c_face,
+    }
+    .establish();
+    c2_r.bi_fwd();
+
+    s1.interest(
+        1,
+        InterestMode::Future,
+        InterestOptions::TOKENS,
+        Some("test".try_into().unwrap()),
+    );
+    c1_r.bi_fwd();
+
+    s2.declare_token(1, "test".try_into().unwrap(), None);
+    c2_r.bi_fwd();
+    c1_r.bi_fwd();
+
+    assert_eq!(
+        s1.recorder().tokens().as_slice(),
+        &[DeclareToken {
+            id: 1,
+            wire_expr: "test".into(),
+        }]
+    );
+
+    s1.interest(
+        1,
+        InterestMode::Current,
+        InterestOptions::TOKENS,
+        Some("test".try_into().unwrap()),
+    );
+    c1_r.bi_fwd();
+
+    assert_eq!(
+        s1.recorder().tokens().as_slice(),
+        &[
+            DeclareToken {
+                id: 1,
+                wire_expr: "test".into(),
+            },
+            DeclareToken {
+                id: TokenId::default(),
+                wire_expr: "test".into(),
+            }
+        ]
+    );
+}
