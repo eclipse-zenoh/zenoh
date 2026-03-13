@@ -56,6 +56,7 @@ unstable = ["zenoh-config/unstable", "zenoh-protocol/unstable"]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 flume = { workspace = true }
+futures = { workspace = true }
 lazy_static = { workspace = true }
 lz4_flex = { workspace = true }
 rand = { workspace = true, features = ["default"] }
@@ -91,7 +92,5 @@ zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]
-futures = { workspace = true }
-futures-util = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-util = { workspace = true }
