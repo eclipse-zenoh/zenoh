@@ -778,7 +778,7 @@ impl Reader {
         join_receiver.mark_unchanged();
 
         let ring_worker = move || -> ZResult<()> {
-            // Create Rx context storge
+            // Create Rx context storage
             let mut context_storage = RxContextStorage::new();
 
             // Create memory for waker's read events

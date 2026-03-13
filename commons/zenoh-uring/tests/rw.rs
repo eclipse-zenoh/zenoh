@@ -107,7 +107,7 @@ fn writer_main() {
                 //iteration = iteration.wrapping_add(1);
 
                 //std::thread::yield_now();
-                //std::thread::sleep(Duration::from_micros(1));
+                //std::thread::sleep(Duration::from_millis(1));
             }
             //std::thread::sleep(Duration::from_millis(1));
         }
@@ -217,6 +217,7 @@ fn reader_main() {
 #[ignore]
 #[test]
 fn rw() {
+    zenoh_util::try_init_log_from_env();
     let _ = std::thread::spawn(reader_main);
     std::thread::sleep(Duration::from_secs(1));
     writer_main();

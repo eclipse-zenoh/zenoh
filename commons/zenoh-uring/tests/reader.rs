@@ -45,7 +45,7 @@ impl ManagedTask {
         Self { handle, finished }
     }
 
-    fn wait_for_comlete(mut self) -> ZResult<()> {
+    fn wait_for_complete(mut self) -> ZResult<()> {
         self.handle.take().unwrap().join().unwrap()
     }
 
@@ -239,12 +239,12 @@ impl RWTask {
         if finished.load(std::sync::atomic::Ordering::Relaxed) {
             writer.interrupt();
         }
-        writer.wait_for_comlete()?;
+        writer.wait_for_complete()?;
 
         if finished.load(std::sync::atomic::Ordering::Relaxed) {
             reader.interrupt();
         }
-        reader.wait_for_comlete()
+        reader.wait_for_complete()
     }
 }
 
@@ -304,10 +304,10 @@ impl StartStopTask {
 
             if finished.load(std::sync::atomic::Ordering::Relaxed) {
                 rw.interrupt();
-                rw.wait_for_comlete()?;
+                rw.wait_for_complete()?;
                 break;
             } else {
-                rw.wait_for_comlete()?;
+                rw.wait_for_complete()?;
             }
         }
         Ok(())
@@ -326,7 +326,7 @@ impl StartStopTask {
             let writer = WriterTask::make(port, usize::MAX, interval);
             std::thread::sleep(Duration::from_millis(100));
             reader.interrupt();
-            reader.wait_for_comlete()?;
+            reader.wait_for_complete()?;
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed) && !writer.poll_comlete()? {
                 std::thread::sleep(Duration::from_millis(100));
@@ -334,10 +334,10 @@ impl StartStopTask {
 
             if finished.load(std::sync::atomic::Ordering::Relaxed) {
                 writer.interrupt();
-                let _ = writer.wait_for_comlete();
+                let _ = writer.wait_for_complete();
                 break;
             } else {
-                let _ = writer.wait_for_comlete();
+                let _ = writer.wait_for_complete();
             }
         }
         Ok(())
@@ -355,8 +355,8 @@ fn rw_single() {
     let reader = ReaderTask::make(reader, port, ITERATION_COUNT);
     let writer = WriterTask::make(port, ITERATION_COUNT, interval);
 
-    writer.wait_for_comlete().unwrap();
-    reader.wait_for_comlete().unwrap();
+    writer.wait_for_complete().unwrap();
+    reader.wait_for_complete().unwrap();
 }
 
 #[test]
@@ -384,8 +384,8 @@ fn rw_parallel() {
     }
 
     for (reader, writer) in rw_pairs {
-        writer.wait_for_comlete().unwrap();
-        reader.wait_for_comlete().unwrap();
+        writer.wait_for_complete().unwrap();
+        reader.wait_for_complete().unwrap();
     }
 }
 
@@ -415,7 +415,7 @@ fn rw_parallel_and_start_stop() {
             100,
             true,
         );
-        start_stop_writer_ends_first.wait_for_comlete().unwrap();
+        start_stop_writer_ends_first.wait_for_complete().unwrap();
         tracing::info!("start-stop done(writer ends first)!");
 
         tracing::info!("start-stop begin (reader ends first)...");
@@ -428,7 +428,7 @@ fn rw_parallel_and_start_stop() {
             100,
             false,
         );
-        start_stop_reader_ends_first.wait_for_comlete().unwrap();
+        start_stop_reader_ends_first.wait_for_complete().unwrap();
         tracing::info!("start-stop done(reader ends first)!");
     };
 
