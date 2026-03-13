@@ -172,7 +172,6 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &prefix, &prefix, q)
         }),
-        #[cfg(feature = "unstable")]
         None,
     );
 
@@ -187,7 +186,6 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
-        #[cfg(feature = "unstable")]
         None,
     );
 
@@ -232,12 +230,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_events_listener_inner(
-        callback,
-        false,
-        #[cfg(feature = "unstable")]
-        None,
-    ) {
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false, None) {
         tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
@@ -294,13 +287,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_links_listener_inner(
-        callback,
-        false,
-        None,
-        #[cfg(feature = "unstable")]
-        None,
-    ) {
+    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None, None) {
         tracing::error!("Unable to subscribe to link events: {}", e);
     }
 }

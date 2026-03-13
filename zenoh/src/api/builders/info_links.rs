@@ -169,7 +169,6 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 pub struct LinkEventsListener<Handler> {
     pub(crate) inner: LinkEventsListenerInner,
     pub(crate) handler: Handler,
-    #[cfg(feature = "unstable")]
     pub(crate) callback_sync_group: SyncGroup,
 }
 
@@ -245,7 +244,6 @@ impl<Handler: Send> UndeclarableSealed<()> for LinkEventsListener<Handler> {
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         LinkEventsListenerUndeclaration {
             listener: self,
-            #[cfg(feature = "unstable")]
             wait_callbacks: false,
         }
     }
@@ -271,7 +269,6 @@ impl<Handler> std::ops::DerefMut for LinkEventsListener<Handler> {
 #[zenoh_macros::unstable]
 pub struct LinkEventsListenerUndeclaration<Handler> {
     listener: LinkEventsListener<Handler>,
-    #[cfg(feature = "unstable")]
     wait_callbacks: bool,
 }
 
@@ -282,8 +279,8 @@ impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
 
 #[zenoh_macros::unstable]
 impl<Handler> LinkEventsListenerUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of link events listener callback (if any) return.
-    #[zenoh_macros::unstable]
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;
         self
@@ -294,7 +291,6 @@ impl<Handler> LinkEventsListenerUndeclaration<Handler> {
 impl<Handler> Wait for LinkEventsListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.listener.undeclare_impl()?;
-        #[cfg(feature = "unstable")]
         if self.wait_callbacks {
             self.listener.callback_sync_group.wait();
         }
@@ -476,14 +472,12 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> Self::To {
-        #[cfg(feature = "unstable")]
         let callback_sync_group = SyncGroup::default();
         let (callback, handler) = self.handler.into_handler();
         let state = self.session.declare_transport_links_listener_inner(
             callback,
             self.history,
             self.transport,
-            #[cfg(feature = "unstable")]
             callback_sync_group.notifier(),
         )?;
 
@@ -494,7 +488,6 @@ where
                 undeclare_on_drop: true,
             },
             handler,
-            #[cfg(feature = "unstable")]
             callback_sync_group,
         })
     }
@@ -526,7 +519,6 @@ impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
             self.handler,
             self.history,
             self.transport,
-            #[cfg(feature = "unstable")]
             None,
         )?;
         // Set the listener to not undeclare on drop (background mode)

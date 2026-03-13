@@ -11,21 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-#![cfg(feature = "unstable")]
+#![cfg(any(feature = "unstable", feature = "internal"))]
 #[allow(dead_code)]
 #[path = "common/mod.rs"]
 mod common;
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
+#[cfg(feature = "unstable")]
+use zenoh::session::{LinkEvent, TransportEvent};
 use zenoh::{
     matching::MatchingStatus,
     query::{Query, Reply},
     sample::Sample,
-    session::{LinkEvent, TransportEvent},
     Session, Wait,
 };
+use zenoh_config::Config;
 use zenoh_core::ztimeout;
 
 use crate::common::{open_session_connect, open_session_listen};
@@ -40,7 +41,7 @@ async fn create_peer_pair(locator: &str) -> (Session, Session) {
 }
 
 async fn create_peer() -> Session {
-    let mut config = zenoh::Config::default();
+    let mut config = Config::default();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     zenoh::open(config).await.unwrap()
 }
@@ -461,6 +462,7 @@ async fn test_callback_drop_on_undeclare_liveliness_get() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_transport_events_listener() {
     zenoh::init_log_from_env_or("error");
@@ -490,6 +492,7 @@ async fn test_callback_drop_on_undeclare_transport_events_listener() {
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
 }
 
+#[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_link_events_listener() {
     zenoh::init_log_from_env_or("error");
