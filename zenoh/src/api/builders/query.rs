@@ -338,6 +338,8 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
+    ///
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {
             if let Ok(Selector {
