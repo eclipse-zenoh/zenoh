@@ -17,7 +17,6 @@ use std::{
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
     sync::{atomic::AtomicBool, mpsc::Sender, Arc},
-    u64,
 };
 
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
@@ -30,13 +29,15 @@ use zenoh_runtime::ZRuntime;
 
 use crate::batch_arena::BatchArena;
 
+type RxCallbackImpl = dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static;
+
 #[derive(Debug)]
 struct RxCallback {
-    pub callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static>>,
+    pub callback: UnsafeCell<Box<RxCallbackImpl>>,
 }
 
 impl RxCallback {
-    fn new(callback: UnsafeCell<Box<dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static>>) -> Self {
+    fn new(callback: UnsafeCell<Box<RxCallbackImpl>>) -> Self {
         Self { callback }
     }
 }
@@ -107,7 +108,7 @@ impl Drop for ReadTask {
 
         ZRuntime::RX.spawn(async move {
             let index = index.wait().await;
-            let stop_rx_cmd = ReactorCmd::StopRx(index.clone());
+            let stop_rx_cmd = ReactorCmd::StopRx(*index);
             let _ = inner.submitter.submit(stop_rx_cmd);
         });
     }
@@ -118,11 +119,11 @@ impl ReadTask {
         tracing::debug!("Async stopping read task: {:?}", self);
 
         let index = self.index.wait().await;
-        let stop_rx_cmd = ReactorCmd::StopRx(index.clone());
+        let stop_rx_cmd = ReactorCmd::StopRx(*index);
         let _ = self.inner.submitter.submit(stop_rx_cmd);
 
         // waiting for read task context to be destroyed within the reactor
-        while let Some(_) = self.error_receiver.recv().await {}
+        while self.error_receiver.recv().await.is_some() {}
     }
 
     fn new<Cb>(fd: RawFd, callback: Cb, inner: Arc<ReaderInner>) -> ZResult<Self>
@@ -293,12 +294,12 @@ impl RxWindow {
                 bail!("Zero-sized buffer in stream!");
             }
             tracing::trace!("parsed size: {}", size);
-            Ok(size as usize)
+            Ok(size)
         }
 
         match &mut self.state {
             RxWindowState::Initial => {
-                let mut leftover = buffer.len() as usize;
+                let mut leftover = buffer.len();
                 let mut pos = 0;
 
                 while leftover > 0 {
@@ -353,7 +354,7 @@ impl RxWindow {
             RxWindowState::SizeFragmented(size_fragment) => {
                 // defragment size
                 let mut size = parse_size([*size_fragment, buffer[0]])?;
-                let mut leftover = buffer.len() as usize - 1;
+                let mut leftover = buffer.len() - 1;
                 let mut pos = 1;
 
                 loop {
@@ -508,13 +509,13 @@ impl Deref for RxBuffer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        &self.data
+        self.data
     }
 }
 
 impl DerefMut for RxBuffer {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
+        self.data
     }
 }
 
@@ -616,7 +617,7 @@ impl RxContextCell {
 
     fn get(&self, generation: NonZeroU32) -> Option<&Rx> {
         if self.generation == generation {
-            return (self.context.as_ref()).map(|val| val.deref());
+            return self.context.as_deref();
         }
         None
     }
@@ -652,9 +653,7 @@ struct RxContextStorage {
 
 impl RxContextStorage {
     fn new() -> Self {
-        let mut data = Vec::default();
-        data.reserve(16);
-
+        let data = Vec::with_capacity(16);
         Self {
             data,
             next_generation: NonZeroU32::MIN,
@@ -675,12 +674,10 @@ impl RxContextStorage {
             self.next_generation = NonZeroU32::MIN;
         }
 
-        let mut index = 0;
-        for cell in &mut self.data {
+        for (index, cell) in self.data.iter_mut().enumerate() {
             if cell.try_alloc(self.next_generation, &context) {
-                return IndexGeneration::new(index, self.next_generation);
+                return IndexGeneration::new(index as u32, self.next_generation);
             }
-            index += 1;
         }
 
         let new_cell = RxContextCell::new(context, self.next_generation);
@@ -705,6 +702,9 @@ impl IndexGeneration {
         })
     }
 
+    /// # Safety
+    ///
+    /// This is safe if `val` is not INVALID_MIN and not INVALID_MAX.
     #[inline]
     pub const unsafe fn new_unchecked(val: u64) -> Self {
         Self(NonZeroU64::new_unchecked(val))
@@ -1016,7 +1016,7 @@ impl Reader {
         ctr: &mut i32,
     ) -> ZResult<bool> {
         match context_storage.get(index) {
-            Some(context) => match Reader::read_multi(&e, index, context, arena, sq, ctr) {
+            Some(context) => match Reader::read_multi(e, index, context, arena, sq, ctr) {
                 Ok(val) => Ok(val),
                 Err(e) => {
                     context.post_error(e);

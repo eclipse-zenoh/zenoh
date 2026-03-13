@@ -74,7 +74,7 @@ impl Drop for ManagedTask {
 struct WriterTask;
 
 impl WriterTask {
-    pub fn new(port: u16, iteration_count: usize, interval: Option<Duration>) -> ManagedTask {
+    pub fn make(port: u16, iteration_count: usize, interval: Option<Duration>) -> ManagedTask {
         let addr = ("127.0.0.1", port);
 
         let finished = Arc::new(AtomicBool::new(false));
@@ -106,11 +106,10 @@ impl WriterTask {
         let mut i = 0u8;
         for _ in 0..iteration_count {
             let size =
-                ((unsafe { rand().abs() as u32 } % u16::MAX as u32) as u16).saturating_add(1);
+                ((unsafe { rand().unsigned_abs() } % u16::MAX as u32) as u16).saturating_add(1);
 
-            let mut data = Vec::new();
-            data.reserve(size as usize + 2);
-            data.write(&size.to_le_bytes())?;
+            let mut data = Vec::with_capacity(size as usize + 2);
+            data.write_all(&size.to_le_bytes())?;
 
             for _ in 0..size {
                 data.push(i);
@@ -125,7 +124,7 @@ impl WriterTask {
             }
 
             if let Some(interval) = &interval {
-                std::thread::sleep(interval.clone());
+                std::thread::sleep(*interval);
             }
         }
 
@@ -136,7 +135,7 @@ impl WriterTask {
 struct ReaderTask;
 
 impl ReaderTask {
-    pub fn new(reader: Reader, port: u16, iteration_count: usize) -> ManagedTask {
+    pub fn make(reader: Reader, port: u16, iteration_count: usize) -> ManagedTask {
         let addr = ("127.0.0.1", port);
 
         let finished = Arc::new(AtomicBool::new(false));
@@ -204,7 +203,7 @@ impl ReaderTask {
 struct RWTask;
 
 impl RWTask {
-    pub fn new(
+    pub fn make(
         reader: Reader,
         port: u16,
         iteration_count: usize,
@@ -227,8 +226,8 @@ impl RWTask {
         interval: Option<Duration>,
         finished: Arc<AtomicBool>,
     ) -> ZResult<()> {
-        let reader = ReaderTask::new(reader, port, iteration_count);
-        let writer = WriterTask::new(port, iteration_count, interval);
+        let reader = ReaderTask::make(reader, port, iteration_count);
+        let writer = WriterTask::make(port, iteration_count, interval);
 
         while !finished.load(std::sync::atomic::Ordering::Relaxed)
             && !reader.poll_comlete()?
@@ -252,7 +251,7 @@ impl RWTask {
 struct StartStopTask;
 
 impl StartStopTask {
-    pub fn new<F: Fn() -> Reader + Send + 'static>(
+    pub fn make<F: Fn() -> Reader + Send + 'static>(
         reader_fn: F,
         port: u16,
         iteration_count: usize,
@@ -297,7 +296,7 @@ impl StartStopTask {
         finished: Arc<AtomicBool>,
     ) -> ZResult<()> {
         for _ in 0..start_stop_count {
-            let rw = RWTask::new(reader_fn(), port, iteration_count, interval);
+            let rw = RWTask::make(reader_fn(), port, iteration_count, interval);
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_comlete()? {
                 std::thread::sleep(Duration::from_millis(100));
@@ -323,8 +322,8 @@ impl StartStopTask {
         finished: Arc<AtomicBool>,
     ) -> ZResult<()> {
         for _ in 0..start_stop_count {
-            let reader = ReaderTask::new(reader_fn(), port, usize::MAX);
-            let writer = WriterTask::new(port, usize::MAX, interval);
+            let reader = ReaderTask::make(reader_fn(), port, usize::MAX);
+            let writer = WriterTask::make(port, usize::MAX, interval);
             std::thread::sleep(Duration::from_millis(100));
             reader.interrupt();
             reader.wait_for_comlete()?;
@@ -353,8 +352,8 @@ fn rw_single() {
 
     let port = 7780;
     let interval = None;
-    let reader = ReaderTask::new(reader, port, ITERATION_COUNT);
-    let writer = WriterTask::new(port, ITERATION_COUNT, interval);
+    let reader = ReaderTask::make(reader, port, ITERATION_COUNT);
+    let writer = WriterTask::make(port, ITERATION_COUNT, interval);
 
     writer.wait_for_comlete().unwrap();
     reader.wait_for_comlete().unwrap();
@@ -371,15 +370,15 @@ fn rw_parallel() {
 
     let mut rw_pairs = vec![];
     for pair in 0..count {
-        let reader = ReaderTask::new(
+        let reader = ReaderTask::make(
             reader.clone(),
             base_port + pair,
             ITERATION_COUNT / count as usize,
         );
-        let writer = WriterTask::new(
+        let writer = WriterTask::make(
             base_port + pair,
             ITERATION_COUNT / count as usize,
-            base_interval.clone(),
+            base_interval,
         );
         rw_pairs.push((reader, writer));
     }
@@ -401,14 +400,14 @@ fn rw_parallel_and_start_stop() {
 
     let mut rw_background = vec![];
     for i in 0..count {
-        let rw = RWTask::new(reader.clone(), base_port + i, usize::MAX, base_interval);
+        let rw = RWTask::make(reader.clone(), base_port + i, usize::MAX, base_interval);
         rw_background.push(rw);
     }
 
     let run_start_stop_session = |reader_fn: Arc<dyn Fn() -> Reader + Send + Sync>| {
         tracing::info!("start-stop begin (writer ends first)...");
         let c_reader_fn = reader_fn.clone();
-        let start_stop_writer_ends_first = StartStopTask::new(
+        let start_stop_writer_ends_first = StartStopTask::make(
             move || c_reader_fn(),
             base_port + count,
             ITERATION_COUNT / 1000,
@@ -421,7 +420,7 @@ fn rw_parallel_and_start_stop() {
 
         tracing::info!("start-stop begin (reader ends first)...");
         let c_reader_fn = reader_fn.clone();
-        let start_stop_reader_ends_first = StartStopTask::new(
+        let start_stop_reader_ends_first = StartStopTask::make(
             move || c_reader_fn(),
             base_port + count,
             ITERATION_COUNT / 1000,

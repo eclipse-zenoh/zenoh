@@ -106,7 +106,7 @@ impl BatchArena {
     }
 
     pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {
-        let batch_count = self.batch_count().try_into().unwrap();
+        let batch_count = self.batch_count();
 
         let mut batches = Vec::with_capacity(batch_count);
 

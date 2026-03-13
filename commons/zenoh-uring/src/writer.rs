@@ -18,9 +18,9 @@ use std::{
 };
 
 use io_uring::{cqueue, opcode, types, IoUring};
+use zenoh_result::ZResult;
 
-use crate::{batch_arena::BatchArena, BUF_COUNT, BUF_SIZE};
-
+use crate::batch_arena::BatchArena;
 /*
 |____________________ARENA______________________|
 |__Segment__|__Segment__|__Segment__|__Segment__|
@@ -84,8 +84,9 @@ struct BufferPool {
 }
 
 impl BufferPool {
-    fn new(ring: &IoUring) -> Self {
-        let mut arena = UnsafeCell::new(BatchArena::new(BUF_SIZE, BUF_COUNT, BUF_COUNT).unwrap());
+    fn new(ring: &IoUring, batch_size: usize, batch_count: usize) -> Self {
+        let mut arena =
+            UnsafeCell::new(BatchArena::new(batch_size, batch_count, batch_count).unwrap());
         let write_buffers = arena.get_mut().register_buffers();
         unsafe { ring.submitter().register_buffers(&write_buffers).unwrap() };
 
@@ -120,7 +121,7 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new() -> Self {
+    pub fn new(batch_size: usize, batch_count: usize) -> ZResult<Self> {
         let ring = IoUring::builder()
         .setup_submit_all()
         //.setup_sqpoll(1)
@@ -129,18 +130,19 @@ impl Writer {
         .setup_coop_taskrun()
         //.setup_defer_taskrun()
         //.setup_single_issuer()
-        .build((BUF_COUNT * 2).try_into().unwrap())
+        .build(4096.try_into()?)
         .unwrap();
 
-        let pool = BufferPool::new(&ring);
+        let pool = BufferPool::new(&ring, batch_size, batch_count);
 
-        Self { ring, pool }
+        Ok(Self { ring, pool })
     }
 
     pub fn select_buffer(&'_ self) -> BorrowedBuffer<'_> {
         loop {
             {
                 let mut cq = unsafe { self.ring.completion_shared() };
+                #[allow(clippy::while_let_on_iterator)]
                 while let Some(e) = cq.next() {
                     if !cqueue::more(e.flags()) {
                         let user_data: WriterUserData =
@@ -165,6 +167,7 @@ impl Writer {
     }
 
     pub fn write(&self, fd: types::Fd, buffer: BorrowedBuffer, actual_len: usize) {
+        #[allow(clippy::missing_transmute_annotations)]
         let user_data =
             unsafe { std::mem::transmute(WriterUserData::WriteFixed(buffer.index as u64)) };
 
