@@ -184,6 +184,10 @@ impl<T> SingleOrVec<T> {
         assert!(at <= self.len());
         self.vectorize().insert(at, value);
     }
+
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.into_iter()
+    }
 }
 
 enum DrainInner<'a, T> {
@@ -270,6 +274,27 @@ impl<T> IntoIterator for SingleOrVec<T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a SingleOrVec<T> {
+    type Item = &'a T;
+    type IntoIter = Iter<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match &self.0 {
+            SingleOrVecInner::Single(first) => Self::IntoIter {
+                last: Some(first),
+                drain: [].iter(),
+            },
+            SingleOrVecInner::Vec(v) => {
+                let mut it = v.iter();
+                Iter {
+                    last: it.next_back(),
+                    drain: it,
+                }
+            }
+        }
+    }
+}
+
 impl<T> iter::Extend<T> for SingleOrVec<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for value in iter {
@@ -301,5 +326,17 @@ impl<T> Index<usize> for SingleOrVec<T> {
 impl<T> IndexMut<usize> for SingleOrVec<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.as_mut()[index]
+    }
+}
+
+pub struct Iter<'a, T> {
+    pub drain: core::slice::Iter<'a, T>,
+    pub last: Option<&'a T>,
+}
+
+impl<'a, T> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.drain.next().or_else(|| self.last.take())
     }
 }
