@@ -18,6 +18,8 @@ use core::{
     ops::Deref,
 };
 use std::net::SocketAddr;
+#[cfg(feature = "uring")]
+use std::os::fd::RawFd;
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -59,6 +61,8 @@ pub trait LinkUnicastTrait: Send + Sync {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
+    #[cfg(feature = "uring")]
+    fn get_fd(&self) -> ZResult<RawFd>;
 }
 
 impl Deref for LinkUnicast {

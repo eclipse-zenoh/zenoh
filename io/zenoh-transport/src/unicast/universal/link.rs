@@ -11,9 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "uring")]
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
+#[cfg(feature = "uring")]
+use zenoh_buffers::ZSlice;
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
 #[cfg(feature = "unstable")]
@@ -24,6 +28,8 @@ use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 use zenoh_task::TaskController;
+#[cfg(feature = "uring")]
+use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -162,19 +168,19 @@ impl TransportLinkUnicastUniversal {
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = cancellation_token
-                .run_until_cancelled(rx_task(
-                    &mut rx,
-                    transport.clone(),
-                    lease,
-                    transport.manager.config.link_rx_buffer_size,
-                    #[cfg(feature = "stats")]
-                    stats,
-                ))
-                .await;
+            let res = rx_task(
+                &mut rx,
+                transport.clone(),
+                lease,
+                transport.manager.config.link_rx_buffer_size,
+                #[cfg(feature = "stats")]
+                stats,
+                cancellation_token,
+            )
+            .await;
 
             // TODO(yuyuan): improve this callback
-            if let Some(Err(e)) = res {
+            if let Err(e) = res {
                 // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
@@ -285,6 +291,41 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
+) -> ZResult<()> {
+    #[cfg(feature = "uring")]
+    if link.link.get_fd().is_ok() {
+        return rx_task_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            #[cfg(feature = "stats")]
+            stats,
+            cancellation_token,
+        )
+        .await;
+    }
+
+    cancellation_token
+        .run_until_cancelled(rx_task_non_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+        .await
+        .unwrap_or(Ok(()))
+}
+
+async fn rx_task_non_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     async fn read<T, F>(
         link: &mut TransportLinkUnicastRx,
@@ -331,5 +372,149 @@ async fn rx_task(
             #[cfg(feature = "stats")]
             &stats,
         )?;
+    }
+}
+
+#[cfg(feature = "uring")]
+#[derive(Debug)]
+struct ZRxBuffer(Arc<RxBuffer>);
+
+#[cfg(feature = "uring")]
+impl ZSliceBuffer for ZRxBuffer {
+    fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(feature = "uring")]
+async fn rx_task_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    // TODO: implement timeout
+    _lease: Duration,
+    rx_buffer_size: usize,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
+) -> ZResult<()> {
+    // The pool of buffers
+    let mtu = link.config.batch.mtu as usize;
+    let mut n = rx_buffer_size / mtu;
+    if n == 0 {
+        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
+        n = 1;
+    }
+
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
+
+    let l = Link::new_unicast(
+        &link.link,
+        link.config.priorities.clone(),
+        link.config.reliability,
+    );
+
+    let batch_config = link.config.batch;
+    let c_transport = transport.clone();
+
+    ///////
+    //let reader = zenoh_uring::reader::Reader::new(65537, 16)?;
+
+    let mut uring_read_task = {
+        match link.link.is_streamed() {
+            true => {
+                let ring_cb = move |data: FragmentedBatch| {
+                    let mut batch_config = batch_config;
+                    batch_config.is_streamed = false;
+
+                    let buffer: ZSlice = match data.try_contagious_zerocopy() {
+                        Some(buffer) => ZSlice::new(
+                            std::sync::Arc::new(ZRxBuffer(buffer)),
+                            data.data_offset,
+                            data.data_offset + data.size(),
+                        )
+                        .map_err(|_| zerror!("Error constructing slice...."))?,
+                        None => {
+                            let contagious_data: Vec<u8> = data.iter().copied().collect();
+                            std::sync::Arc::new(contagious_data).into()
+                        }
+                    };
+
+                    let mut batch = RBatch::new(batch_config, buffer);
+                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+
+                    #[cfg(feature = "stats")]
+                    {
+                        let header_bytes = 2;
+                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                    }
+                    c_transport.read_messages(
+                        batch,
+                        &l,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
+                };
+
+                transport
+                    .manager
+                    .state
+                    .uring
+                    .reader
+                    .setup_fragmented_read(link.link.get_fd()?, ring_cb)?
+            }
+            false => {
+                let ring_cb = move |data: Arc<RxBuffer>| {
+                    let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
+
+                    let mut batch = RBatch::new(batch_config, buffer);
+                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+
+                    #[cfg(feature = "stats")]
+                    {
+                        let header_bytes = 0;
+                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                    }
+                    c_transport.read_messages(
+                        batch,
+                        &l,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
+                };
+
+                transport
+                    .manager
+                    .state
+                    .uring
+                    .reader
+                    .setup_read(link.link.get_fd()?, ring_cb)?
+            }
+        }
+    };
+
+    tokio::select! {
+        e = uring_read_task.read_error() => {
+            tracing::debug!("Uring RX task stopped by uring task error event");
+            Err(e)
+        },
+        finished = transport
+                    .manager
+                    .state
+                    .uring
+                    .reader.wait_finished() => {
+                        tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
+                        finished
+                    }
+        _ = cancellation_token.cancelled() => {
+            tracing::debug!("Uring RX task stopped by cancellation event");
+            Ok(())
+        }
     }
 }
