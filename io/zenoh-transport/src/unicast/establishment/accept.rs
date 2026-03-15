@@ -87,6 +87,8 @@ struct RecvInitSynOut {
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
+    #[cfg(feature = "cuda")]
+    negotiated_mem: Option<std::sync::Arc<zenoh_mem_transport::NegotiatedMemCaps>>,
 }
 
 // InitAck
@@ -98,11 +100,15 @@ struct SendInitAckIn {
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
+    #[cfg(feature = "cuda")]
+    negotiated_mem: Option<std::sync::Arc<zenoh_mem_transport::NegotiatedMemCaps>>,
 }
 struct SendInitAckOut {
     cookie_nonce: u64,
     #[cfg(feature = "shared-memory")]
     ext_shm: Option<AuthSegment>,
+    #[cfg(feature = "cuda")]
+    negotiated_mem: Option<std::sync::Arc<zenoh_mem_transport::NegotiatedMemCaps>>,
 }
 
 // OpenSyn
@@ -145,6 +151,8 @@ struct AcceptLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
+    #[cfg(feature = "cuda")]
+    ext_mem: Option<ext::mem::MemFsm>,
 }
 
 #[async_trait]
@@ -234,6 +242,11 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
+        // Note: capture peer_has_shm before ext_shm is consumed by recv_init_syn.
+        #[cfg(all(feature = "cuda", feature = "shared-memory"))]
+        let peer_has_shm = init_syn.ext_shm.is_some();
+        #[cfg(all(feature = "cuda", not(feature = "shared-memory")))]
+        let peer_has_shm = false;
         #[cfg(feature = "shared-memory")]
         let ext_shm = match &self.ext_shm {
             Some(my_shm) => my_shm
@@ -276,11 +289,22 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Mem (CUDA IPC / zero-copy negotiation)
+        #[cfg(feature = "cuda")]
+        let negotiated_mem = if let Some(mem_fsm) = self.ext_mem.as_ref() {
+            let neg = mem_fsm.negotiate(init_syn.ext_mem, peer_has_shm);
+            Some(std::sync::Arc::new(neg))
+        } else {
+            None
+        };
+
         let output = RecvInitSynOut {
             other_zid: init_syn.zid,
             other_whatami: init_syn.whatami,
             #[cfg(feature = "shared-memory")]
             ext_shm,
+            #[cfg(feature = "cuda")]
+            negotiated_mem,
         };
         Ok(output)
     }
@@ -395,6 +419,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             (encrypted.into(), nonce)
         };
 
+        // Extension Mem — advertise local CUDA caps in the InitAck
+        #[cfg(feature = "cuda")]
+        let ext_mem_ack = self.ext_mem.as_ref().and_then(|f| f.local_ext());
+
         // Send the message on the link
         let msg: TransportMessage = InitAck {
             version: input.mine_version,
@@ -412,6 +440,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem: ext_mem_ack,
         }
         .into();
 
@@ -431,6 +461,8 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             cookie_nonce,
             #[cfg(feature = "shared-memory")]
             ext_shm: input.ext_shm,
+            #[cfg(feature = "cuda")]
+            negotiated_mem: input.negotiated_mem,
         };
         Ok(output)
     }
@@ -704,6 +736,12 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
+        #[cfg(feature = "cuda")]
+        ext_mem: manager
+            .state
+            .mem_registry
+            .as_ref()
+            .map(|r| ext::mem::MemFsm::new(r.clone())),
     };
 
     // Init handshake
@@ -776,6 +814,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             other_whatami: isyn_out.other_whatami,
             #[cfg(feature = "shared-memory")]
             ext_shm: isyn_out.ext_shm,
+            #[cfg(feature = "cuda")]
+            negotiated_mem: isyn_out.negotiated_mem,
         };
         step!(fsm.send_init_ack((state, iack_in)).await)
     };
@@ -812,6 +852,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,
         patch: state.transport.ext_patch.get(),
+        #[cfg(feature = "cuda")]
+        negotiated_mem: iack_out.negotiated_mem,
     };
 
     let a_config = TransportLinkUnicastConfig {

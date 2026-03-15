@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 ZettaScale Technology
+# Copyright (c) 2026 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -14,23 +14,20 @@
 [package]
 authors = { workspace = true }
 categories = { workspace = true }
-description = "Internal crate for zenoh."
+description = "CUDA device memory support for zenoh ZSlice transport."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-buffers"
+name = "zenoh-cuda"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["std"]
-cuda = []
-shared-memory = []
 std = []
-test = ["rand"]
 
 [dependencies]
-rand = { workspace = true, optional = true }
-zenoh-collections = { workspace = true, default-features = false }
+tracing = { workspace = true }
+zenoh-buffers = { workspace = true, features = ["shared-memory", "cuda"] }
+zenoh-result = { workspace = true }

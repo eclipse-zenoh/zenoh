@@ -38,6 +38,7 @@ std = [
 ]
 test = ["rand", "zenoh-buffers/test"]
 unstable = []
+cuda = []
 
 [dependencies]
 const_format = { workspace = true }

@@ -5941,6 +5941,7 @@ dependencies = [
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
+ "zenoh-cuda",
  "zenoh-keyexpr",
  "zenoh-link",
  "zenoh-link-commons",
@@ -5988,6 +5989,7 @@ dependencies = [
  "tracing",
  "uhlc",
  "zenoh-buffers",
+ "zenoh-cuda",
  "zenoh-protocol",
  "zenoh-shm",
  "zenoh-util",
@@ -6043,6 +6045,15 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha3",
+ "zenoh-result",
+]
+
+[[package]]
+name = "zenoh-cuda"
+version = "1.7.2"
+dependencies = [
+ "tracing",
+ "zenoh-buffers",
  "zenoh-result",
 ]
 
@@ -6374,6 +6385,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-mem-transport"
+version = "1.7.2"
+dependencies = [
+ "tracing",
+ "zenoh-buffers",
+ "zenoh-cuda",
+ "zenoh-result",
+ "zenoh-shm",
+]
+
+[[package]]
 name = "zenoh-plugin-example"
 version = "1.7.2"
 dependencies = [
@@ -6584,8 +6606,10 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
+ "zenoh-cuda",
  "zenoh-link",
  "zenoh-link-commons",
+ "zenoh-mem-transport",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-runtime",

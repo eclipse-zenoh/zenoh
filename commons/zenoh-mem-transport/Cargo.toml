@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2023 ZettaScale Technology
+# Copyright (c) 2026 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -14,23 +14,28 @@
 [package]
 authors = { workspace = true }
 categories = { workspace = true }
-description = "Internal crate for zenoh."
+description = "Pluggable zero-copy memory transport backends for zenoh (SHM, CUDA IPC, RDMA, …)."
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
-name = "zenoh-buffers"
+name = "zenoh-mem-transport"
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["std"]
-cuda = []
-shared-memory = []
 std = []
-test = ["rand"]
+shared-memory = ["zenoh-buffers/shared-memory", "dep:zenoh-shm"]
+cuda = ["shared-memory", "zenoh-buffers/cuda", "dep:zenoh-cuda"]
 
 [dependencies]
-rand = { workspace = true, optional = true }
-zenoh-collections = { workspace = true, default-features = false }
+zenoh-buffers = { workspace = true, default-features = false, features = ["shared-memory"] }
+zenoh-result = { workspace = true }
+tracing = { workspace = true }
+zenoh-shm = { workspace = true, optional = true }
+zenoh-cuda = { workspace = true, optional = true }
+
+[[example]]
+name = "registry_negotiate"
+required-features = ["shared-memory"]

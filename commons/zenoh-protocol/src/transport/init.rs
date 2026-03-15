@@ -132,6 +132,8 @@ pub struct InitSyn {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    #[cfg(feature = "cuda")]
+    pub ext_mem: Option<ext::Mem>,
 }
 
 // Extensions
@@ -173,6 +175,11 @@ pub mod ext {
     /// if >= 1, then fragmentation first/drop markers
     pub type Patch = zextz64!(0x7, false);
     pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
+
+    /// # Mem extension (ID 0x8)
+    /// Advertises zero-copy memory backend capabilities (CUDA IPC, RDMA, etc.)
+    #[cfg(feature = "cuda")]
+    pub type Mem = zextzbuf!(0x8, false);
 }
 
 impl InitSyn {
@@ -199,6 +206,8 @@ impl InitSyn {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        #[cfg(feature = "cuda")]
+        let ext_mem = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -215,6 +224,8 @@ impl InitSyn {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         }
     }
 }
@@ -246,6 +257,8 @@ pub struct InitAck {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    #[cfg(feature = "cuda")]
+    pub ext_mem: Option<ext::Mem>,
 }
 
 impl InitAck {
@@ -277,6 +290,8 @@ impl InitAck {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        #[cfg(feature = "cuda")]
+        let ext_mem = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -294,6 +309,8 @@ impl InitAck {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         }
     }
 }

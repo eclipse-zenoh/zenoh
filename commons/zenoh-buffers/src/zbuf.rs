@@ -60,6 +60,15 @@ impl ZBuf {
 
     #[inline(always)]
     pub fn push_zslice(&mut self, zslice: ZSlice) {
+        // CudaPtr/CudaTensor ZSlices have zero CPU-visible bytes (device memory) but
+        // must be stored so the transport codec can extract the IPC handle for wire
+        // encoding, and so receivers can downcast the Arc<CudaBufInner>.
+        #[cfg(feature = "cuda")]
+        if zslice.kind == crate::ZSliceKind::CudaPtr || zslice.kind == crate::ZSliceKind::CudaTensor
+        {
+            self.slices.push(zslice);
+            return;
+        }
         if !zslice.is_empty() {
             self.slices.push(zslice);
         }

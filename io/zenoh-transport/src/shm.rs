@@ -209,6 +209,84 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     }
 }
 
+/// TX mapping with CUDA capability negotiation (cross-host downgrade support).
+///
+/// Use this instead of [`map_zmsg_to_partner`] when the transport has completed
+/// the `ext_mem` handshake and has a [`NegotiatedMemCaps`] for the peer.
+/// CUDA ZSlices are downgraded to raw bytes if the peer does not support CUDA IPC.
+#[cfg(all(feature = "shared-memory", feature = "cuda"))]
+pub fn map_zmsg_to_partner_with_caps<ShmCfg: PartnerShmConfig>(
+    msg: &mut NetworkMessageMut,
+    partner_shm_cfg: &ShmCfg,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
+    negotiated: &zenoh_mem_transport::NegotiatedMemCaps,
+) {
+    match &mut msg.body {
+        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
+            PushBody::Put(Put {
+                payload, ext_shm, ..
+            }) => map_to_partner_negotiated(
+                payload,
+                ext_shm,
+                partner_shm_cfg,
+                shm_provider,
+                negotiated,
+            ),
+            PushBody::Del(_) => {}
+        },
+        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
+            RequestBody::Query(q) => {
+                if let Some(zenoh_protocol::zenoh::query::ext::QueryBodyType {
+                    payload,
+                    ext_shm,
+                    ..
+                }) = &mut q.ext_body
+                {
+                    map_to_partner_negotiated(
+                        payload,
+                        ext_shm,
+                        partner_shm_cfg,
+                        shm_provider,
+                        negotiated,
+                    );
+                }
+            }
+        },
+        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
+            ResponseBody::Reply(r) => {
+                if let PushBody::Put(Put {
+                    payload, ext_shm, ..
+                }) = &mut r.payload
+                {
+                    map_to_partner_negotiated(
+                        payload,
+                        ext_shm,
+                        partner_shm_cfg,
+                        shm_provider,
+                        negotiated,
+                    );
+                }
+            }
+            ResponseBody::Err(e) => {
+                let zenoh_protocol::zenoh::err::Err {
+                    payload, ext_shm, ..
+                } = e;
+                map_to_partner_negotiated(
+                    payload,
+                    ext_shm,
+                    partner_shm_cfg,
+                    shm_provider,
+                    negotiated,
+                );
+            }
+        },
+        NetworkBodyMut::ResponseFinal(_)
+        | NetworkBodyMut::Interest(_)
+        | NetworkBodyMut::Declare(_)
+        | NetworkBodyMut::OAM(_) => {}
+    }
+}
+
 pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<()> {
     match msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
@@ -247,6 +325,7 @@ trait MapShm {
     // TX:
     // - shmbuf -> shminfo if partner supports shmbuf's SHM protocol
     // - shmbuf -> rawbuf if partner does not support shmbuf's SHM protocol
+    // - CUDA ZSlice -> IPC handle (native) or raw bytes (downgrade via negotiated caps)
     // - rawbuf -> rawbuf (no changes)
     fn map_to_partner<ShmCfg: PartnerShmConfig>(
         &mut self,
@@ -262,10 +341,82 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     shm_provider: &Option<Arc<LazyShmProvider>>,
 ) {
     for zs in zbuf.zslices_mut() {
+        #[cfg(all(feature = "shared-memory", feature = "cuda"))]
+        if zs.kind == ZSliceKind::CudaPtr || zs.kind == ZSliceKind::CudaTensor {
+            // CUDA IPC: ZSlice already carries a CudaBufInner with an IPC handle.
+            // Signal the sliced codec to encode the IPC handle (native path).
+            // For capability-aware downgrade (cross-host), use map_to_partner_negotiated.
+            *ext_shm = Some(ShmType::new());
+            continue;
+        }
+
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
                 if let Some(shm_provider) = shm_provider {
                     // Implicit SHM optimization: try to convert to SHM buffer
+                    shm_provider.wrap_in_place(ext_shm, zs);
+                }
+            }
+            Some(shmb) => {
+                if partner_shm_cfg.supports_protocol(shmb.protocol()) {
+                    zs.kind = ZSliceKind::ShmPtr;
+                    *ext_shm = Some(ShmType::new());
+                }
+            }
+        }
+    }
+}
+
+/// TX mapping with capability-negotiated CUDA downgrade.
+///
+/// Like [`map_to_partner`] but uses [`NegotiatedMemCaps`] to decide whether
+/// to send CUDA ZSlices natively (same-host IPC) or downgrade to raw bytes
+/// (cross-host fallback via `cudaMemcpy`).
+///
+/// Called from the transport TX path when `NegotiatedMemCaps` is available
+/// (Phase 5 wiring). Until then, `map_zmsg_to_partner` uses the native path.
+#[cfg(all(feature = "shared-memory", feature = "cuda"))]
+pub fn map_to_partner_negotiated<const ID: u8, ShmCfg: PartnerShmConfig>(
+    zbuf: &mut ZBuf,
+    ext_shm: &mut Option<ShmType<ID>>,
+    partner_shm_cfg: &ShmCfg,
+    shm_provider: &Option<Arc<LazyShmProvider>>,
+    negotiated: &zenoh_mem_transport::NegotiatedMemCaps,
+) {
+    use zenoh_mem_transport::{
+        backends::cuda::CudaIpcBackend, DowngradePath, NegotiationResult, ZeroMemTransport,
+    };
+
+    for zs in zbuf.zslices_mut() {
+        if zs.kind == ZSliceKind::CudaPtr || zs.kind == ZSliceKind::CudaTensor {
+            let outcome = negotiated.get(zs.kind).map(|e| &e.result);
+            match outcome {
+                Some(NegotiationResult::Native) | None => {
+                    *ext_shm = Some(ShmType::new());
+                }
+                Some(NegotiationResult::Fallback(path)) => {
+                    let backend = CudaIpcBackend::new(vec![]);
+                    if let Some(downgraded) = backend.downgrade(zs, *path) {
+                        *zs = downgraded;
+                        if *path == DowngradePath::ToShm {
+                            if let Some(provider) = shm_provider {
+                                provider.wrap_in_place(ext_shm, zs);
+                            }
+                        }
+                    } else {
+                        tracing::warn!("CUDA downgrade failed; slice will be sent as empty raw");
+                    }
+                }
+                Some(NegotiationResult::Reject) => {
+                    tracing::warn!("CUDA slice rejected by negotiation; skipping");
+                }
+            }
+            continue;
+        }
+
+        match zs.downcast_ref::<ShmBufInner>() {
+            None => {
+                if let Some(shm_provider) = shm_provider {
                     shm_provider.wrap_in_place(ext_shm, zs);
                 }
             }
@@ -411,4 +562,148 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     *zslice = smb.into();
 
     Ok(())
+}
+
+#[cfg(all(test, feature = "shared-memory", feature = "cuda"))]
+mod tests {
+    use std::sync::Arc;
+
+    use zenoh_buffers::{ZBuf, ZSlice, ZSliceKind, buffer::SplitBuffer};
+    use zenoh_cuda::CudaBufInner;
+    use zenoh_mem_transport::{DowngradePath, NegotiatedMemCaps, NegotiationResult};
+    use zenoh_protocol::{
+        core::Reliability,
+        network::{NetworkBody, NetworkBodyMut, NetworkMessage, Push},
+        zenoh::{PushBody, Put},
+    };
+
+    use super::{map_zmsg_to_partner_with_caps, PartnerShmConfig, ProtocolID};
+
+    // Minimal ShmCfg that advertises no SHM protocols.
+    struct NoShm;
+    impl PartnerShmConfig for NoShm {
+        fn supports_protocol(&self, _: ProtocolID) -> bool {
+            false
+        }
+    }
+
+    /// Build a `zenoh_buffers::ZBuf` carrying a single `CudaPtr` ZSlice.
+    fn cuda_zbuf(len: usize) -> ZBuf {
+        let cuda = CudaBufInner::alloc_device(len, 0).expect("cudaMalloc");
+        let mut zs = ZSlice::from(Arc::new(cuda) as Arc<dyn zenoh_buffers::ZSliceBuffer>);
+        zs.kind = ZSliceKind::CudaPtr;
+        let mut zbuf = ZBuf::empty();
+        zbuf.push_zslice(zs);
+        zbuf
+    }
+
+    // ── TX path: CUDA ZSlice downgraded to raw when peer has no CUDA caps ────
+    //
+    // Exercises the new `map_zmsg_to_partner_with_caps` branch.  Constructs a
+    // Put message carrying a CudaPtr ZBuf and confirms the payload becomes a
+    // Raw slice after the downgrade.
+    //
+    // cudaMalloc zero-initialises device memory so we verify the resulting
+    // bytes are all zero without needing an explicit HostToDevice memcpy.
+    #[test]
+    #[ignore = "requires CUDA device"]
+    fn test_tx_cuda_downgrade_to_raw_via_map_zmsg() {
+        const LEN: usize = 128;
+
+        let mut msg = NetworkMessage {
+            body: NetworkBody::Push(Push {
+                wire_expr: zenoh_protocol::core::WireExpr::empty(),
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+                ext_nodeid: Default::default(),
+                payload: PushBody::Put(Put {
+                    payload: cuda_zbuf(LEN),
+                    ..Default::default()
+                }),
+            }),
+            reliability: Reliability::Reliable,
+        };
+
+        let mut negotiated = NegotiatedMemCaps::new();
+        negotiated.set(
+            ZSliceKind::CudaPtr,
+            NegotiationResult::Fallback(DowngradePath::ToRaw),
+        );
+
+        map_zmsg_to_partner_with_caps(&mut msg.as_mut(), &NoShm, &None, &negotiated);
+
+        let NetworkBodyMut::Push(push) = msg.as_mut().body else {
+            panic!("expected Push body");
+        };
+        let PushBody::Put(ref put_out) = push.payload else {
+            panic!("expected Put payload");
+        };
+
+        let first_kind = put_out
+            .payload
+            .zslices()
+            .next()
+            .map(|s| s.kind)
+            .expect("payload must not be empty after downgrade");
+        assert!(first_kind == ZSliceKind::Raw, "payload must be Raw after downgrade");
+
+        let bytes = put_out.payload.contiguous();
+        assert_eq!(bytes.len(), LEN, "byte count must be preserved");
+        assert!(
+            bytes.as_ref().iter().all(|&b| b == 0),
+            "zeroed device memory must round-trip as zero bytes"
+        );
+    }
+
+    // ── TX path: CUDA ZSlice kept native when peer has matching CUDA caps ─────
+    //
+    // When NegotiatedMemCaps says Native for CudaPtr, the ZSlice kind must
+    // remain CudaPtr and ext_shm must be set (signals codec to write IPC handle).
+    #[test]
+    #[ignore = "requires CUDA device"]
+    fn test_tx_cuda_native_path_preserved() {
+        const LEN: usize = 64;
+
+        let mut msg = NetworkMessage {
+            body: NetworkBody::Push(Push {
+                wire_expr: zenoh_protocol::core::WireExpr::empty(),
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+                ext_nodeid: Default::default(),
+                payload: PushBody::Put(Put {
+                    payload: cuda_zbuf(LEN),
+                    ..Default::default()
+                }),
+            }),
+            reliability: Reliability::Reliable,
+        };
+
+        let mut negotiated = NegotiatedMemCaps::new();
+        negotiated.set(ZSliceKind::CudaPtr, NegotiationResult::Native);
+
+        map_zmsg_to_partner_with_caps(&mut msg.as_mut(), &NoShm, &None, &negotiated);
+
+        let NetworkBodyMut::Push(push) = msg.as_mut().body else {
+            panic!("expected Push body");
+        };
+        let PushBody::Put(ref put_out) = push.payload else {
+            panic!("expected Put payload");
+        };
+
+        let first_kind = put_out
+            .payload
+            .zslices()
+            .next()
+            .map(|s| s.kind)
+            .expect("payload must not be empty");
+        assert!(
+            first_kind == ZSliceKind::CudaPtr,
+            "payload must remain CudaPtr on native path"
+        );
+        // ext_shm must be set so the codec writes the IPC handle.
+        assert!(
+            put_out.ext_shm.is_some(),
+            "ext_shm must be Some to signal IPC encoding"
+        );
+    }
 }

@@ -53,6 +53,8 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         } = x;
 
         // Header
@@ -71,6 +73,10 @@ where
         #[cfg(feature = "shared-memory")]
         {
             n_exts += ext_shm.is_some() as u8;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            n_exts += ext_mem.is_some() as u8;
         }
 
         if n_exts != 0 {
@@ -130,6 +136,11 @@ where
         if *ext_patch != ext::PatchType::NONE {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
+        }
+        #[cfg(feature = "cuda")]
+        if let Some(mem) = ext_mem.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mem, n_exts != 0))?;
         }
 
         Ok(())
@@ -193,6 +204,8 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
+        #[cfg(feature = "cuda")]
+        let mut ext_mem = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -240,6 +253,12 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
+                #[cfg(feature = "cuda")]
+                ext::Mem::ID => {
+                    let (m, ext): (ext::Mem, bool) = eodec.read(&mut *reader)?;
+                    ext_mem = Some(m);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -261,6 +280,8 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         })
     }
 }
@@ -289,6 +310,8 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         } = x;
 
         // Header
@@ -307,6 +330,10 @@ where
         #[cfg(feature = "shared-memory")]
         {
             n_exts += ext_shm.is_some() as u8;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            n_exts += ext_mem.is_some() as u8;
         }
 
         if n_exts != 0 {
@@ -369,6 +396,11 @@ where
         if *ext_patch != ext::PatchType::NONE {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_patch, n_exts != 0))?;
+        }
+        #[cfg(feature = "cuda")]
+        if let Some(mem) = ext_mem.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mem, n_exts != 0))?;
         }
 
         Ok(())
@@ -435,6 +467,8 @@ where
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
         let mut ext_patch = ext::PatchType::NONE;
+        #[cfg(feature = "cuda")]
+        let mut ext_mem = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -482,6 +516,12 @@ where
                     ext_patch = p;
                     has_ext = ext;
                 }
+                #[cfg(feature = "cuda")]
+                ext::Mem::ID => {
+                    let (m, ext): (ext::Mem, bool) = eodec.read(&mut *reader)?;
+                    ext_mem = Some(m);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -504,6 +544,8 @@ where
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            #[cfg(feature = "cuda")]
+            ext_mem,
         })
     }
 }
