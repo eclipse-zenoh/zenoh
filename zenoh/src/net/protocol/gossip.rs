@@ -456,12 +456,7 @@ impl GossipNet {
             }
 
             if self.gossip && self.autoconnect.should_autoconnect(zid, whatami) {
-                // Connect discovered peers
-                zenoh_runtime::ZRuntime::Net.block_in_place(
-                    strong_runtime
-                        .start_conditions()
-                        .add_peer_connector_zid(zid),
-                );
+                // Connect discovered peers (only if locators are available)
                 if let Some(locators) = locators {
                     let runtime = strong_runtime.clone();
                     let wait_declares = self.wait_declares;
@@ -471,13 +466,16 @@ impl GossipNet {
                             .get_transport_unicast(&zid)
                             .await
                             .is_none()
-                            && runtime.connect_peer(&zid, &locators).await
-                            && ((!wait_declares) || whatami != WhatAmI::Peer)
                         {
-                            runtime
-                                .start_conditions()
-                                .terminate_peer_connector_zid(zid)
-                                .await;
+                            runtime.start_conditions().add_peer_connector_zid(zid).await;
+                            if runtime.connect_peer(&zid, &locators).await
+                                && ((!wait_declares) || whatami != WhatAmI::Peer)
+                            {
+                                runtime
+                                    .start_conditions()
+                                    .terminate_peer_connector_zid(zid)
+                                    .await;
+                            }
                         }
                     });
                 }
