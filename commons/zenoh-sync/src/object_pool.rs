@@ -32,6 +32,15 @@ where
     f: F,
 }
 
+impl<T, F: Fn() -> T + Clone> Clone for RecyclingObjectPool<T, F> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            f: self.f.clone(),
+        }
+    }
+}
+
 impl<T, F: Fn() -> T> RecyclingObjectPool<T, F> {
     pub fn new(num: usize, f: F) -> RecyclingObjectPool<T, F> {
         let inner: Arc<LifoQueue<T>> = Arc::new(LifoQueue::new(num));

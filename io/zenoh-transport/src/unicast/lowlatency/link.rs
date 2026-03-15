@@ -49,7 +49,7 @@ pub(crate) async fn send_with_link(
 
         buffer[0..4].copy_from_slice(&le);
 
-        link.write_all(&buffer).await?;
+        link.write_all(&buffer, None).await?;
     } else {
         let mut buffer = vec![];
         let mut writer = buffer.writer();
@@ -61,7 +61,7 @@ pub(crate) async fn send_with_link(
         {
             len = buffer.len() as u32;
         }
-        link.write_all(&buffer).await?;
+        link.write_all(&buffer, None).await?;
     }
     tracing::trace!("Sent: {:?}", msg);
 
@@ -81,16 +81,16 @@ pub(crate) async fn read_with_link(
     if is_streamed {
         // 16 bits for reading the batch length
         let mut length = [0_u8; 4];
-        link.link.read_exact(&mut length).await?;
+        link.link.read_exact(&mut length, None).await?;
         let n = u32::from_le_bytes(length) as usize;
         let len = buffer.len();
         let b = buffer.get_mut(0..n).ok_or_else(|| {
             zerror!("Batch len is invalid. Received {n} but negotiated max len is {len}.")
         })?;
-        link.link.read_exact(b).await?;
+        link.link.read_exact(b, None).await?;
         Ok(n)
     } else {
-        link.link.read(buffer).await
+        link.link.read(buffer, None).await
     }
 }
 
