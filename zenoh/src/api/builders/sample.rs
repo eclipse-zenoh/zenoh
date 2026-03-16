@@ -53,7 +53,8 @@ pub trait SampleBuilderTrait {
     #[zenoh_macros::unstable]
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self;
     /// Sets an optional attachment to be sent along with the publication.
-    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
+    /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
+    /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
