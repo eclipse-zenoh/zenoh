@@ -45,7 +45,7 @@ use crate::api::{key_expr::KeyExpr, queryable::Query};
 /// Zenoh intends to standardize the usage of a set of parameter names. To avoid conflicting with RPC parameters,
 /// the Zenoh team has settled on reserving the set of parameter names that start with non-alphanumeric characters.
 ///
-/// [Queryable](crate::queryable::Queryable) implementers are encouraged to prefer these standardized parameter names when implementing their
+/// [Queryable](crate::query::Queryable) implementers are encouraged to prefer these standardized parameter names when implementing their
 /// associated features, and to prefix their own parameter names to avoid having conflicting parameter names with other
 /// queryables.
 ///
