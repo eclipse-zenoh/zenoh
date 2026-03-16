@@ -21,14 +21,25 @@ use std::{
 };
 
 use zenoh::{
-    KE_ADV_PREFIX, KE_EMPTY, Resolvable, Resolve, Result as ZResult, Session, Wait, bytes::{Encoding, OptionZBytes, ZBytes}, internal::{
-        TerminatableTask, bail, runtime::ZRuntime, traits::{
+    bytes::{Encoding, OptionZBytes, ZBytes},
+    internal::{
+        bail,
+        runtime::ZRuntime,
+        traits::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-        }
-    }, key_expr::{KeyExpr, keyexpr}, liveliness::LivelinessToken, pubsub::{
+        },
+        TerminatableTask,
+    },
+    key_expr::{keyexpr, KeyExpr},
+    liveliness::LivelinessToken,
+    pubsub::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
         PublisherBuilder, PublisherUndeclaration,
-    }, qos::{CongestionControl, Priority, Reliability}, sample::{Locality, SourceInfo}, session::EntityGlobalId
+    },
+    qos::{CongestionControl, Priority, Reliability},
+    sample::{Locality, SourceInfo},
+    session::EntityGlobalId,
+    Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_EMPTY,
 };
 use zenoh_macros::ke;
 
