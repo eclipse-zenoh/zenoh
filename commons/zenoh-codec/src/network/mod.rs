@@ -42,18 +42,29 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: NetworkMessageRef) -> Self::Output {
         let NetworkMessageRef { body, .. } = x;
-
-        match body {
-            NetworkBodyRef::Push(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::Request(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::Response(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::ResponseFinal(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::Interest(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::Declare(b) => self.write(&mut *writer, b),
-            NetworkBodyRef::OAM(b) => self.write(&mut *writer, b),
+        if let NetworkBodyRef::Push(b) = body {
+            return self.write(&mut *writer, b);
         }
+        #[cold]
+        fn write_not_push<W: Writer>(
+            codec: Zenoh080,
+            writer: &mut W,
+            body: NetworkBodyRef,
+        ) -> Result<(), DidntWrite> {
+            match body {
+                NetworkBodyRef::Push(_) => unreachable!(),
+                NetworkBodyRef::Request(b) => codec.write(&mut *writer, b),
+                NetworkBodyRef::Response(b) => codec.write(&mut *writer, b),
+                NetworkBodyRef::ResponseFinal(b) => codec.write(&mut *writer, b),
+                NetworkBodyRef::Interest(b) => codec.write(&mut *writer, b),
+                NetworkBodyRef::Declare(b) => codec.write(&mut *writer, b),
+                NetworkBodyRef::OAM(b) => codec.write(&mut *writer, b),
+            }
+        }
+        write_not_push(self, writer, body)
     }
 }
 
@@ -86,6 +97,7 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
         let header: u8 = self.codec.read(&mut *reader)?;
 
@@ -102,19 +114,29 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
-        let body = match imsg::mid(self.header) {
-            id::PUSH => NetworkBody::Push(self.read(&mut *reader)?),
-            id::REQUEST => NetworkBody::Request(self.read(&mut *reader)?),
-            id::RESPONSE => NetworkBody::Response(self.read(&mut *reader)?),
-            id::RESPONSE_FINAL => NetworkBody::ResponseFinal(self.read(&mut *reader)?),
-            id::INTEREST => NetworkBody::Interest(self.read(&mut *reader)?),
-            id::DECLARE => NetworkBody::Declare(self.read(&mut *reader)?),
-            id::OAM => NetworkBody::OAM(self.read(&mut *reader)?),
-            _ => return Err(DidntRead),
-        };
+        if imsg::mid(self.header) == id::PUSH {
+            return Ok(NetworkBody::Push(self.read(&mut *reader)?).into());
+        }
+        #[cold]
+        fn read_not_push<R: Reader>(
+            header: Zenoh080Header,
+            reader: &mut R,
+        ) -> Result<NetworkMessage, DidntRead> {
+            let body = match imsg::mid(header.header) {
+                id::REQUEST => NetworkBody::Request(header.read(&mut *reader)?),
+                id::RESPONSE => NetworkBody::Response(header.read(&mut *reader)?),
+                id::RESPONSE_FINAL => NetworkBody::ResponseFinal(header.read(&mut *reader)?),
+                id::INTEREST => NetworkBody::Interest(header.read(&mut *reader)?),
+                id::DECLARE => NetworkBody::Declare(header.read(&mut *reader)?),
+                id::OAM => NetworkBody::OAM(header.read(&mut *reader)?),
+                _ => return Err(DidntRead),
+            };
 
-        Ok(body.into())
+            Ok(body.into())
+        }
+        read_not_push(self, reader)
     }
 }
 

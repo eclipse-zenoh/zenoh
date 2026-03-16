@@ -13,10 +13,7 @@
 //
 use std::future::{IntoFuture, Ready};
 
-use itertools::Itertools;
-use zenoh_config::qos::PublisherQoSConfig;
 use zenoh_core::{Resolvable, Result as ZResult, Wait};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode};
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
@@ -29,6 +26,7 @@ use crate::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         },
         bytes::{OptionZBytes, ZBytes},
+        cancellation::SyncGroup,
         encoding::Encoding,
         key_expr::KeyExpr,
         publisher::{Priority, Publisher},
@@ -103,7 +101,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) kind: T,
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
 }
 
@@ -145,7 +143,6 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
     /// that have the given [`Locality`](crate::sample::Locality).
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
@@ -196,9 +193,9 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -232,7 +229,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             self.kind.payload,
             SampleKind::Put,
@@ -255,7 +252,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
     #[inline]
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.publisher = self.publisher.apply_qos_overwrites();
-        self.publisher.session.0.resolve_put(
+        self.publisher.session.resolve_put(
             &self.publisher.key_expr?,
             ZBytes::new(),
             SampleKind::Delete,
@@ -401,34 +398,9 @@ impl PublisherBuilder<'_, '_> {
     /// Looks up whether any configured QoS overwrites apply to the builder's key expression.
     /// Returns a new builder with the overwritten QoS parameters.
     pub(crate) fn apply_qos_overwrites(self) -> Self {
-        let mut qos_overwrites = PublisherQoSConfig::default();
-        if let Ok(key_expr) = &self.key_expr {
-            // get overwritten builder
-            let state = zread!(self.session.0.state);
-            let nodes_including = state
-                .publisher_qos_tree
-                .nodes_including(key_expr)
-                .filter(|n| n.weight().is_some())
-                .collect_vec();
-            if let Some(node) = nodes_including.first() {
-                qos_overwrites = node
-                    .weight()
-                    .expect("first node weight should not be None")
-                    .clone();
-                if nodes_including.len() > 1 {
-                    tracing::warn!(
-                        "Publisher declared on `{}` which is included by multiple key_exprs in qos config ({}). Using qos config for `{}`",
-                        key_expr,
-                        nodes_including
-                            .iter()
-                            .map(|n| n.keyexpr().to_string())
-                            .join(", "),
-                        node.keyexpr(),
-                    );
-                }
-            }
-        }
-
+        let qos_overwrites = self.key_expr.as_ref().map_or(Default::default(), |ke| {
+            self.session.get_publisher_qos_overwrite(ke)
+        });
         Self {
             congestion_control: qos_overwrites
                 .congestion_control
@@ -486,12 +458,9 @@ impl Wait for PublisherBuilder<'_, '_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self = self.apply_qos_overwrites();
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session.0) {
-            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
-        }
+        key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_publisher_inner(key_expr.clone(), self.destination)?;
         Ok(Publisher {
             session: self.session.downgrade(),
@@ -506,6 +475,7 @@ impl Wait for PublisherBuilder<'_, '_> {
             reliability: self.reliability,
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
+            sync_group: SyncGroup::default(),
         })
     }
 }

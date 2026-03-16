@@ -181,7 +181,11 @@ impl CurrentInterestCleanup {
                         self.interests_timeout,
                     );
                 }
-                finalize_pending_interest(interest, &mut |p, m| m.with_mut(|m| p.send_declare(m)));
+                finalize_pending_interest(interest, &mut |p, m| {
+                    m.with_mut(|m| {
+                        p.send_declare(m);
+                    })
+                });
             }
         }
     }

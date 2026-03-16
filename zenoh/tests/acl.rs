@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(all(feature = "unstable", feature = "internal_config"))]
+#![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},

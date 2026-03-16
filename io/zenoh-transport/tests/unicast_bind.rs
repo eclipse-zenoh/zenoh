@@ -83,6 +83,58 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
+/// Like `openclose_transport` but asserts that the transport open FAILS.
+///
+/// Use for tests where the connect endpoint is expected to be rejected
+/// (e.g. IPv6 bind address to an IPv4 listen endpoint).
+async fn openclose_transport_expect_failure(
+    listen_endpoint: &EndPoint,
+    connect_endpoint: &EndPoint,
+    lowlatency_transport: bool,
+) {
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_handler = Arc::new(SHRouterOpenClose);
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        2,
+        lowlatency_transport,
+    )
+    .max_sessions(1);
+    let router_manager = TransportManager::builder()
+        .whatami(WhatAmI::Router)
+        .zid(router_id)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        2,
+        lowlatency_transport,
+    )
+    .max_sessions(1);
+    let client01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client01_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
+
+    let router_res = ztimeout!(router_manager.add_listener(listen_endpoint.clone()));
+    assert!(router_res.is_ok());
+
+    let open_res =
+        ztimeout_expected!(client01_manager.open_transport_unicast(connect_endpoint.clone()));
+    assert!(
+        open_res.is_err(),
+        "expected transport open to fail (protocol mismatch), but it succeeded: {open_res:?}"
+    );
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+}
+
 async fn openclose_transport(
     listen_endpoint: &EndPoint,
     connect_endpoint: &EndPoint,
@@ -104,7 +156,7 @@ async fn openclose_transport(
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     /* [CLIENT] */
@@ -121,7 +173,7 @@ async fn openclose_transport(
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientOpenClose::new()))
+        .build_test(Arc::new(SHClientOpenClose::new()))
         .unwrap();
 
     /* [1] */
@@ -316,7 +368,6 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
     use zenoh_util::net::get_ipv6_ipaddrs;
@@ -324,24 +375,26 @@ async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
     let addrs = get_ipv4_ipaddrs(None);
     let addrs_v6 = get_ipv6_ipaddrs(None);
 
+    if addrs_v6.is_empty() {
+        // No IPv6 addresses on this host; test requires IPv6 to produce a protocol mismatch.
+        return;
+    }
+
     let bind_addr_str = format!("{}:{}", addrs_v6[0], 13006);
-    let bind_addr = Address::from(bind_addr_str.as_str());
 
     zenoh_util::init_log_from_env_or("error");
 
     let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13005).parse().unwrap();
 
-    // Bind to different port on same IP address
+    // Connecting to an IPv4 endpoint while binding to an IPv6 address should fail.
     let connect_endpoint: EndPoint = format!("tcp/{}:{}#bind={}", addrs[0], 13005, bind_addr_str)
         .parse()
         .unwrap();
 
-    // should not connect to local interface and external address
-    openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
+    openclose_transport_expect_failure(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
     use zenoh_util::net::get_ipv6_ipaddrs;
@@ -349,20 +402,23 @@ async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
     let addrs = get_ipv4_ipaddrs(None);
     let addrs_v6 = get_ipv6_ipaddrs(None);
 
+    if addrs_v6.is_empty() {
+        // No IPv6 addresses on this host; test requires IPv6 to produce a protocol mismatch.
+        return;
+    }
+
     let bind_addr_str = format!("{}:{}", addrs_v6[0], 13006);
-    let bind_addr = Address::from(bind_addr_str.as_str());
 
     zenoh_util::init_log_from_env_or("error");
 
     let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13005).parse().unwrap();
 
-    // Bind to different port on same IP address
+    // Connecting to an IPv4 endpoint while binding to an IPv6 address should fail.
     let connect_endpoint: EndPoint = format!("udp/{}:{}#bind={}", addrs[0], 13005, bind_addr_str)
         .parse()
         .unwrap();
 
-    // should not connect to local interface and external address
-    openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
+    openclose_transport_expect_failure(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(feature = "transport_udp")]

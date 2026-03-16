@@ -408,9 +408,7 @@ impl HatQueriesTrait for HatCode {
         complete: bool,
     ) -> HashMap<usize, Arc<FaceState>> {
         let mut matching_queryables = HashMap::new();
-        if key_expr.ends_with('/') {
-            return matching_queryables;
-        }
+
         tracing::trace!(
             "get_matching_queryables({}; complete: {})",
             key_expr,

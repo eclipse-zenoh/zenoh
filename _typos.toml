@@ -8,7 +8,8 @@ extend-exclude = [
 
 
 [default.extend-words]
-Closee = "Closee" # Closee
-closee = "closee" # closee
-mis = "mis"       # mismatch
-thr = "thr"       # throughput
+Closee = "Closee"         # Closee
+closee = "closee"         # closee
+controllen = "controllen" # From libc
+mis = "mis"               # mismatch
+thr = "thr"               # throughput

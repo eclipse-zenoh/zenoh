@@ -59,7 +59,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
     #[cfg(feature = "unstable")]
-    source_info: SourceInfo,
+    source_info: Option<SourceInfo>,
     attachment: Option<ZBytes>,
 }
 
@@ -77,14 +77,14 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderPut {
                 payload: payload.into(),
                 encoding: Encoding::default(),
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -99,11 +99,11 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -134,9 +134,9 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
     #[cfg(feature = "unstable")]
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -144,16 +144,14 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
-    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the reply.
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let qos = self.qos.congestion_control(congestion_control);
-        Self { qos, ..self }
+    #[deprecated = "calling this function has no impact, replies will use the query congestion control"]
+    fn congestion_control(self, _congestion_control: CongestionControl) -> Self {
+        self
     }
 
-    /// Changes the [`Priority`](crate::qos::Priority) of the reply.
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
+    #[deprecated = "calling this function has no impact, replies will use the query priority"]
+    fn priority(self, _priority: Priority) -> Self {
+        self
     }
 
     /// Changes the Express policy to apply when routing the reply.
@@ -284,7 +282,7 @@ impl Wait for ReplyErrBuilder<'_> {
                 ext_unknown: vec![],
                 payload: self.payload.into(),
             }),
-            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_qos: self.query.inner.qos.into(),
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,

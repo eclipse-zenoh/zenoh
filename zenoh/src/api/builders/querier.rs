@@ -25,24 +25,24 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::query::ReplyKeyExpr;
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
-#[cfg(feature = "unstable")]
-use crate::query::ZenohParameters;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         querier::Querier,
         sample::{Locality, QoSBuilder},
+        selector::REPLY_KEY_EXPR_ANY_SEL_PARAM,
     },
     bytes::OptionZBytes,
     key_expr::KeyExpr,
     qos::Priority,
-    query::{QueryConsolidation, Reply},
+    query::{QueryConsolidation, Reply, ReplyKeyExpr},
     Session,
 };
 
@@ -81,7 +81,6 @@ pub struct QuerierBuilder<'a, 'b> {
     pub(crate) qos: QoSBuilder,
     pub(crate) destination: Locality,
     pub(crate) timeout: Duration,
-    #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
 }
 
@@ -157,9 +156,9 @@ impl QuerierBuilder<'_, '_> {
     }
 
     /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this querier accepts such disjoint replies.
-    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         Self {
             accept_replies: accept,
@@ -175,12 +174,9 @@ impl<'b> Resolvable for QuerierBuilder<'_, 'b> {
 impl Wait for QuerierBuilder<'_, '_> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut key_expr = self.key_expr?;
-        if !key_expr.is_fully_optimized(&self.session.0) {
-            key_expr = self.session.declare_keyexpr(key_expr).wait()?;
-        }
+        key_expr = self.session.declare_keyexpr(key_expr).wait()?;
         let id = self
             .session
-            .0
             .declare_querier_inner(key_expr.clone(), self.destination)?;
         Ok(Querier {
             session: self.session.downgrade(),
@@ -192,9 +188,9 @@ impl Wait for QuerierBuilder<'_, '_> {
             target: self.target,
             consolidation: self.consolidation,
             timeout: self.timeout,
-            #[cfg(feature = "unstable")]
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
+            callback_sync_group: SyncGroup::default(),
         })
     }
 }
@@ -244,16 +240,61 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt GET operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use zenoh::{query::{ConsolidationMode, QueryTarget}};
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let querier = session.declare_querier("key/expression")
+    ///     .target(QueryTarget::All)
+    ///     .consolidation(ConsolidationMode::None)
+    ///     .await
+    ///     .unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let _ = querier
+    ///     .get()
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
+    ///     .cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
+            ..self
+        }
+    }
 }
 
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -381,6 +422,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         QuerierGetBuilder {
             querier,
@@ -390,6 +433,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -432,31 +477,31 @@ where
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (callback, receiver) = self.handler.into_handler();
-
         #[allow(unused_mut)]
         // mut is only needed when building with "unstable" feature, which might add extra internal parameters on top of the user-provided ones
         let mut parameters = self.parameters.clone();
-        #[cfg(feature = "unstable")]
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
-            parameters.set_reply_key_expr_any();
+            parameters.insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
         }
-        self.querier
-            .session
-            .query(
-                &self.querier.key_expr,
-                &parameters,
-                self.querier.target,
-                self.querier.consolidation,
-                self.querier.qos,
-                self.querier.destination,
-                self.querier.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|_| receiver)
+        self.querier.session.query(
+            &self.querier.key_expr,
+            &parameters,
+            self.querier.target,
+            self.querier.consolidation,
+            self.querier.qos,
+            self.querier.destination,
+            self.querier.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            Some(self.querier.id),
+            self.querier.callback_sync_group.notifier(),
+        )?;
+        Ok(receiver)
     }
 }
 

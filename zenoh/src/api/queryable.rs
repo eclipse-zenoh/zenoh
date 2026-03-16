@@ -19,7 +19,7 @@ use std::{
 };
 
 use tracing::error;
-use zenoh_core::{Resolvable, Resolve, Wait};
+use zenoh_core::{Resolvable, Wait};
 use zenoh_protocol::{
     core::{EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
@@ -27,24 +27,23 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
-use {
-    crate::api::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 #[zenoh_macros::unstable]
-use crate::api::selector::ZenohParameters;
+use crate::api::sample::SourceInfo;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
-        sample::{Locality, Sample, SampleKind},
-        selector::Selector,
+        query::ReplyKeyExpr,
+        sample::{Locality, QoS, Sample, SampleKind},
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::{UndeclarableSealed, WeakSession},
         Id,
     },
@@ -52,12 +51,73 @@ use crate::{
     net::primitives::Primitives,
 };
 
+pub(crate) struct LocalReplyPrimitives {
+    session: WeakSession,
+}
+
+pub(crate) struct RemoteReplyPrimitives {
+    pub(crate) session: Option<WeakSession>,
+    pub(crate) primitives: Arc<dyn Primitives>,
+}
+
+pub(crate) enum ReplyPrimitives {
+    Local(LocalReplyPrimitives),
+    Remote(RemoteReplyPrimitives),
+}
+
+impl ReplyPrimitives {
+    pub(crate) fn new_local(session: WeakSession) -> Self {
+        ReplyPrimitives::Local(LocalReplyPrimitives { session })
+    }
+
+    pub(crate) fn new_remote(
+        session: Option<WeakSession>,
+        primitives: Arc<dyn Primitives>,
+    ) -> Self {
+        ReplyPrimitives::Remote(RemoteReplyPrimitives {
+            session,
+            primitives,
+        })
+    }
+
+    pub(crate) fn send_response_final(&self, msg: &mut ResponseFinal) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response_final(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response_final(msg),
+        }
+    }
+
+    pub(crate) fn send_response(&self, msg: &mut Response) {
+        match self {
+            ReplyPrimitives::Local(local) => local.session.send_response(msg),
+            ReplyPrimitives::Remote(remote) => remote.primitives.send_response(msg),
+        }
+    }
+
+    pub(crate) fn keyexpr_to_wire(&self, key_expr: &KeyExpr) -> WireExpr<'static> {
+        match self {
+            ReplyPrimitives::Local(local) => key_expr.to_wire_local(&local.session).to_owned(),
+            ReplyPrimitives::Remote(remote) => match &remote.session {
+                Some(s) => key_expr.to_wire(s).to_owned(),
+                None => WireExpr {
+                    scope: 0,
+                    suffix: std::borrow::Cow::Owned(key_expr.as_str().into()),
+                    mapping: Mapping::Sender,
+                },
+            },
+        }
+    }
+}
+
 pub(crate) struct QueryInner {
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohIdProto,
-    pub(crate) primitives: Arc<dyn Primitives>,
+    pub(crate) qos: QoS,
+    #[cfg(feature = "unstable")]
+    pub(crate) source_info: Option<SourceInfo>,
+    pub(crate) primitives: ReplyPrimitives,
 }
 
 impl QueryInner {
@@ -68,7 +128,10 @@ impl QueryInner {
             parameters: Parameters::empty(),
             qid: 0,
             zid: ZenohIdProto::default(),
-            primitives: Arc::new(DummyPrimitives),
+            qos: QoS::default(),
+            #[cfg(feature = "unstable")]
+            source_info: None,
+            primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
         }
     }
 }
@@ -77,7 +140,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(&mut ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
+            ext_qos: self.qos.into(),
             ext_tstamp: None,
         });
     }
@@ -109,54 +172,191 @@ pub struct Query {
 
 impl Query {
     /// The full [`Selector`] of this Query.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.selector()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector::borrowed(&self.inner.key_expr, &self.inner.parameters)
     }
 
     /// The key selector part of this Query.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.key_expr()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{}", query.parameters()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn parameters(&self) -> &Parameters<'static> {
         &self.inner.parameters
     }
 
     /// This Query's payload.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| {
+    ///         let payload: Option<&ZBytes> = query.payload();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn payload(&self) -> Option<&ZBytes> {
         self.value.as_ref().map(|v| &v.0)
     }
 
     /// This Query's payload (mutable).
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |mut query| {
+    ///         let payload: Option<&mut ZBytes> = query.payload_mut();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn payload_mut(&mut self) -> Option<&mut ZBytes> {
         self.value.as_mut().map(|v| &mut v.0)
     }
 
     /// This Query's encoding.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { println!("{:?}", query.encoding()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     pub fn encoding(&self) -> Option<&Encoding> {
         self.value.as_ref().map(|v| &v.1)
     }
 
     /// This Query's attachment.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| {
+    ///         let attachment: Option<&ZBytes> = query.attachment();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
     /// This Query's attachment (mutable).
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::bytes::ZBytes;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |mut query| {
+    ///         let attachment: Option<&mut ZBytes> = query.attachment_mut();
+    ///     })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
+    }
+
+    /// Gets info on the source of this Query.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn source_info(&self) -> Option<&SourceInfo> {
+        self.inner.source_info.as_ref()
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
     ///
     /// This api is for internal use only.
+    ///
+    /// # Examples
+    /// ```
+    /// # use zenoh::sample::Sample;
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { query.reply_sample(Sample::empty()); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
     #[inline(always)]
     #[zenoh_macros::internal]
     pub fn reply_sample(&self, sample: Sample) -> ReplySample<'_> {
@@ -172,6 +372,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply<'b, TryIntoKeyExpr, IntoZBytes>(
         &self,
@@ -187,6 +389,8 @@ impl Query {
     }
 
     /// Sends a [`ReplyError`](crate::query::ReplyError) as a reply to this Query.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_err<IntoZBytes>(&self, payload: IntoZBytes) -> ReplyErrBuilder<'_>
     where
@@ -201,6 +405,8 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    ///
+    /// The reply is sent with QoS of the query.
     #[inline(always)]
     pub fn reply_del<'b, TryIntoKeyExpr>(
         &self,
@@ -214,24 +420,40 @@ impl Query {
     }
 
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does so.
-    #[zenoh_macros::unstable]
-    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
-        self._accepts_any_replies().map(|any| {
-            if any {
-                ReplyKeyExpr::Any
-            } else {
-                ReplyKeyExpr::MatchingQuery
-            }
-        })
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session
+    ///     .declare_queryable("key/expression")
+    ///     .callback(move |query| { query.accepts_replies(); })
+    ///     .await
+    ///     .unwrap();
+    /// # session.get("key/expression").await.unwrap();
+    /// # }
+    pub fn accepts_replies(&self) -> ReplyKeyExpr {
+        if self._accepts_any_replies() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        }
     }
-    #[cfg(feature = "unstable")]
-    fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().reply_key_expr_any())
+    fn _accepts_any_replies(&self) -> bool {
+        self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
+    ///
+    /// # Examples
+    /// ```
+    /// # fn main() {
+    /// let query = unsafe { zenoh::query::Query::empty() };
+    /// # }
     #[zenoh_macros::internal]
     pub unsafe fn empty() -> Self {
         Query {
@@ -240,6 +462,27 @@ impl Query {
             value: None,
             attachment: None,
         }
+    }
+
+    /// Gets the Priority policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn priority(&self) -> crate::qos::Priority {
+        self.inner.qos.priority()
+    }
+
+    /// Gets the CongestionControl policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn congestion_control(&self) -> crate::qos::CongestionControl {
+        self.inner.qos.congestion_control()
+    }
+
+    /// Gets the Express policy of this Query.
+    #[inline(always)]
+    #[zenoh_macros::unstable]
+    pub fn express(&self) -> bool {
+        self.inner.qos.express()
     }
 }
 
@@ -301,25 +544,16 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
-            true
-        );
-        if c && !self.key_expr().intersects(&sample.key_expr) {
+        if !self._accepts_any_replies() && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[cfg(not(feature = "unstable"))]
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
-        let ext_sinfo = sample.source_info.into();
+        let ext_sinfo = sample.source_info.map(Into::into);
         self.inner.primitives.send_response(&mut Response {
             rid: self.inner.qid,
-            wire_expr: WireExpr {
-                scope: 0,
-                suffix: std::borrow::Cow::Owned(sample.key_expr.into()),
-                mapping: Mapping::Sender,
-            },
+            wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
             payload: ResponseBody::Reply(zenoh::Reply {
                 consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],
@@ -391,7 +625,19 @@ pub(crate) struct QueryableInner {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct QueryableUndeclaration<Handler>(Queryable<Handler>);
+pub struct QueryableUndeclaration<Handler> {
+    queryable: Queryable<Handler>,
+    wait_callbacks: bool,
+}
+
+impl<Handler> QueryableUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
     type To = ZResult<()>;
@@ -399,7 +645,11 @@ impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
 
 impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.queryable.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.queryable.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -426,26 +676,25 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// # Examples
 ///
 /// Using callback:
-/// ```no_run
+/// ```
 /// # #[tokio::main]
 /// # async fn main() {
 /// use futures::prelude::*;
 ///
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let (tx, rx) = flume::bounded(32);
-/// session
+/// let queryable = session
 ///     .declare_queryable("key/expression")
-///     .callback(move |query| tx.send(query).unwrap())
-///     .background()
+///     .callback(move |query| {
+///         use crate::zenoh::Wait;
+///         println!(">> Handling query '{}'", query.selector());
+///         query.reply("key/expression", "value").wait().unwrap();
+/// #       format!("{query}");
+/// #       format!("{query:?}");
+///     })
 ///     .await
 ///     .unwrap();
-/// // queryable runs in background until the session is closed
-/// tokio::spawn(async move {
-///     while let Ok(query) = rx.recv_async().await {
-///         println!(">> Handling query '{}'", query.selector());
-///         query.reply("key/expression", "value").await.unwrap();
-///     }
-/// });
+/// # format!("{queryable:?}");
+/// # session.get("key/expression").await.unwrap();
 /// # }
 /// ```
 ///
@@ -457,14 +706,11 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
 /// let queryable = session
 ///     .declare_queryable("key/expression")
-///     .with(flume::bounded(32))
 ///     .await
 ///     .unwrap();
 /// while let Ok(query) = queryable.recv_async().await {
 ///     println!(">> Handling query '{}'", query.selector());
-///     query.reply("key/expression", "value")
-///         .await
-///         .unwrap();
+///     query.reply("key/expression", "value").await.unwrap();
 /// }
 /// // queryable is undeclared at the end of the scope
 /// # }
@@ -474,6 +720,7 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl<Handler> Queryable<Handler> {
@@ -485,9 +732,7 @@ impl<Handler> Queryable<Handler> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
     /// let queryable_id = queryable.id();
     /// # }
     /// ```
@@ -503,6 +748,17 @@ impl<Handler> Queryable<Handler> {
     /// Returns a reference to this queryable's handler.
     /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
     /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// let handler = queryable.handler();
+    /// # }
+    /// ```
     pub fn handler(&self) -> &Handler {
         &self.handler
     }
@@ -510,6 +766,17 @@ impl<Handler> Queryable<Handler> {
     /// Returns a mutable reference to this queryable's handler.
     /// A handler is anything that implements [`IntoHandler`](crate::handlers::IntoHandler).
     /// The default handler is [`DefaultHandler`](crate::handlers::DefaultHandler).
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// let handler = queryable.handler_mut();
+    /// # }
+    /// ```
     pub fn handler_mut(&mut self) -> &mut Handler {
         &mut self.handler
     }
@@ -522,14 +789,12 @@ impl<Handler> Queryable<Handler> {
     /// # async fn main() {
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression")
-    ///     .await
-    ///     .unwrap();
+    /// let queryable = session.declare_queryable("key/expression").await.unwrap();
     /// queryable.undeclare().await.unwrap();
     /// # }
     /// ```
     #[inline]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>>
+    pub fn undeclare(self) -> QueryableUndeclaration<Handler>
     where
         Handler: Send,
     {
@@ -542,12 +807,37 @@ impl<Handler> Queryable<Handler> {
         self.inner.session.close_queryable(self.inner.id)
     }
 
+    /// Make queryable run in background until the session is closed.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let mut queryable = session.declare_queryable("key/expression").await.unwrap();
+    /// queryable.set_background(true);
+    /// # }
+    /// ```
     #[zenoh_macros::internal]
     pub fn set_background(&mut self, background: bool) {
         self.inner.undeclare_on_drop = !background;
     }
 
     /// Returns the [`KeyExpr`] this queryable responds to.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .await
+    ///     .unwrap();
+    /// let key_expr = queryable.key_expr();
+    /// # }
+    /// ```
     #[inline]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
@@ -568,7 +858,10 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
     type Undeclaration = QueryableUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        QueryableUndeclaration(self)
+        QueryableUndeclaration {
+            queryable: self,
+            wait_callbacks: false,
+        }
     }
 }
 

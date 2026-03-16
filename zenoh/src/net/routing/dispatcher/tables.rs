@@ -52,10 +52,15 @@ pub(crate) struct RoutingExpr<'a> {
 impl<'a> RoutingExpr<'a> {
     #[inline]
     pub(crate) fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
+        let resource = if suffix.is_empty() {
+            Some(prefix).into()
+        } else {
+            OnceCell::new()
+        };
         RoutingExpr {
             prefix,
             suffix,
-            resource: OnceCell::new(),
+            resource,
             key_expr: OnceCell::new(),
         }
     }
@@ -95,6 +100,16 @@ impl<'a> RoutingExpr<'a> {
             None => self.prefix.get_best_key(self.suffix, sid),
         }
     }
+
+    #[cfg(feature = "stats")]
+    pub(crate) fn is_admin(&self) -> bool {
+        let admin_prefix = "@/";
+        if self.prefix.parent.is_none() {
+            self.suffix.starts_with(admin_prefix)
+        } else {
+            self.prefix.expr().starts_with(admin_prefix)
+        }
+    }
 }
 
 pub struct Tables {
@@ -115,6 +130,10 @@ pub struct Tables {
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) routes_version: RoutesVersion,
     pub(crate) next_interceptor_version: AtomicUsize,
+    #[cfg(feature = "stats")]
+    pub(crate) stats: zenoh_stats::StatsRegistry,
+    #[cfg(feature = "stats")]
+    pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
 }
 
 impl Tables {
@@ -124,6 +143,7 @@ impl Tables {
         hlc: Option<Arc<HLC>>,
         config: &Config,
         hat_code: &(dyn HatTrait + Send + Sync),
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
     ) -> ZResult<Self> {
         let drop_future_timestamp =
             unwrap_or_default!(config.timestamping().drop_future_timestamp());
@@ -133,6 +153,13 @@ impl Tables {
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
+        #[cfg(feature = "stats")]
+        let mut stats_keys = zenoh_stats::StatsKeysTree::default();
+        #[cfg(feature = "stats")]
+        stats.update_keys(
+            &mut stats_keys,
+            config.stats.filters().iter().map(|f| &*f.key),
+        );
         Ok(Tables {
             zid,
             whatami,
@@ -150,6 +177,10 @@ impl Tables {
             hat: hat_code.new_tables(router_peers_failover_brokering),
             routes_version: 0,
             next_interceptor_version: AtomicUsize::new(0),
+            #[cfg(feature = "stats")]
+            stats_keys,
+            #[cfg(feature = "stats")]
+            stats,
         })
     }
 
@@ -208,8 +239,16 @@ pub struct TablesLock {
 
 impl TablesLock {
     #[allow(dead_code)]
-    pub(crate) fn regen_interceptors(&self, config: &Config) -> ZResult<()> {
+    pub(crate) fn update_config(&self, config: &Config) -> ZResult<()> {
         let mut tables = zwrite!(self.tables);
+        #[cfg(feature = "stats")]
+        {
+            let tables = &mut *tables;
+            tables.stats.update_keys(
+                &mut tables.stats_keys,
+                config.stats.filters().iter().map(|k| &*k.key),
+            );
+        }
         tables.interceptors = interceptor_factories(config)?;
         drop(tables);
         let tables = zread!(self.tables);

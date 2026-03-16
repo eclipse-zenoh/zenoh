@@ -30,8 +30,9 @@ use crate::{
 };
 
 #[dynamic(lazy, drop)]
-/// A global lazily-initialized SHM client storage. When initialized,
-/// contains default client set, see [with_default_client_set](ShmClientStorage::with_default_client_set)
+/// A global lazily-initialized SHM client storage.
+///
+/// When initialized, contains default client set, see [with_default_client_set](ShmClientSetBuilder::with_default_client_set)
 #[zenoh_macros::unstable_doc]
 pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
     ShmClientStorage::builder()
@@ -112,6 +113,7 @@ impl ShmClientStorageBuilder {
 }
 
 /// A storage for SHM clients.
+///
 /// Runtime or Session constructed with instance of this type gets capabilities to read
 /// SHM buffers for Protocols added to this instance.
 #[zenoh_macros::unstable_doc]

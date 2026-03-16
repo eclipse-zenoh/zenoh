@@ -45,6 +45,7 @@ impl ZBuf {
         self.slices.clear();
     }
 
+    #[inline(always)]
     pub fn zslices(&self) -> impl Iterator<Item = &ZSlice> + '_ {
         self.slices.as_ref().iter()
     }
@@ -57,6 +58,7 @@ impl ZBuf {
         self.slices.into_iter()
     }
 
+    #[inline(always)]
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
@@ -488,14 +490,12 @@ pub struct ZBufWriter<'a> {
 impl<'a> ZBufWriter<'a> {
     #[inline]
     fn zslice_writer(&mut self) -> &mut ZSliceWriter<'a> {
-        // Cannot use `if let` because of  https://github.com/rust-lang/rust/issues/54663
-        if self.zslice_writer.is_some() {
-            return self.zslice_writer.as_mut().unwrap();
+        if self.zslice_writer.is_none() {
+            // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
+            let zbuf = unsafe { self.inner.as_mut() };
+            zbuf.slices.push(ZSlice::empty());
+            self.zslice_writer = zbuf.slices.last_mut().unwrap().writer();
         }
-        // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
-        let zbuf = unsafe { self.inner.as_mut() };
-        zbuf.slices.push(ZSlice::empty());
-        self.zslice_writer = zbuf.slices.last_mut().unwrap().writer();
         self.zslice_writer.as_mut().unwrap()
     }
 }

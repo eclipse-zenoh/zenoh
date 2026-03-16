@@ -30,7 +30,7 @@ use super::{
     session::{UndeclarableSealed, WeakSession},
     Id,
 };
-use crate::api::handlers::CallbackParameter;
+use crate::api::{cancellation::SyncGroup, handlers::CallbackParameter};
 
 /// A struct that indicates if there exist entities matching the key expression.
 ///
@@ -157,6 +157,7 @@ pub(crate) struct MatchingListenerInner {
 pub struct MatchingListener<Handler> {
     pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl<Handler> MatchingListener<Handler> {
@@ -224,7 +225,10 @@ impl<Handler: Send> UndeclarableSealed<()> for MatchingListener<Handler> {
     type Undeclaration = MatchingListenerUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        MatchingListenerUndeclaration(self)
+        MatchingListenerUndeclaration {
+            listener: self,
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -243,7 +247,19 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
 }
 
 /// A [`Resolvable`] returned by [`MatchingListener::undeclare`]
-pub struct MatchingListenerUndeclaration<Handler>(MatchingListener<Handler>);
+pub struct MatchingListenerUndeclaration<Handler> {
+    listener: MatchingListener<Handler>,
+    wait_callbacks: bool,
+}
+
+impl<Handler> MatchingListenerUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of matching listener callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {
     type To = ZResult<()>;
@@ -251,7 +267,11 @@ impl<Handler> Resolvable for MatchingListenerUndeclaration<Handler> {
 
 impl<Handler> Wait for MatchingListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.listener.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.listener.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 

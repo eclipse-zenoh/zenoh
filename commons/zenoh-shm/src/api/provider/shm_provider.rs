@@ -93,6 +93,7 @@ impl<T> AllocLayout for TypedLayout<T> {
 }
 
 /// A layout for allocations.
+///
 /// This is a pre-calculated layout suitable for making series of similar allocations
 /// adopted for particular ShmProvider
 #[zenoh_macros::unstable_doc]
@@ -395,6 +396,7 @@ impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> Const
 }
 
 /// Blocking allocation policy.
+///
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
 #[zenoh_macros::unstable_doc]
@@ -532,14 +534,14 @@ where
     }
 }
 
-impl<'a, Backend, Layout: AllocLayout, Policy> Resolvable
-    for AllocBuilder<'a, Backend, Layout, Policy>
+impl<Backend, Layout: AllocLayout, Policy> Resolvable
+    for AllocBuilder<'_, Backend, Layout, Policy>
 {
     type To = Result<Layout::Buffer, ZLayoutAllocError>;
 }
 
-impl<'a, Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
-    for AllocBuilder<'a, Backend, Layout, Policy>
+impl<Backend: ShmProviderBackend, Layout: AllocLayout, Policy: AllocPolicy<Backend>> Wait
+    for AllocBuilder<'_, Backend, Layout, Policy>
 {
     fn wait(self) -> <Self as Resolvable>::To {
         let (layout, policy) = self.layout_policy()?;
@@ -762,7 +764,7 @@ where
 {
     /// Allocates a buffer with a given memory layout.
     #[zenoh_macros::unstable_doc]
-    pub fn alloc<'a, Layout>(&'a self, layout: Layout) -> AllocBuilder<'a, Backend, Layout> {
+    pub fn alloc<Layout>(&self, layout: Layout) -> AllocBuilder<'_, Backend, Layout> {
         AllocBuilder {
             provider: self,
             layout,
@@ -772,10 +774,10 @@ where
 
     /// Precompute the actual layout for an allocation.
     #[zenoh_macros::unstable_doc]
-    pub fn alloc_layout<'a, Layout: TryInto<MemoryLayout>>(
-        &'a self,
+    pub fn alloc_layout<Layout: TryInto<MemoryLayout>>(
+        &self,
         layout: Layout,
-    ) -> Result<PrecomputedLayout<'a, Backend, Layout>, ZLayoutError>
+    ) -> Result<PrecomputedLayout<'_, Backend, Layout>, ZLayoutError>
     where
         Layout::Error: Into<ZLayoutError>,
     {
@@ -788,6 +790,7 @@ where
     }
 
     /// Map externally-allocated chunk into ZShmMut.
+    ///
     /// This method is designed to be used with push data sources.
     /// Remember that chunk's len may be >= len!
     #[zenoh_macros::unstable_doc]
@@ -835,6 +838,7 @@ where
     }
 
     /// Try to collect free chunks.
+    ///
     /// Returns the size of largest collected chunk
     #[zenoh_macros::unstable_doc]
     pub fn garbage_collect(&self) -> usize {
@@ -842,6 +846,7 @@ where
     }
 
     /// Try to collect free chunks.
+    ///
     /// Returns the size of largest collected chunk
     ///
     /// # Safety

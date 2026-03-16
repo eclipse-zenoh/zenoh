@@ -21,9 +21,9 @@ use zenoh_protocol::{core::CongestionControl, network::request::ext::QueryTarget
 use zenoh_result::ZResult;
 
 #[cfg(feature = "unstable")]
-use crate::api::query::ReplyKeyExpr;
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::{sample::SourceInfo, selector::ZenohParameters};
+use crate::api::sample::SourceInfo;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
@@ -31,8 +31,9 @@ use crate::{
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         publisher::Priority,
+        query::ReplyKeyExpr,
         sample::{Locality, QoSBuilder},
-        selector::Selector,
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         session::Session,
     },
     bytes::OptionZBytes,
@@ -76,16 +77,18 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     pub(crate) value: Option<(ZBytes, Encoding)>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) source_info: SourceInfo,
+    pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -102,7 +105,7 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 }
 
 #[zenoh_macros::internal_trait]
-impl QoSBuilderTrait for SessionGetBuilder<'_, '_, DefaultHandler> {
+impl<Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the request.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
@@ -133,6 +136,43 @@ impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         value.1 = encoding.into();
         Self {
             value: Some(value),
+            ..self
+        }
+    }
+}
+
+#[cfg(feature = "unstable")]
+#[zenoh_macros::internal_trait]
+impl<Handler> CancellationTokenBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    /// Provide a cancellation token that can be used later to interrupt GET operation.
+    ///
+    /// # Examples
+    /// ```
+    /// # #[tokio::main]
+    /// # async fn main() {
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// let ct = zenoh::cancellation::CancellationToken::default();
+    /// let query = session
+    ///     .get("key/expression")
+    ///     .callback(|reply| {println!("Received {:?}", reply.result());})
+    ///     .cancellation_token(ct.clone())
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// tokio::task::spawn(async move {
+    ///     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    ///     ct.cancel().await.unwrap();
+    /// });
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable_doc]
+    fn cancellation_token(
+        self,
+        cancellation_token: crate::api::cancellation::CancellationToken,
+    ) -> Self {
+        Self {
+            cancellation_token: Some(cancellation_token),
             ..self
         }
     }
@@ -225,6 +265,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler: _,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         } = self;
         SessionGetBuilder {
             session,
@@ -239,6 +281,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             handler,
+            #[cfg(feature = "unstable")]
+            cancellation_token,
         }
     }
 }
@@ -285,9 +329,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Restrict the matching queryables that will receive the query
-    /// to the ones that have the given [`Locality`](Locality).
-    #[zenoh_macros::unstable]
+    /// Restrict the matching queryables that will receive the query to the ones that have the given [`Locality`](Locality).
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
         Self {
@@ -303,9 +345,9 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// See details in [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
-    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {
             if let Ok(Selector {
@@ -313,7 +355,7 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
                 mut parameters,
             }) = self.selector
             {
-                parameters.to_mut().set_reply_key_expr_any();
+                parameters.to_mut().insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
                 let selector = Ok(Selector {
                     key_expr,
                     parameters,
@@ -344,23 +386,25 @@ where
             key_expr,
             parameters,
         } = self.selector?;
-        self.session
-            .0
-            .query(
-                &key_expr,
-                &parameters,
-                self.target,
-                self.consolidation,
-                self.qos.into(),
-                self.destination,
-                self.timeout,
-                self.value,
-                self.attachment,
-                #[cfg(feature = "unstable")]
-                self.source_info,
-                callback,
-            )
-            .map(|_| receiver)
+        self.session.query(
+            &key_expr,
+            &parameters,
+            self.target,
+            self.consolidation,
+            self.qos.into(),
+            self.destination,
+            self.timeout,
+            self.value,
+            self.attachment,
+            #[cfg(feature = "unstable")]
+            self.source_info,
+            callback,
+            #[cfg(feature = "unstable")]
+            self.cancellation_token,
+            None,
+            None,
+        )?;
+        Ok(receiver)
     }
 }
 

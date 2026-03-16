@@ -70,6 +70,14 @@ impl<K, V> IntHashMap<K, V> {
     }
 
     #[inline]
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+        match self {
+            Self::Vec { vec, .. } => IterMut::Vec(vec.iter_mut()),
+            Self::Map(map) => IterMut::Map(map.iter_mut()),
+        }
+    }
+
+    #[inline]
     pub fn values(&self) -> Values<'_, K, V> {
         match self {
             Self::Vec { vec, .. } => Values::Vec(vec.iter()),
@@ -220,6 +228,23 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Vec(iter) => iter.by_ref().flatten().map(|(k, v)| (k, v)).next(),
+            Self::Map(iter) => iter.next(),
+        }
+    }
+}
+
+pub enum IterMut<'a, K, V> {
+    Vec(slice::IterMut<'a, Option<(K, V)>>),
+    Map(hash_map::IterMut<'a, K, V>),
+}
+
+impl<'a, K, V> Iterator for IterMut<'a, K, V> {
+    type Item = (&'a K, &'a mut V);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Vec(iter) => iter.by_ref().flatten().map(|(k, v)| (k as &'_ K, v)).next(),
             Self::Map(iter) => iter.next(),
         }
     }

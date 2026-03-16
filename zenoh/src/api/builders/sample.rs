@@ -51,7 +51,7 @@ pub trait TimestampBuilderTrait {
 pub trait SampleBuilderTrait {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
-    fn source_info(self, source_info: SourceInfo) -> Self;
+    fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self;
     /// Sets an optional attachment to be sent along with the publication.
     /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
@@ -108,7 +108,7 @@ impl SampleBuilder<SampleBuilderPut> {
                 #[cfg(feature = "unstable")]
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
+                source_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
@@ -140,7 +140,7 @@ impl SampleBuilder<SampleBuilderDelete> {
                 #[cfg(feature = "unstable")]
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
-                source_info: SourceInfo::empty(),
+                source_info: None,
                 attachment: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
@@ -201,10 +201,10 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    fn source_info<S: Into<Option<SourceInfo>>>(self, source_info: S) -> Self {
         Self {
             sample: Sample {
-                source_info,
+                source_info: source_info.into(),
                 ..self.sample
             },
             _t: PhantomData::<T>,
