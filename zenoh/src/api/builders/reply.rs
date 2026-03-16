@@ -111,7 +111,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
 
 #[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
-    /// Sets an optional timestamp to be sent along with the publication.
+    /// Sets an optional timestamp to be sent along with the reply/response.
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -122,8 +122,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
-    /// Sets an optional attachment to be sent along with the publication.
-    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
+    /// Sets an optional attachment to be sent along with the reply/response.
+    /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>`.
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -133,7 +133,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
-    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the reply/response.
     fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             source_info: source_info.into(),
