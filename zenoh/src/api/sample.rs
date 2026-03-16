@@ -274,12 +274,12 @@ impl Sample {
         self.timestamp.as_ref()
     }
 
-    /// Get the [`CongestionControl`] applied when routing the data.
+    /// Gets the [`CongestionControl`] applied when routing the data.
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Get the [`Priority`] of this Sample.
+    /// Gets the [`Priority`] of this Sample.
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
