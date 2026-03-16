@@ -227,7 +227,7 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for SampleBuilder<T> {
-    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the reply.
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data/publication/sample.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.congestion_control(congestion_control).into();
