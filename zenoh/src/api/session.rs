@@ -72,19 +72,12 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
+#[cfg(feature = "unstable")]
+use crate::api::{cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
 use crate::net::runtime::ShmProviderState;
-#[cfg(feature = "unstable")]
-use crate::{
-    api::handlers::CallbackParameter,
-    api::{
-        cancellation::{CancellationToken, SyncGroup, SyncGroupNotifier},
-        sample::SourceInfo,
-        selector::ZenohParameters,
-    },
-};
 use crate::{
     api::{
         admin,
@@ -100,8 +93,9 @@ use crate::{
             subscriber::SubscriberBuilder,
         },
         bytes::ZBytes,
+        cancellation::{SyncGroup, SyncGroupNotifier},
         encoding::Encoding,
-        handlers::{Callback, DefaultHandler},
+        handlers::{Callback, CallbackParameter, DefaultHandler},
         info::{Link, LinkEvent, SessionInfo, Transport, TransportEvent},
         key_expr::KeyExpr,
         liveliness::Liveliness,
@@ -114,7 +108,7 @@ use crate::{
         },
         queryable::{Query, QueryInner, QueryableState, ReplyPrimitives},
         sample::{Locality, QoS, Sample, SampleKind},
-        selector::Selector,
+        selector::{Selector, REPLY_KEY_EXPR_ANY_SEL_PARAM},
         subscriber::{SubscriberKind, SubscriberState},
         Id,
     },
@@ -662,7 +656,6 @@ pub(crate) struct SessionInner {
     id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
-    #[cfg(feature = "unstable")]
     pub(crate) callbacks_drop_sync_group: SyncGroup,
 }
 
@@ -843,7 +836,6 @@ impl Session {
                 id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
-                #[cfg(feature = "unstable")]
                 callbacks_drop_sync_group: SyncGroup::default(),
             }));
 
@@ -1533,6 +1525,9 @@ impl Session {
         destination: Locality,
     ) -> ZResult<EntityId> {
         let mut state = zwrite!(self.0.state);
+        if state.primitives.is_none() {
+            return Err(SessionClosedError.into());
+        }
         tracing::trace!("declare_publisher({:?})", key_expr);
         let id = self.0.runtime.next_id();
 
@@ -1633,10 +1628,10 @@ impl Session {
     ) -> ZResult<EntityId> {
         tracing::trace!("declare_querier({:?})", key_expr);
         let mut state = zwrite!(self.0.state);
+        let primitives = state.primitives()?;
         let id = self.0.runtime.next_id();
         let declared_querier = state.register_querier(id, &key_expr, destination);
         if let Some(res) = declared_querier {
-            let primitives = state.primitives()?;
             drop(state);
             primitives.send_interest(&mut Interest {
                 id,
@@ -1687,7 +1682,6 @@ impl Session {
         }
     }
 
-    #[cfg(feature = "unstable")]
     fn register_callback_drop_notifier<T>(
         &self,
         external_notifier: Option<SyncGroupNotifier>,
@@ -1708,16 +1702,15 @@ impl Session {
         key_expr: &KeyExpr,
         origin: Locality,
         mut callback: Callback<Sample>,
-        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
+        callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_subscriber({:?})", key_expr);
-        #[cfg(feature = "unstable")]
+        let mut state = zwrite!(self.0.state);
+        let primitives = state.primitives()?;
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let (sub_state, declared_sub) = state.register_subscriber(id, key_expr, origin, callback);
         if let Some(key_expr) = declared_sub {
-            let primitives = state.primitives()?;
             drop(state);
             let wire_expr = key_expr.to_wire(self).to_owned();
             primitives.send_declare(&mut Declare {
@@ -1838,12 +1831,12 @@ impl Session {
         complete: bool,
         origin: Locality,
         mut callback: Callback<Query>,
-        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
+        callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<QueryableState>> {
-        #[cfg(feature = "unstable")]
-        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
-        let mut state = zwrite!(self.0.state);
         tracing::trace!("declare_queryable({:?})", key_expr);
+        let mut state = zwrite!(self.0.state);
+        let primitives = state.primitives()?;
+        self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let id = self.0.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
@@ -1855,7 +1848,6 @@ impl Session {
 
         state.queryables.insert(id, qable_state.clone());
         if origin != Locality::SessionLocal {
-            let primitives = state.primitives()?;
             drop(state);
             let qabl_info = QueryableInfoType {
                 complete,
@@ -1954,13 +1946,13 @@ impl Session {
         origin: Locality,
         history: bool,
         mut callback: Callback<Sample>,
-        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
+        callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
-        let mut state = zwrite!(self.0.state);
         trace!("declare_liveliness_subscriber({:?})", key_expr);
-        let id = self.0.runtime.next_id();
-        #[cfg(feature = "unstable")]
+        let mut state = zwrite!(self.0.state);
+        let primitives = state.primitives()?;
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
+        let id = self.0.runtime.next_id();
         let sub_state = SubscriberState {
             id,
             remote_id: id,
@@ -2009,7 +2001,6 @@ impl Session {
             vec![]
         };
 
-        let primitives = state.primitives()?;
         drop(state);
 
         if !known_tokens.is_empty() {
@@ -2076,13 +2067,19 @@ impl Session {
         destination: Locality,
         match_type: MatchingStatusType,
         mut callback: Callback<MatchingStatus>,
-        #[cfg(feature = "unstable")] callback_sync_group_notifier: Option<SyncGroupNotifier>,
+        callback_sync_group_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<MatchingListenerState>> {
-        #[cfg(feature = "unstable")]
-        self.register_callback_drop_notifier(callback_sync_group_notifier, &mut callback);
-        let mut state = zwrite!(self.0.state);
         let id = self.0.runtime.next_id();
-        tracing::trace!("matches_listener({:?}: {:?}) => {id}", match_type, key_expr);
+        tracing::trace!(
+            "declare_matches_listener({:?}: {:?}) => {id}",
+            match_type,
+            key_expr
+        );
+        let mut state = zwrite!(self.0.state);
+        if state.primitives.is_none() {
+            return Err(SessionClosedError.into());
+        }
+        self.register_callback_drop_notifier(callback_sync_group_notifier, &mut callback);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: Mutex::new(false),
@@ -2237,17 +2234,21 @@ impl Session {
         &self,
         mut callback: Callback<TransportEvent>,
         history: bool,
-        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
+        callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<TransportEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_events_listener_inner() => {id}");
-        #[cfg(feature = "unstable")]
+        let mut state = zwrite!(self.0.state);
+        if state.primitives.is_none() {
+            return Err(SessionClosedError.into());
+        }
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(TransportEventsListenerState { id, callback });
 
-        zwrite!(self.0.state)
+        state
             .transport_events_listeners
             .insert(id, listener_state.clone());
+        drop(state);
 
         // Send history if requested
         if history {
@@ -2308,11 +2309,14 @@ impl Session {
         mut callback: Callback<LinkEvent>,
         history: bool,
         transport: Option<Transport>,
-        #[cfg(feature = "unstable")] callback_drop_notifier: Option<SyncGroupNotifier>,
+        callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<LinkEventsListenerState>> {
         let id = self.runtime().next_id();
         trace!("declare_transport_links_listener_inner() => {id}");
-        #[cfg(feature = "unstable")]
+        let mut state = zwrite!(self.0.state);
+        if state.primitives.is_none() {
+            return Err(SessionClosedError.into());
+        }
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
         let listener_state = Arc::new(LinkEventsListenerState {
             id,
@@ -2320,9 +2324,10 @@ impl Session {
             transport: transport.clone(),
         });
 
-        zwrite!(self.0.state)
+        state
             .link_events_listeners
             .insert(id, listener_state.clone());
+        drop(state);
 
         // Send history if requested
         if history {
@@ -2524,6 +2529,16 @@ impl Session {
 
     // Important: this function should be called while state lock is being held, to ensure that
     // on_cancel callback will not be fired until query is registered.
+    #[cfg(not(feature = "unstable"))]
+    fn register_query_cancellation(
+        &self,
+        querier_notifier: Option<SyncGroupNotifier>,
+        callback: &mut Callback<Reply>,
+    ) -> ZResult<()> {
+        self.register_callback_drop_notifier(querier_notifier, callback);
+        Ok(())
+    }
+
     #[cfg(feature = "unstable")]
     fn register_query_cancellation<F>(
         &self,
@@ -2535,10 +2550,10 @@ impl Session {
     where
         F: FnOnce() -> ZResult<()> + Clone + Send + Sync + 'static,
     {
-        let session_notifier = self.0.callbacks_drop_sync_group.notifier();
         if let Some(ct) = cancellation_token {
             if let Some(ct_notifier) = ct.notifier() {
                 if let Ok(handler_id) = ct.add_on_cancel_handler(on_cancel.clone()) {
+                    let session_notifier = self.0.callbacks_drop_sync_group.notifier();
                     callback.set_on_drop(move || {
                         drop(session_notifier);
                         ct.remove_on_cancel_handler(handler_id);
@@ -2551,10 +2566,7 @@ impl Session {
             bail!("Query was cancelled")
         }
 
-        callback.set_on_drop(move || {
-            drop(session_notifier);
-            drop(querier_notifier);
-        });
+        self.register_callback_drop_notifier(querier_notifier, callback);
         Ok(())
     }
 
@@ -2575,7 +2587,7 @@ impl Session {
         mut callback: Callback<Reply>,
         #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
         querier_id: Option<EntityId>,
-        #[cfg(feature = "unstable")] querier_notifier: Option<SyncGroupNotifier>,
+        querier_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
@@ -2591,10 +2603,12 @@ impl Session {
             mode => mode,
         };
         let qid = state.qid_counter.fetch_add(1, Ordering::SeqCst);
-        #[cfg(feature = "unstable")]
+        let primitives = state.primitives()?;
         self.register_query_cancellation(
+            #[cfg(feature = "unstable")]
             cancellation_token,
             querier_notifier,
+            #[cfg(feature = "unstable")]
             {
                 let s = self.downgrade();
                 move || {
@@ -2638,7 +2652,6 @@ impl Session {
                 }
             });
 
-        let primitives = state.primitives()?;
         tracing::trace!("Register query {} (nb_final = {})", qid, nb_final);
         state.queries.insert(
             qid,
@@ -2732,10 +2745,12 @@ impl Session {
         // This is because both query's id and subscriber's id are used as interest id,
         // so both must not overlap.
         let id = self.0.runtime.next_id();
-        #[cfg(feature = "unstable")]
+        let primitives = state.primitives()?;
         self.register_query_cancellation(
+            #[cfg(feature = "unstable")]
             cancellation_token,
             None,
+            #[cfg(feature = "unstable")]
             {
                 let s = self.downgrade();
                 move || {
@@ -2767,8 +2782,6 @@ impl Session {
                     }
                 }
             });
-
-        let primitives = state.primitives()?;
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
         state
@@ -3241,9 +3254,9 @@ impl Primitives for WeakSession {
                 };
                 match state.queries.get_mut(&msg.rid) {
                     Some(query) => {
-                        let c =
-                            zcondfeat!("unstable", !query.parameters.reply_key_expr_any(), true);
-                        if c && !query.key_expr.intersects(&key_expr) {
+                        if !query.parameters.contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
+                            && !query.key_expr.intersects(&key_expr)
+                        {
                             tracing::warn!(
                                 "Received Reply for `{}` from `{:?}`, which didn't match query `{}?{}`: dropping Reply.",
                                 key_expr,
@@ -3478,7 +3491,6 @@ where
 
 #[derive(Default)]
 pub(crate) struct SessionCloseArgs {
-    #[cfg(feature = "unstable")]
     pub(crate) wait_callbacks: bool,
 }
 
@@ -3518,7 +3530,6 @@ impl Closee for WeakSession {
             let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
             drop(state);
         }
-        #[cfg(feature = "unstable")]
         if close_args.wait_callbacks {
             self.0.callbacks_drop_sync_group.wait_async().await;
         }

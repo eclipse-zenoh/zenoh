@@ -29,8 +29,6 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
 #[zenoh_macros::internal]
@@ -39,6 +37,7 @@ use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
@@ -443,17 +442,15 @@ impl Query {
     ///     .unwrap();
     /// # session.get("key/expression").await.unwrap();
     /// # }
-    pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
-        self._accepts_any_replies().map(|any| {
-            if any {
-                ReplyKeyExpr::Any
-            } else {
-                ReplyKeyExpr::MatchingQuery
-            }
-        })
+    pub fn accepts_replies(&self) -> ReplyKeyExpr {
+        if self._accepts_any_replies() {
+            ReplyKeyExpr::Any
+        } else {
+            ReplyKeyExpr::MatchingQuery
+        }
     }
-    fn _accepts_any_replies(&self) -> ZResult<bool> {
-        Ok(self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM))
+    fn _accepts_any_replies(&self) -> bool {
+        self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
     /// Constructs an empty Query without payload or attachment, referencing the same inner query.
@@ -553,12 +550,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!(
-            "unstable",
-            !self._accepts_any_replies().unwrap_or(false),
-            true
-        );
-        if c && !self.key_expr().intersects(&sample.key_expr) {
+        if !self._accepts_any_replies() && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[cfg(not(feature = "unstable"))]
@@ -641,13 +633,12 @@ pub(crate) struct QueryableInner {
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryableUndeclaration<Handler> {
     queryable: Queryable<Handler>,
-    #[cfg(feature = "unstable")]
     wait_callbacks: bool,
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
-    #[zenoh_macros::unstable]
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;
         self
@@ -661,7 +652,6 @@ impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
 impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.undeclare_impl()?;
-        #[cfg(feature = "unstable")]
         if self.wait_callbacks {
             self.queryable.callback_sync_group.wait();
         }
@@ -736,7 +726,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
-    #[cfg(feature = "unstable")]
     pub(crate) callback_sync_group: SyncGroup,
 }
 
@@ -877,7 +866,6 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         QueryableUndeclaration {
             queryable: self,
-            #[cfg(feature = "unstable")]
             wait_callbacks: false,
         }
     }

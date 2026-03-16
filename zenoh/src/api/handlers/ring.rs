@@ -22,7 +22,7 @@ use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
 use crate::api::{
-    handlers::{callback::Callback, CallbackParameter, IntoHandler},
+    handlers::{callback::Callback, IntoHandler},
     session::API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
@@ -145,7 +145,7 @@ impl<T> RingChannelHandler<T> {
     }
 }
 
-impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for RingChannel {
+impl<T: Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {

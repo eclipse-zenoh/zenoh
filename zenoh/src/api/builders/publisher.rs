@@ -19,8 +19,6 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
-#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
@@ -28,6 +26,7 @@ use crate::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         },
         bytes::{OptionZBytes, ZBytes},
+        cancellation::SyncGroup,
         encoding::Encoding,
         key_expr::KeyExpr,
         publisher::{Priority, Publisher},
@@ -144,7 +143,6 @@ impl<T> PublicationBuilder<PublisherBuilder<'_, '_>, T> {
     ///
     /// This restricts the matching subscribers that will receive the published data to the ones
     /// that have the given [`Locality`](crate::sample::Locality).
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
@@ -477,7 +475,6 @@ impl Wait for PublisherBuilder<'_, '_> {
             reliability: self.reliability,
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
-            #[cfg(feature = "unstable")]
             sync_group: SyncGroup::default(),
         })
     }

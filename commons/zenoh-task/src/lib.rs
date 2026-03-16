@@ -41,39 +41,19 @@ impl Default for TaskController {
     }
 }
 
-#[derive(Debug)]
-pub struct TaskCancelledError;
-impl std::fmt::Display for TaskCancelledError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "task was cancelled")
-    }
-}
-impl std::error::Error for TaskCancelledError {}
-
 impl TaskController {
     /// Converts a task to abortable one, which can later be terminated by call to [`TaskController::terminate_all()`].
-    pub fn into_abortable<'a, F, T>(
-        &self,
-        future: F,
-    ) -> impl Future<Output = Result<T, TaskCancelledError>> + Send + 'a
+    pub fn into_abortable<'a, F, T>(&self, future: F) -> impl Future<Output = Option<T>> + Send + 'a
     where
         F: Future<Output = T> + Send + 'a,
         T: Send + 'static,
     {
-        let token = self.token.child_token();
-        let task = async move {
-            tokio::select! {
-                _ = token.cancelled() => { Err(TaskCancelledError) },
-                res = future => { Ok(res) }
-            }
-        };
-
-        task
+        self.token.child_token().run_until_cancelled_owned(future)
     }
 
     /// Spawns a task that can be later terminated by call to [`TaskController::terminate_all()`].
     /// Task output is ignored.
-    pub fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Result<T, TaskCancelledError>>
+    pub fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -85,11 +65,7 @@ impl TaskController {
     }
 
     /// Spawns a task using a specified runtime that can be later terminated by call to [`TaskController::terminate_all()`].
-    pub fn spawn_abortable_with_rt<F, T>(
-        &self,
-        rt: ZRuntime,
-        future: F,
-    ) -> JoinHandle<Result<T, TaskCancelledError>>
+    pub fn spawn_abortable_with_rt<F, T>(&self, rt: ZRuntime, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,

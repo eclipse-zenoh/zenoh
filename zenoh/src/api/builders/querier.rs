@@ -25,13 +25,14 @@ use zenoh_result::ZResult;
 
 use super::sample::QoSBuilderTrait;
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::{CancellationTokenBuilderTrait, SyncGroup};
+use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
         querier::Querier,
@@ -186,7 +187,6 @@ impl Wait for QuerierBuilder<'_, '_> {
             timeout: self.timeout,
             accept_replies: self.accept_replies,
             matching_listeners: Default::default(),
-            #[cfg(feature = "unstable")]
             callback_sync_group: SyncGroup::default(),
         })
     }
@@ -477,7 +477,6 @@ where
         if self.querier.accept_replies() == ReplyKeyExpr::Any {
             parameters.insert(REPLY_KEY_EXPR_ANY_SEL_PARAM, "");
         }
-        #[allow(unused_variables)] // qid is only needed for unstable cancellation_token
         self.querier.session.query(
             &self.querier.key_expr,
             &parameters,
@@ -494,7 +493,6 @@ where
             #[cfg(feature = "unstable")]
             self.cancellation_token,
             Some(self.querier.id),
-            #[cfg(feature = "unstable")]
             self.querier.callback_sync_group.notifier(),
         )?;
         Ok(receiver)

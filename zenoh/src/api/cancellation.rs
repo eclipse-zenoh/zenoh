@@ -12,17 +12,23 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::fmt;
+use std::sync::Arc;
+#[cfg(feature = "unstable")]
 use std::{
     collections::HashMap,
     future::IntoFuture,
     ops::DerefMut,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Mutex, OnceLock},
 };
 
+#[cfg(feature = "unstable")]
 use futures::{future::BoxFuture, FutureExt};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+#[cfg(feature = "unstable")]
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Debug)]
@@ -67,7 +73,7 @@ impl SyncGroup {
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
         let s = self.semaphore.clone();
-        let _p = futures::executor::block_on(s.acquire_many(Self::max_permits()));
+        let _p = ZRuntime::Application.block_in_place(s.acquire_many(Self::max_permits()));
         self.close();
     }
 
@@ -90,14 +96,17 @@ impl fmt::Debug for SyncGroup {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[zenoh_macros::pub_visibility_if_internal]
 pub(crate) type OnCancelHandlerId = usize;
+#[cfg(feature = "unstable")]
 struct OnCancelHandlers {
     handlers: HashMap<OnCancelHandlerId, Box<dyn FnOnce() -> ZResult<()> + Send + Sync>>,
     execution_finished_notifier: SyncGroupNotifier,
     next_handler_id: usize,
 }
 
+#[cfg(feature = "unstable")]
 impl OnCancelHandlers {
     fn new(execution_finished_notifier: SyncGroupNotifier) -> Self {
         Self {
@@ -166,6 +175,7 @@ pub struct CancellationToken {
     cancel_result: Arc<OnceLock<ZResult<()>>>,
 }
 
+#[zenoh_macros::unstable]
 impl Default for CancellationToken {
     fn default() -> Self {
         let sync_group = SyncGroup::default();
@@ -182,9 +192,11 @@ impl Default for CancellationToken {
     }
 }
 
+#[cfg(feature = "unstable")]
 #[derive(Default)]
 pub struct CancelResult(CancellationToken);
 
+#[cfg(feature = "unstable")]
 impl IntoFuture for CancelResult {
     type Output = ZResult<()>;
 
@@ -197,16 +209,19 @@ impl IntoFuture for CancelResult {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl Resolvable for CancelResult {
     type To = ZResult<()>;
 }
 
+#[cfg(feature = "unstable")]
 impl Wait for CancelResult {
     fn wait(self) -> Self::To {
         self.0.cancel_inner()
     }
 }
 
+#[cfg(feature = "unstable")]
 impl CancellationToken {
     /// Interrupt all associated get queries.
     ///
@@ -321,6 +336,7 @@ impl CancellationToken {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl fmt::Debug for CancellationToken {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CancellationTokenInner")
@@ -339,10 +355,12 @@ impl fmt::Debug for CancellationToken {
     }
 }
 
+#[cfg(feature = "unstable")]
 pub trait CancellationTokenBuilderTrait {
     fn cancellation_token(self, cancellation_token: CancellationToken) -> Self;
 }
 
+#[cfg(feature = "unstable")]
 #[cfg(test)]
 mod test {
     use std::{sync::atomic::AtomicUsize, time::Duration};
