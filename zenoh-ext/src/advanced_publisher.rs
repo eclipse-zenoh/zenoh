@@ -21,25 +21,14 @@ use std::{
 };
 
 use zenoh::{
-    bytes::{Encoding, OptionZBytes, ZBytes},
-    internal::{
-        bail,
-        runtime::ZRuntime,
-        traits::{
+    KE_ADV_PREFIX, KE_EMPTY, Resolvable, Resolve, Result as ZResult, Session, Wait, bytes::{Encoding, OptionZBytes, ZBytes}, internal::{
+        TerminatableTask, bail, runtime::ZRuntime, traits::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
-        },
-        TerminatableTask,
-    },
-    key_expr::{keyexpr, KeyExpr},
-    liveliness::LivelinessToken,
-    pubsub::{
+        }
+    }, key_expr::{KeyExpr, keyexpr}, liveliness::LivelinessToken, pubsub::{
         PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
         PublisherBuilder, PublisherUndeclaration,
-    },
-    qos::{CongestionControl, Priority, Reliability},
-    sample::{Locality, SourceInfo},
-    session::EntityGlobalId,
-    Resolvable, Resolve, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_EMPTY,
+    }, qos::{CongestionControl, Priority, Reliability}, sample::{Locality, SourceInfo}, session::EntityGlobalId
 };
 use zenoh_macros::ke;
 
@@ -710,7 +699,8 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     }
     #[zenoh_macros::unstable]
     /// Sets an optional attachment to be sent along with the publication.
-    /// The method accepts both <code>Option&lt;Into&lt;ZBytes&gt;&gt;</code> and <code>Into&lt;ZBytes&gt;</code>.
+    ///
+    /// The method accepts both `Option<Into<ZBytes>>` and `Into<ZBytes>`.
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
