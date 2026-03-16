@@ -886,7 +886,6 @@ impl Session {
     /// Sessions are automatically closed when all their instances are dropped, same as `Arc`.
     /// You may still want to use this function to handle errors or close the session
     /// explicitly.
-    ///
     /// # Examples
     /// ```no_run
     /// # #[tokio::main]
