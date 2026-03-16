@@ -302,13 +302,13 @@ impl Sample {
         self.source_info.as_ref()
     }
 
-    /// Gets the sample attachment
+    /// Gets the optional sample attachment as bytes.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
-    /// Gets the mutable reference to sample attachment
+    /// Gets a mutable reference to the optional sample attachment bytes.
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
