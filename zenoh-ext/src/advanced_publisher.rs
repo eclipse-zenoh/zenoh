@@ -233,7 +233,7 @@ impl EncodingBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
-    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
+    /// Changes the [`CongestionControl`] to apply when routing the data.
     #[inline]
     #[zenoh_macros::unstable]
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
@@ -243,7 +243,7 @@ impl QoSBuilderTrait for AdvancedPublisherBuilder<'_, '_, '_> {
         }
     }
 
-    /// Changes the [`Priority`](crate::qos::Priority) to apply when routing the data.
+    /// Changes the [`Priority`] to apply when routing the data.
     #[inline]
     #[zenoh_macros::unstable]
     fn priority(self, priority: Priority) -> Self {
