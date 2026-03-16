@@ -711,7 +711,8 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     #[zenoh_macros::unstable]
     /// Sets an optional attachment to be sent along with the publication.
     ///
-    /// The method accepts both `Option<Into<ZBytes>>` and `Into<ZBytes>`.
+    /// The argument is converted via [`OptionZBytes`], which supports both `T: Into<ZBytes>`
+    /// and `Option<T>` where `T: Into<ZBytes>`.
     fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
