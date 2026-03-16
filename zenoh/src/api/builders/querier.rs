@@ -290,7 +290,7 @@ impl<Handler> CancellationTokenBuilderTrait for QuerierGetBuilder<'_, '_, Handle
 
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
-    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the query request.
     #[zenoh_macros::unstable]
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
@@ -298,8 +298,9 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
             ..self
         }
     }
-    /// Sets an optional attachment to be sent along with the publication.
-    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
+    /// Sets an optional attachment to be sent along with the query request.
+    /// The method accepts both values convertible to [`ZBytes`](crate::prelude::ZBytes)
+    /// and optional values of such types (`Option<T>` where `T: Into<ZBytes>`).
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
