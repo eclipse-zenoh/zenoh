@@ -85,7 +85,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the request/query.
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
             source_info: source_info.into(),
@@ -93,8 +93,8 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
-    /// Sets an optional attachment to be sent along with the publication.
-    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
+    /// Sets an optional attachment to be sent along with the request/query.
+    /// The method accepts both `T` where `T: Into<ZBytes>` and `Option<T>` where `T: Into<ZBytes>` (see [`OptionZBytes`](crate::bytes::OptionZBytes)).
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
