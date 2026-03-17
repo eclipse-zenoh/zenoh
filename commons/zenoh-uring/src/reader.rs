@@ -22,7 +22,7 @@ use std::{
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -144,6 +144,12 @@ impl ReadTask {
             error_receiver,
             index,
         })
+    }
+
+    pub fn try_read_error_sync(
+        &mut self,
+    ) -> core::result::Result<zenoh_result::Error, TryRecvError> {
+        self.error_receiver.try_recv()
     }
 
     pub async fn read_error(&mut self) -> zenoh_result::Error {
@@ -940,6 +946,7 @@ impl Reader {
 
         ZRuntime::RX.spawn_blocking(move || {
             if let Err(e) = ring_worker() {
+                tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
             }
         });
@@ -1094,7 +1101,7 @@ impl Reader {
                     }
                 }
                 None => {
-                    bail!("no IORING_CQE_F_BUFFER: {:?}", e);
+                    //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
                 }
             };
         }
@@ -1114,7 +1121,7 @@ impl Reader {
                     arena.inner.recycle_batch(buf_id);
                 }
                 None => {
-                    bail!("no IORING_CQE_F_BUFFER: {:?}", e);
+                    //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
                 }
             };
         }

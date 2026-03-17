@@ -41,3 +41,4 @@ tokio = { workspace = true }
 [dev-dependencies]
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+test-case = { workspace = true }
