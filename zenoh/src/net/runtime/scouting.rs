@@ -8,7 +8,7 @@ use std::{
 };
 
 use futures::{lock::Mutex, FutureExt};
-use itertools::Itertools;
+use itertools::Itertools as _;
 use tokio::{net::UdpSocket, sync::RwLock, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
