@@ -299,7 +299,7 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
         }
     }
     /// Sets an optional attachment to be sent along with the query request.
-    /// The method accepts both values convertible to [`ZBytes`](crate::prelude::ZBytes)
+    /// The method accepts both values convertible to [`ZBytes`](crate::bytes::ZBytes)
     /// and optional values of such types (`Option<T>` where `T: Into<ZBytes>`).
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
