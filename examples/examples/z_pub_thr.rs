@@ -53,7 +53,7 @@ fn main() {
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
-        publisher.put(data.clone()).wait().unwrap();
+        publisher.put(&data).wait().unwrap();
 
         if args.print {
             if count < args.number {
