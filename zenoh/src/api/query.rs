@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
-#[cfg(feature = "unstable")]
 use serde::Deserialize;
 #[cfg(feature = "unstable")]
 use zenoh_config::wrappers::EntityGlobalId;
@@ -244,10 +243,10 @@ pub(crate) struct QueryState {
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
 /// [`Querier::get`](crate::query::Querier::get))
 /// then the reply with a disjoint key expression will be accepted for this query.
+/// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
 ///
 /// The [`Queryable`](crate::query::Queryable) may check this parameter with
 /// [`Query::accepts_replies`](crate::query::Query::accepts_replies).
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.

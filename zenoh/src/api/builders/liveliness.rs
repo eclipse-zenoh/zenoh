@@ -254,7 +254,6 @@ where
         let key_expr = self.key_expr?;
         let session = self.session;
         let (callback, handler) = self.handler.into_handler();
-        #[cfg(feature = "unstable")]
         let callback_sync_group = crate::api::cancellation::SyncGroup::default();
         session
             .declare_liveliness_subscriber_inner(
@@ -262,7 +261,6 @@ where
                 Locality::default(),
                 self.history,
                 callback,
-                #[cfg(feature = "unstable")]
                 callback_sync_group.notifier(),
             )
             .map(|sub_state| Subscriber {
@@ -274,7 +272,6 @@ where
                     undeclare_on_drop: true,
                 },
                 handler,
-                #[cfg(feature = "unstable")]
                 callback_sync_group,
             })
     }
@@ -304,7 +301,6 @@ impl Wait for LivelinessSubscriberBuilder<'_, '_, Callback<Sample>, true> {
             Locality::default(),
             self.history,
             self.handler,
-            #[cfg(feature = "unstable")]
             None,
         )?;
         Ok(())

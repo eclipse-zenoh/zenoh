@@ -649,6 +649,8 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
     pub use crate::api::{
         builders::{
             querier::{QuerierBuilder, QuerierGetBuilder},
@@ -656,12 +658,12 @@ pub mod query {
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
         querier::{Querier, QuerierUndeclaration},
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        query::{
+            ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError, ReplyKeyExpr,
+        },
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// # Matching primitives
@@ -880,6 +882,8 @@ pub mod scouting {
 /// key expression or subscribe to it to be notified when the token appears or disappears on the network
 /// using the corresponding functions [get](liveliness::Liveliness::get) and
 /// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
+/// The [history](liveliness::LivelinessSubscriberBuilder::history) option allows subscribers to
+/// receive updates about already declared tokens.
 ///
 /// # Examples
 /// ### Declaring a token
