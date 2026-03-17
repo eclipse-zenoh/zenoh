@@ -435,7 +435,7 @@ impl Scouting {
         self.state.runtime.connect_peer(zid, locators).await
     }
 
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
