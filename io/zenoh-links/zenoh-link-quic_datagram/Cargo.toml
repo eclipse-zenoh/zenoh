@@ -27,24 +27,14 @@ version = { workspace = true }
 [dependencies]
 async-trait = { workspace = true }
 quinn = { workspace = true }
-rustls = { workspace = true }
 rustls-webpki = { workspace = true }
 time = { workspace = true }
-tokio = { workspace = true, features = [
-  "fs",
-  "io-util",
-  "net",
-  "sync",
-  "time",
-] }
-# tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["quic"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
-zenoh-util = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]
