@@ -12,12 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use arc_swap::{ArcSwap, Guard};
+use hazarc::{ArcBorrow, AtomicArc};
 
 pub struct CacheValue<T: Sized> {
     version: usize,
@@ -33,16 +30,16 @@ impl<T> CacheValue<T> {
 /// This is a lock-free concurrent cache.
 /// It stores only the most up-to-date value.
 pub struct Cache<T> {
-    value: ArcSwap<CacheValue<T>>,
+    value: AtomicArc<CacheValue<T>>,
     is_updating: AtomicBool,
 }
 
-pub type CacheValueType<T> = Guard<Arc<CacheValue<T>>>;
+pub type CacheValueType<T> = ArcBorrow<CacheValue<T>>;
 
 impl<T> Cache<T> {
     pub fn new(value: T, version: usize) -> Self {
         Cache {
-            value: ArcSwap::new(CacheValue::<T> { version, value }.into()),
+            value: AtomicArc::from(CacheValue::<T> { version, value }),
             is_updating: AtomicBool::new(false),
         }
     }
