@@ -116,7 +116,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
 
-    /// Changes the [`Priority`](crate::qos::Priority) of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) when routing the data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
