@@ -22,7 +22,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -43,7 +43,16 @@ pub trait ConstructibleLinkManagerUnicast<T>: Sized {
 }
 
 #[derive(Clone)]
-pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
+pub struct LinkUnicast(pub NewLink);
+
+#[derive(Clone)]
+pub enum NewLink {
+    Single(Arc<dyn LinkUnicastTrait>),
+    MixedReliability {
+        reliable: Arc<dyn LinkUnicastTrait>,
+        best_effort: Arc<dyn LinkUnicastTrait>,
+    },
+}
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
@@ -54,10 +63,13 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
     fn get_auth_id(&self) -> &LinkAuthId;
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
+    fn supports_priorities(&self) -> bool {
+        false
+    }
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()>;
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
 }
 
@@ -66,7 +78,10 @@ impl Deref for LinkUnicast {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        match &self.0 {
+            NewLink::Single(link) => link,
+            NewLink::MixedReliability { reliable, .. } => reliable,
+        }
     }
 }
 
@@ -105,7 +120,7 @@ impl fmt::Debug for LinkUnicast {
 
 impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
     fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
-        LinkUnicast(link)
+        LinkUnicast(NewLink::Single(link))
     }
 }
 

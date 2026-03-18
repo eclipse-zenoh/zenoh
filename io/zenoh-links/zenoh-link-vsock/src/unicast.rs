@@ -31,7 +31,7 @@ use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{endpoint::Address, EndPoint, Locator},
+    core::{endpoint::Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -123,7 +123,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -131,7 +131,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -139,7 +139,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -147,7 +147,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _ = self
             .get_mut_socket()
             .read_exact(buffer)
@@ -253,8 +253,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastVsock {
         if let Ok(stream) = VsockStream::connect(addr).await {
             let local_addr = stream.local_addr()?;
             let peer_addr = stream.peer_addr()?;
-            let link = Arc::new(LinkUnicastVsock::new(stream, local_addr, peer_addr));
-            return Ok(LinkUnicast(link));
+            let link: Arc<dyn LinkUnicastTrait> =
+                Arc::new(LinkUnicastVsock::new(stream, local_addr, peer_addr));
+            return Ok(LinkUnicast::from(link));
         }
 
         bail!("Can not create a new vsock link bound to {}", endpoint)
@@ -355,10 +356,10 @@ async fn accept_task(
                     Ok((stream, dst_addr)) => {
                         tracing::debug!("Accepted vsock connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

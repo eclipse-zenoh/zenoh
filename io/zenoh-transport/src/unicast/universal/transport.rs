@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    collections::HashMap,
     fmt::DebugStruct,
     sync::{Arc, RwLock},
     time::Duration,
@@ -58,7 +59,7 @@ pub(crate) struct TransportUnicastUniversal {
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
+    pub(super) links: Arc<RwLock<TransportLinks>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
@@ -103,8 +104,7 @@ impl TransportUnicastUniversal {
             config: Arc::new(config),
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
-            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
-
+            links: Arc::new(RwLock::new(TransportLinks::default())),
             callback: Arc::new(RwLock::new(None)),
             status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
@@ -133,12 +133,7 @@ impl TransportUnicastUniversal {
         let callback = zwrite!(self.callback).take();
 
         // Close all the links
-        let mut links = {
-            let mut l_guard = zwrite!(self.links);
-            let links = l_guard.to_vec();
-            *l_guard = vec![].into_boxed_slice();
-            links
-        };
+        let mut links = zwrite!(self.links).take();
         for l in links.drain(..) {
             let _ = l.close().await;
         }
@@ -157,47 +152,44 @@ impl TransportUnicastUniversal {
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
         // Try to remove the link
-        let (is_last, stl) = {
-            let mut guard = zwrite!(self.links);
-
-            if let Some(index) = guard.iter().position(|tl| {
-                // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-                Link::new_unicast(
-                    &tl.link.link,
-                    tl.link.config.priorities.clone(),
-                    tl.link.config.reliability,
-                )
-                .eq(&link)
-            }) {
-                // Remove the link
-                let mut links = guard.to_vec();
-                let stl = links.remove(index);
-                *guard = links.into_boxed_slice();
-                (guard.is_empty(), stl)
-            } else {
-                bail!(
-                    "Can not delete Link {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
+        let Some((is_last, stl, associated_link)) = zwrite!(self.links).remove_link(&link) else {
+            bail!(
+                "Can not delete Link {} with peer: {}",
+                link,
+                self.config.zid
+            )
         };
 
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
+            let associated_link = associated_link.clone();
             tokio::task::spawn_blocking(move || {
                 callback.del_link(link);
+                if let Some(asl) = &associated_link {
+                    callback.del_link(Link::new_unicast(
+                        &asl.link.link,
+                        asl.link.config.priorities.clone(),
+                        asl.link.config.reliability,
+                    ));
+                }
             })
             .await?;
         }
+
+        // Associated link must also be closed. run both close calls, return whichever failed first
+        let close_asl = async {
+            match associated_link {
+                Some(asl) => asl.close().await,
+                None => Ok(()),
+            }
+        };
+        let (close_stl_res, close_asl_res) = tokio::join!(stl.close(), close_asl);
+
         if is_last {
-            let r = stl.close().await; // do not return early to ensure that the transport is deleted even if the link close fails
             self.delete().await?;
-            r
-        } else {
-            stl.close().await
         }
+        close_stl_res.and(close_asl_res)
     }
 
     async fn sync(
@@ -254,14 +246,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
         };
 
-        // Check if we can add more inbound links
         let mut guard = zwrite!(self.links);
-        if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
-            let count = guard
-                .iter()
-                .filter(|l| l.link.config.direction == link.inner_config().direction)
-                .count();
 
+        // Check if we can add more inbound links
+        if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
             let limit = zcondfeat!(
                 "transport_multilink",
                 match self.config.multilink {
@@ -271,12 +259,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                 1
             );
 
-            if count >= limit {
+            if guard.reached_multilink_limit(TransportLinkUnicastDirection::Inbound, limit) {
                 let e = zerror!(
-                    "Can not add Link {} with peer {}: max num of links reached {}/{}",
+                    "Can not add Link {} with peer {}: max num of links reached ({})",
                     link,
                     self.config.zid,
-                    count,
                     limit
                 );
                 return Err((e.into(), link.fail(), close::reason::MAX_LINKS));
@@ -284,32 +271,46 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
 
         // Wrap the link
-        let (link, ack) = link.unpack();
+        let (link, ack, associated_link) = link.unpack();
         let (mut link, consumer) =
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
+        // Handle associated link (if mixed-reliability link)
+        let (associated_link, al_consumer) = associated_link
+            .map(|l| TransportLinkUnicastUniversal::new(self, l, &self.priority_tx))
+            .map_or((None, None), |(l, c)| (Some(l), Some(c)));
         // Add the link to the channel
-        let mut links = Vec::with_capacity(guard.len() + 1);
-        links.extend_from_slice(&guard);
-        links.push(link.clone());
-        *guard = links.into_boxed_slice();
+        guard.push_link(link.clone(), associated_link.clone());
 
         drop(guard);
 
         // create a callback to start the link
         let transport = self.clone();
-        let mut c_link = link.clone();
-        let c_transport = transport.clone();
-        let start_tx = Box::new(move || {
-            // Start the TX loop
-            let keep_alive =
-                self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            c_link.start_tx(c_transport, consumer, keep_alive);
-        });
+        let start_tx = {
+            let mut link = link.clone();
+            let transport = transport.clone();
+            let associated_link = associated_link.clone();
+            Box::new(move || {
+                // Start the TX loop
+                let keep_alive = self.manager.config.unicast.lease
+                    / self.manager.config.unicast.keep_alive as u32;
+                link.start_tx(transport.clone(), consumer, keep_alive);
+                if let Some(mut associated_link) = associated_link {
+                    associated_link.start_tx(
+                        transport,
+                        al_consumer.expect("consumer should be Some when associated_link is Some"),
+                        keep_alive,
+                    );
+                }
+            })
+        };
 
         let start_rx = Box::new(move || {
             // Start the RX loop
-            link.start_rx(transport, other_lease);
+            link.start_rx(transport.clone(), other_lease);
+            if let Some(mut associated_link) = associated_link {
+                associated_link.start_rx(transport, other_lease);
+            }
         });
 
         Ok((start_tx, start_rx, ack, status_guard))
@@ -363,6 +364,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
         let mut pipelines = zread!(self.links)
+            .get_links()
             .iter()
             .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
@@ -384,13 +386,18 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links).iter().map(|l| l.link.link()).collect()
+        zread!(self.links)
+            .get_links()
+            .iter()
+            .map(|l| l.link.link())
+            .collect()
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
         zread!(self.links)
+            .get_links()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
@@ -412,5 +419,132 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         s: &'c mut DebugStruct<'a, 'b>,
     ) -> &'c mut DebugStruct<'a, 'b> {
         s.field("sn_resolution", &self.config.sn_resolution)
+    }
+}
+
+/// Container for Transport links that manages link associations (namely for mixed-reliability).
+/// Manages insertion/removal of links and their potential associated links while providing the
+/// following:
+/// - Evaluate multilink limit by considering each link association as a single link.
+/// - Expose a read-only view on links that mixes associations in the same set (as if they were
+///   separate links) for message scheduling based on QoS.
+#[derive(Default)]
+pub(super) struct TransportLinks {
+    inner: Box<[TransportLinkUnicastUniversal]>,
+    // TODO: memory usage of associations can probably be optimized
+    /// associations of links that internally use a shared state (namely mixed-reliability links)
+    associations: HashMap<Link, (Link, TransportLinkUnicastDirection)>,
+}
+
+impl TransportLinks {
+    pub(super) fn get_links(&self) -> &[TransportLinkUnicastUniversal] {
+        &self.inner
+    }
+
+    fn push_link(
+        &mut self,
+        link: TransportLinkUnicastUniversal,
+        associated_link: Option<TransportLinkUnicastUniversal>,
+    ) {
+        let mut links =
+            Vec::with_capacity(self.inner.len() + if associated_link.is_some() { 2 } else { 1 });
+        links.extend_from_slice(&self.inner);
+        links.push(link.clone());
+
+        if let Some(l) = associated_link {
+            links.push(l.clone());
+            // add associations to HashMap
+            let l1 = Link::new_unicast(
+                &link.link.link,
+                link.link.config.priorities.clone(),
+                link.link.config.reliability,
+            );
+            let l2 = Link::new_unicast(
+                &l.link.link,
+                l.link.config.priorities.clone(),
+                l.link.config.reliability,
+            );
+            self.associations
+                .insert(l1.clone(), (l2.clone(), link.link.config.direction));
+            self.associations
+                .insert(l2, (l1, link.link.config.direction));
+        }
+
+        self.inner = links.into_boxed_slice();
+    }
+
+    fn remove_link(
+        &mut self,
+        link: &Link,
+    ) -> Option<(
+        bool,
+        TransportLinkUnicastUniversal,
+        Option<TransportLinkUnicastUniversal>,
+    )> {
+        let link_equality = |tl: &TransportLinkUnicastUniversal, link: &Link| {
+            // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+            Link::new_unicast(
+                &tl.link.link,
+                tl.link.config.priorities.clone(),
+                tl.link.config.reliability,
+            )
+            .eq(link)
+        };
+        let index = self.inner.iter().position(|tl| link_equality(tl, link))?;
+
+        // Remove the link
+        let mut links = self.inner.to_vec();
+        let stl = links.remove(index);
+
+        // Remove associated link (if applicable)
+        let asl = if let Some((associated_link, _)) = self.associations.remove(link) {
+            // Remove opposite association
+            self.associations.remove(&associated_link);
+            // Remove associated link from links vec
+            match links
+                .iter()
+                .position(|tl| link_equality(tl, &associated_link))
+            {
+                Some(index) => Some(links.remove(index)),
+                None => {
+                    // this is possible if link equality cannot be guaranteed between now and
+                    // when the link was originally inserted. RX or TX task will fail and remove
+                    // it once its internal connection is closed by the associated link.
+                    tracing::debug!("Associated link not found while removing link {link}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        self.inner = links.into_boxed_slice();
+        Some((self.inner.is_empty(), stl, asl))
+    }
+
+    fn take(&mut self) -> Vec<TransportLinkUnicastUniversal> {
+        let links = self.inner.to_vec();
+        self.inner = vec![].into_boxed_slice();
+        links
+    }
+
+    fn reached_multilink_limit(
+        &self,
+        direction: TransportLinkUnicastDirection,
+        limit: usize,
+    ) -> bool {
+        let count = self
+            .inner
+            .iter()
+            .filter(|l| l.link.config.direction == direction)
+            .count();
+        count
+            - self
+                .associations
+                .values()
+                .filter(|(_, link_direction)| *link_direction == direction)
+                .count()
+                / 2
+            >= limit
     }
 }

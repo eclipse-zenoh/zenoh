@@ -38,7 +38,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -140,7 +140,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         let mut guard = zasynclock!(self.send);
         let msg = buffer.into();
 
@@ -153,15 +153,15 @@ impl LinkUnicastTrait for LinkUnicastWs {
         Ok(buffer.len())
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
+            written += self.write(&buffer[written..], priority).await?;
         }
         Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         let mut leftovers_guard = zasynclock!(self.leftovers);
 
         let (slice, start, len) = match leftovers_guard.take() {
@@ -187,10 +187,10 @@ impl LinkUnicastTrait for LinkUnicastWs {
         Ok(len_min)
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()> {
         let mut read: usize = 0;
         while read < buffer.len() {
-            let n = self.read(&mut buffer[read..]).await?;
+            let n = self.read(&mut buffer[read..], priority).await?;
             read += n;
         }
         Ok(())
@@ -332,9 +332,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
             )
         })?;
 
-        let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
+        let link: Arc<dyn LinkUnicastTrait> =
+            Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link))
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
@@ -534,10 +535,11 @@ async fn accept_task(
                 e
             })?;
         // Create the new link object
-        let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
+        let link: Arc<dyn LinkUnicastTrait> =
+            Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
             tracing::error!("{}-{}: {}", file!(), line!(), e)
         }
     }

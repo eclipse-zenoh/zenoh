@@ -574,7 +574,7 @@ pub(crate) async fn open_link(
         priorities: None,
         reliability: None,
     };
-    let mut link = TransportLinkUnicast::new(link, config);
+    let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
     let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
@@ -599,7 +599,7 @@ pub(crate) async fn open_link(
     let batch_size = manager
         .config
         .batch_size
-        .min(link.config.batch.mtu)
+        .min(link_unicast.config.batch.mtu)
         .min(batch_size::UNICAST);
 
     let mut state = {
@@ -642,7 +642,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    let _ = link.close(reason).await;
+                    let _ = link_unicast.close(reason).await;
                     return Err(e);
                 }
             }
@@ -654,9 +654,12 @@ pub(crate) async fn open_link(
         mine_zid: manager.config.zid,
         mine_whatami: manager.config.whatami,
     };
-    step!(fsm.send_init_syn((&mut link, &mut state, isyn_in)).await);
+    step!(
+        fsm.send_init_syn((&mut link_unicast, &mut state, isyn_in))
+            .await
+    );
 
-    let iack_out = step!(fsm.recv_init_ack((&mut link, &mut state)).await);
+    let iack_out = step!(fsm.recv_init_ack((&mut link_unicast, &mut state)).await);
 
     // Open handshake
     let osyn_in = SendOpenSynIn {
@@ -667,9 +670,12 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         ext_shm: iack_out.ext_shm,
     };
-    let osyn_out = step!(fsm.send_open_syn((&mut link, &mut state, osyn_in)).await);
+    let osyn_out = step!(
+        fsm.send_open_syn((&mut link_unicast, &mut state, osyn_in))
+            .await
+    );
 
-    let oack_out = step!(fsm.recv_open_ack((&mut link, &mut state)).await);
+    let oack_out = step!(fsm.recv_open_ack((&mut link_unicast, &mut state)).await);
 
     // Initialize the transport
     let config = TransportConfigUnicast {
@@ -702,9 +708,38 @@ pub(crate) async fn open_link(
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
     };
-    let o_link = link.reconfigure(o_config);
+    let o_link = link_unicast.reconfigure(o_config);
     let s_link = format!("{o_link:?}");
-    let o_link = LinkUnicastWithOpenAck::new(o_link, None);
+    // Handle MixedReliability links
+    let best_effort_link = match link.0 {
+        zenoh_link::NewLink::MixedReliability { best_effort, .. } => {
+            #[allow(clippy::unnecessary_min_or_max)]
+            let mtu = manager
+                .config
+                .batch_size
+                .min(best_effort.get_mtu())
+                .min(batch_size::UNICAST);
+
+            let o_config = TransportLinkUnicastConfig {
+                direction,
+                batch: BatchConfig {
+                    mtu,
+                    is_streamed: best_effort.is_streamed(),
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: state.link.ext_compression.is_compression(),
+                },
+                priorities: state.transport.ext_qos.priorities(),
+                // Do not apply reliability override to MixedReliability associated links
+                reliability: None,
+            };
+            let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
+            Some(link)
+        }
+        zenoh_link::NewLink::Single(_) => None,
+    };
+    let s_best_effort = best_effort_link.as_ref().map(|l| format!("{l:?}"));
+
+    let o_link = LinkUnicastWithOpenAck::new(o_link, None, best_effort_link);
     let transport = manager
         .init_transport_unicast(
             config,
@@ -715,10 +750,15 @@ pub(crate) async fn open_link(
         .await?;
 
     tracing::debug!(
-        "New transport link opened from {} to {}: {}.",
+        "New transport link opened from {} to {}: {} {}",
         manager.config.zid,
         iack_out.other_zid,
         s_link,
+        if let Some(s) = s_best_effort {
+            format!(" with associated link {s}")
+        } else {
+            "".into()
+        }
     );
 
     Ok(transport)
