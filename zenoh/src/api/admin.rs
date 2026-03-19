@@ -172,6 +172,7 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &prefix, &prefix, q)
         }),
+        None,
     );
 
     // Queryable simulating advanced publisher to allow advanced subscriber to receive historical data
@@ -185,6 +186,7 @@ pub(crate) fn init(session: WeakSession) {
             let session = session.clone();
             move |q| on_admin_query(&session, &adv_prefix, &prefix, q)
         }),
+        None,
     );
 
     // Subscribe to transport events and publish them to the adminspace
@@ -195,7 +197,7 @@ pub(crate) fn init(session: WeakSession) {
         move |event: TransportEvent| {
             let key_expr = ke_prefix(&own_zid) / &ke_transport(&event.transport);
             let key_expr = KeyExpr::from(key_expr);
-            tracing::info!(
+            tracing::trace!(
                 "Publishing transport event: {:?} : {:?} on {}",
                 &event.kind,
                 &event.transport,
@@ -228,7 +230,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_events_listener_inner(callback, false) {
+    if let Err(e) = session.declare_transport_events_listener_inner(callback, false, None) {
         tracing::error!("Unable to subscribe to transport events: {}", e);
     }
 
@@ -241,15 +243,16 @@ pub(crate) fn init(session: WeakSession) {
             // Find the transport to determine if it's multicast
             let transport_zid = &event.link.zid;
             let transport = session
-                .runtime
-                .get_transports()
+                .runtime()
+                .get_transports_blocking()
+                .into_iter()
                 .find(|t| t.zid == *transport_zid);
 
             if let Some(transport) = transport {
                 let key_expr =
                     ke_prefix(&own_zid) / &ke_transport(&transport) / &ke_link(&event.link);
                 let key_expr = KeyExpr::from(key_expr);
-                tracing::info!(
+                tracing::trace!(
                     "Publishing link event: {:?} : {:?} on {}",
                     &event.kind,
                     &event.link,
@@ -284,7 +287,7 @@ pub(crate) fn init(session: WeakSession) {
             }
         }
     });
-    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None) {
+    if let Err(e) = session.declare_transport_links_listener_inner(callback, false, None, None) {
         tracing::error!("Unable to subscribe to link events: {}", e);
     }
 }
@@ -317,7 +320,7 @@ pub(crate) fn on_admin_query(
     reply_prefix: &keyexpr,
     query: Query,
 ) {
-    for transport in session.runtime.get_transports() {
+    for transport in session.runtime().get_transports() {
         let ke_transport = ke_transport(&transport);
         let transport_json = TransportJson::from(transport.clone());
         reply(
@@ -327,7 +330,7 @@ pub(crate) fn on_admin_query(
             &query,
             &transport_json,
         );
-        for link in session.runtime.get_links(Some(&transport)) {
+        for link in session.runtime().get_links(Some(&transport)) {
             let ke_link = &ke_transport / &ke_link(&link);
             let link_json = LinkJson::from(link);
             reply(match_prefix, reply_prefix, &ke_link, &query, &link_json);

@@ -19,7 +19,10 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use proc_macro::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, Attribute, Error, Item, ItemImpl, LitStr, TraitItem};
+use syn::{
+    parse_macro_input, parse_quote, spanned::Spanned, Attribute, Error, Item, ItemImpl, LitStr,
+    TraitItem,
+};
 use zenoh_keyexpr::{
     format::{
         macro_support::{self, SegmentBuilder},
@@ -605,14 +608,14 @@ pub fn register_param(input: proc_macro::TokenStream) -> proc_macro::TokenStream
 ///
 #[proc_macro_attribute]
 pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemImpl);
+    let mut input = parse_macro_input!(item as ItemImpl);
     let trait_path = &input.trait_.as_ref().unwrap().1;
     let struct_path = &input.self_ty;
     let generics = &input.generics;
     // let struct_lifetime = get_type_path_lifetime(struct_path);
 
     let mut struct_methods = quote! {};
-    for item_fn in input.items.iter() {
+    for item_fn in input.items.iter_mut() {
         if let syn::ImplItem::Fn(method) = item_fn {
             let method_name = &method.sig.ident;
             let method_generic_params = &method.sig.generics.params;
@@ -642,6 +645,9 @@ pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #attr
                 });
             }
+            method
+                .attrs
+                .retain(|attr| !attr.meta.path().is_ident("deprecated"));
             // call corresponding trait method from struct method
             struct_methods.extend(quote! {
                 #attributes
@@ -661,4 +667,100 @@ pub fn internal_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #struct_methods_output
     })
     .into()
+}
+
+#[proc_macro_attribute]
+pub fn pub_visibility_if_internal(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut item_original: syn::Item = syn::parse(tokens).expect("failed to parse input");
+    let item_modified;
+    let not_internal_feature_gate: Attribute = parse_quote!(#[cfg(not(feature = "internal"))]);
+    let internal_feature_gate: Attribute = parse_quote!(#[cfg(feature = "internal")]);
+    let hide_doc: Attribute = parse_quote!(#[doc(hidden)]);
+    let allow_dead_code: Attribute = parse_quote!(#[allow(dead_code)]);
+    match &mut item_original {
+        Item::Fn(item_fn) => {
+            let mut item_fn_modified = item_fn.clone();
+            item_fn_modified.vis = syn::Visibility::Public(syn::token::Pub(item_fn.span()));
+            item_fn_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_modified = Item::Fn(item_fn_modified);
+            item_fn.attrs.splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Struct(item_struct) => {
+            let mut item_struct_modified = item_struct.clone();
+            item_struct_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_struct_modified.vis = syn::Visibility::Public(syn::token::Pub(item_struct.span()));
+            item_modified = Item::Struct(item_struct_modified);
+            item_struct
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        Item::Type(item_type) => {
+            let mut item_type_modified = item_type.clone();
+            item_type_modified
+                .attrs
+                .splice(0..0, vec![internal_feature_gate, hide_doc, allow_dead_code]);
+            item_type_modified.vis = syn::Visibility::Public(syn::token::Pub(item_type.span()));
+            item_modified = Item::Type(item_type_modified);
+            item_type
+                .attrs
+                .splice(0..0, vec![not_internal_feature_gate]);
+        }
+        _ => panic!("pub_visibility_if_internal only works with struct, type and fn"),
+    }
+    let ts: TokenStream = item_original.into_token_stream().into();
+    out.extend(ts);
+    let ts: TokenStream = item_modified.into_token_stream().into();
+    out.extend(ts);
+    out
+}
+
+// applies zenoh_macros::internal if unstable feature is disabled, otherwise applies zenoh_macros::unstable
+#[proc_macro_attribute]
+pub fn internal_or_unstable(_attr: TokenStream, tokens: TokenStream) -> TokenStream {
+    let mut out = TokenStream::new();
+    let mut item_original: syn::Item = syn::parse(tokens).expect("failed to parse input");
+    let item_modified;
+    let non_unstable_feature_gate: Attribute = parse_quote!(#[cfg(not(feature = "unstable"))]);
+    let internal_feature_gate: Attribute = parse_quote!(#[zenoh_macros::internal]);
+    let unstable_feature_gate: Attribute = parse_quote!(#[zenoh_macros::unstable]);
+    match &mut item_original {
+        Item::Fn(item_fn) => {
+            let mut item_fn_modified = item_fn.clone();
+            item_fn_modified.vis = syn::Visibility::Public(syn::token::Pub(item_fn.span()));
+            item_fn_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_modified = Item::Fn(item_fn_modified);
+            item_fn.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        Item::Struct(item_struct) => {
+            let mut item_struct_modified = item_struct.clone();
+            item_struct_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_struct_modified.vis = syn::Visibility::Public(syn::token::Pub(item_struct.span()));
+            item_modified = Item::Struct(item_struct_modified);
+            item_struct.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        Item::Type(item_type) => {
+            let mut item_type_modified = item_type.clone();
+            item_type_modified
+                .attrs
+                .splice(0..0, vec![non_unstable_feature_gate, internal_feature_gate]);
+            item_type_modified.vis = syn::Visibility::Public(syn::token::Pub(item_type.span()));
+            item_modified = Item::Type(item_type_modified);
+            item_type.attrs.splice(0..0, vec![unstable_feature_gate]);
+        }
+        _ => panic!("internal_or_unstable only works with struct, type and fn"),
+    }
+    let ts: TokenStream = item_original.into_token_stream().into();
+    out.extend(ts);
+    let ts: TokenStream = item_modified.into_token_stream().into();
+    out.extend(ts);
+    out
 }

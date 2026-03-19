@@ -32,6 +32,7 @@ use crate::api::info::{Link, LinkEvent};
 use crate::api::Id;
 #[zenoh_macros::unstable]
 use crate::{
+    api::cancellation::SyncGroup,
     api::session::{UndeclarableSealed, WeakSession},
     handlers::{Callback, DefaultHandler, IntoHandler},
 };
@@ -102,7 +103,7 @@ impl Resolvable for LinksBuilder<'_> {
 #[zenoh_macros::unstable]
 impl Wait for LinksBuilder<'_> {
     fn wait(self) -> Self::To {
-        self.session.runtime.get_links(self.transport.as_ref())
+        self.session.runtime().get_links(self.transport.as_ref())
     }
 }
 
@@ -168,6 +169,7 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 pub struct LinkEventsListener<Handler> {
     pub(crate) inner: LinkEventsListenerInner,
     pub(crate) handler: Handler,
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 #[zenoh_macros::unstable]
@@ -240,7 +242,10 @@ impl<Handler: Send> UndeclarableSealed<()> for LinkEventsListener<Handler> {
     type Undeclaration = LinkEventsListenerUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        LinkEventsListenerUndeclaration(self)
+        LinkEventsListenerUndeclaration {
+            listener: self,
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -262,7 +267,10 @@ impl<Handler> std::ops::DerefMut for LinkEventsListener<Handler> {
 
 /// A [`Resolvable`] returned by [`LinkEventsListener::undeclare`]
 #[zenoh_macros::unstable]
-pub struct LinkEventsListenerUndeclaration<Handler>(LinkEventsListener<Handler>);
+pub struct LinkEventsListenerUndeclaration<Handler> {
+    listener: LinkEventsListener<Handler>,
+    wait_callbacks: bool,
+}
 
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
@@ -270,9 +278,23 @@ impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<Handler> LinkEventsListenerUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of link events listener callback (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> Wait for LinkEventsListenerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.listener.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.listener.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -450,11 +472,13 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> Self::To {
+        let callback_sync_group = SyncGroup::default();
         let (callback, handler) = self.handler.into_handler();
         let state = self.session.declare_transport_links_listener_inner(
             callback,
             self.history,
             self.transport,
+            callback_sync_group.notifier(),
         )?;
 
         Ok(LinkEventsListener {
@@ -464,6 +488,7 @@ where
                 undeclare_on_drop: true,
             },
             handler,
+            callback_sync_group,
         })
     }
 }
@@ -494,6 +519,7 @@ impl Wait for LinkEventsListenerBuilder<'_, Callback<LinkEvent>, true> {
             self.handler,
             self.history,
             self.transport,
+            None,
         )?;
         // Set the listener to not undeclare on drop (background mode)
         // Note: We can't access the listener to set background flag, so we just don't keep a reference

@@ -34,6 +34,7 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: &Push) -> Self::Output {
         let Push {
             wire_expr,
@@ -102,6 +103,7 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<Push, Self::Error> {
         if imsg::mid(self.header) != id::PUSH {
             return Err(DidntRead);

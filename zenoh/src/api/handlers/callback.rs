@@ -16,8 +16,6 @@
 
 use std::sync::Arc;
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroupNotifier;
 use crate::api::handlers::IntoHandler;
 
 /// A function that can transform an [`FnMut`]`(T)` into
@@ -33,43 +31,65 @@ pub trait CallbackParameter: 'static {
     fn from_message(msg: Self::Message<'_>) -> Self;
 }
 
-trait CallbackImpl<T: CallbackParameter>: Send + Sync {
+trait CallbackImpl<T>: Send + Sync {
     fn call(&self, t: T);
 
-    fn call_with_message(&self, msg: T::Message<'_>) {
+    fn call_with_message(&self, msg: T::Message<'_>)
+    where
+        T: CallbackParameter,
+    {
         self.call(T::from_message(msg))
     }
 }
 
-impl<T: CallbackParameter, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
+impl<T, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
     fn call(&self, t: T) {
         self(t)
     }
 }
 
+struct Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    drop: Option<F>,
+}
+impl<F> Drop for Dropper<F>
+where
+    F: FnOnce() + Send + Sync,
+{
+    fn drop(&mut self) {
+        if let Some(d) = self.drop.take() {
+            (d)()
+        }
+    }
+}
+trait DropperTrait {}
+impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 /// Callback type used by zenoh entities.
 ///
 /// This type stores the callback function passed to zenoh entities.
-pub struct Callback<T: CallbackParameter> {
+pub struct Callback<T> {
     callable: Arc<dyn CallbackImpl<T>>,
-    #[cfg(feature = "unstable")]
-    on_drop_notifier: Option<SyncGroupNotifier>,
+    drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
 }
 
-impl<T: CallbackParameter> Clone for Callback<T> {
+impl<T> Clone for Callback<T> {
     fn clone(&self) -> Self {
         Self {
             callable: self.callable.clone(),
-            #[cfg(feature = "unstable")]
-            on_drop_notifier: self.on_drop_notifier.clone(),
+            drop: self.drop.clone(),
         }
     }
 }
 
-impl<T: CallbackParameter> Callback<T> {
+impl<T> Callback<T> {
     // TODO deprecate
     /// Instantiate a `Callback` from a callback function.
-    pub fn new(cb: Arc<dyn Fn(T) + Send + Sync>) -> Self {
+    pub fn new(cb: Arc<dyn Fn(T) + Send + Sync>) -> Self
+    where
+        T: 'static,
+    {
         Self::from(move |msg| cb(msg))
     }
 
@@ -79,34 +99,36 @@ impl<T: CallbackParameter> Callback<T> {
         self.callable.call(arg)
     }
 
-    pub(crate) fn call_with_message(&self, msg: T::Message<'_>) {
+    pub(crate) fn call_with_message(&self, msg: T::Message<'_>)
+    where
+        T: CallbackParameter,
+    {
         self.callable.call_with_message(msg)
     }
 
-    #[cfg(feature = "unstable")]
-    pub(crate) fn set_on_drop_notifier(&mut self, notifier: SyncGroupNotifier) {
-        self.on_drop_notifier = Some(notifier);
+    #[zenoh_macros::pub_visibility_if_internal]
+    pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
+        self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
     }
 }
 
-impl<T: CallbackParameter, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
+impl<T, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
     fn from(value: F) -> Self {
         Self {
             callable: Arc::new(value),
-            #[cfg(feature = "unstable")]
-            on_drop_notifier: None,
+            drop: None,
         }
     }
 }
 
-impl<T: CallbackParameter> IntoHandler<T> for Callback<T> {
+impl<T> IntoHandler<T> for Callback<T> {
     type Handler = ();
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
         (self, ())
     }
 }
 
-impl<T: CallbackParameter, F, H> IntoHandler<T> for (F, H)
+impl<T, F, H> IntoHandler<T> for (F, H)
 where
     F: Fn(T) + Send + Sync + 'static,
 {
@@ -117,7 +139,7 @@ where
     }
 }
 
-impl<T: CallbackParameter, H> IntoHandler<T> for (Callback<T>, H) {
+impl<T, H> IntoHandler<T> for (Callback<T>, H) {
     type Handler = H;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
@@ -125,9 +147,7 @@ impl<T: CallbackParameter, H> IntoHandler<T> for (Callback<T>, H) {
     }
 }
 
-impl<T: CallbackParameter + Send + 'static> IntoHandler<T>
-    for (flume::Sender<T>, flume::Receiver<T>)
-{
+impl<T: Send + 'static> IntoHandler<T> for (flume::Sender<T>, flume::Receiver<T>) {
     type Handler = flume::Receiver<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {
@@ -169,7 +189,7 @@ where
     }
 }
 
-impl<OnEvent, Event: CallbackParameter, DropFn> IntoHandler<Event> for CallbackDrop<OnEvent, DropFn>
+impl<OnEvent, Event, DropFn> IntoHandler<Event> for CallbackDrop<OnEvent, DropFn>
 where
     OnEvent: Fn(Event) + Send + Sync + 'static,
     DropFn: FnMut() + Send + Sync + 'static,

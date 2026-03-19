@@ -197,7 +197,6 @@ async fn test_interceptors_cache_update_ingress() {
         .insert(router_id, Box::new(f));
 
     router
-        .0
         .static_runtime()
         .unwrap()
         .router()
@@ -288,7 +287,6 @@ async fn test_interceptors_cache_update_egress() {
         .insert(router_id, Box::new(f));
 
     router
-        .0
         .static_runtime()
         .unwrap()
         .router()
@@ -379,7 +377,6 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
         .insert(router_id, Box::new(f));
 
     router
-        .0
         .static_runtime()
         .unwrap()
         .router()

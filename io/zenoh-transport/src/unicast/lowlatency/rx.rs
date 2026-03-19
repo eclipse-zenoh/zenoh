@@ -82,7 +82,12 @@ impl TransportUnicastLowlatency {
 
             match msg.body {
                 zenoh_protocol::transport::TransportBodyLowLatency::Close(_) => {
-                    let _ = self.delete().await;
+                    // Spawn a task to avoid a deadlock waiting for this same task
+                    // to finish in the link close() joining the rx handle
+                    let c_transport = self.clone();
+                    zenoh_runtime::ZRuntime::Net.spawn(async move {
+                        let _ = c_transport.delete().await;
+                    });
                 }
                 zenoh_protocol::transport::TransportBodyLowLatency::KeepAlive(_) => {}
                 zenoh_protocol::transport::TransportBodyLowLatency::Network(mut msg) => {
