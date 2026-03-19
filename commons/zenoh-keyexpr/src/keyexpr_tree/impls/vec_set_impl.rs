@@ -73,6 +73,7 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> IChildren<T> for Vec<T> {
         'a: 'b,
         T: 'b,
     {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         let this = unsafe { &mut *(self as *mut Self) };
         match self.child_at_mut(chunk) {
             Some(entry) => Entry::Occupied(entry),

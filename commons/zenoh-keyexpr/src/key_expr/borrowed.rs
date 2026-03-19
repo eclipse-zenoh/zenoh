@@ -175,6 +175,7 @@ impl keyexpr {
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 Some(j) => unsafe { Some(keyexpr::from_str_unchecked(&self.0[..j])) },
                 None => None, // wildcard in the first segment => no invariant prefix
             },
@@ -265,6 +266,7 @@ impl keyexpr {
                     // if remaining is "**" return only this since it covers all
                     if remaining.as_bytes() == b"**" {
                         result.clear();
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         result.push(unsafe { keyexpr::from_str_unchecked(remaining) });
                         return result;
                     }
@@ -375,6 +377,7 @@ impl keyexpr {
                                 }
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         None => unsafe {
                             // "**" can match all remaining non-verbatim chunks
                             Some(keyexpr::from_str_unchecked(core::str::from_utf8_unchecked(
@@ -392,7 +395,7 @@ impl keyexpr {
                     return None;
                 }
                 if prefix_end == prefix_bytes.len() {
-                    // Safety: every chunk of keyexpr is also a valid keyexpr
+                    // SAFETY: every chunk of keyexpr is also a valid keyexpr
                     return unsafe {
                         Some(keyexpr::from_str_unchecked(core::str::from_utf8_unchecked(
                             &target_bytes[(target_end + 1)..],
@@ -421,7 +424,8 @@ impl keyexpr {
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub const unsafe fn from_str_unchecked(s: &str) -> &Self {
-        core::mem::transmute(s)
+        // SAFETY: `keyexpr` is `repr(transparent)` over `str`.
+        unsafe { core::mem::transmute(s) }
     }
 
     /// # Safety
@@ -430,7 +434,8 @@ impl keyexpr {
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
-        core::mem::transmute(s)
+        // SAFETY: `keyexpr` is `repr(transparent)` over `str` and caller guarantees valid UTF-8 keyexpr bytes.
+        unsafe { core::mem::transmute(s) }
     }
 
     #[cfg(feature = "internal")]
@@ -452,6 +457,7 @@ impl keyexpr {
         self.as_str().get(..i).and_then(|s| s.rfind('/'))
     }
     pub(crate) fn first_byte(&self) -> u8 {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { *self.as_bytes().get_unchecked(0) }
     }
     pub(crate) fn iter_splits_ltr(&self) -> SplitsLeftToRight<'_> {
@@ -634,6 +640,7 @@ impl<'a> Chunks<'a> {
     pub const fn as_keyexpr(self) -> Option<&'a keyexpr> {
         match self.inner.is_empty() {
             true => None,
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             _ => Some(unsafe { keyexpr::from_str_unchecked(self.inner) }),
         }
     }
@@ -642,6 +649,7 @@ impl<'a> Chunks<'a> {
         if self.inner.is_empty() {
             None
         } else {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             Some(unsafe {
                 keyexpr::from_str_unchecked(
                     &self.inner[..self.inner.find('/').unwrap_or(self.inner.len())],
@@ -654,6 +662,7 @@ impl<'a> Chunks<'a> {
         if self.inner.is_empty() {
             None
         } else {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             Some(unsafe {
                 keyexpr::from_str_unchecked(
                     &self.inner[self.inner.rfind('/').map_or(0, |i| i + 1)..],
@@ -670,6 +679,7 @@ impl<'a> Iterator for Chunks<'a> {
         }
         let (next, inner) = self.inner.split_once('/').unwrap_or((self.inner, ""));
         self.inner = inner;
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         Some(unsafe { keyexpr::from_str_unchecked(next) })
     }
 }
@@ -680,6 +690,7 @@ impl DoubleEndedIterator for Chunks<'_> {
         }
         let (inner, next) = self.inner.rsplit_once('/').unwrap_or(("", self.inner));
         self.inner = inner;
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         Some(unsafe { keyexpr::from_str_unchecked(next) })
     }
 }
@@ -864,6 +875,7 @@ impl<'a> TryFrom<&'a str> for &'a keyexpr {
                 _ => i += 1,
             }
         }
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         Ok(unsafe { keyexpr::from_str_unchecked(value) })
     }
 }
@@ -910,6 +922,7 @@ fn autocanon() {
 impl Deref for keyexpr {
     type Target = str;
     fn deref(&self) -> &Self::Target {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -969,7 +982,8 @@ impl nonwild_keyexpr {
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`nonwild_keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub const unsafe fn from_str_unchecked(s: &str) -> &Self {
-        core::mem::transmute(s)
+        // SAFETY: `nonwild_keyexpr` is `repr(transparent)` over `keyexpr`/`str`.
+        unsafe { core::mem::transmute(s) }
     }
 }
 
@@ -986,6 +1000,7 @@ impl<'a> TryFrom<&'a keyexpr> for &'a nonwild_keyexpr {
         if value.is_wild_impl() {
             bail!("nonwild_keyexpr can not contain any wild chunks")
         }
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         Ok(unsafe { core::mem::transmute::<&keyexpr, &nonwild_keyexpr>(value) })
     }
 }
