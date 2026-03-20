@@ -61,7 +61,7 @@ impl MemoryLayout {
         }
     }
 
-    /// #SAFETY: this is safe if size is a multiply of alignment
+    /// # Safety: this is safe if size is a multiply of alignment
     /// Note: not intended for public APIs as it is really very unsafe
     const unsafe fn new_unchecked(size: NonZeroUsize, alignment: AllocAlignment) -> Self {
         Self { size, alignment }
@@ -79,6 +79,7 @@ impl MemoryLayout {
         // SAFETY: invariant checked above
         let size = unsafe { NonZeroUsize::new_unchecked(mem::size_of::<T>()) };
         let alignment = AllocAlignment::for_type::<T>();
+        // SAFETY: size and alignment are guaranteed to be compatible as they were obtained from the same type `T`
         unsafe { Self::new_unchecked(size, alignment) }
     }
 
