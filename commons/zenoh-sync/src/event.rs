@@ -13,12 +13,14 @@
 //
 use std::{
     fmt,
+    pin::pin,
     sync::{
         atomic::{AtomicU16, Ordering},
         Arc, Condvar, Mutex,
     },
     time::{Duration, Instant},
 };
+use tokio::sync::Notify as AsyncNotify;
 
 // Error types
 const WAIT_ERR_STR: &str = "No notifier available";
@@ -101,17 +103,25 @@ impl fmt::Debug for NotifyError {
 
 impl std::error::Error for NotifyError {}
 
-// State values stored inside the mutex.
+// State values for the sync Mutex<u8>.
 const UNSET: u8 = 0;
 const OK: u8 = 1;
 const ERR: u8 = 2;
 
-// Replace event_listener::Event + AtomicU8 with std Mutex<u8> + Condvar.
-// This eliminates per-wait EventListener allocation and intrusive-list
-// register/deregister cost on the transport pipeline hot path.
+// Replace event_listener::Event + AtomicU8 with:
+//   - std Mutex<u8> + Condvar  →  sync paths (wait / wait_deadline / wait_timeout)
+//   - tokio::sync::Notify      →  async path (wait_async), which is cancellation-safe
+//
+// The original event_listener approach allocated a linked-list node (EventListener)
+// on every wait() call and paid intrusive-list register/deregister cost on the hot path.
+// tokio::time::timeout() was also able to cancel wait_async() while its inner
+// spawn_blocking task continued running, eventually consuming the next real notification
+// (a "zombie" thread bug). tokio::sync::Notify avoids this: a dropped Notified future
+// returns its permit to the pool so no notification is lost.
 struct EventInner {
     state: Mutex<u8>,
     cv: Condvar,
+    async_notify: AsyncNotify,
     notifiers: AtomicU16,
     waiters: AtomicU16,
 }
@@ -124,6 +134,7 @@ pub fn new() -> (Notifier, Waiter) {
     let inner = Arc::new(EventInner {
         state: Mutex::new(UNSET),
         cv: Condvar::new(),
+        async_notify: AsyncNotify::new(),
         notifiers: AtomicU16::new(1),
         waiters: AtomicU16::new(1),
     });
@@ -143,6 +154,8 @@ impl Notifier {
         }
         *state = OK;
         self.0.cv.notify_one();
+        drop(state); // release before async notify to minimise lock contention
+        self.0.async_notify.notify_one();
         Ok(())
     }
 }
@@ -159,10 +172,12 @@ impl Drop for Notifier {
     fn drop(&mut self) {
         let n = self.0.notifiers.fetch_sub(1, Ordering::SeqCst);
         if n == 1 {
-            // Last notifier dropped — wake all waiters with error.
+            // Last notifier dropped — signal error to all waiters.
             let mut state = self.0.state.lock().unwrap();
             *state = ERR;
             self.0.cv.notify_all();
+            drop(state);
+            self.0.async_notify.notify_waiters(); // wake all async waiters
         }
     }
 }
@@ -183,12 +198,34 @@ impl Waiter {
         }
     }
 
+    /// Cancellation-safe async wait.
+    ///
+    /// Uses [`tokio::sync::Notify`] so that if this future is dropped (e.g. by
+    /// `tokio::time::timeout`), the pending notification is returned to the pool
+    /// rather than silently consumed by a detached `spawn_blocking` thread.
     #[inline]
     pub async fn wait_async(&self) -> Result<(), WaitError> {
-        let waiter = self.clone();
-        tokio::task::spawn_blocking(move || waiter.wait())
-            .await
-            .unwrap_or(Err(WaitError))
+        loop {
+            // Create and enable the Notified future BEFORE checking state.
+            // enable() subscribes to the Notify and consumes any stored permit,
+            // so a notify_one() that fires between here and the .await is not lost.
+            let mut notified = pin!(self.0.async_notify.notified());
+            notified.as_mut().enable();
+
+            {
+                let mut state = self.0.state.lock().unwrap();
+                match *state {
+                    OK => { *state = UNSET; return Ok(()); }
+                    ERR => return Err(WaitError),
+                    _ => {}
+                }
+            }
+
+            // No pending notification — await (cancellation-safe).
+            // If this future is dropped here, the Notified future is dropped too,
+            // which returns any pre-reserved permit to the Notify pool.
+            notified.await;
+        }
     }
 
     #[inline]
@@ -243,6 +280,9 @@ impl Drop for Waiter {
         if n == 1 {
             let mut state = self.0.state.lock().unwrap();
             *state = ERR;
+            self.0.cv.notify_all();
+            drop(state);
+            self.0.async_notify.notify_waiters();
         }
     }
 }
