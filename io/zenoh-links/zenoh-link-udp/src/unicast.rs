@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "uring")]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     collections::HashMap,
     fmt,
@@ -230,6 +232,27 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
+    }
+
+    #[cfg(feature = "uring")]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        let fd = match &self.variant {
+            LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
+                link_unicast_udp_connected.socket.as_raw_fd()
+            }
+            LinkUnicastUdpVariant::Unconnected(link_unicast_udp_unconnected) => {
+                link_unicast_udp_unconnected
+                    .socket
+                    .upgrade()
+                    .unwrap()
+                    .as_raw_fd()
+            }
+        };
+
+        match fd {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
     }
 }
 

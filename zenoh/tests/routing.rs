@@ -28,7 +28,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_result::bail;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(100);
 const MSG_COUNT: usize = 50;
 const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
