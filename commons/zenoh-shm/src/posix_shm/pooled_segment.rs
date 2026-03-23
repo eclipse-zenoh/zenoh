@@ -36,7 +36,11 @@ pub(crate) struct PooledPosixShmSegment {
 }
 
 impl PooledPosixShmSegment {
-    pub(crate) fn new(inner: Arc<PosixShmSegment>, size: NonZeroUsize, pool: Weak<ShmSegmentPool>) -> Self {
+    pub(crate) fn new(
+        inner: Arc<PosixShmSegment>,
+        size: NonZeroUsize,
+        pool: Weak<ShmSegmentPool>,
+    ) -> Self {
         Self { inner, size, pool }
     }
 }

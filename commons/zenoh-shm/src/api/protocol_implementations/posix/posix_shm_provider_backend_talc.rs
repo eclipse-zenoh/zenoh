@@ -56,7 +56,9 @@ pub struct ShmPoolConfig {
 
 impl Default for ShmPoolConfig {
     fn default() -> Self {
-        Self { max_idle_per_size: 8 }
+        Self {
+            max_idle_per_size: 8,
+        }
     }
 }
 
@@ -108,7 +110,10 @@ impl PosixShmProviderBackendTalc {
     /// pre-allocated SHM segment is used.
     #[zenoh_macros::unstable_doc]
     pub fn builder<Layout>(layout: Layout) -> PosixShmProviderBackendTalcBuilder<Layout> {
-        PosixShmProviderBackendTalcBuilder { layout, pool_config: None }
+        PosixShmProviderBackendTalcBuilder {
+            layout,
+            pool_config: None,
+        }
     }
 
     /// Get the builder to construct a new instance with segment pooling enabled.
@@ -180,12 +185,19 @@ impl ShmProviderBackend for PosixShmProviderBackendTalc {
                 );
                 seg
             } else {
-                Arc::new(PosixShmSegment::create(layout.size()).map_err(|_| ZAllocError::OutOfMemory)?)
+                Arc::new(
+                    PosixShmSegment::create(layout.size()).map_err(|_| ZAllocError::OutOfMemory)?,
+                )
             };
 
             // SAFETY: elem_mut(0) is always valid for a freshly-created or freshly-pooled segment.
             let buf = unsafe { NonNull::new_unchecked(segment.segment.elem_mut(0)) };
-            return Ok(segment.allocated_chunk_pooled(buf, layout, Arc::downgrade(pool), layout.size()));
+            return Ok(segment.allocated_chunk_pooled(
+                buf,
+                layout,
+                Arc::downgrade(pool),
+                layout.size(),
+            ));
         }
 
         // Traditional Talc sub-allocation path (no pool configured).
