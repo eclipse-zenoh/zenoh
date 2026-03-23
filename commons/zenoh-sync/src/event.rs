@@ -13,6 +13,7 @@
 //
 use std::{
     fmt,
+    pin::pin,
     sync::{
         atomic::{AtomicU16, AtomicU8, Ordering},
         Arc,
@@ -20,7 +21,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use event_listener::{Event as EventLib, Listener};
+use parking_lot::{Condvar, Mutex};
+use tokio::sync::Notify as AsyncNotify;
 
 // Error types
 const WAIT_ERR_STR: &str = "No notifier available";
@@ -103,92 +105,91 @@ impl fmt::Debug for NotifyError {
 
 impl std::error::Error for NotifyError {}
 
-// Inner
+// State values for the AtomicU8 flag.
+const UNSET: u8 = 0;
+const OK: u8 = 1;
+const ERR: u8 = 2;
+
+// Replace event_listener::Event + AtomicU8 with:
+//   - AtomicU8 flag + Mutex<()> + Condvar  →  sync paths (wait / wait_deadline / wait_timeout)
+//   - tokio::sync::Notify                  →  async path (wait_async), cancellation-safe
+//
+// Hot-path design (sticky notification):
+//
+//   notify():  flag.fetch_update(UNSET|OK → OK) [atomic, no lock]
+//              + brief lock()/unlock() to prevent lost wakeup
+//              + cv.notify_one() + async_notify.notify_one()
+//
+//   wait():    flag.compare_exchange(OK → UNSET) [atomic, no lock]  ← hot path returns here
+//              If UNSET: lock() → re-check flag → cv.wait() if still UNSET
+//
+// The mutex is only taken on the slow (blocking) path and briefly in notify() to
+// fence against the lost-wakeup window. No heap allocation on either path.
 struct EventInner {
-    event: EventLib,
+    /// Primary state. Written atomically on hot path; also read under `mutex`
+    /// on the slow path to re-check after wakeup.
     flag: AtomicU8,
+    /// Used exclusively as the condvar lock. Carries no state of its own.
+    mutex: Mutex<()>,
+    cv: Condvar,
+    async_notify: AsyncNotify,
     notifiers: AtomicU16,
     waiters: AtomicU16,
 }
 
-const UNSET: u8 = 0;
-const OK: u8 = 1;
-const ERR: u8 = 1 << 1;
-
-#[repr(u8)]
-enum EventCheck {
-    Unset = UNSET,
-    Ok = OK,
-    Err = ERR,
-}
-
-#[repr(u8)]
-enum EventSet {
-    Ok = OK,
-    Err = ERR,
-}
-
-impl EventInner {
-    fn check(&self) -> EventCheck {
-        let f = self.flag.fetch_and(!OK, Ordering::SeqCst);
-        if f & ERR != 0 {
-            return EventCheck::Err;
-        }
-        if f == OK {
-            return EventCheck::Ok;
-        }
-        EventCheck::Unset
-    }
-
-    fn set(&self) -> EventSet {
-        let f = self.flag.fetch_or(OK, Ordering::SeqCst);
-        if f & ERR != 0 {
-            return EventSet::Err;
-        }
-        EventSet::Ok
-    }
-
-    fn err(&self) {
-        self.flag.store(ERR, Ordering::SeqCst);
-    }
-}
-
-/// Creates a new lock-free event variable. Every time a [`Notifier`] calls ['Notifier::notify`], one [`Waiter`] will be waken-up.
-/// If no waiter is waiting when the `notify` is called, the notification will not be lost. That means the next waiter will return
-/// immediately when calling `wait`.
+/// Creates a new event variable. Every time a [`Notifier`] calls
+/// [`Notifier::notify`], one [`Waiter`] will be woken up. Notifications are
+/// sticky: if no waiter is blocking when `notify` is called, the next `wait`
+/// call returns immediately.
 pub fn new() -> (Notifier, Waiter) {
     let inner = Arc::new(EventInner {
-        event: EventLib::new(),
         flag: AtomicU8::new(UNSET),
+        mutex: Mutex::new(()),
+        cv: Condvar::new(),
+        async_notify: AsyncNotify::new(),
         notifiers: AtomicU16::new(1),
         waiters: AtomicU16::new(1),
     });
     (Notifier(inner.clone()), Waiter(inner))
 }
 
-/// A [`Notifier`] is used to notify and wake up one and only one [`Waiter`].
+/// A [`Notifier`] wakes up one [`Waiter`].
 #[repr(transparent)]
 pub struct Notifier(Arc<EventInner>);
 
 impl Notifier {
-    /// Notifies one pending listener
     #[inline]
     pub fn notify(&self) -> Result<(), NotifyError> {
-        // Set the flag.
-        match self.0.set() {
-            EventSet::Ok => {
-                self.0.event.notify_additional_relaxed(1);
-                Ok(())
-            }
-            EventSet::Err => Err(NotifyError),
-        }
+        // Atomically set flag to OK unless it is already ERR (terminal state).
+        // fetch_update returns Err if the closure returns None (i.e. flag == ERR).
+        self.0
+            .flag
+            .fetch_update(Ordering::Release, Ordering::Relaxed, |f| {
+                if f == ERR {
+                    None
+                } else {
+                    Some(OK)
+                }
+            })
+            .map_err(|_| NotifyError)?;
+
+        // Brief lock/unlock to close the lost-wakeup window.
+        //
+        // A waiter on the slow path does: CAS-fails → lock() → re-check flag → cv.wait().
+        // By taking the lock here we ensure either:
+        //   (a) waiter has not yet called lock() → it will see OK on its flag re-check, or
+        //   (b) waiter is already in cv.wait() → cv.notify_one() below will wake it.
+        drop(self.0.mutex.lock());
+
+        self.0.cv.notify_one();
+        self.0.async_notify.notify_one();
+        Ok(())
     }
 }
 
 impl Clone for Notifier {
     fn clone(&self) -> Self {
         let n = self.0.notifiers.fetch_add(1, Ordering::SeqCst);
-        // Panic on overflow
         assert!(n != 0);
         Self(self.0.clone())
     }
@@ -198,9 +199,11 @@ impl Drop for Notifier {
     fn drop(&mut self) {
         let n = self.0.notifiers.fetch_sub(1, Ordering::SeqCst);
         if n == 1 {
-            // The last Notifier has been dropped, close the event and notify everyone
-            self.0.err();
-            self.0.event.notify(usize::MAX);
+            // Last notifier dropped — set ERR and wake all waiters.
+            self.0.flag.store(ERR, Ordering::Release);
+            drop(self.0.mutex.lock()); // lost-wakeup fence
+            self.0.cv.notify_all();
+            self.0.async_notify.notify_waiters();
         }
     }
 }
@@ -209,131 +212,123 @@ impl Drop for Notifier {
 pub struct Waiter(Arc<EventInner>);
 
 impl Waiter {
-    /// Waits for the condition to be notified
-    #[inline]
-    pub async fn wait_async(&self) -> Result<(), WaitError> {
-        // Wait until the flag is set.
-        loop {
-            // Check the flag.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitError),
-            }
-
-            // Start listening for events.
-            let listener = self.0.event.listen();
-
-            // Check the flag again after creating the listener.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitError),
-            }
-
-            // Wait for a notification and continue the loop.
-            listener.await;
-        }
-
-        Ok(())
-    }
-
-    /// Waits for the condition to be notified
     #[inline]
     pub fn wait(&self) -> Result<(), WaitError> {
-        // Wait until the flag is set.
-        loop {
-            // Check the flag.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitError),
-            }
-
-            // Start listening for events.
-            let listener = self.0.event.listen();
-
-            // Check the flag again after creating the listener.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitError),
-            }
-
-            // Wait for a notification and continue the loop.
-            listener.wait();
+        // Hot path: consume a sticky OK notification without taking the lock.
+        match self
+            .0
+            .flag
+            .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => return Ok(()),
+            Err(ERR) => return Err(WaitError),
+            Err(_) => {} // UNSET → fall through to slow path
         }
 
-        Ok(())
+        // Slow path: take the lock and block on the condvar.
+        let mut guard = self.0.mutex.lock();
+        loop {
+            match self.0.flag.load(Ordering::Acquire) {
+                OK => {
+                    self.0.flag.store(UNSET, Ordering::Release);
+                    return Ok(());
+                }
+                ERR => return Err(WaitError),
+                _ => {
+                    self.0.cv.wait(&mut guard);
+                }
+            }
+        }
     }
 
-    /// Waits for the condition to be notified or returns an error when the deadline is reached
+    /// Cancellation-safe async wait.
+    ///
+    /// Uses [`tokio::sync::Notify`] so that if this future is dropped (e.g. by
+    /// `tokio::time::timeout`), the pending notification is returned to the pool
+    /// rather than silently consumed by a detached `spawn_blocking` thread.
+    #[inline]
+    pub async fn wait_async(&self) -> Result<(), WaitError> {
+        loop {
+            // Subscribe BEFORE checking the flag.
+            // enable() ensures that any notify_one() fired after this point wakes us,
+            // and consumes any stored permit if notify_one() already fired.
+            let mut notified = pin!(self.0.async_notify.notified());
+            notified.as_mut().enable();
+
+            // Hot path: consume sticky OK without lock.
+            match self
+                .0
+                .flag
+                .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
+            {
+                Ok(_) => return Ok(()),
+                Err(ERR) => return Err(WaitError),
+                Err(_) => {}
+            }
+
+            // No pending notification — await (cancellation-safe).
+            // If this future is dropped here, the Notified future is dropped too,
+            // which returns any pre-reserved permit to the Notify pool.
+            notified.await;
+        }
+    }
+
     #[inline]
     pub fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
-        // Wait until the flag is set.
-        loop {
-            // Check the flag.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitDeadlineError::WaitError),
-            }
-
-            // Start listening for events.
-            let listener = self.0.event.listen();
-
-            // Check the flag again after creating the listener.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitDeadlineError::WaitError),
-            }
-
-            // Wait for a notification and continue the loop.
-            if listener.wait_deadline(deadline).is_none() {
-                return Err(WaitDeadlineError::Deadline);
-            }
+        // Hot path.
+        match self
+            .0
+            .flag
+            .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => return Ok(()),
+            Err(ERR) => return Err(WaitDeadlineError::WaitError),
+            Err(_) => {}
         }
 
-        Ok(())
+        // Slow path.
+        let mut guard = self.0.mutex.lock();
+        loop {
+            match self.0.flag.load(Ordering::Acquire) {
+                OK => {
+                    self.0.flag.store(UNSET, Ordering::Release);
+                    return Ok(());
+                }
+                ERR => return Err(WaitDeadlineError::WaitError),
+                _ => {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        return Err(WaitDeadlineError::Deadline);
+                    }
+                    let timed_out = self.0.cv.wait_for(&mut guard, deadline - now).timed_out();
+                    if timed_out {
+                        return match self.0.flag.load(Ordering::Acquire) {
+                            OK => {
+                                self.0.flag.store(UNSET, Ordering::Release);
+                                Ok(())
+                            }
+                            ERR => Err(WaitDeadlineError::WaitError),
+                            _ => Err(WaitDeadlineError::Deadline),
+                        };
+                    }
+                }
+            }
+        }
     }
 
-    /// Waits for the condition to be notified or returns an error when the timeout is expired
     #[inline]
     pub fn wait_timeout(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
-        // Wait until the flag is set.
-        loop {
-            // Check the flag.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitTimeoutError::WaitError),
-            }
-
-            // Start listening for events.
-            let listener = self.0.event.listen();
-
-            // Check the flag again after creating the listener.
-            match self.0.check() {
-                EventCheck::Ok => break,
-                EventCheck::Unset => {}
-                EventCheck::Err => return Err(WaitTimeoutError::WaitError),
-            }
-
-            // Wait for a notification and continue the loop.
-            if listener.wait_timeout(timeout).is_none() {
-                return Err(WaitTimeoutError::Timeout);
-            }
+        match self.wait_deadline(Instant::now() + timeout) {
+            Ok(()) => Ok(()),
+            Err(WaitDeadlineError::Deadline) => Err(WaitTimeoutError::Timeout),
+            Err(WaitDeadlineError::WaitError) => Err(WaitTimeoutError::WaitError),
         }
-
-        Ok(())
     }
 }
 
 impl Clone for Waiter {
     fn clone(&self) -> Self {
         let n = self.0.waiters.fetch_add(1, Ordering::Relaxed);
-        // Panic on overflow
         assert!(n != 0);
         Self(self.0.clone())
     }
@@ -343,12 +338,15 @@ impl Drop for Waiter {
     fn drop(&mut self) {
         let n = self.0.waiters.fetch_sub(1, Ordering::SeqCst);
         if n == 1 {
-            // The last Waiter has been dropped, close the event
-            self.0.err();
+            self.0.flag.store(ERR, Ordering::Release);
+            drop(self.0.mutex.lock()); // lost-wakeup fence
+            self.0.cv.notify_all();
+            self.0.async_notify.notify_waiters();
         }
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn event_timeout() {
@@ -365,57 +363,38 @@ mod tests {
 
         let bs = barrier.clone();
         let s = std::thread::spawn(move || {
-            // 1 - Wait one notification
             match waiter.wait_timeout(tslot) {
                 Ok(()) => {}
                 Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
-
             bs.wait();
-
-            // 2 - Being notified twice but waiting only once
             bs.wait();
-
             match waiter.wait_timeout(tslot) {
                 Ok(()) => {}
                 Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
-
             match waiter.wait_timeout(tslot) {
                 Ok(()) => panic!("Event Ok but it should be Timeout"),
                 Err(WaitTimeoutError::Timeout) => {}
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
-
             bs.wait();
-
-            // 3 - Notifier has been dropped
             bs.wait();
-
             waiter.wait().unwrap_err();
-
             bs.wait();
         });
 
         let bp = barrier.clone();
         let p = std::thread::spawn(move || {
-            // 1 - Notify once
             notifier.notify().unwrap();
-
             bp.wait();
-
-            // 2 - Notify twice
             notifier.notify().unwrap();
             notifier.notify().unwrap();
-
             bp.wait();
             bp.wait();
-
-            // 3 - Drop notifier yielding an error in the waiter
             drop(notifier);
-
             bp.wait();
             bp.wait();
         });
@@ -439,57 +418,38 @@ mod tests {
 
         let bs = barrier.clone();
         let s = std::thread::spawn(move || {
-            // 1 - Wait one notification
             match waiter.wait_deadline(Instant::now() + tslot) {
                 Ok(()) => {}
                 Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
-
             bs.wait();
-
-            // 2 - Being notified twice but waiting only once
             bs.wait();
-
             match waiter.wait_deadline(Instant::now() + tslot) {
                 Ok(()) => {}
                 Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
-
             match waiter.wait_deadline(Instant::now() + tslot) {
                 Ok(()) => panic!("Event Ok but it should be Timeout"),
                 Err(WaitDeadlineError::Deadline) => {}
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
-
             bs.wait();
-
-            // 3 - Notifier has been dropped
             bs.wait();
-
             waiter.wait().unwrap_err();
-
             bs.wait();
         });
 
         let bp = barrier.clone();
         let p = std::thread::spawn(move || {
-            // 1 - Notify once
             notifier.notify().unwrap();
-
             bp.wait();
-
-            // 2 - Notify twice
             notifier.notify().unwrap();
             notifier.notify().unwrap();
-
             bp.wait();
             bp.wait();
-
-            // 3 - Drop notifier yielding an error in the waiter
             drop(notifier);
-
             bp.wait();
             bp.wait();
         });
@@ -539,7 +499,6 @@ mod tests {
             if start.elapsed() > tout {
                 panic!("Timeout {tout:#?}. Counter: {n}/{N}");
             }
-
             std::thread::sleep(Duration::from_millis(100));
         }
 
@@ -608,14 +567,12 @@ mod tests {
                 if start.elapsed() > tout {
                     panic!("Timeout {tout:#?}. Counter: {n}/{N}");
                 }
-
                 std::thread::sleep(Duration::from_millis(100));
             }
         });
 
         p1.join().unwrap();
         p2.join().unwrap();
-
         s1.join().unwrap();
         s2.join().unwrap();
     }
