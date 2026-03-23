@@ -15,11 +15,12 @@ use std::{
     fmt,
     pin::pin,
     sync::{
-        atomic::{AtomicU16, Ordering},
-        Arc, Condvar, Mutex,
+        atomic::{AtomicU16, AtomicU8, Ordering},
+        Arc,
     },
     time::{Duration, Instant},
 };
+use parking_lot::{Condvar, Mutex};
 use tokio::sync::Notify as AsyncNotify;
 
 // Error types
@@ -103,23 +104,32 @@ impl fmt::Debug for NotifyError {
 
 impl std::error::Error for NotifyError {}
 
-// State values for the sync Mutex<u8>.
+// State values for the AtomicU8 flag.
 const UNSET: u8 = 0;
 const OK: u8 = 1;
 const ERR: u8 = 2;
 
 // Replace event_listener::Event + AtomicU8 with:
-//   - std Mutex<u8> + Condvar  →  sync paths (wait / wait_deadline / wait_timeout)
-//   - tokio::sync::Notify      →  async path (wait_async), which is cancellation-safe
+//   - AtomicU8 flag + Mutex<()> + Condvar  →  sync paths (wait / wait_deadline / wait_timeout)
+//   - tokio::sync::Notify                  →  async path (wait_async), cancellation-safe
 //
-// The original event_listener approach allocated a linked-list node (EventListener)
-// on every wait() call and paid intrusive-list register/deregister cost on the hot path.
-// tokio::time::timeout() was also able to cancel wait_async() while its inner
-// spawn_blocking task continued running, eventually consuming the next real notification
-// (a "zombie" thread bug). tokio::sync::Notify avoids this: a dropped Notified future
-// returns its permit to the pool so no notification is lost.
+// Hot-path design (sticky notification):
+//
+//   notify():  flag.fetch_update(UNSET|OK → OK) [atomic, no lock]
+//              + brief lock()/unlock() to prevent lost wakeup
+//              + cv.notify_one() + async_notify.notify_one()
+//
+//   wait():    flag.compare_exchange(OK → UNSET) [atomic, no lock]  ← hot path returns here
+//              If UNSET: lock() → re-check flag → cv.wait() if still UNSET
+//
+// The mutex is only taken on the slow (blocking) path and briefly in notify() to
+// fence against the lost-wakeup window. No heap allocation on either path.
 struct EventInner {
-    state: Mutex<u8>,
+    /// Primary state. Written atomically on hot path; also read under `mutex`
+    /// on the slow path to re-check after wakeup.
+    flag: AtomicU8,
+    /// Used exclusively as the condvar lock. Carries no state of its own.
+    mutex: Mutex<()>,
     cv: Condvar,
     async_notify: AsyncNotify,
     notifiers: AtomicU16,
@@ -132,7 +142,8 @@ struct EventInner {
 /// call returns immediately.
 pub fn new() -> (Notifier, Waiter) {
     let inner = Arc::new(EventInner {
-        state: Mutex::new(UNSET),
+        flag: AtomicU8::new(UNSET),
+        mutex: Mutex::new(()),
         cv: Condvar::new(),
         async_notify: AsyncNotify::new(),
         notifiers: AtomicU16::new(1),
@@ -148,13 +159,24 @@ pub struct Notifier(Arc<EventInner>);
 impl Notifier {
     #[inline]
     pub fn notify(&self) -> Result<(), NotifyError> {
-        let mut state = self.0.state.lock().unwrap();
-        if *state == ERR {
-            return Err(NotifyError);
-        }
-        *state = OK;
+        // Atomically set flag to OK unless it is already ERR (terminal state).
+        // fetch_update returns Err if the closure returns None (i.e. flag == ERR).
+        self.0
+            .flag
+            .fetch_update(Ordering::Release, Ordering::Relaxed, |f| {
+                if f == ERR { None } else { Some(OK) }
+            })
+            .map_err(|_| NotifyError)?;
+
+        // Brief lock/unlock to close the lost-wakeup window.
+        //
+        // A waiter on the slow path does: CAS-fails → lock() → re-check flag → cv.wait().
+        // By taking the lock here we ensure either:
+        //   (a) waiter has not yet called lock() → it will see OK on its flag re-check, or
+        //   (b) waiter is already in cv.wait() → cv.notify_one() below will wake it.
+        drop(self.0.mutex.lock());
+
         self.0.cv.notify_one();
-        drop(state); // release before async notify to minimise lock contention
         self.0.async_notify.notify_one();
         Ok(())
     }
@@ -172,12 +194,11 @@ impl Drop for Notifier {
     fn drop(&mut self) {
         let n = self.0.notifiers.fetch_sub(1, Ordering::SeqCst);
         if n == 1 {
-            // Last notifier dropped — signal error to all waiters.
-            let mut state = self.0.state.lock().unwrap();
-            *state = ERR;
+            // Last notifier dropped — set ERR and wake all waiters.
+            self.0.flag.store(ERR, Ordering::Release);
+            drop(self.0.mutex.lock()); // lost-wakeup fence
             self.0.cv.notify_all();
-            drop(state);
-            self.0.async_notify.notify_waiters(); // wake all async waiters
+            self.0.async_notify.notify_waiters();
         }
     }
 }
@@ -188,12 +209,29 @@ pub struct Waiter(Arc<EventInner>);
 impl Waiter {
     #[inline]
     pub fn wait(&self) -> Result<(), WaitError> {
-        let mut state = self.0.state.lock().unwrap();
+        // Hot path: consume a sticky OK notification without taking the lock.
+        match self
+            .0
+            .flag
+            .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => return Ok(()),
+            Err(ERR) => return Err(WaitError),
+            Err(_) => {} // UNSET → fall through to slow path
+        }
+
+        // Slow path: take the lock and block on the condvar.
+        let mut guard = self.0.mutex.lock();
         loop {
-            match *state {
-                OK => { *state = UNSET; return Ok(()); }
+            match self.0.flag.load(Ordering::Acquire) {
+                OK => {
+                    self.0.flag.store(UNSET, Ordering::Release);
+                    return Ok(());
+                }
                 ERR => return Err(WaitError),
-                _ => { state = self.0.cv.wait(state).unwrap(); }
+                _ => {
+                    self.0.cv.wait(&mut guard);
+                }
             }
         }
     }
@@ -206,19 +244,21 @@ impl Waiter {
     #[inline]
     pub async fn wait_async(&self) -> Result<(), WaitError> {
         loop {
-            // Create and enable the Notified future BEFORE checking state.
-            // enable() subscribes to the Notify and consumes any stored permit,
-            // so a notify_one() that fires between here and the .await is not lost.
+            // Subscribe BEFORE checking the flag.
+            // enable() ensures that any notify_one() fired after this point wakes us,
+            // and consumes any stored permit if notify_one() already fired.
             let mut notified = pin!(self.0.async_notify.notified());
             notified.as_mut().enable();
 
+            // Hot path: consume sticky OK without lock.
+            match self
+                .0
+                .flag
+                .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
             {
-                let mut state = self.0.state.lock().unwrap();
-                match *state {
-                    OK => { *state = UNSET; return Ok(()); }
-                    ERR => return Err(WaitError),
-                    _ => {}
-                }
+                Ok(_) => return Ok(()),
+                Err(ERR) => return Err(WaitError),
+                Err(_) => {}
             }
 
             // No pending notification — await (cancellation-safe).
@@ -230,23 +270,38 @@ impl Waiter {
 
     #[inline]
     pub fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
-        let mut state = self.0.state.lock().unwrap();
+        // Hot path.
+        match self
+            .0
+            .flag
+            .compare_exchange(OK, UNSET, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => return Ok(()),
+            Err(ERR) => return Err(WaitDeadlineError::WaitError),
+            Err(_) => {}
+        }
+
+        // Slow path.
+        let mut guard = self.0.mutex.lock();
         loop {
-            match *state {
-                OK => { *state = UNSET; return Ok(()); }
+            match self.0.flag.load(Ordering::Acquire) {
+                OK => {
+                    self.0.flag.store(UNSET, Ordering::Release);
+                    return Ok(());
+                }
                 ERR => return Err(WaitDeadlineError::WaitError),
                 _ => {
                     let now = Instant::now();
                     if now >= deadline {
                         return Err(WaitDeadlineError::Deadline);
                     }
-                    let (new_state, timeout) = self.0.cv
-                        .wait_timeout(state, deadline - now)
-                        .unwrap();
-                    state = new_state;
-                    if timeout.timed_out() {
-                        return match *state {
-                            OK => { *state = UNSET; Ok(()) }
+                    let timed_out = self.0.cv.wait_for(&mut guard, deadline - now).timed_out();
+                    if timed_out {
+                        return match self.0.flag.load(Ordering::Acquire) {
+                            OK => {
+                                self.0.flag.store(UNSET, Ordering::Release);
+                                Ok(())
+                            }
                             ERR => Err(WaitDeadlineError::WaitError),
                             _ => Err(WaitDeadlineError::Deadline),
                         };
@@ -278,10 +333,9 @@ impl Drop for Waiter {
     fn drop(&mut self) {
         let n = self.0.waiters.fetch_sub(1, Ordering::SeqCst);
         if n == 1 {
-            let mut state = self.0.state.lock().unwrap();
-            *state = ERR;
+            self.0.flag.store(ERR, Ordering::Release);
+            drop(self.0.mutex.lock()); // lost-wakeup fence
             self.0.cv.notify_all();
-            drop(state);
             self.0.async_notify.notify_waiters();
         }
     }
