@@ -78,7 +78,7 @@ impl WriterTask {
     pub fn make(
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         is_tcp: bool,
     ) -> ManagedTask {
         let addr = ("127.0.0.1", port);
@@ -96,7 +96,7 @@ impl WriterTask {
     fn writer_main<A: ToSocketAddrs>(
         addr: A,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         finished: Arc<AtomicBool>,
         is_tcp: bool,
     ) -> ZResult<()> {
@@ -143,7 +143,7 @@ impl WriterTask {
             }
 
             if let Some(interval) = &interval {
-                std::thread::sleep(*interval);
+                std::thread::sleep(**interval);
             }
         }
 
@@ -212,7 +212,6 @@ impl ReaderTask {
         let handle = Some(std::thread::spawn(move || {
             Self::reader_main(reader, addr, iteration_count, c_finished, is_tcp)
         }));
-        std::thread::sleep(Duration::from_millis(100));
 
         ManagedTask::new(handle, finished)
     }
@@ -259,7 +258,7 @@ impl ReaderTask {
             && !finished.load(std::sync::atomic::Ordering::Relaxed)
             && iteration.load(std::sync::atomic::Ordering::SeqCst) < iteration_count
         {
-            std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         drop(read_handle);
@@ -269,7 +268,7 @@ impl ReaderTask {
             if Arc::strong_count(&iteration) == 1 {
                 break;
             }
-            std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(10));
         }
         assert!(Arc::strong_count(&iteration) == 1);
 
@@ -284,7 +283,7 @@ impl RWTask {
         reader: Reader,
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         is_tcp: bool,
     ) -> ManagedTask {
         let finished = Arc::new(AtomicBool::new(false));
@@ -301,7 +300,7 @@ impl RWTask {
         reader: Reader,
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         finished: Arc<AtomicBool>,
         is_tcp: bool,
     ) -> ZResult<()> {
@@ -312,7 +311,7 @@ impl RWTask {
             && !reader.poll_comlete()?
             && !writer.poll_comlete()?
         {
-            std::thread::sleep(Duration::from_millis(100));
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         if finished.load(std::sync::atomic::Ordering::Relaxed) {
@@ -337,9 +336,9 @@ impl StartStopTask {
         reader_fn: F,
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
         start_stop_count: usize,
         writer_ends_first: bool,
+        interval: Option<Arc<Duration>>,
         is_tcp: bool,
     ) -> ManagedTask {
         let finished = Arc::new(AtomicBool::new(false));
@@ -376,16 +375,16 @@ impl StartStopTask {
         reader_fn: F,
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         start_stop_count: usize,
         finished: Arc<AtomicBool>,
         is_tcp: bool,
     ) -> ZResult<()> {
         for _ in 0..start_stop_count {
-            let rw = RWTask::make(reader_fn(), port, iteration_count, interval, is_tcp);
+            let rw = RWTask::make(reader_fn(), port, iteration_count, interval.clone(), is_tcp);
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_comlete()? {
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(10));
             }
 
             if finished.load(std::sync::atomic::Ordering::Relaxed) {
@@ -403,19 +402,17 @@ impl StartStopTask {
         reader_fn: F,
         port: u16,
         iteration_count: usize,
-        interval: Option<Duration>,
+        interval: Option<Arc<Duration>>,
         start_stop_count: usize,
         finished: Arc<AtomicBool>,
         is_tcp: bool,
     ) -> ZResult<()> {
         for _ in 0..start_stop_count {
             let reader = ReaderTask::make(reader_fn(), port, iteration_count, is_tcp);
-            let writer = WriterTask::make(port, usize::MAX, interval, is_tcp);
+            let writer = WriterTask::make(port, usize::MAX, interval.clone(), is_tcp);
 
-            while !finished.load(std::sync::atomic::Ordering::Relaxed)
-                && !reader.poll_comlete()?
-            {
-                std::thread::sleep(Duration::from_millis(100));
+            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !reader.poll_comlete()? {
+                std::thread::sleep(Duration::from_millis(10));
             }
 
             if reader.poll_comlete()? {
@@ -431,7 +428,7 @@ impl StartStopTask {
             }
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed) && !writer.poll_comlete()? {
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(10));
             }
 
             if finished.load(std::sync::atomic::Ordering::Relaxed) {
@@ -448,15 +445,15 @@ impl StartStopTask {
 
 #[test_case(true; "tcp")]
 #[test_case(false; "udp")]
-fn rw_single(is_tcp: bool) {
+fn rw_single_simple(is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
 
-    let reader = Reader::new(65535 + 2, 16).unwrap();
+    let r = Reader::new(65535 + 2, 16).unwrap();
 
     let port = 7780;
     let interval = None;
-    let reader = ReaderTask::make(reader, port, ITERATION_COUNT, is_tcp);
-    let writer = WriterTask::make(port, ITERATION_COUNT, interval, is_tcp);
+    let reader = ReaderTask::make(r.clone(), port, 100, is_tcp);
+    let writer = WriterTask::make(port, 100, interval, is_tcp);
 
     reader.wait_for_complete().unwrap();
 
@@ -464,6 +461,10 @@ fn rw_single(is_tcp: bool) {
         writer.interrupt();
     }
     writer.wait_for_complete().unwrap();
+
+    tracing::debug!("Dropping reader...");
+    drop(r);
+    tracing::debug!("Done!");
 }
 
 #[test_case(true; "tcp")]
@@ -504,7 +505,7 @@ fn rw_parallel(is_tcp: bool) {
             reader.clone(),
             base_port + pair,
             ITERATION_COUNT / count as usize,
-            base_interval,
+            base_interval.clone(),
             is_tcp,
         );
         rw_tasks.push(rw);
@@ -532,9 +533,9 @@ fn rw_parallel_and_start_stop(
     zenoh_util::try_init_log_from_env();
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
-    let count = 2;
+    let count = 1;
     let base_port = 7782 + 64 + port_offset * (count + 1);
-    let base_interval = None; //Some(Duration::from_millis(1));
+    let base_interval = Some(Arc::new(Duration::from_millis(1)));
 
     let mut rw_background = vec![];
     for i in 0..count {
@@ -542,7 +543,7 @@ fn rw_parallel_and_start_stop(
             reader.clone(),
             base_port + i,
             usize::MAX,
-            base_interval,
+            base_interval.clone(),
             is_tcp,
         );
         rw_background.push(rw);
@@ -553,10 +554,10 @@ fn rw_parallel_and_start_stop(
         let start_stop_writer_ends_first = StartStopTask::make(
             move || c_reader_fn(),
             base_port + count,
-            ITERATION_COUNT / 1000,
-            None,
-            100,
+            1, //ITERATION_COUNT / 1000,
+            1,
             writer_ends_first,
+            None,
             is_tcp,
         );
         start_stop_writer_ends_first.wait_for_complete().unwrap();

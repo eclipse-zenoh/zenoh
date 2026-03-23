@@ -65,9 +65,9 @@ impl Rx {
     }
 
     fn run_callback(&self, buffer: Arc<RxBuffer>) {
-        tracing::debug!("DEADBEEF CB begin....");
+        tracing::trace!("CB begin....");
         let callback = unsafe { &mut *self.cb.callback.get() };
-        tracing::debug!("DEADBEEF CB end....");
+        tracing::trace!("CB end....");
 
         if let Err(e) = (callback)(buffer) {
             self.post_error(e);
@@ -177,7 +177,7 @@ impl SubmissionIface {
     }
 
     fn submit_quiet(&self, cmd: ReactorCmd) -> ZResult<()> {
-        tracing::debug!("DEADBEEF Submit cmd: {:?}", cmd);
+        tracing::debug!("Submit cmd: {:?}", cmd);
         self.sender.send(cmd).map_err(|e| e.to_string().into())
     }
 
@@ -636,16 +636,16 @@ impl RxContextCell {
     fn free(&mut self, generation: NonZeroU32) {
         if self.generation == generation {
             if let Some(context) = self.context.take() {
-                tracing::debug!("Spawning async RxContext destroy {:?}", context);
-                //ZRuntime::Net.spawn_blocking(move || {
-                    tracing::debug!("Begin RxContext destroy {:?}", context);
-                    assert!(Arc::strong_count(&context) == 1);
-                    drop(context);
-                    tracing::debug!("End RxContext destroy!");
-                //});
+                tracing::debug!("Begin RxContext destroy {:?}", context);
+                assert!(Arc::strong_count(&context) == 1);
+                drop(context);
+                tracing::debug!("End RxContext destroy!");
             }
         } else {
-            tracing::debug!("Unable to free: generation mismatch! {:?}, generation: {generation}", self);
+            tracing::debug!(
+                "Unable to free: generation mismatch! {:?}, generation: {generation}",
+                self
+            );
         }
     }
 
@@ -840,11 +840,11 @@ impl Reader {
                 context_storage: &mut RxContextStorage,
                 sq: &mut SubmissionQueue<'_>,
             ) -> ZResult<()> {
-                //tracing::debug!("DEADBEEF Reading cmds....");
+                //tracing::debug!("Reading cmds....");
 
                 // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
-                    tracing::debug!("DEADBEEF Cmd: {:?}", val);
+                    tracing::debug!("Cmd: {:?}", val);
 
                     match val {
                         ReactorCmd::StartRx(fd, callback, set_once, error_sender) => {
@@ -906,7 +906,7 @@ impl Reader {
                             tracing::debug!("Zero-user-data entry: {:?}", e);
                         }
                         IndexGeneration::INVALID_MAX => {
-                            tracing::debug!("DEADBEEF Waker event: {:?}", e);
+                            tracing::debug!("Waker event: {:?}", e);
                             let _ = c_waker.read()?;
                             unsafe { sq.push(&waker_read)? };
                         }
@@ -976,6 +976,7 @@ impl Reader {
                 tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
             }
+            tracing::debug!("Urng reactor thread finished!");
         });
 
         /*
