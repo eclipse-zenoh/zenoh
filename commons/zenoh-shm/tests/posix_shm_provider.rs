@@ -215,7 +215,9 @@ fn shm_segment_pool_reuse() {
 
     let backend = PosixShmProviderBackendTalc::builder_with_pool(
         layout.size(),
-        ShmPoolConfig { max_idle_per_size: 1 },
+        ShmPoolConfig {
+            max_idle_per_size: 1,
+        },
     )
     .wait()
     .expect("Error creating pooled PosixShmProviderBackendTalc");
@@ -245,7 +247,9 @@ fn shm_segment_pool_cap_enforcement() {
 
     let backend = PosixShmProviderBackendTalc::builder_with_pool(
         layout.size(),
-        ShmPoolConfig { max_idle_per_size: 1 },
+        ShmPoolConfig {
+            max_idle_per_size: 1,
+        },
     )
     .wait()
     .expect("Error creating pooled PosixShmProviderBackendTalc");
@@ -257,14 +261,19 @@ fn shm_segment_pool_cap_enforcement() {
     let seg_b = chunk_b.descriptor.segment;
 
     // They should be distinct segments.
-    assert_ne!(seg_a, seg_b, "Expected two distinct segments for two concurrent allocs");
+    assert_ne!(
+        seg_a, seg_b,
+        "Expected two distinct segments for two concurrent allocs"
+    );
 
     // Drop both — pool can hold at most 1, so one is immediately unmapped.
     drop(chunk_a);
     drop(chunk_b);
 
     // The next allocation should return one of the two segments (whichever was retained).
-    let chunk_c = backend.alloc(&layout).expect("alloc c after cap test failed");
+    let chunk_c = backend
+        .alloc(&layout)
+        .expect("alloc c after cap test failed");
     let seg_c = chunk_c.descriptor.segment;
 
     // seg_c must be one of the two previously-seen IDs (pooled), not a fresh one.
@@ -282,12 +291,10 @@ fn shm_segment_pool_outlived_by_segment() {
     let layout = MemoryLayout::new(4096_usize, AllocAlignment::default()).unwrap();
 
     let chunk = {
-        let backend = PosixShmProviderBackendTalc::builder_with_pool(
-            layout.size(),
-            ShmPoolConfig::default(),
-        )
-        .wait()
-        .expect("Error creating pooled PosixShmProviderBackendTalc");
+        let backend =
+            PosixShmProviderBackendTalc::builder_with_pool(layout.size(), ShmPoolConfig::default())
+                .wait()
+                .expect("Error creating pooled PosixShmProviderBackendTalc");
 
         let chunk = backend.alloc(&layout).expect("alloc failed");
         // backend (and its Arc<ShmSegmentPool>) drops here

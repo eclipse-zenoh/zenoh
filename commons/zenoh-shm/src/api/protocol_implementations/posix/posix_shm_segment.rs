@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{num::NonZeroUsize, ptr::NonNull, sync::{Arc, Weak}};
+use std::{
+    num::NonZeroUsize,
+    ptr::NonNull,
+    sync::{Arc, Weak},
+};
 
 use zenoh_result::ZResult;
 
