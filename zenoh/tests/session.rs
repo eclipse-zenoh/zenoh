@@ -421,6 +421,7 @@ async fn test_session_from_cloned_config() {
             .endpoints
             .set(vec![locator.parse().unwrap()])
             .unwrap();
+        pub_config.listen.endpoints.set(vec![]).unwrap();
 
         (pub_config, sub_config)
     };
