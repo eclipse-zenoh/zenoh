@@ -91,7 +91,7 @@ where
 /// Talc allocator provides great performnce (2nd after `buddy_system_allocator`) while maintaining
 /// excellent fragmentation resistance and memory utilization efficiency.
 ///
-/// When a [`ShmPoolConfig`] is provided (via [`builder_with_pool`]), each allocation creates a
+/// When a [`ShmPoolConfig`] is provided (via [`PosixShmProviderBackendTalc::builder_with_pool`]), each allocation creates a
 /// whole dedicated SHM segment of exactly the requested size and returns it to the pool on
 /// release, eliminating per-message `shm_open + mmap` / `munmap + shm_unlink` cycles.
 /// When the pool is not configured, the traditional Talc sub-allocation path is used.
