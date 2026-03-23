@@ -52,6 +52,7 @@ impl PosixShmSegment {
         AllocatedChunk {
             descriptor: ChunkDescriptor::new(
                 self.segment.id(),
+                // SAFETY: buf is guaranteed to belong to the segment.
                 unsafe { self.segment.index(buf.as_ptr()) },
                 layout.size(),
             ),
@@ -62,6 +63,7 @@ impl PosixShmSegment {
 
 impl ShmSegment for PosixShmSegment {
     fn map(&self, chunk: ChunkID) -> ZResult<*mut u8> {
+        // SAFETY: chunk descriptor is guaranteed to be valid and belong to the segment.
         Ok(unsafe { self.segment.elem_mut(chunk) })
     }
 }
