@@ -290,16 +290,13 @@ fn shm_segment_pool_cap_enforcement() {
 fn shm_segment_pool_outlived_by_segment() {
     let layout = MemoryLayout::new(4096_usize, AllocAlignment::default()).unwrap();
 
-    let chunk = {
-        let backend =
-            PosixShmProviderBackendTalc::builder_with_pool(layout.size(), ShmPoolConfig::default())
-                .wait()
-                .expect("Error creating pooled PosixShmProviderBackendTalc");
-
-        let chunk = backend.alloc(&layout).expect("alloc failed");
-        // backend (and its Arc<ShmSegmentPool>) drops here
-        chunk
-    };
+    let backend =
+        PosixShmProviderBackendTalc::builder_with_pool(layout.size(), ShmPoolConfig::default())
+            .wait()
+            .expect("Error creating pooled PosixShmProviderBackendTalc");
+    let chunk = backend.alloc(&layout).expect("alloc failed");
+    // backend (and its Arc<ShmSegmentPool>) drops here
+    drop(backend);
 
     // chunk still holds a PtrInSegment → Arc<PooledPosixShmSegment>.
     // Dropping it now: Weak::upgrade fails → segment drops normally (munmap).
