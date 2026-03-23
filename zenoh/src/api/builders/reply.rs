@@ -111,6 +111,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
 
 #[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional timestamp to be sent along with the reply/response.
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -121,6 +122,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional attachment to be sent along with the reply/response.
+    /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>`.
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -130,6 +133,7 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the reply/response.
     fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             source_info: source_info.into(),
@@ -150,6 +154,10 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
         self
     }
 
+    /// Changes the Express policy to apply when routing the reply.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
         Self { qos, ..self }
@@ -158,6 +166,7 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
@@ -243,6 +252,7 @@ impl<'a> ReplyErrBuilder<'a> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),

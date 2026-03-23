@@ -64,6 +64,7 @@ impl Default for RepliesConfig {
 impl QoSBuilderTrait for RepliesConfig {
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`CongestionControl`] to apply when routing the data.
     fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
         self
@@ -71,6 +72,7 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`Priority`] to apply when routing the data.
     fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
@@ -78,6 +80,10 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(mut self, is_express: bool) -> Self {
         self.is_express = is_express;
         self

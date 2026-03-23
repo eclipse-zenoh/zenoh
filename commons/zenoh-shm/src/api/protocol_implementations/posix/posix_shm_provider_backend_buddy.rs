@@ -85,6 +85,7 @@ impl PosixShmProviderBackendBuddy {
 
         let mut heap = Heap::empty();
 
+        // SAFETY: we initialized the segment with `real_size` bytes.
         unsafe { heap.init(segment.segment.elem_mut(0) as usize, real_size) };
 
         tracing::trace!(
@@ -111,6 +112,7 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
         tracing::trace!("PosixShmProviderBackendBuddy::alloc({:?})", layout);
 
+        // SAFETY: layout is guaranteed to be valid as it's passed from `MemoryLayout`
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 layout.size().get(),
@@ -130,6 +132,7 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
     }
 
     fn free(&self, chunk: &ChunkDescriptor) {
+        // SAFETY: layout is guaranteed to be valid as it's passed from `ChunkDescriptor`
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 chunk.len.get(),
@@ -137,8 +140,10 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
             )
         };
 
+        // SAFETY: chunk descriptor is guaranteed to be valid and belong to the segment
         let ptr = unsafe { self.segment.segment.elem_mut(chunk.chunk) };
 
+        // SAFETY: ptr is guaranteed to be non-null and belong to the heap as it's passed from `ChunkDescriptor`
         unsafe { zlock!(self.heap).dealloc(NonNull::new_unchecked(ptr), alloc_layout) };
     }
 

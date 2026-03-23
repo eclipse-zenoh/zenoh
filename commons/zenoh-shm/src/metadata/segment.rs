@@ -27,25 +27,33 @@ pub struct Metadata<const S: usize> {
 }
 
 impl<const S: usize> Metadata<S> {
-    // SAFETY: this is safe if header belongs to current Metadata instance
+    /// # Safety
+    ///
+    /// This is safe if header belongs to current Metadata instance
     pub unsafe fn fast_index_compute(&self, header: *const ChunkHeaderType) -> MetadataIndex {
-        header.offset_from(self.headers.as_ptr()) as MetadataIndex
+        // SAFETY: same precondition as described in the function documentation.
+        unsafe { header.offset_from(self.headers.as_ptr()) as MetadataIndex }
     }
 
-    // SAFETY: this is safe if index is in bounds!
+    /// # Safety
+    ///
+    /// This is safe if index is in bounds!
     pub unsafe fn fast_elem_compute(
         &self,
         index: MetadataIndex,
     ) -> (&'static ChunkHeaderType, OwnedWatchdog) {
         let watchdog_index = index / 64;
         let watchdog_mask_index = index % 64;
-        (
-            &*(self.headers.as_ptr().offset(index as isize)),
-            OwnedWatchdog::new(
-                &*(self.watchdogs.as_ptr().offset(watchdog_index as isize)),
-                1u64 << watchdog_mask_index,
-            ),
-        )
+        // SAFETY: same precondition as described in the function documentation.
+        unsafe {
+            (
+                &*(self.headers.as_ptr().offset(index as isize)),
+                OwnedWatchdog::new(
+                    &*(self.watchdogs.as_ptr().offset(watchdog_index as isize)),
+                    1u64 << watchdog_mask_index,
+                ),
+            )
+        }
     }
 
     #[inline(always)]

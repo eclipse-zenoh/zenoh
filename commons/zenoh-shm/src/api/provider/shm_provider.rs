@@ -74,6 +74,9 @@ where
         self.try_into().map_err(Into::into)
     }
 
+    /// # Safety
+    ///
+    /// The buffer must have the layout returned by `memory_layout`
     unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
         buffer
     }
@@ -86,6 +89,9 @@ impl<T> AllocLayout for TypedLayout<T> {
         Ok(MemoryLayout::for_type::<T>())
     }
 
+    /// # Safety
+    ///
+    /// The buffer must have the layout returned by `memory_layout`
     unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
         // SAFETY: same precondition
         unsafe { Typed::new_unchecked(buffer) }
@@ -802,6 +808,7 @@ where
 
         // wrap everything to ShmBufInner
         let wrapped = self.wrap(chunk, len, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents a mapped chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
@@ -900,6 +907,7 @@ where
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents an allocated chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
@@ -988,6 +996,7 @@ where
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents an allocated chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 }

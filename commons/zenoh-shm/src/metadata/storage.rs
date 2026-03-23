@@ -54,6 +54,7 @@ impl MetadataStorage {
 
         for index in 0..segment.data.count() {
             let (header, watchdog) =
+                // SAFETY: index is guaranteed to be within segment boundaries.
                 unsafe { segment.data.fast_elem_compute(index as MetadataIndex) };
             let descriptor = OwnedMetadataDescriptor::new(segment.clone(), header, watchdog);
 

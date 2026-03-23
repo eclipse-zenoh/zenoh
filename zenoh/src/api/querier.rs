@@ -127,13 +127,13 @@ impl<'a> Querier<'a> {
         &self.key_expr
     }
 
-    /// Get the `congestion_control` applied when routing the data.
+    /// Get the [`CongestionControl`] applied when routing the data.
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Get the priority of the written data.
+    /// Get the [`Priority`] of the querier requests.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.qos.priority()
@@ -143,6 +143,7 @@ impl<'a> Querier<'a> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether this querier accepts such disjoint replies.
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     #[inline]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies

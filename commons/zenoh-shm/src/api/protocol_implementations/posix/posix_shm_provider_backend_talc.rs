@@ -81,10 +81,12 @@ impl PosixShmProviderBackendTalc {
         // because of platform specific, our shm segment is >= requested size, so in order to utilize
         // additional memory we re-layout the size
         let real_size = segment.segment.elem_count().get();
+        // SAFETY: the segment is guaranteed to be valid and the index 0 is always valid.
         let ptr = unsafe { segment.segment.elem_mut(0) };
 
         let mut talc = Talc::new(ErrOnOom);
 
+        // SAFETY: the pointer and size are guaranteed to be valid as they represent the whole segment.
         unsafe {
             talc.claim(slice::from_raw_parts_mut(ptr, real_size).into())
                 .map_err(|_| "Error initializing Talc backend!")?;
@@ -114,6 +116,7 @@ impl ShmProviderBackend for PosixShmProviderBackendTalc {
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
         tracing::trace!("PosixShmProviderBackendTalc::alloc({:?})", layout);
 
+        // SAFETY: layout is guaranteed to be valid as it's passed from `MemoryLayout`.
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 layout.size().get(),
@@ -123,6 +126,7 @@ impl ShmProviderBackend for PosixShmProviderBackendTalc {
 
         let alloc = {
             let mut lock = zlock!(self.talc);
+            // SAFETY: layout is guaranteed to be valid.
             unsafe { lock.malloc(alloc_layout) }
         };
 
@@ -133,6 +137,7 @@ impl ShmProviderBackend for PosixShmProviderBackendTalc {
     }
 
     fn free(&self, chunk: &ChunkDescriptor) {
+        // SAFETY: chunk descriptor is guaranteed to be valid and belong to the segment.
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 chunk.len.get(),
@@ -140,8 +145,10 @@ impl ShmProviderBackend for PosixShmProviderBackendTalc {
             )
         };
 
+        // SAFETY: chunk descriptor is guaranteed to be valid and belong to the segment.
         let ptr = unsafe { self.segment.segment.elem_mut(chunk.chunk) };
 
+        // SAFETY: ptr and layout are guaranteed to be valid as they are passed from `ChunkDescriptor`.
         unsafe { zlock!(self.talc).free(NonNull::new_unchecked(ptr), alloc_layout) };
     }
 

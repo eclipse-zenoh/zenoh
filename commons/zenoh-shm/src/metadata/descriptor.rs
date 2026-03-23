@@ -33,6 +33,7 @@ pub struct MetadataDescriptor {
 impl From<&OwnedMetadataDescriptor> for MetadataDescriptor {
     fn from(item: &OwnedMetadataDescriptor) -> Self {
         let id = item.segment.data.id();
+        // SAFETY: `item` is guaranteed to belong to the segment.
         let index = unsafe { item.segment.data.fast_index_compute(item.header) };
 
         Self { id, index }

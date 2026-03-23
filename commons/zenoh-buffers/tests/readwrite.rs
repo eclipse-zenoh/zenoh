@@ -47,7 +47,7 @@ macro_rules! run_write {
 
         writer.write_exact(&WBS4).unwrap();
 
-        // SAFETY: callback returns the length of the buffer
+        // SAFETY: callback returns the length of the buffer, which is guaranteed to be 4.
         unsafe {
             writer.with_slot(4, |mut buffer| {
                 let w = buffer.write(&WBS5).unwrap();

@@ -26,6 +26,7 @@ use crate::{
 pub fn uninit(capacity: usize) -> Vec<u8> {
     let mut vbuf = Vec::with_capacity(capacity);
     // SAFETY: this operation is safe since we are setting the length equal to the allocated capacity.
+    // The caller is responsible for ensuring the memory is initialized before reading.
     #[allow(clippy::uninit_vec)]
     unsafe {
         vbuf.set_len(capacity);
@@ -76,7 +77,8 @@ impl Writer for Vec<u8> {
             return Err(DidntWrite);
         }
         self.extend_from_slice(bytes);
-        // SAFETY: this operation is safe since we early return in case bytes is empty
+        // SAFETY: this operation is safe since we early return in case bytes is empty,
+        // so bytes.len() is guaranteed to be non-zero.
         Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 
@@ -93,18 +95,23 @@ impl Writer for Vec<u8> {
         Ok(())
     }
 
+    /// # Safety
+    ///
+    /// The `write` closure must return the number of bytes actually written to the slice,
+    /// which must be less than or equal to `len`.
     unsafe fn with_slot<F>(&mut self, mut len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
         self.reserve(len);
 
-        // SAFETY: we already reserved len elements on the vector.
+        // SAFETY: we already reserved `len` elements on the vector.
         let s = crate::unsafe_slice_mut!(self.spare_capacity_mut(), ..len);
-        // SAFETY: converting MaybeUninit<u8> into [u8] is safe because we are going to write on it.
-        //         The returned len tells us how many bytes have been written so as to update the len accordingly.
+        // SAFETY: converting `MaybeUninit<u8>` into `[u8]` is safe because we are going to write to it.
+        // The returned `len` tells us how many bytes have been written so as to update the length accordingly.
         len = unsafe { write(&mut *(s as *mut [mem::MaybeUninit<u8>] as *mut [u8])) };
-        // SAFETY: we already reserved len elements on the vector.
+        // SAFETY: we already reserved `len` elements on the vector and we are setting the length
+        // based on the number of bytes actually written by the closure.
         unsafe { self.set_len(self.len() + len) };
 
         NonZeroUsize::new(len).ok_or(DidntWrite)

@@ -491,7 +491,7 @@ impl<'a> ZBufWriter<'a> {
     #[inline]
     fn zslice_writer(&mut self) -> &mut ZSliceWriter<'a> {
         if self.zslice_writer.is_none() {
-            // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
+            // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow.
             let zbuf = unsafe { self.inner.as_mut() };
             zbuf.slices.push(ZSlice::empty());
             self.zslice_writer = zbuf.slices.last_mut().unwrap().writer();
@@ -527,17 +527,22 @@ impl Writer for ZBufWriter<'_> {
     fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
         self.zslice_writer = None;
         // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow,
-        // and `self.writer` has been overwritten
+        // and `self.writer` has been overwritten.
         unsafe { self.inner.as_mut() }.push_zslice(slice.clone());
         Ok(())
     }
 
+    /// # Safety
+    ///
+    /// The `write` closure must return the number of bytes actually written to the slice,
+    /// which must be less than or equal to `len`.
     unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
-        // SAFETY: same precondition as the enclosing function
-        self.zslice_writer().with_slot(len, write)
+        // SAFETY: Same precondition as this function. Call to `with_slot` is safe because
+        // the requirements are passed through.
+        unsafe { self.zslice_writer().with_slot(len, write) }
     }
 }
 
@@ -546,7 +551,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 
     fn mark(&mut self) -> Self::Mark {
         let byte = self.zslice_writer.as_mut().map(|w| w.mark());
-        // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow
+        // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow.
         let zbuf = unsafe { self.inner.as_mut() };
         ZBufPos {
             slice: zbuf.slices.len(),
@@ -558,7 +563,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         // SAFETY: `self.inner` is valid as guaranteed by `self.writer` borrow,
-        // and `self.writer` is reassigned after modification
+        // and `self.writer` is reassigned after modification.
         let zbuf = unsafe { self.inner.as_mut() };
         zbuf.slices.truncate(mark.slice);
         self.zslice_writer = zbuf.opt_zslice_writer();
