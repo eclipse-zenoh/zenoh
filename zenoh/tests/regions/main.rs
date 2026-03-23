@@ -15,6 +15,8 @@
 #![cfg(feature = "internal")]
 
 #[cfg(feature = "unstable")]
+mod gossip;
+#[cfg(feature = "unstable")]
 mod scenario1;
 #[cfg(feature = "unstable")]
 mod scenario2;
