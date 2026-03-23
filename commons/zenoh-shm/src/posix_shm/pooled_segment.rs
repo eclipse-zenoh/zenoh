@@ -17,9 +17,8 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use crate::api::protocol_implementations::posix::posix_shm_segment::PosixShmSegment;
-
 use super::pool::ShmSegmentPool;
+use crate::api::protocol_implementations::posix::posix_shm_segment::PosixShmSegment;
 
 /// A wrapper around [`Arc<PosixShmSegment>`] whose `Drop` implementation returns the
 /// segment to the pool instead of unmapping it.
