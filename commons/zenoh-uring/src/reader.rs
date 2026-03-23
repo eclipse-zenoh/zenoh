@@ -11,25 +11,29 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use flume::{Receiver, Sender};
 use std::{
     cell::UnsafeCell,
     num::{NonZeroU32, NonZeroU64},
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
-    sync::{atomic::AtomicBool, mpsc::Sender, Arc},
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
-use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver, UnboundedSender};
+use tokio::{
+    runtime::Runtime,
+    sync::mpsc::{error::TryRecvError, UnboundedReceiver, UnboundedSender},
+};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
 use crate::batch_arena::BatchArena;
 
-type RxCallbackImpl = dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static;
+type RxCallbackImpl = dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + Send + 'static;
 
 #[derive(Debug)]
 struct RxCallback {
@@ -41,9 +45,6 @@ impl RxCallback {
         Self { callback }
     }
 }
-
-unsafe impl Send for RxCallback {}
-unsafe impl Sync for RxCallback {}
 
 #[derive(Debug)]
 struct Rx {
@@ -64,7 +65,10 @@ impl Rx {
     }
 
     fn run_callback(&self, buffer: Arc<RxBuffer>) {
+        tracing::debug!("DEADBEEF CB begin....");
         let callback = unsafe { &mut *self.cb.callback.get() };
+        tracing::debug!("DEADBEEF CB end....");
+
         if let Err(e) = (callback)(buffer) {
             self.post_error(e);
         }
@@ -94,23 +98,17 @@ enum ReactorCmd {
 }
 #[derive(Debug)]
 pub struct ReadTask {
-    inner: Arc<ReaderInner>,
+    submitter: SubmissionIface,
     error_receiver: UnboundedReceiver<zenoh_result::Error>,
-    index: Arc<tokio::sync::SetOnce<IndexGeneration>>,
+    index: IndexGeneration,
 }
 
 impl Drop for ReadTask {
     fn drop(&mut self) {
         tracing::debug!("Stopping read task: {:?}", self);
 
-        let inner = self.inner.clone();
-        let index = self.index.clone();
-
-        ZRuntime::RX.spawn(async move {
-            let index = index.wait().await;
-            let stop_rx_cmd = ReactorCmd::StopRx(*index);
-            let _ = inner.submitter.submit(stop_rx_cmd);
-        });
+        let stop_rx_cmd = ReactorCmd::StopRx(self.index);
+        let _ = self.submitter.submit(stop_rx_cmd);
     }
 }
 
@@ -118,17 +116,16 @@ impl ReadTask {
     pub async fn stop(&mut self) {
         tracing::debug!("Async stopping read task: {:?}", self);
 
-        let index = self.index.wait().await;
-        let stop_rx_cmd = ReactorCmd::StopRx(*index);
-        let _ = self.inner.submitter.submit(stop_rx_cmd);
+        let stop_rx_cmd = ReactorCmd::StopRx(self.index);
+        let _ = self.submitter.submit(stop_rx_cmd);
 
         // waiting for read task context to be destroyed within the reactor
         while self.error_receiver.recv().await.is_some() {}
     }
 
-    fn new<Cb>(fd: RawFd, callback: Cb, inner: Arc<ReaderInner>) -> ZResult<Self>
+    async fn new<Cb>(fd: RawFd, callback: Cb, submitter: SubmissionIface) -> ZResult<Self>
     where
-        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static,
+        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + Send + 'static,
     {
         tracing::debug!("Creating read task: fd = {fd}");
 
@@ -137,10 +134,15 @@ impl ReadTask {
         let rx_callback = RxCallback::new(UnsafeCell::new(Box::new(callback)));
 
         let start_rx_cmd = ReactorCmd::StartRx(fd, rx_callback, index.clone(), error_sender);
-        inner.submitter.submit(start_rx_cmd)?;
+
+        submitter.submit(start_rx_cmd)?;
+
+        tracing::debug!("Start waiting index for read task: fd = {fd}");
+        let index = index.wait().await.clone();
+        tracing::debug!("Got index {:?} for read task: fd = {fd}", index);
 
         Ok(Self {
-            inner,
+            submitter,
             error_receiver,
             index,
         })
@@ -175,7 +177,7 @@ impl SubmissionIface {
     }
 
     fn submit_quiet(&self, cmd: ReactorCmd) -> ZResult<()> {
-        tracing::debug!("Submit cmd: {:?}", cmd);
+        tracing::debug!("DEADBEEF Submit cmd: {:?}", cmd);
         self.sender.send(cmd).map_err(|e| e.to_string().into())
     }
 
@@ -191,13 +193,15 @@ impl SubmissionIface {
 
 #[derive(Debug)]
 pub struct ReaderInner {
+    runtime: Runtime,
     submitter: SubmissionIface,
     exit_flag: Arc<AtomicBool>,
 }
 
 impl ReaderInner {
-    fn new(submitter: SubmissionIface, exit_flag: Arc<AtomicBool>) -> Self {
+    fn new(runtime: Runtime, submitter: SubmissionIface, exit_flag: Arc<AtomicBool>) -> Self {
         Self {
+            runtime,
             submitter,
             exit_flag,
         }
@@ -608,6 +612,7 @@ impl ReservableArena {
     }
 }
 
+#[derive(Debug)]
 struct RxContextCell {
     context: Option<Arc<Rx>>,
     generation: NonZeroU32,
@@ -632,13 +637,15 @@ impl RxContextCell {
         if self.generation == generation {
             if let Some(context) = self.context.take() {
                 tracing::debug!("Spawning async RxContext destroy {:?}", context);
-                ZRuntime::Net.spawn_blocking(move || {
+                //ZRuntime::Net.spawn_blocking(move || {
                     tracing::debug!("Begin RxContext destroy {:?}", context);
                     assert!(Arc::strong_count(&context) == 1);
                     drop(context);
                     tracing::debug!("End RxContext destroy!");
-                });
+                //});
             }
+        } else {
+            tracing::debug!("Unable to free: generation mismatch! {:?}, generation: {generation}", self);
         }
     }
 
@@ -740,26 +747,32 @@ pub struct Reader {
     receiver: tokio::sync::watch::Receiver<String>,
 }
 
+impl Drop for Reader {
+    fn drop(&mut self) {
+        tracing::debug!("Drop Reader: {:?}", self);
+    }
+}
+
 impl Reader {
-    pub fn setup_fragmented_read<Cb>(&self, fd: RawFd, mut callback: Cb) -> ZResult<ReadTask>
+    pub async fn setup_fragmented_read<Cb>(&self, fd: RawFd, mut callback: Cb) -> ZResult<ReadTask>
     where
-        Cb: FnMut(FragmentedBatch) -> ZResult<()> + 'static,
+        Cb: FnMut(FragmentedBatch) -> ZResult<()> + Send + 'static,
     {
         tracing::debug!("Setting up fragmented read task for fd: {fd}");
 
         let mut window = RxWindow::default();
         let raw_callback = move |buffer| window.push(buffer, &mut callback);
 
-        ReadTask::new(fd, raw_callback, self.inner.clone())
+        ReadTask::new(fd, raw_callback, self.inner.submitter.clone()).await
     }
 
-    pub fn setup_read<Cb>(&self, fd: RawFd, callback: Cb) -> ZResult<ReadTask>
+    pub async fn setup_read<Cb>(&self, fd: RawFd, callback: Cb) -> ZResult<ReadTask>
     where
-        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + 'static,
+        Cb: FnMut(Arc<RxBuffer>) -> ZResult<()> + Send + 'static,
     {
         tracing::debug!("Setting up read task for fd: {fd}");
 
-        ReadTask::new(fd, callback, self.inner.clone())
+        ReadTask::new(fd, callback, self.inner.submitter.clone()).await
     }
 
     pub fn new(batch_size: usize, batch_count: usize) -> ZResult<Self> {
@@ -771,7 +784,7 @@ impl Reader {
 
         let c_waker = waker.clone();
 
-        let (sender, receiver) = std::sync::mpsc::channel();
+        let (sender, receiver) = flume::unbounded();
 
         let submitter = SubmissionIface::new(waker, sender);
         let c_submitter = submitter.clone();
@@ -786,12 +799,6 @@ impl Reader {
         let ring_worker = move || -> ZResult<()> {
             // Create Rx context storage
             let mut context_storage = RxContextStorage::new();
-
-            // Create memory for waker's read events
-            let mut dummy_mem = {
-                let mem: [u8; 8] = [0; 8];
-                Box::new(mem)
-            };
 
             // io_uring read
             let ring = IoUring::builder()
@@ -821,7 +828,7 @@ impl Reader {
 
             // read for waker
             let waker_read =
-                opcode::Read::new(types::Fd(c_waker.as_raw_fd()), dummy_mem.as_mut_ptr(), 8)
+                opcode::PollAdd::new(types::Fd(c_waker.as_raw_fd()), libc::POLLIN as _)
                     .build()
                     .user_data(IndexGeneration::INVALID_MAX)
                     .flags(io_uring::squeue::Flags::ASYNC);
@@ -829,13 +836,15 @@ impl Reader {
             unsafe { ring.submission_shared().push(&waker_read)? };
 
             fn roll_cmds(
-                receiver: &std::sync::mpsc::Receiver<ReactorCmd>,
+                receiver: &Receiver<ReactorCmd>,
                 context_storage: &mut RxContextStorage,
                 sq: &mut SubmissionQueue<'_>,
             ) -> ZResult<()> {
+                //tracing::debug!("DEADBEEF Reading cmds....");
+
                 // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
-                    tracing::debug!("Cmd: {:?}", val);
+                    tracing::debug!("DEADBEEF Cmd: {:?}", val);
 
                     match val {
                         ReactorCmd::StartRx(fd, callback, set_once, error_sender) => {
@@ -862,6 +871,7 @@ impl Reader {
                         }
                     }
                 }
+
                 Ok(())
             }
 
@@ -896,7 +906,8 @@ impl Reader {
                             tracing::debug!("Zero-user-data entry: {:?}", e);
                         }
                         IndexGeneration::INVALID_MAX => {
-                            tracing::debug!("Waker event: {:?}", e);
+                            tracing::debug!("DEADBEEF Waker event: {:?}", e);
+                            let _ = c_waker.read()?;
                             unsafe { sq.push(&waker_read)? };
                         }
                         index => {
@@ -909,17 +920,17 @@ impl Reader {
                                 &mut sq,
                                 &mut batch_ctr,
                             )? {
-                                //let len = sq.len() as u32;
+                                let len = sq.len() as u32;
                                 drop(sq);
-                                ring.submit()?;
-                                //unsafe {
-                                //    ring.submitter().enter::<libc::sigset_t>(
-                                //        len,
-                                //        0,
-                                //        EnterFlags::GETEVENTS.bits(),
-                                //        None,
-                                //    )?;
-                                //}
+                                //ring.submit()?;
+                                unsafe {
+                                    ring.submitter().enter::<libc::sigset_t>(
+                                        len,
+                                        0,
+                                        io_uring::EnterFlags::GETEVENTS.bits(),
+                                        None,
+                                    )?;
+                                }
                             }
                         }
                     }
@@ -932,6 +943,9 @@ impl Reader {
 
                 // receive external submissions
                 roll_cmds(&receiver, &mut context_storage, &mut sq)?;
+
+                //let len = sq.len();
+
                 drop(sq);
 
                 if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -940,11 +954,24 @@ impl Reader {
 
                 // this wait can be interrupted by Self::wake_reader_thread
                 ring.submit_and_wait(1)?;
+                //std::thread::sleep(std::time::Duration::from_millis(1));
+                //ring.submit()?;
+
+                //unsafe {
+                //    ring.submitter().enter::<libc::sigset_t>(
+                //        len as u32,
+                //        0,
+                //        io_uring::EnterFlags::GETEVENTS.bits(),
+                //        None,
+                //    )?;
+                //}
             }
             Ok(())
         };
 
-        ZRuntime::RX.spawn_blocking(move || {
+        let runtime = Runtime::new()?;
+
+        runtime.spawn_blocking(move || {
             if let Err(e) = ring_worker() {
                 tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
@@ -998,7 +1025,7 @@ impl Reader {
         });
         */
 
-        let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
+        let inner = Arc::new(ReaderInner::new(runtime, submitter, exit_flag));
 
         Ok(Self {
             inner,
@@ -1030,10 +1057,7 @@ impl Reader {
                     Ok(false)
                 }
             },
-            None => {
-                Self::utilize_multi(e, arena, ctr)?;
-                Ok(true)
-            }
+            None => Ok(Self::utilize_multi(e, arena, ctr)),
         }
     }
 
@@ -1108,23 +1132,20 @@ impl Reader {
         Ok(need_submit)
     }
 
-    fn utilize_multi(
-        e: &io_uring::cqueue::Entry,
-        arena: &ReservableArena,
-        ctr: &mut i32,
-    ) -> ZResult<()> {
+    fn utilize_multi(e: &io_uring::cqueue::Entry, arena: &ReservableArena, ctr: &mut i32) -> bool {
         if e.result() >= 0 {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
                     tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
                     *ctr -= 1;
                     arena.inner.recycle_batch(buf_id);
+                    return true;
                 }
                 None => {
                     //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
                 }
-            };
+            }
         }
-        Ok(())
+        false
     }
 }

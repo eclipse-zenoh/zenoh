@@ -230,25 +230,28 @@ impl ReaderTask {
         let c_iteration = iteration.clone();
 
         let mut i = 0u8;
-        let mut read_handle = reader.setup_fragmented_read(socket.as_raw_fd(), move |data| {
-            //            println!("Got {} bytes!", data.size());
 
-            if data.size() == 0 {
-                println!("Unexpected size: {}", data.size());
-                assert!(data.size() != 0);
-            }
+        let mut read_handle = zenoh_runtime::ZRuntime::Application.block_on(
+            reader.setup_fragmented_read(socket.as_raw_fd(), move |data| {
+                //            println!("Got {} bytes!", data.size());
 
-            if is_tcp {
-                for cell in data.iter() {
-                    assert!(*cell == i);
-                    i = i.wrapping_add(1);
+                if data.size() == 0 {
+                    println!("Unexpected size: {}", data.size());
+                    assert!(data.size() != 0);
                 }
-            }
 
-            c_iteration.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if is_tcp {
+                    for cell in data.iter() {
+                        assert!(*cell == i);
+                        i = i.wrapping_add(1);
+                    }
+                }
 
-            Ok(())
-        })?;
+                c_iteration.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+                Ok(())
+            }),
+        )?;
 
         assert!(Arc::strong_count(&iteration) == 2);
 
@@ -411,7 +414,6 @@ impl StartStopTask {
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed)
                 && !reader.poll_comlete()?
-                && !writer.poll_comlete()?
             {
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -444,10 +446,10 @@ impl StartStopTask {
     }
 }
 
-fn _rw_single(is_tcp: bool) {
+#[test_case(true; "tcp")]
+#[test_case(false; "udp")]
+fn rw_single(is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
-
-    tracing::info!("Is TCP: {is_tcp}");
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
 
@@ -464,20 +466,10 @@ fn _rw_single(is_tcp: bool) {
     writer.wait_for_complete().unwrap();
 }
 
-#[test]
-fn rw_single_tcp() {
-    _rw_single(true);
-}
-
-#[test]
-fn rw_single_udp() {
-    _rw_single(false);
-}
-
-fn _rw_single_pause_after_interrupt(is_tcp: bool) {
+#[test_case(true; "tcp")]
+#[test_case(false; "udp")]
+fn rw_single_pause_after_interrupt(is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
-
-    tracing::info!("Is TCP: {is_tcp}");
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
 
@@ -496,20 +488,10 @@ fn _rw_single_pause_after_interrupt(is_tcp: bool) {
     writer.wait_for_complete().unwrap();
 }
 
-#[test]
-fn rw_single_pause_after_interrupt_tcp() {
-    _rw_single_pause_after_interrupt(true);
-}
-
-#[test]
-fn rw_single_pause_after_interrupt_udp() {
-    _rw_single_pause_after_interrupt(false);
-}
-
-fn _rw_parallel(is_tcp: bool) {
+#[test_case(true; "tcp")]
+#[test_case(false; "udp")]
+fn rw_parallel(is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
-
-    tracing::info!("Is TCP: {is_tcp}");
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
     let count = 64;
@@ -533,25 +515,21 @@ fn _rw_parallel(is_tcp: bool) {
     }
 }
 
-#[test]
-fn rw_parallel_tcp() {
-    _rw_parallel(true);
-}
-
-#[test]
-fn rw_parallel_udp() {
-    _rw_parallel(false);
-}
-
-fn _rw_parallel_and_start_stop(
+#[test_case(true,  true,  true, 0;  "tcp_writer_first_shared_reader")]
+#[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
+#[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
+#[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
+#[test_case(false, true,  true, 4;  "udp_writer_first_shared_reader")]
+#[test_case(false, true,  false, 5; "udp_writer_first_exclusive_reader")]
+#[test_case(false, false, true, 6;  "udp_reader_first_shared_reader")]
+#[test_case(false, false, false, 7; "udp_reader_first_exclusive_reader")]
+fn rw_parallel_and_start_stop(
     is_tcp: bool,
     writer_ends_first: bool,
     shared_reader: bool,
     port_offset: u16,
 ) {
     zenoh_util::try_init_log_from_env();
-
-    tracing::info!("Is TCP: {is_tcp}");
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
     let count = 2;
@@ -597,21 +575,4 @@ fn _rw_parallel_and_start_stop(
     for rw in rw_background {
         drop(rw);
     }
-}
-
-#[test_case(true,  true,  true, 0;  "tcp_writer_first_shared_reader")]
-#[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
-#[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
-#[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
-#[test_case(false, true,  true, 4;  "udp_writer_first_shared_reader")]
-#[test_case(false, true,  false, 5; "udp_writer_first_exclusive_reader")]
-#[test_case(false, false, true, 6;  "udp_reader_first_shared_reader")]
-#[test_case(false, false, false, 7; "udp_reader_first_exclusive_reader")]
-fn rw_parallel_and_start_stop(
-    is_tcp: bool,
-    writer_ends_first: bool,
-    shared_reader: bool,
-    port_offset: u16,
-) {
-    _rw_parallel_and_start_stop(is_tcp, writer_ends_first, shared_reader, port_offset);
 }

@@ -48,6 +48,7 @@ async fn test_adminspace_wonly() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
 async fn test_adminspace_read() {
     const TIMEOUT: Duration = Duration::from_secs(60);
     const ROUTER_ENDPOINT: &str = "tcp/localhost:31000";

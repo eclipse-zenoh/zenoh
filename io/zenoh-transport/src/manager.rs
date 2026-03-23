@@ -135,6 +135,12 @@ pub struct TransportManagerState {
     pub uring: Uring,
 }
 
+impl Drop for TransportManagerState {
+    fn drop(&mut self) {
+        tracing::debug!("Drop");
+    }
+}
+
 pub struct TransportManagerParams {
     config: TransportManagerConfig,
     state: TransportManagerState,
@@ -457,6 +463,12 @@ pub struct TransportManager {
     #[cfg(feature = "stats")]
     pub(crate) stats: zenoh_stats::StatsRegistry,
     pub(crate) task_controller: TaskController,
+}
+
+impl Drop for TransportManager {
+    fn drop(&mut self) {
+        tracing::debug!("Drop");
+    }
 }
 
 impl TransportManager {

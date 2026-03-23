@@ -421,10 +421,11 @@ async fn rx_task_uring(
     );
 
     let batch_config = link.config.batch;
-    let c_transport = transport.clone();
 
     ///////
     //let reader = zenoh_uring::reader::Reader::new(65537, 16)?;
+
+    let r = transport.manager.state.uring.reader.clone();
 
     let mut uring_read_task = {
         match link.link.is_streamed() {
@@ -454,7 +455,7 @@ async fn rx_task_uring(
                         let header_bytes = 2;
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    c_transport.read_messages(
+                    transport.read_messages(
                         batch,
                         &l,
                         #[cfg(feature = "stats")]
@@ -462,12 +463,8 @@ async fn rx_task_uring(
                     )
                 };
 
-                transport
-                    .manager
-                    .state
-                    .uring
-                    .reader
-                    .setup_fragmented_read(link.link.get_fd()?, ring_cb)?
+                r.setup_fragmented_read(link.link.get_fd()?, ring_cb)
+                    .await?
             }
             false => {
                 let ring_cb = move |data: Arc<RxBuffer>| {
@@ -481,7 +478,7 @@ async fn rx_task_uring(
                         let header_bytes = 0;
                         stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                     }
-                    c_transport.read_messages(
+                    transport.read_messages(
                         batch,
                         &l,
                         #[cfg(feature = "stats")]
@@ -489,26 +486,17 @@ async fn rx_task_uring(
                     )
                 };
 
-                transport
-                    .manager
-                    .state
-                    .uring
-                    .reader
-                    .setup_read(link.link.get_fd()?, ring_cb)?
+                r.setup_read(link.link.get_fd()?, ring_cb).await?
             }
         }
     };
 
-    tokio::select! {
+    let result = tokio::select! {
         e = uring_read_task.read_error() => {
             tracing::debug!("Uring RX task stopped by uring task error event");
             Err(e)
         },
-        finished = transport
-                    .manager
-                    .state
-                    .uring
-                    .reader.wait_finished() => {
+        finished = r.wait_finished() => {
                         tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
                         finished
                     }
@@ -516,5 +504,9 @@ async fn rx_task_uring(
             tracing::debug!("Uring RX task stopped by cancellation event");
             Ok(())
         }
-    }
+    };
+
+    uring_read_task.stop().await;
+
+    result
 }

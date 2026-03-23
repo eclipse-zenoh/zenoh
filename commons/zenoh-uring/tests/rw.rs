@@ -143,7 +143,7 @@ fn reader_main() {
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    let _read_handle = reader
+    let _read_handle = zenoh_runtime::ZRuntime::Application.block_on( reader
         .setup_fragmented_read(stream.as_raw_fd(), move |data| {
             //if data.size() != BUF_SIZE-2 {
             //    println!("Unexpected size: {}", data.size());
@@ -173,7 +173,7 @@ fn reader_main() {
             c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
 
             Ok(())
-        })
+        }))
         .unwrap();
 
     /*

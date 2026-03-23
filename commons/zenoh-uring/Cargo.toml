@@ -37,8 +37,10 @@ nix = { workspace = true, features = ["event"] }
 thread-priority = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+flume = { workspace = true }
 
 [dev-dependencies]
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
 test-case = { workspace = true }
