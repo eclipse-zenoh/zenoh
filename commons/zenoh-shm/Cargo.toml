@@ -60,7 +60,12 @@ win-sys = { workspace = true }
 winapi = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 libc = { workspace = true }
+
+[[bench]]
+name = "shm_pool"
+harness = false
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
