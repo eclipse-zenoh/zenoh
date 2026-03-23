@@ -20,6 +20,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::Notify as AsyncNotify;
 
@@ -164,7 +165,11 @@ impl Notifier {
         self.0
             .flag
             .fetch_update(Ordering::Release, Ordering::Relaxed, |f| {
-                if f == ERR { None } else { Some(OK) }
+                if f == ERR {
+                    None
+                } else {
+                    Some(OK)
+                }
             })
             .map_err(|_| NotifyError)?;
 
@@ -349,6 +354,7 @@ mod tests {
             sync::{Arc, Barrier},
             time::Duration,
         };
+
         use crate::WaitTimeoutError;
 
         let barrier = Arc::new(Barrier::new(2));
@@ -403,6 +409,7 @@ mod tests {
             sync::{Arc, Barrier},
             time::{Duration, Instant},
         };
+
         use crate::WaitDeadlineError;
 
         let barrier = Arc::new(Barrier::new(2));
@@ -486,7 +493,9 @@ mod tests {
         let tout = Duration::from_secs(60);
         loop {
             let n = COUNTER.load(Ordering::Relaxed);
-            if n == N { break; }
+            if n == N {
+                break;
+            }
             if start.elapsed() > tout {
                 panic!("Timeout {tout:#?}. Counter: {n}/{N}");
             }
@@ -552,7 +561,9 @@ mod tests {
             let tout = Duration::from_secs(60);
             loop {
                 let n = COUNTER.load(Ordering::Relaxed);
-                if n == N { break; }
+                if n == N {
+                    break;
+                }
                 if start.elapsed() > tout {
                     panic!("Timeout {tout:#?}. Counter: {n}/{N}");
                 }
