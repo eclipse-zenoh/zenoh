@@ -54,6 +54,7 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T>> IChildren<T> for KeyedSet<T, ChunkE
     }
     fn child_at_mut(&mut self, chunk: &keyexpr) -> Option<&mut T> {
         // Unicity is guaranteed by &mut self
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { self.get_mut_unguarded(&chunk) }
     }
     fn remove(&mut self, chunk: &keyexpr) -> Option<T> {
