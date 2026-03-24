@@ -513,18 +513,21 @@ impl Primitives for Face {
                 }
             }
             zenoh_protocol::network::DeclareBody::DeclareFinal(_) => {
-                if let Some(id) = msg.interest_id {
-                    let mut wtables = zwrite!(self.tables.tables);
-                    let mut declares = vec![];
-                    self.declare_final(&mut wtables, id, msg.ext_nodeid.node_id, &mut |p, m| {
-                        declares.push((p.clone(), m))
-                    });
+                let Some(id) = msg.interest_id else {
+                    tracing::error!("Received DeclareFinal without interest id");
+                    return;
+                };
 
-                    drop(wtables);
-                    drop(ctrl_lock);
-                    for (p, m) in declares {
-                        m.with_mut(|m| p.send_declare(m));
-                    }
+                let mut wtables = zwrite!(self.tables.tables);
+                let mut declares = vec![];
+                self.declare_final(&mut wtables, id, msg.ext_nodeid.node_id, &mut |p, m| {
+                    declares.push((p.clone(), m))
+                });
+
+                drop(wtables);
+                drop(ctrl_lock);
+                for (p, m) in declares {
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
         }

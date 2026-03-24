@@ -116,3 +116,44 @@ fn test_current_token_propagation() {
         ]
     );
 }
+
+/// Test peer-to-peer interest routing in the presence of unfinalized initial interests.
+///
+/// This checks for a regression discovered in RMW Zenoh which uses peer mode and sends a
+/// [liveliness GET] right after opening a session.
+///
+/// This issue occured because we did not check that the source of a current tokens interest is
+/// south-bound before propagating it to peers with unfinalized initial interests.
+///
+/// [liveliness GET]:
+///     https://github.com/ros2/rmw_zenoh/blob/944a8715f5af6f58e74e318d31510409f69a5e6e/rmw_zenoh_cpp/src/detail/rmw_context_impl_s.cpp#L250-L254
+#[test]
+fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
+    let p = Harness::with_subregions(WhatAmI::Peer, []);
+
+    let p0 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+    let p1 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+
+    p0.interest(42, InterestMode::Current, InterestOptions::TOKENS, None);
+
+    assert!(p0.recorder().interests().is_empty());
+    assert!(p1.recorder().interests().is_empty());
+}
+
+/// Same as [`test_p2p_interest_routing_with_unfinalized_initial_interests`] but finalizes initial
+/// interests before sending the current tokens interest.
+#[test]
+fn test_p2p_interest_routing_with_finalized_initial_interests() {
+    let p = Harness::with_subregions(WhatAmI::Peer, []);
+
+    let p0 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+    let p1 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
+
+    p0.declare_final(0);
+    p1.declare_final(0);
+
+    p0.interest(42, InterestMode::Current, InterestOptions::TOKENS, None);
+
+    assert!(p0.recorder().interests().is_empty());
+    assert!(p1.recorder().interests().is_empty());
+}

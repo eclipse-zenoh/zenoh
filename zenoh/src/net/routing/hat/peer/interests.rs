@@ -109,44 +109,48 @@ impl HatInterestTrait for Hat {
             ctx.src_face.region.bound().is_north(),
             ctx.src_face.whatami.is_peer()
         );
+        debug_assert_implies!(msg.mode == InterestMode::Current, msg.options.tokens());
 
-        let interest = Arc::new(CurrentInterest {
+        let interest = CurrentInterest {
             src: src.clone(),
             src_region: ctx.src_face.region,
             src_interest_id: msg.id,
             mode: msg.mode,
-        });
+        };
 
-        let initial_interest_peers = self.owned_faces(ctx.tables).filter(|f| {
-            f.remote_bound.is_north()
-                && f.whatami.is_peer()
-                && msg.options.tokens()
-                && msg.mode == InterestMode::Current // TODO(regions): why not `CurrentFuture` as well?
-                && !initial_interest(f).is_none_or(|i| i.finalized)
-        });
+        if ctx.src_face.region.bound().is_north() {
+            return Some(interest);
+        }
 
         // NOTE(regions): `Current` (and not `CurrentFuture`) interests are stateless, i.e. gateways
         // don't register inbound/outbound token propagation. For this reason, we pick at most one
         // destination for `Current` interests; otherwise we would wind up with duplicate tokens.
         let dsts = if msg.mode == InterestMode::Current {
-            // FIXME(regions): when initial_interest_peers is non-empty, we may get duplicates tokens.
-            initial_interest_peers
+            // NOTE(regions): we don't send current-future interest to peers with unfinalized
+            // initial interests. After finalization, we will be notified with potential tokens
+            // and propagate them as future tokens.
+            self.owned_faces(ctx.tables)
+                .filter(|p| {
+                    p.id != ctx.src_face.id
+                        && p.remote_bound.is_north()
+                        && !initial_interest(p).is_none_or(|i| i.finalized)
+                })
                 .chain(
                     self.owned_faces(ctx.tables)
-                        .find(|f| f.remote_bound.is_south())
-                        .into_iter(),
+                        .find(|f| f.remote_bound.is_south()),
                 )
                 .cloned()
                 .collect_vec()
+            // FIXME(regions): we may get duplicates tokens when sending to one gateway _and_ one
+            // peer with unfinalized initial interest.
         } else {
-            initial_interest_peers
-                .chain(
-                    self.owned_faces(ctx.tables)
-                        .filter(|f| f.remote_bound.is_south()),
-                )
+            self.owned_faces(ctx.tables)
+                .filter(|f| f.remote_bound.is_south())
                 .cloned()
                 .collect_vec()
         };
+
+        let interest = Arc::new(interest);
 
         for mut dst in dsts {
             let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);

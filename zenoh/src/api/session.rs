@@ -3187,10 +3187,14 @@ impl Primitives for WeakSession {
             }
             DeclareBody::DeclareFinal(DeclareFinal) => {
                 trace!("recv DeclareFinal {:?}", msg.interest_id);
-                if let Some(interest_id) = msg.interest_id {
-                    let mut state = zwrite!(self.0.state);
-                    let _ = state.liveliness_queries.remove(&interest_id);
-                }
+
+                let Some(interest_id) = msg.interest_id else {
+                    tracing::error!("Received DeclareFinal without interest id");
+                    return;
+                };
+
+                let mut state = zwrite!(self.0.state);
+                let _ = state.liveliness_queries.remove(&interest_id);
             }
         }
     }

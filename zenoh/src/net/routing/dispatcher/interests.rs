@@ -226,6 +226,13 @@ impl Face {
             msg.options -= InterestOptions::AGGREGATE;
         }
 
+        if msg.mode == InterestMode::Current
+            && (msg.options.subscribers() || msg.options.queryables() || !msg.options.tokens())
+        {
+            tracing::error!("Current interests may only refer to tokens (illegal)");
+            return;
+        }
+
         let Interest {
             id,
             mode,

@@ -48,8 +48,8 @@ use zenoh_protocol::{
         ext::{self, NodeIdType},
         interest::{InterestId, InterestMode, InterestOptions},
         request::ext::QueryTarget,
-        Declare, DeclareBody, Interest, NetworkBody, NetworkBodyMut, NetworkMessageMut, Oam, Push,
-        Request, RequestId, Response, ResponseFinal,
+        Declare, DeclareBody, DeclareFinal, Interest, NetworkBody, NetworkBodyMut,
+        NetworkMessageMut, Oam, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::{PushBody, Put, Query, RequestBody},
 };
@@ -69,7 +69,6 @@ use crate::net::{
 
 pub(crate) fn try_init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt()
-        .pretty()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 }
@@ -584,6 +583,17 @@ impl MockFace {
             ext_qos: ext::QoSType::DEFAULT,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
+        });
+    }
+
+    /// Declare a liveliness token for `key_expr` from this face's perspective.
+    pub(crate) fn declare_final(&self, interest_id: InterestId) {
+        self.face.send_declare(&mut Declare {
+            interest_id: Some(interest_id), // NOTE: DeclareFinal without interest id is invalid
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareFinal(DeclareFinal),
         });
     }
 
