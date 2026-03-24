@@ -69,8 +69,8 @@ fn test_p2p_inter_subregion_data_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    p0.declare_subscriber(1, &ke);
-    p1.declare_subscriber(1, &ke);
+    p0.declare_subscriber(None, 1, &ke);
+    p1.declare_subscriber(None, 1, &ke);
 
     p0.put(&ke, vec![42]);
     p1.put(&ke, vec![43]);
@@ -101,8 +101,8 @@ fn test_p2p_inter_subregion_query_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    p0.declare_queryable(1, &ke);
-    p1.declare_queryable(1, &ke);
+    p0.declare_queryable(None, 1, &ke);
+    p1.declare_queryable(None, 1, &ke);
 
     p0.query(1, &ke);
     p1.query(1, &ke);
@@ -159,8 +159,8 @@ fn test_r2r_inter_subregion_data_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    r0s.declare_subscriber(1, &ke);
-    r1s.declare_subscriber(1, &ke);
+    r0s.declare_subscriber(None, 1, &ke);
+    r1s.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     r0s.put(&ke, vec![42]);
@@ -221,8 +221,8 @@ fn test_r2r_inter_subregion_query_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    r0s.declare_queryable(1, &ke);
-    r1s.declare_queryable(1, &ke);
+    r0s.declare_queryable(None, 1, &ke);
+    r1s.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     r0s.query(1, &ke);
@@ -257,8 +257,8 @@ fn test_c2c_inter_subregion_data_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    c0.declare_subscriber(1, &ke);
-    c1.declare_subscriber(1, &ke);
+    c0.declare_subscriber(None, 1, &ke);
+    c1.declare_subscriber(None, 1, &ke);
 
     c0.put(&ke, vec![42]);
     c1.put(&ke, vec![43]);
@@ -289,8 +289,8 @@ fn test_c2c_inter_subregion_query_routing() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    c0.declare_queryable(1, &ke);
-    c1.declare_queryable(1, &ke);
+    c0.declare_queryable(None, 1, &ke);
+    c1.declare_queryable(None, 1, &ke);
 
     c0.query(1, &ke);
     c1.query(1, &ke);
@@ -359,7 +359,7 @@ fn multiple_gateways_data_routing_r2p_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ps.declare_subscriber(1, &ke);
+    ps.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     rs.put(&ke, vec![42]);
@@ -433,7 +433,7 @@ fn multiple_gateways_query_routing_r2p_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ps.declare_queryable(1, &ke);
+    ps.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     rs.query(1, &ke);
@@ -509,7 +509,7 @@ fn multiple_gateways_data_routing_r2r_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ss.declare_subscriber(1, &ke);
+    ss.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ns.put(&ke, vec![0x42]);
@@ -585,7 +585,7 @@ fn multiple_gateways_query_routing_r2r_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ss.declare_queryable(1, &ke);
+    ss.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ns.query(1, &ke);
@@ -659,7 +659,7 @@ fn multiple_gateways_data_routing_p2r_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    rs.declare_subscriber(1, &ke);
+    rs.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     // The peer routes upstream unconditionally without having sent an interest.
@@ -734,7 +734,7 @@ fn multiple_gateways_data_routing_p2r_upstream_with_interest() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    rs.declare_subscriber(1, &ke);
+    rs.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ps.interest(
@@ -816,7 +816,7 @@ fn multiple_gateways_query_routing_p2r_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    rs.declare_queryable(1, &ke);
+    rs.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     // The peer routes the query upstream unconditionally without having sent an interest.
@@ -891,7 +891,7 @@ fn multiple_gateways_query_routing_p2r_upstream_with_interest() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    rs.declare_queryable(1, &ke);
+    rs.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ps.interest(
@@ -975,7 +975,7 @@ fn multiple_gateways_data_routing_r2r_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_subscriber(1, &ke);
+    ns.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ss.put(&ke, vec![0x42]);
@@ -1051,7 +1051,7 @@ fn multiple_gateways_query_routing_r2r_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_queryable(1, &ke);
+    ns.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ss.query(1, &ke);
@@ -1125,7 +1125,7 @@ fn multiple_gateways_data_routing_p2p_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ss.declare_subscriber(1, &ke);
+    ss.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ns.put(&ke, vec![0x42]);
@@ -1199,7 +1199,7 @@ fn multiple_gateways_query_routing_p2p_downstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ss.declare_queryable(1, &ke);
+    ss.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ns.query(1, &ke);
@@ -1273,7 +1273,7 @@ fn multiple_gateways_data_routing_p2p_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_subscriber(1, &ke);
+    ns.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ss.put(&ke, vec![0x42]);
@@ -1347,7 +1347,7 @@ fn multiple_gateways_data_routing_p2p_upstream_with_interest() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_subscriber(1, &ke);
+    ns.declare_subscriber(None, 1, &ke);
     bi_fwd_all();
 
     ss.interest(
@@ -1429,7 +1429,7 @@ fn multiple_gateways_query_routing_p2p_upstream() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_queryable(1, &ke);
+    ns.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ss.query(1, &ke);
@@ -1503,7 +1503,7 @@ fn multiple_gateways_query_routing_p2p_upstream_with_interest() {
 
     let ke = KeyExpr::from_str("k").unwrap();
 
-    ns.declare_queryable(1, &ke);
+    ns.declare_queryable(None, 1, &ke);
     bi_fwd_all();
 
     ss.interest(

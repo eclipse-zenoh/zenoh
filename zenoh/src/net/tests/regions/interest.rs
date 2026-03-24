@@ -20,9 +20,12 @@ use zenoh_protocol::{
     },
 };
 
+use crate::key_expr::KeyExpr;
+
 use super::{try_init_tracing_subscriber, Connection, FaceConfig, Harness};
 
-/// Current token propagation.
+/// Test that current tokens are re-propagated even if they've already been propagated in future
+/// mode.
 ///
 /// ```d2
 /// shape: sequence_diagram
@@ -37,7 +40,7 @@ use super::{try_init_tracing_subscriber, Connection, FaceConfig, Harness};
 /// R.2 -> C1: DeclareFinal iid=2
 /// ```
 #[test]
-fn test_current_token_propagation() {
+fn test_current_token_repropagation() {
     try_init_tracing_subscriber();
 
     let r = Harness::new_router();
@@ -82,7 +85,7 @@ fn test_current_token_propagation() {
     );
     c1_r.bi_fwd();
 
-    s2.declare_token(1, "test".try_into().unwrap(), None);
+    s2.declare_token(None, 1, "test".try_into().unwrap());
     c2_r.bi_fwd();
     c1_r.bi_fwd();
 
@@ -129,6 +132,8 @@ fn test_current_token_propagation() {
 ///     https://github.com/ros2/rmw_zenoh/blob/944a8715f5af6f58e74e318d31510409f69a5e6e/rmw_zenoh_cpp/src/detail/rmw_context_impl_s.cpp#L250-L254
 #[test]
 fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
+    try_init_tracing_subscriber();
+
     let p = Harness::with_subregions(WhatAmI::Peer, []);
 
     let p0 = p.new_face(FaceConfig::default().mode(WhatAmI::Peer));
@@ -156,4 +161,74 @@ fn test_p2p_interest_routing_with_finalized_initial_interests() {
 
     assert!(p0.recorder().interests().is_empty());
     assert!(p1.recorder().interests().is_empty());
+}
+
+/// Concurrent current-future interest in a two-region hierarchy.
+#[test_case::test_matrix(
+    [WhatAmI::Client, WhatAmI::Peer],
+    [WhatAmI::Client, WhatAmI::Peer]
+)]
+fn test_concurrent_current_future_interests(north: WhatAmI, south: WhatAmI) {
+    try_init_tracing_subscriber();
+
+    let r = Region::default_south(south);
+    let g = Harness::with_subregions_noruntime(north, [r]);
+    let n = g.new_face(FaceConfig::default().remote_bound(Bound::South));
+    let s0 = g.new_face(FaceConfig::default().mode(south).region(r));
+    let s1 = g.new_face(FaceConfig::default().mode(south).region(r));
+
+    assert_eq!(n.recorder().interests().len(), 0);
+
+    s0.interest(
+        42,
+        InterestMode::CurrentFuture,
+        InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+        None,
+    );
+
+    s1.interest(
+        42,
+        InterestMode::CurrentFuture,
+        InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+        None,
+    );
+
+    assert_eq!(n.recorder().interests().len(), 2);
+
+    n.declare_subscriber(Some(42), 1999, &KeyExpr::dummy());
+
+    assert_eq!(s0.recorder().subscribers().len(), 1);
+    assert_eq!(s1.recorder().subscribers().len(), 1);
+}
+
+/// Re-propagated current-future interest in a two-region hierarchy.
+#[test_case::test_matrix(
+    [WhatAmI::Client, WhatAmI::Peer],
+    [WhatAmI::Client, WhatAmI::Peer]
+)]
+/// Test that current-future interests are propagated upstresam on open and that downstream
+/// declarations with interest id are accepted by the middle gateway even though there is no
+/// breadcrumb.
+fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatAmI) {
+    try_init_tracing_subscriber();
+
+    let r = Region::default_south(south);
+    let g = Harness::with_subregions_noruntime(north, [r]);
+    let s = g.new_face(FaceConfig::default().mode(south).region(r));
+
+    s.interest(
+        42,
+        InterestMode::CurrentFuture,
+        InterestOptions::QUERYABLES,
+        None,
+    );
+
+    let n = g.new_face(FaceConfig::default().remote_bound(Bound::South));
+
+    assert_eq!(n.recorder().interests().len(), 1);
+    assert_eq!(s.recorder().queryables().len(), 0);
+
+    n.declare_queryable(Some(42), 1999, &KeyExpr::dummy());
+
+    assert_eq!(s.recorder().queryables().len(), 1);
 }

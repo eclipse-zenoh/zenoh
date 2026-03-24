@@ -477,9 +477,14 @@ impl MockFace {
     }
 
     /// Declare a subscriber for `key_expr` from this face's perspective.
-    pub(crate) fn declare_subscriber(&self, id: SubscriberId, key_expr: &keyexpr) {
+    pub(crate) fn declare_subscriber(
+        &self,
+        interest_id: Option<InterestId>,
+        id: SubscriberId,
+        key_expr: &keyexpr,
+    ) {
         self.face.send_declare(&mut Declare {
-            interest_id: None,
+            interest_id,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
@@ -505,10 +510,15 @@ impl MockFace {
     }
 
     /// Declare a queryable for `key_expr` from this face's perspective.
-    pub(crate) fn declare_queryable(&self, id: QueryableId, key_expr: &keyexpr) {
+    pub(crate) fn declare_queryable(
+        &self,
+        interest_id: Option<InterestId>,
+        id: QueryableId,
+        key_expr: &keyexpr,
+    ) {
         use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
         self.face.send_declare(&mut Declare {
-            interest_id: None,
+            interest_id,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
@@ -537,9 +547,9 @@ impl MockFace {
     /// Declare a liveliness token for `key_expr` from this face's perspective.
     pub(crate) fn declare_token(
         &self,
+        interest_id: Option<InterestId>,
         id: TokenId,
         key_expr: &keyexpr,
-        interest_id: Option<InterestId>,
     ) {
         self.face.send_declare(&mut Declare {
             interest_id,
