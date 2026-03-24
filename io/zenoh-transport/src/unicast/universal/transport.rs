@@ -210,7 +210,6 @@ impl TransportUnicastUniversal {
 
         match *status_guard {
             TransportStatus::Uninitialized => {
-                *status_guard = TransportStatus::Alive;
                 let csn = PrioritySn {
                     reliable: initial_sn_rx,
                     best_effort: initial_sn_rx,
@@ -218,6 +217,7 @@ impl TransportUnicastUniversal {
                 for c in self.priority_rx.iter() {
                     c.sync(csn)?;
                 }
+                *status_guard = TransportStatus::Alive;
                 Ok(status_guard)
             }
             TransportStatus::Alive => Ok(status_guard),
@@ -241,37 +241,6 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        // Check if we can add more inbound links
-        {
-            let guard = zread!(self.links);
-            if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
-                let count = guard
-                    .iter()
-                    .filter(|l| l.link.config.direction == link.inner_config().direction)
-                    .count();
-
-                let limit = zcondfeat!(
-                    "transport_multilink",
-                    match self.config.multilink {
-                        Some(_) => self.manager.config.unicast.max_links,
-                        None => 1,
-                    },
-                    1
-                );
-
-                if count >= limit {
-                    let e = zerror!(
-                        "Can not add Link {} with peer {}: max num of links reached {}/{}",
-                        link,
-                        self.config.zid,
-                        count,
-                        limit
-                    );
-                    return Err((e.into(), link.fail(), close::reason::MAX_LINKS));
-                }
-            }
-        }
-
         // sync the RX sequence number
         let status_guard = match self.sync(other_initial_sn).await {
             Ok(status_guard) => status_guard,
@@ -285,13 +254,41 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
         };
 
+        // Check if we can add more inbound links
+        let mut guard = zwrite!(self.links);
+        if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
+            let count = guard
+                .iter()
+                .filter(|l| l.link.config.direction == link.inner_config().direction)
+                .count();
+
+            let limit = zcondfeat!(
+                "transport_multilink",
+                match self.config.multilink {
+                    Some(_) => self.manager.config.unicast.max_links,
+                    None => 1,
+                },
+                1
+            );
+
+            if count >= limit {
+                let e = zerror!(
+                    "Can not add Link {} with peer {}: max num of links reached {}/{}",
+                    link,
+                    self.config.zid,
+                    count,
+                    limit
+                );
+                return Err((e.into(), link.fail(), close::reason::MAX_LINKS));
+            }
+        }
+
         // Wrap the link
         let (link, ack) = link.unpack();
         let (mut link, consumer) =
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
         // Add the link to the channel
-        let mut guard = zwrite!(self.links);
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
         links.push(link.clone());

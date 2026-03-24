@@ -1528,3 +1528,68 @@ async fn router_linkstate() -> Result<()> {
     println!("Router linkstate test passed.");
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn scouting_delay_regression() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:17490";
+
+    let router = {
+        let mut c = Config::default();
+        c.listen
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Measure how long open() takes. The regression causes a full 500ms delay.
+    let start = std::time::Instant::now();
+    let peer2 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        ztimeout!(zenoh::open(c)).unwrap()
+    };
+    let elapsed = start.elapsed();
+    tracing::info!("Peer (2) ZID: {} (open took {:?})", peer2.zid(), elapsed);
+
+    // The scouting delay default is 500ms.
+    assert!(
+        elapsed < Duration::from_millis(400),
+        "zenoh.open() took {:?}, expected <400ms",
+        elapsed,
+    );
+
+    peer2.close().await.unwrap();
+    peer1.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}

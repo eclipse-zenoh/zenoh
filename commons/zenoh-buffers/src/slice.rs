@@ -88,6 +88,10 @@ impl Writer for &mut [u8] {
         self.len()
     }
 
+    /// # Safety
+    ///
+    /// The `write` closure must return the number of bytes actually written to the slice,
+    /// which must be less than or equal to `len`.
     unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
@@ -96,7 +100,7 @@ impl Writer for &mut [u8] {
             return Err(DidntWrite);
         }
         let written = write(&mut self[..len]);
-        // SAFETY: `written` < `len` is guaranteed by function contract
+        // SAFETY: `written` <= `len` is guaranteed by the safety contract of this function.
         *self = unsafe { mem::take(self).get_unchecked_mut(written..) };
         NonZeroUsize::new(written).ok_or(DidntWrite)
     }
@@ -121,7 +125,8 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
     }
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
-        // SAFETY: SliceMark's lifetime is bound to the slice's lifetime
+        // SAFETY: SliceMark's lifetime is bound to the slice's lifetime, and the pointer and length
+        // are guaranteed to be valid as they were obtained from a valid slice in `mark()`.
         *self = unsafe { slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
         true
     }

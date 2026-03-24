@@ -96,6 +96,7 @@ where
                         };
                     }
                     let chunk = node.chunk();
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     unsafe { node.as_node().__keyexpr() };
                     let chunk_is_super = chunk == "**";
                     if chunk_is_super {
@@ -132,16 +133,19 @@ where
                                 break;
                             }
                             let key = &self.key.as_bytes()[kec_start..];
+                            // SAFETY: upheld by the surrounding invariants and prior validation.
                             unsafe { keyexpr::from_slice_unchecked(key) };
                             match key.iter().position(|&c| c == b'/') {
                                 Some(kec_end) => {
                                     let subkey =
+                                        // SAFETY: upheld by the surrounding invariants and prior validation.
                                         unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                     if chunk.includes(subkey) {
                                         push!(kec_start + kec_end + 1);
                                     }
                                 }
                                 None => {
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                     if chunk.includes(key) {
                                         push!(self.key.len());
@@ -152,6 +156,7 @@ where
                         }
                     }
                     if new_end > new_start {
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
@@ -293,16 +298,19 @@ where
                                 break;
                             }
                             let key = &self.key.as_bytes()[kec_start..];
+                            // SAFETY: upheld by the surrounding invariants and prior validation.
                             unsafe { keyexpr::from_slice_unchecked(key) };
                             match key.iter().position(|&c| c == b'/') {
                                 Some(kec_end) => {
                                     let subkey =
+                                        // SAFETY: upheld by the surrounding invariants and prior validation.
                                         unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                     if chunk.includes(subkey) {
                                         push!(kec_start + kec_end + 1);
                                     }
                                 }
                                 None => {
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                     if chunk.includes(key) {
                                         push!(self.key.len());
@@ -313,6 +321,7 @@ where
                         }
                     }
                     if new_end > new_start {
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                             .children_mut()
                             .children_mut();

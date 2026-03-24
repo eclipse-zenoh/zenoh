@@ -131,7 +131,7 @@ impl ZSlice {
 
     /// # Safety
     ///
-    /// Buffer modification must not modify slice range.
+    /// Buffer modification must not modify slice range or invalidate the data.
     #[inline]
     #[must_use]
     pub unsafe fn downcast_mut<T: Any>(&mut self) -> Option<&mut T> {
@@ -172,7 +172,7 @@ impl ZSlice {
     #[inline]
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
+        // SAFETY: bounds checks are performed at `ZSlice` construction via `new()` or `subslice()`.
         unsafe { self.buf.as_slice().get_unchecked(self.start..self.end) }
     }
 
@@ -317,11 +317,16 @@ impl Writer for ZSliceWriter<'_> {
         self.vec.remaining()
     }
 
+    /// # Safety
+    ///
+    /// The `write` closure must return the number of bytes actually written to the slice,
+    /// which must be less than or equal to `len`.
     unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
-        // SAFETY: same precondition as the enclosing function
+        // SAFETY: Same precondition as this function. Call to `with_slot` is safe because
+        // the requirements are passed through.
         let len = unsafe { self.vec.with_slot(len, write) }?;
         *self.end += len.get();
         Ok(len)
@@ -457,7 +462,7 @@ mod tests {
         let mut zslice: ZSlice = buf.clone().into();
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
-        // SAFETY: buffer slize size is not modified
+        // SAFETY: buffer slice size is not modified.
         let mut_slice = unsafe { zslice.downcast_mut::<Vec<u8>>() }.unwrap();
 
         mut_slice[..buf.len()].clone_from_slice(&buf[..]);

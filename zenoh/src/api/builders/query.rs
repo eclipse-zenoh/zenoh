@@ -85,6 +85,7 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
 #[zenoh_macros::internal_trait]
 impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the request/query.
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self {
         Self {
             source_info: source_info.into(),
@@ -92,6 +93,8 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         }
     }
 
+    /// Sets an optional attachment to be sent along with the request/query.
+    /// The method accepts both `T` where `T: Into<ZBytes>` and `Option<T>` where `T: Into<ZBytes>` (see [`OptionZBytes`](crate::bytes::OptionZBytes)).
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -103,16 +106,22 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 
 #[zenoh_macros::internal_trait]
 impl<Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the request.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos = self.qos.congestion_control(congestion_control);
         Self { qos, ..self }
     }
 
+    /// Changes the [`Priority`](crate::qos::Priority) of the request.
     fn priority(self, priority: Priority) -> Self {
         let qos = self.qos.priority(priority);
         Self { qos, ..self }
     }
 
+    /// Changes the Express policy to apply when routing the request.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
         Self { qos, ..self }
@@ -121,6 +130,7 @@ impl<Handler> QoSBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
 
 #[zenoh_macros::internal_trait]
 impl<Handler> EncodingBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         let mut value = self.value.unwrap_or_default();
         value.1 = encoding.into();
@@ -320,7 +330,6 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     }
 
     /// Restrict the matching queryables that will receive the query to the ones that have the given [`Locality`](Locality).
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(self, destination: Locality) -> Self {
         Self {
@@ -339,6 +348,8 @@ impl<Handler> SessionGetBuilder<'_, '_, Handler> {
     ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This setter allows you to define whether this get operation accepts such disjoint replies.
+    ///
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         if accept == ReplyKeyExpr::Any {
             if let Ok(Selector {
@@ -393,7 +404,6 @@ where
             #[cfg(feature = "unstable")]
             self.cancellation_token,
             None,
-            #[cfg(feature = "unstable")]
             None,
         )?;
         Ok(receiver)

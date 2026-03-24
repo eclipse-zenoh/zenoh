@@ -110,7 +110,8 @@ impl KeyExpr<'static> {
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_string_unchecked(s: String) -> Self {
         Self(KeyExprInner::Owned {
-            key_expr: OwnedKeyExpr::from_string_unchecked(s),
+            // SAFETY: caller upholds key expression invariants for `s`.
+            key_expr: unsafe { OwnedKeyExpr::from_string_unchecked(s) },
             declaration: None,
         })
     }
@@ -121,7 +122,8 @@ impl KeyExpr<'static> {
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_boxed_str_unchecked(s: Box<str>) -> Self {
         Self(KeyExprInner::Owned {
-            key_expr: OwnedKeyExpr::from_boxed_str_unchecked(s),
+            // SAFETY: caller upholds key expression invariants for `s`.
+            key_expr: unsafe { OwnedKeyExpr::from_boxed_str_unchecked(s) },
             declaration: None,
         })
     }
@@ -207,7 +209,8 @@ impl<'a> KeyExpr<'a> {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
-        keyexpr::from_str_unchecked(s).into()
+        // SAFETY: caller upholds key expression invariants for `s`.
+        unsafe { keyexpr::from_str_unchecked(s).into() }
     }
 
     /// Returns the borrowed version of `self`

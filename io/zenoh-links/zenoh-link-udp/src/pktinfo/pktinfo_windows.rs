@@ -82,12 +82,21 @@ fn locate_wsarecvmsg(socket: RawSocket) -> io::Result<WSARecvMsgExtension> {
     }
 }
 
+/// # Safety
+/// The caller must ensure that:
+/// - `socket` is a valid file descriptor for a socket.
+/// - The combination of `opt`, `val`, and the type `T` of `payload` is a valid
+///   socket option. The underlying C function `setsockopt` will read
+///   `mem::size_of::<T>()` bytes from `payload`.
 unsafe fn setsockopt<T>(socket: RawSocket, opt: i32, val: i32, payload: T) -> io::Result<()>
 where
     T: Copy,
 {
     let payload = &payload as *const T as PCSTR;
-    if WinSock::setsockopt(socket as _, opt, val, payload, mem::size_of::<T>() as i32) == 0 {
+    // SAFETY: Call the underlying C function `setsockopt`.
+    if unsafe { WinSock::setsockopt(socket as _, opt, val, payload, mem::size_of::<T>() as i32) }
+        == 0
+    {
         Ok(())
     } else {
         Err(Error::from_raw_os_error(WinSock::WSAGetLastError()))

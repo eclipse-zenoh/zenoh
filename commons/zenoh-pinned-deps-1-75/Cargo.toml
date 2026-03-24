@@ -29,6 +29,8 @@ maintenance = { status = "actively-developed" }
 [dependencies]
 async-lock = "=3.4.1"
 base64ct = "=1.6.0"
+clap_builder = "=4.5.60"
+clap_lex = "=1.0.0"
 derive_more = { version = "=2.0.1", features = ["as_ref"] }
 generic-array = "=0.14.7"
 home = "=0.5.9"
@@ -36,7 +38,7 @@ icu_normalizer = "=1.5.0"
 indexmap = "=2.11.4"
 libloading = "=0.8.9"
 litemap = "=0.7.4"
-lz4_flex = "=0.11.3"
+lz4_flex = "=0.10.0"
 nonempty-collections = "=0.3.1"
 pest = "=2.8.0"
 pest_derive = "=2.8.0"
@@ -71,6 +73,8 @@ security-framework = "=3.6.0"
 ignored = [
   "async-lock",
   "base64ct",
+  "clap_builder",
+  "clap_lex",
   "derive_more",
   "generic-array",
   "home",
