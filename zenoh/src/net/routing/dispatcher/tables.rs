@@ -254,6 +254,12 @@ impl TablesData {
         self.face_counter += 1;
         face_id
     }
+
+    /// Disable all hats' data and query routes **for all resources**.
+    pub(crate) fn disable_all_routes(&mut self) {
+        let routes_version = &mut self.routes_version;
+        *routes_version = routes_version.saturating_add(1);
+    }
 }
 
 pub struct TablesLock {
@@ -289,13 +295,6 @@ pub struct Tables {
 }
 
 impl Tables {
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn disable_all_hat_routes(&mut self) {
-        for hat in self.hats.values_mut() {
-            hat.disable_all_routes(&mut self.data);
-        }
-    }
-
     pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()

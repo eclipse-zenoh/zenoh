@@ -299,10 +299,10 @@ pub(crate) trait HatBaseTrait: Any {
 
     /// Disables this hat's data and query routes **for all resources**.
     fn disable_all_routes(&mut self, tables: &mut TablesData) {
-        let hat_routes_version = &mut tables.hats[self.region()].routes_version;
-        *hat_routes_version = hat_routes_version.saturating_add(1);
-        let routes_version = &mut tables.routes_version;
+        let routes_version = &mut tables.hats[self.region()].routes_version;
         *routes_version = routes_version.saturating_add(1);
+
+        tables.disable_all_routes();
     }
 }
 
