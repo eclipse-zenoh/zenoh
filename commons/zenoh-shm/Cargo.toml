@@ -64,8 +64,8 @@ criterion = { workspace = true }
 libc = { workspace = true }
 
 [[bench]]
-name = "shm_pool"
 harness = false
+name = "shm_pool"
 
 [build-dependencies]
 cfg_aliases = "0.2.1"
