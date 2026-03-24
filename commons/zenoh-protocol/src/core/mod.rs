@@ -24,6 +24,7 @@ use core::{
     ops::{Deref, RangeInclusive},
     str::FromStr,
 };
+use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
@@ -88,11 +89,30 @@ impl ZenohIdProto {
         self.into()
     }
 
-    pub fn short(&self) -> String {
-        const MAX_ZID_LEN: usize = 8;
-        let mut string = self.to_string();
-        string.truncate(MAX_ZID_LEN);
-        string
+    pub fn short(self) -> ShortZenohIdProto {
+        ShortZenohIdProto(self)
+    }
+}
+
+pub struct ShortZenohIdProto(ZenohIdProto);
+
+impl Display for ShortZenohIdProto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        type Repr = u32;
+        const L: usize = std::mem::size_of::<Repr>();
+        let bytes = self.0.to_le_bytes();
+        let start = self.0.size().saturating_sub(L);
+        write!(
+            f,
+            "{:x}",
+            Repr::from_le_bytes(bytes[start..start + L].try_into().unwrap())
+        )
+    }
+}
+
+impl Debug for ShortZenohIdProto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -642,7 +662,7 @@ impl CongestionControl {
 mod tests {
     use core::str::FromStr;
 
-    use crate::core::{Priority, PriorityRange, RegionName};
+    use crate::core::{Priority, PriorityRange, RegionName, ZenohIdProto};
 
     #[test]
     fn test_priority_range() {
@@ -673,5 +693,21 @@ mod tests {
     fn test_region_name_err() {
         assert!(RegionName::from_str(&std::iter::repeat_n("Z", 33).collect::<String>()).is_err());
         assert!(RegionName::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_short_zid() {
+        assert_eq!(
+            &format!(
+                "{}",
+                "a1b2c3d4e5f6".parse::<ZenohIdProto>().unwrap().short()
+            ),
+            "a1b2c3d4"
+        );
+
+        assert_eq!(
+            &format!("{}", "a1b2".parse::<ZenohIdProto>().unwrap().short()),
+            "a1b2"
+        );
     }
 }

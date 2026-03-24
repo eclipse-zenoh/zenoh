@@ -534,8 +534,17 @@ impl Primitives for Face {
     }
 
     #[inline]
-    #[tracing::instrument(level = "debug", skip(msg), ret)]
     fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
+        let _span = tracing::enabled!(tracing::Level::DEBUG).then(|| {
+            tracing::debug_span!(
+                "send_push",
+                expr = %msg.wire_expr,
+                is_reliable = bool::from(reliability),
+                consume,
+            )
+            .entered()
+        });
+
         route_data(&self.tables, &self.state, msg, reliability, consume);
     }
 
@@ -606,7 +615,7 @@ impl Primitives for Face {
 
             let remaining = hats
                 .iter()
-                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (*rgn, info)))
+                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (rgn, info)))
                 .collect_vec();
 
             match &*remaining {

@@ -105,7 +105,7 @@ impl Face {
 
                 hats[region].disable_data_routes(ctx.tables, &mut res);
 
-                for region in hats.regions().copied().collect_vec() {
+                for region in hats.regions().collect_vec() {
                     let other_info = hats
                         .values()
                         .filter(|hat| hat.region() != region)
@@ -247,7 +247,7 @@ macro_rules! treat_timestamp {
 }
 
 #[inline]
-fn get_data_route(
+fn get_hat_data_route(
     tables: &Tables,
     src_face: &FaceState,
     expr: &RoutingExpr,
@@ -266,6 +266,43 @@ fn get_data_route(
         Some(data_routes) => get_or_set_route(
             data_routes,
             tables.data.hats[region].routes_version,
+            &src_face.region,
+            node_id,
+            compute_route,
+        ),
+        None => compute_route(),
+    }
+}
+
+#[inline]
+fn get_data_route(
+    tables: &Tables,
+    src_face: &FaceState,
+    expr: &RoutingExpr,
+    node_id: NodeId,
+) -> Arc<Route> {
+    let compute_route = || {
+        let mut builder = RouteBuilder::<Direction>::new();
+
+        for (region, _) in tables.hats.iter() {
+            let route = get_hat_data_route(tables, src_face, expr, node_id, &region);
+
+            for dir in route.iter() {
+                builder.insert(dir.dst_face.id, || dir.clone());
+            }
+        }
+        Arc::new(builder.build())
+    };
+    let node_id = tables.hats[src_face.region].map_routing_context(&tables.data, src_face, node_id);
+    match expr
+        .resource()
+        .as_ref()
+        .and_then(|res| res.ctx.as_ref())
+        .map(|ctx| &ctx.data_routes)
+    {
+        Some(data_routes) => get_or_set_route(
+            data_routes,
+            tables.data.routes_version,
             &src_face.region,
             node_id,
             compute_route,
@@ -307,18 +344,9 @@ pub fn route_data(
     let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &rtables);
     #[cfg(feature = "stats")]
     payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
-    let mut builder = RouteBuilder::<Direction>::new();
 
-    for (region, hat) in rtables.hats.iter() {
-        if hat.ingress_filter(&rtables.data, face, &expr) {
-            let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id, region);
-
-            for dir in route.iter() {
-                if hat.egress_filter(&rtables.data, face, &dir.dst_face, &expr) {
-                    builder.insert(dir.dst_face.id, || dir.clone());
-                }
-            }
-        }
+    if !rtables.ingress_filter(face) {
+        return;
     }
 
     let send_push = |dst_face: &FaceState, msg: &mut Push, reliability: Reliability| {
@@ -328,47 +356,57 @@ pub fn route_data(
         }
     };
 
-    let mut dirs = builder.build().into_iter();
+    let route = get_data_route(&rtables, face, &expr, msg.ext_nodeid.node_id);
 
-    tracing::trace!(?dirs);
+    tracing::trace!(?route);
 
-    if let Some(dir) = dirs.next() {
+    if !route.is_empty() {
         treat_timestamp!(
             &rtables.data.hlc,
             msg.payload,
             rtables.data.drop_future_timestamp
         );
 
-        msg.wire_expr = dir.wire_expr.clone();
-        msg.ext_nodeid = ext::NodeIdType {
-            node_id: dir.node_id,
-        };
+        if route.len() == 1 {
+            let dir = route.iter().next().unwrap();
+            if rtables.egress_filter(face, &dir.dst_face) {
+                drop(rtables);
+                let mut msg_clone;
+                let mut msg = &mut *msg;
+                if !consume {
+                    msg_clone = msg.clone();
+                    msg = &mut msg_clone;
+                }
 
-        drop(rtables);
+                msg.wire_expr = dir.wire_expr.clone();
+                msg.ext_nodeid = ext::NodeIdType {
+                    node_id: dir.node_id,
+                };
+                send_push(&dir.dst_face, msg, reliability);
+            }
+        } else {
+            let dirs = route
+                .iter()
+                .filter(|dir| rtables.egress_filter(face, &dir.dst_face))
+                .collect::<Vec<&Direction>>();
 
-        for dir in dirs {
-            send_push(
-                &dir.dst_face,
-                &mut Push {
-                    wire_expr: dir.wire_expr,
-                    ext_qos: msg.ext_qos,
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType {
-                        node_id: dir.node_id,
+            drop(rtables);
+            for dir in dirs {
+                send_push(
+                    &dir.dst_face,
+                    &mut Push {
+                        wire_expr: dir.wire_expr.clone(),
+                        ext_qos: msg.ext_qos,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType {
+                            node_id: dir.node_id,
+                        },
+                        payload: msg.payload.clone(),
                     },
-                    payload: msg.payload.clone(),
-                },
-                reliability,
-            );
+                    reliability,
+                );
+            }
         }
-
-        let mut msg_clone;
-        let mut msg = &mut *msg;
-        if !consume {
-            msg_clone = msg.clone();
-            msg = &mut msg_clone;
-        }
-        send_push(&dir.dst_face, msg, reliability);
     }
 }
 

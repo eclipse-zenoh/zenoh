@@ -144,6 +144,7 @@ pub(crate) struct TablesData {
     pub(crate) stats_keys: zenoh_stats::StatsKeysTree,
 
     pub(crate) hats: RegionMap<HatTablesData>,
+    pub(crate) routes_version: RoutesVersion,
 }
 
 impl Debug for TablesData {
@@ -208,6 +209,7 @@ impl TablesData {
             stats_keys,
             #[cfg(feature = "stats")]
             stats,
+            routes_version: 0,
         })
     }
 
@@ -252,6 +254,12 @@ impl TablesData {
         self.face_counter += 1;
         face_id
     }
+
+    /// Disable all hats' data and query routes **for all resources**.
+    pub(crate) fn disable_all_routes(&mut self) {
+        let routes_version = &mut self.routes_version;
+        *routes_version = routes_version.saturating_add(1);
+    }
 }
 
 pub struct TablesLock {
@@ -287,13 +295,6 @@ pub struct Tables {
 }
 
 impl Tables {
-    #[allow(dead_code)] // FIXME(regions)
-    pub(crate) fn disable_all_hat_routes(&mut self) {
-        for hat in self.hats.values_mut() {
-            hat.disable_all_routes(&mut self.data);
-        }
-    }
-
     pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()
@@ -352,6 +353,17 @@ impl Tables {
                     .or_insert(src);
                 acc
             })
+    }
+
+    #[inline]
+    pub(crate) fn ingress_filter(&self, _src_face: &FaceState) -> bool {
+        true
+    }
+
+    #[inline]
+    pub(crate) fn egress_filter(&self, src_face: &FaceState, out_face: &Arc<FaceState>) -> bool {
+        src_face.id != out_face.id
+            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 }
 

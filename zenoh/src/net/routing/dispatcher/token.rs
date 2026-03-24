@@ -111,7 +111,7 @@ impl Face {
                     Some(RouteCurrentDeclareResult::NoBreadcrumb) | None => {
                         hats[region].register_token(ctx.reborrow(), id, res.clone(), node_id);
 
-                        for region in hats.regions().copied().collect_vec() {
+                        for region in hats.regions().collect_vec() {
                             let other_tokens = hats
                                 .values()
                                 .filter(|hat| hat.region() != region)

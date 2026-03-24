@@ -201,7 +201,7 @@ pub mod polyfill {
 
 /// Asserts that the LHS expression implies the RHS expression.
 ///
-/// Note that in logic, `p ⟹ q` is equivalent to `¬p ∧ q` (i.e. `!p || q`).
+/// Note that in logic, `p ⟹ q` is equivalent to `¬p ∨ q` (i.e. `!p || q`).
 #[macro_export]
 macro_rules! debug_assert_implies {
     ($lhs:expr, $rhs:expr) => {

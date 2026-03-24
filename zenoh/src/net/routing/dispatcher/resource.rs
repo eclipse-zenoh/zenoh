@@ -327,6 +327,7 @@ pub(crate) struct ResourceContext {
     // NodeId -> Route) since each linkstate has a NodeId space, but this is no longer true. Is this
     // still needed?
     pub(crate) hats: RegionMap<HatResourceContext>,
+    pub(crate) data_routes: RwLock<DataRoutes>,
     #[cfg(feature = "stats")]
     pub(crate) stats_keys: zenoh_stats::StatsKeyCache,
 }
@@ -336,9 +337,14 @@ impl ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             hats: hat,
+            data_routes: Default::default(),
             #[cfg(feature = "stats")]
             stats_keys: Default::default(),
         }
+    }
+
+    pub(crate) fn disable_data_routes(&mut self) {
+        self.data_routes.get_mut().unwrap().clear();
     }
 }
 

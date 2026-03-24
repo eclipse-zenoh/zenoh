@@ -26,6 +26,10 @@ pub struct Metadata<const S: usize> {
     watchdogs: [AtomicU64; S], // TODO: replace with (S + 63) / 64 when Rust supports it
 }
 
+// SAFETY: all fields are atomic types which are Send
+// This prevents the Rust trait solver to out of recursion budget
+unsafe impl<const S: usize> Send for Metadata<S> {}
+
 impl<const S: usize> Metadata<S> {
     /// # Safety
     ///
