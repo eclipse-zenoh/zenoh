@@ -160,3 +160,5 @@ section = "net"
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(nolocal_thread_not_available)',
 ] }
+# This will be enabled by default in Edition 2024
+unsafe_op_in_unsafe_fn = "warn"
