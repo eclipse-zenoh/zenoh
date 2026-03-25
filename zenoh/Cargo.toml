@@ -59,6 +59,7 @@ shared-memory = [
   "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-stats", "zenoh-transport/stats"]
+test = []
 tracing-instrument = [
   "zenoh-runtime/tracing-instrument",
   "zenoh-task/tracing-instrument",
@@ -160,3 +161,5 @@ section = "net"
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(nolocal_thread_not_available)',
 ] }
+# This will be enabled by default in Edition 2024
+unsafe_op_in_unsafe_fn = "warn"

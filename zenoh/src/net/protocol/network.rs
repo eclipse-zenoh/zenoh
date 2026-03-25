@@ -42,7 +42,7 @@ use crate::net::{
     common::AutoConnect,
     protocol::linkstate::{LinkEdgeWeight, LinkState, LinkStateList, LocalLinkState},
     routing::dispatcher::tables::NodeId,
-    runtime::Runtime,
+    runtime::{Runtime, WeakRuntime},
 };
 
 #[derive(Clone, Default)]
@@ -133,7 +133,7 @@ pub(crate) struct Network {
     pub(crate) trees: Vec<Tree>,
     pub(crate) distances: Vec<f64>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(crate) runtime: Runtime,
+    pub(crate) runtime: WeakRuntime,
     pub(crate) link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
 }
 
@@ -178,7 +178,7 @@ impl Network {
             }],
             distances: vec![0.0],
             graph,
-            runtime,
+            runtime: Runtime::downgrade(&runtime),
             link_weights,
         }
     }
@@ -337,7 +337,7 @@ impl Network {
             whatami: self.graph[idx].whatami,
             locators: if details.locators {
                 if idx == self.idx {
-                    Some(self.runtime.get_locators())
+                    Some(self.runtime.upgrade().unwrap().get_locators())
                 } else {
                     self.graph[idx].locators.clone()
                 }
@@ -617,8 +617,8 @@ impl Network {
     }
 
     fn connect_discovered_peer(&self, zid: ZenohIdProto, locators: Vec<Locator>) {
-        let runtime = self.runtime.clone();
-        self.runtime.spawn(async move {
+        let runtime = self.runtime.upgrade().unwrap();
+        self.runtime.upgrade().unwrap().spawn(async move {
             if runtime
                 .manager()
                 .get_transport_unicast(&zid)
