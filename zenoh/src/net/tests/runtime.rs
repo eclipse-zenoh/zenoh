@@ -13,9 +13,10 @@
 //
 #[cfg(feature = "test")]
 mod tests {
-    use crate::net::runtime::RuntimeBuilder;
-    use crate::net::runtime::Runtime;
-    use crate::api::config::Config;
+    use crate::{
+        api::config::Config,
+        net::runtime::{Runtime, RuntimeBuilder},
+    };
 
     // Helper to create a runtime that does not bind to any network endpoints.
     async fn create_runtime() -> Runtime {
@@ -45,7 +46,7 @@ mod tests {
         let runtime = create_runtime().await;
         let weak = runtime.state_weak();
         runtime.close().await.unwrap(); // Cancels all internal tasks that hold references.
-        // The Runtime object still holds the strong reference, so the weak is still valid.
+                                        // The Runtime object still holds the strong reference, so the weak is still valid.
         assert!(weak.upgrade().is_some());
     }
 

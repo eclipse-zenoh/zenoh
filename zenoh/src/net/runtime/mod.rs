@@ -798,6 +798,7 @@ impl Runtime {
     }
 
     #[cfg(feature = "test")]
+    #[allow(dead_code)]
     pub(crate) fn state_weak(&self) -> Weak<RuntimeState> {
         Arc::downgrade(&self.state)
     }
