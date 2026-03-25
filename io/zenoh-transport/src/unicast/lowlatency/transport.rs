@@ -278,12 +278,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             ));
         }
         let (link, ack) = link.unpack();
+
+        // Use the complete src and dest locators including parameters
+        #[cfg(feature = "stats")]
+        let link_unicast = link.link();
         #[cfg(feature = "stats")]
         self.link_stats
-            .set(
-                self.stats
-                    .link_stats(link.link.get_src(), link.link.get_dst()),
-            )
+            .set(self.stats.link_stats(&link_unicast.src, &link_unicast.dst))
             .unwrap();
         *guard = Some(link);
         drop(guard);
