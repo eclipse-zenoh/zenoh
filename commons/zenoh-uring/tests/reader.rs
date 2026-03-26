@@ -520,10 +520,10 @@ fn rw_parallel(is_tcp: bool) {
 #[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
 #[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
 #[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
-#[test_case(false, true,  true, 4;  "udp_writer_first_shared_reader")]
-#[test_case(false, true,  false, 5; "udp_writer_first_exclusive_reader")]
-#[test_case(false, false, true, 6;  "udp_reader_first_shared_reader")]
-#[test_case(false, false, false, 7; "udp_reader_first_exclusive_reader")]
+#[test_case(false, true,  true, 0;  "udp_writer_first_shared_reader")]
+#[test_case(false, true,  false, 1; "udp_writer_first_exclusive_reader")]
+#[test_case(false, false, true, 2;  "udp_reader_first_shared_reader")]
+#[test_case(false, false, false, 3; "udp_reader_first_exclusive_reader")]
 fn rw_parallel_and_start_stop(
     is_tcp: bool,
     writer_ends_first: bool,
@@ -533,8 +533,8 @@ fn rw_parallel_and_start_stop(
     zenoh_util::try_init_log_from_env();
 
     let reader = Reader::new(65535 + 2, 16).unwrap();
-    let count = 1;
-    let base_port = 7782 + 64 + port_offset * (count + 1);
+    let count = 20;
+    let base_port = 13000 + port_offset * (count + 1);
     let base_interval = Some(Arc::new(Duration::from_millis(1)));
 
     let mut rw_background = vec![];
@@ -554,8 +554,8 @@ fn rw_parallel_and_start_stop(
         let start_stop_writer_ends_first = StartStopTask::make(
             move || c_reader_fn(),
             base_port + count,
-            1, //ITERATION_COUNT / 1000,
-            1,
+            ITERATION_COUNT / 1000,
+            100,
             writer_ends_first,
             None,
             is_tcp,
@@ -566,7 +566,8 @@ fn rw_parallel_and_start_stop(
     if shared_reader {
         tracing::info!("Shared Reader...");
         run_start_stop_session(Arc::new(move || reader.clone()));
-    } else {
+    }
+    else {
         tracing::info!("Exclusive Reader...");
         run_start_stop_session(Arc::new(|| Reader::new(65535 + 2, 16).unwrap()));
     }

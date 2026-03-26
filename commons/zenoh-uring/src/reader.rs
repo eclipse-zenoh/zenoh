@@ -23,10 +23,7 @@ use std::{
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
-use tokio::{
-    runtime::Runtime,
-    sync::mpsc::{error::TryRecvError, UnboundedReceiver, UnboundedSender},
-};
+use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver, UnboundedSender};
 use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -193,15 +190,13 @@ impl SubmissionIface {
 
 #[derive(Debug)]
 pub struct ReaderInner {
-    runtime: Runtime,
     submitter: SubmissionIface,
     exit_flag: Arc<AtomicBool>,
 }
 
 impl ReaderInner {
-    fn new(runtime: Runtime, submitter: SubmissionIface, exit_flag: Arc<AtomicBool>) -> Self {
+    fn new(submitter: SubmissionIface, exit_flag: Arc<AtomicBool>) -> Self {
         Self {
-            runtime,
             submitter,
             exit_flag,
         }
@@ -969,9 +964,7 @@ impl Reader {
             Ok(())
         };
 
-        let runtime = Runtime::new()?;
-
-        runtime.spawn_blocking(move || {
+        ZRuntime::RX.spawn_blocking(move || {
             if let Err(e) = ring_worker() {
                 tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
@@ -1026,7 +1019,7 @@ impl Reader {
         });
         */
 
-        let inner = Arc::new(ReaderInner::new(runtime, submitter, exit_flag));
+        let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
 
         Ok(Self {
             inner,
