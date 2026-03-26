@@ -84,10 +84,13 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
+        // Use the complete src and dest locators including parameters
+        #[cfg(feature = "stats")]
+        let link_unicast = link.link();
         #[cfg(feature = "stats")]
         let stats = transport
             .stats
-            .link_stats(link.link.get_src(), link.link.get_dst());
+            .link_stats(&link_unicast.src, &link_unicast.dst);
 
         #[cfg(feature = "unstable")]
         let mut block_first_notifiers = Vec::new();
