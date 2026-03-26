@@ -31,6 +31,7 @@ use zenoh_protocol::{
     },
     zenoh::{PushBody, Put, RequestBody, ResponseBody},
 };
+use zenoh_sync::get_mut_unchecked;
 
 use crate::{
     key_expr::KeyExpr,
@@ -1309,16 +1310,13 @@ fn forced_face_close_preserves_late_routing() {
     // Force close the publisher face (simulates network timeout)
     {
         let ctrl_lock = zlock!(tables.ctrl_lock);
-        tables.hat_code.close_face(
-            &tables,
-            &tables,
-            &mut publisher_arc,
-            &mut |p, m| {
+        tables
+            .hat_code
+            .close_face(&tables, &tables, &mut publisher_arc, &mut |p, m| {
                 m.with_mut(|m| {
                     p.send_declare(m);
                 })
-            },
-        );
+            });
         drop(ctrl_lock);
     }
 
@@ -1351,6 +1349,46 @@ fn forced_face_close_preserves_late_routing() {
 }
 
 /// Byte budget eviction: large key expressions trigger eviction
+/// when the total cached bytes exceed MAX_LATE_REMOTE_MAPPINGS_BYTES.
+#[test]
+fn late_cache_byte_budget_eviction() {
+    let router = new_router();
+    let primitives = Arc::new(ClientPrimitives::new());
+    let face = router.new_primitives(primitives);
+    let mut face_arc = face.state.clone();
+    let face_state = get_mut_unchecked(&mut face_arc);
+
+    // Insert entries with 100KB key expressions each
+    // 1MB budget / 100KB = ~10 entries before eviction
+    let big_expr = "a".repeat(100 * 1024);
+    for i in 1u16..=11 {
+        face_state.insert_late_remote_mapping(i, format!("{big_expr}/{i}"));
+    }
+
+    // First entry should have been evicted to stay within byte budget
+    assert!(
+        !face_state.late_remote_mappings.contains_key(&1),
+        "ExprId 1 should be evicted by byte budget"
+    );
+    // Later entries should still be present
+    assert!(face_state.late_remote_mappings.contains_key(&11));
+    // Byte counter should be consistent
+    let actual_bytes: usize = face_state
+        .late_remote_mappings
+        .iter()
+        .map(|(_, v): (&ExprId, &String)| v.len())
+        .sum();
+    assert_eq!(face_state.late_remote_mappings_bytes, actual_bytes);
+    assert!(face_state.late_remote_mappings_bytes <= 1024 * 1024);
+
+    // Entries exceeding half the byte budget should be skipped entirely
+    let huge_expr = "x".repeat(512 * 1024 + 1);
+    face_state.insert_late_remote_mapping(99, huge_expr);
+    assert!(
+        !face_state.late_remote_mappings.contains_key(&99),
+        "oversized entry should be skipped"
+    );
+}
 
 #[test]
 fn get_best_key_test() {

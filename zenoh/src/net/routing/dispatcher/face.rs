@@ -102,6 +102,7 @@ impl PartialEq<RemoteInterest> for InterestState {
 
 pub(crate) type FaceId = usize;
 const MAX_LATE_REMOTE_MAPPINGS: usize = 1024;
+const MAX_LATE_REMOTE_MAPPINGS_BYTES: usize = 1024 * 1024; // 1MB per face
 
 pub struct FaceState {
     pub(crate) id: FaceId,
@@ -115,6 +116,7 @@ pub struct FaceState {
     pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) late_remote_mappings: IntHashMap<ExprId, String>,
     pub(crate) late_remote_mappings_order: VecDeque<ExprId>,
+    pub(crate) late_remote_mappings_bytes: usize,
     pub(crate) next_qid: RequestId,
     /// Pending queries sent to this face.
     ///
@@ -157,6 +159,7 @@ impl FaceState {
             remote_mappings: IntHashMap::new(),
             late_remote_mappings: IntHashMap::new(),
             late_remote_mappings_order: VecDeque::new(),
+            late_remote_mappings_bytes: 0,
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
@@ -206,22 +209,48 @@ impl FaceState {
         expr_id: ExprId,
         expr: String,
     ) -> Option<String> {
-        self.remove_late_remote_mapping(&expr_id);
-        let evicted = if self.late_remote_mappings_order.len() >= MAX_LATE_REMOTE_MAPPINGS {
-            self.late_remote_mappings_order
-                .pop_front()
-                .and_then(|old_expr_id| self.late_remote_mappings.remove(&old_expr_id))
-        } else {
-            None
-        };
+        let new_bytes = expr.len();
+
+        // Skip entries that are unreasonably large (> half the byte budget)
+        if new_bytes > MAX_LATE_REMOTE_MAPPINGS_BYTES / 2 {
+            tracing::warn!(
+                "Late remote mapping for ExprId {} skipped: \
+                 expression length {} exceeds per-entry limit",
+                expr_id,
+                new_bytes
+            );
+            return None;
+        }
+
+        // Remove existing entry for this expr_id if present
+        if let Some(old) = self.late_remote_mappings.remove(&expr_id) {
+            self.late_remote_mappings_bytes -= old.len();
+            self.late_remote_mappings_order.retain(|id| *id != expr_id);
+        }
+
+        // Evict oldest entries until both count and byte budget are satisfied
+        while self.late_remote_mappings_order.len() >= MAX_LATE_REMOTE_MAPPINGS
+            || self.late_remote_mappings_bytes + new_bytes > MAX_LATE_REMOTE_MAPPINGS_BYTES
+        {
+            if let Some(old_id) = self.late_remote_mappings_order.pop_front() {
+                if let Some(evicted) = self.late_remote_mappings.remove(&old_id) {
+                    self.late_remote_mappings_bytes -= evicted.len();
+                }
+            } else {
+                break;
+            }
+        }
+
+        self.late_remote_mappings_bytes += new_bytes;
         self.late_remote_mappings.insert(expr_id, expr);
         self.late_remote_mappings_order.push_back(expr_id);
-        evicted
+        None
     }
 
     pub(crate) fn remove_late_remote_mapping(&mut self, expr_id: &ExprId) -> Option<String> {
         let removed = self.late_remote_mappings.remove(expr_id);
-        if removed.is_some() {
+        if let Some(ref s) = removed {
+            self.late_remote_mappings_bytes -= s.len();
             self.late_remote_mappings_order
                 .retain(|queued_expr_id| queued_expr_id != expr_id);
         }
