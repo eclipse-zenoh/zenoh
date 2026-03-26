@@ -12,12 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
+use futures::{stream::FuturesUnordered, StreamExt};
+use zenoh::sample::SampleKind;
 use zenoh_config::WhatAmI::{Peer, Router};
 use zenoh_core::ztimeout;
 
-use crate::{loc, skip_fmt, Node};
+use crate::{loc, Node};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -74,26 +76,52 @@ async fn regions_gossip() {
         .connect(&[loc!(z9200)])
         .open());
 
-    skip_fmt! {
-        assert!(z9110.info().transports().await.count() == 2);
-        assert!(z9110.info().transports().await.any(|t| *t.zid() == z9100.zid()));
-        assert!(z9110.info().transports().await.any(|t| *t.zid() == z9111.zid()));
-        assert!(z9111.info().transports().await.count() == 2);
-        assert!(z9111.info().transports().await.any(|t| *t.zid() == z9100.zid()));
-        assert!(z9111.info().transports().await.any(|t| *t.zid() == z9110.zid()));
+    async fn wait_for_transports<const N: usize>(
+        this: &zenoh::Session,
+        others: [&zenoh::Session; N],
+    ) {
+        let listener = this
+            .info()
+            .transport_events_listener()
+            .history(true)
+            .await
+            .unwrap();
+        let mut stream = listener.stream();
 
-        assert!(z9120.info().transports().await.count() == 2);
-        assert!(z9120.info().transports().await.any(|t| *t.zid() == z9100.zid()));
-        assert!(z9120.info().transports().await.any(|t| *t.zid() == z9121.zid()));
-        assert!(z9121.info().transports().await.count() == 2);
-        assert!(z9121.info().transports().await.any(|t| *t.zid() == z9100.zid()));
-        assert!(z9121.info().transports().await.any(|t| *t.zid() == z9120.zid()));
+        let mut zids = others.iter().map(|s| s.zid()).collect::<HashSet<_>>();
 
-        assert!(z9210.info().transports().await.count() == 2);
-        assert!(z9210.info().transports().await.any(|t| *t.zid() == z9200.zid()));
-        assert!(z9210.info().transports().await.any(|t| *t.zid() == z9211.zid()));
-        assert!(z9211.info().transports().await.count() == 2);
-        assert!(z9211.info().transports().await.any(|t| *t.zid() == z9200.zid()));
-        assert!(z9211.info().transports().await.any(|t| *t.zid() == z9210.zid()));
+        while let Some(event) = stream.next().await {
+            assert_eq!(event.kind(), SampleKind::Put);
+
+            // Fail if we get an unexpected transport
+            assert!(zids.remove(event.transport().zid()));
+
+            if zids.is_empty() {
+                break;
+            }
+        }
     }
+
+    let waits = [
+        wait_for_transports(&z9110, [&z9100, &z9111]),
+        wait_for_transports(&z9111, [&z9100, &z9110]),
+        wait_for_transports(&z9120, [&z9100, &z9121]),
+        wait_for_transports(&z9121, [&z9100, &z9120]),
+        wait_for_transports(&z9210, [&z9200, &z9211]),
+        wait_for_transports(&z9211, [&z9200, &z9210]),
+    ]
+    .into_iter()
+    .collect::<FuturesUnordered<_>>();
+
+    tokio::time::timeout(TIMEOUT, waits.for_each(|_| async {}))
+        .await
+        .expect("timed out waiting for transports");
+
+    // Verify no unexpected transports exist
+    assert_eq!(z9110.info().transports().await.count(), 2);
+    assert_eq!(z9111.info().transports().await.count(), 2);
+    assert_eq!(z9120.info().transports().await.count(), 2);
+    assert_eq!(z9121.info().transports().await.count(), 2);
+    assert_eq!(z9210.info().transports().await.count(), 2);
+    assert_eq!(z9211.info().transports().await.count(), 2);
 }
