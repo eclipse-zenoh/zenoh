@@ -156,6 +156,8 @@ impl HatBaseTrait for HatCode {
             Resource::clean(res);
         }
         face.remote_mappings.clear();
+        face.late_remote_mappings.clear();
+        face.late_remote_mappings_order.clear();
         for res in face.local_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);

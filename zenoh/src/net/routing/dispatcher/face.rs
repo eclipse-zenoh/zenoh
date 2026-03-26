@@ -13,7 +13,7 @@
 //
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt,
     sync::{Arc, Weak},
     time::Duration,
@@ -101,6 +101,7 @@ impl PartialEq<RemoteInterest> for InterestState {
 }
 
 pub(crate) type FaceId = usize;
+const MAX_LATE_REMOTE_MAPPINGS: usize = 1024;
 
 pub struct FaceState {
     pub(crate) id: FaceId,
@@ -112,6 +113,8 @@ pub struct FaceState {
     pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
     pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
+    pub(crate) late_remote_mappings: IntHashMap<ExprId, String>,
+    pub(crate) late_remote_mappings_order: VecDeque<ExprId>,
     pub(crate) next_qid: RequestId,
     /// Pending queries sent to this face.
     ///
@@ -152,6 +155,8 @@ impl FaceState {
             pending_current_interests: HashMap::new(),
             local_mappings: IntHashMap::new(),
             remote_mappings: IntHashMap::new(),
+            late_remote_mappings: IntHashMap::new(),
+            late_remote_mappings_order: VecDeque::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
@@ -194,6 +199,47 @@ impl FaceState {
             id += 1;
         }
         id
+    }
+
+    pub(crate) fn insert_late_remote_mapping(
+        &mut self,
+        expr_id: ExprId,
+        expr: String,
+    ) -> Option<String> {
+        self.remove_late_remote_mapping(&expr_id);
+        let evicted = if self.late_remote_mappings_order.len() >= MAX_LATE_REMOTE_MAPPINGS {
+            self.late_remote_mappings_order
+                .pop_front()
+                .and_then(|old_expr_id| self.late_remote_mappings.remove(&old_expr_id))
+        } else {
+            None
+        };
+        self.late_remote_mappings.insert(expr_id, expr);
+        self.late_remote_mappings_order.push_back(expr_id);
+        evicted
+    }
+
+    pub(crate) fn remove_late_remote_mapping(&mut self, expr_id: &ExprId) -> Option<String> {
+        let removed = self.late_remote_mappings.remove(expr_id);
+        if removed.is_some() {
+            self.late_remote_mappings_order
+                .retain(|queued_expr_id| queued_expr_id != expr_id);
+        }
+        removed
+    }
+
+    /// # Safety
+    ///
+    /// This fallback is only sound because transport delivery for a single face is expected to be
+    /// observed in-order by routing. A stale late mapping must never outlive a newly declared
+    /// mapping for the same `ExprId`, which is why `register_expr()` clears any cached late entry
+    /// before accepting reuse.
+    #[inline]
+    pub(crate) fn get_late_mapping(&self, prefixid: &ExprId, mapping: Mapping) -> Option<&str> {
+        match mapping {
+            Mapping::Sender => self.late_remote_mappings.get(prefixid).map(String::as_str),
+            Mapping::Receiver => None,
+        }
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {

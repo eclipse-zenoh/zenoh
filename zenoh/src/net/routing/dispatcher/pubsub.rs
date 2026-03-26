@@ -257,7 +257,8 @@ pub fn route_data(
     consume: bool,
 ) {
     let tables = zread!(tables_ref.tables);
-    match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
+    let late_expr;
+    let expr = match tables.get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping) {
         Some(prefix) => {
             tracing::trace!(
                 "{} Route data for res {}{}",
@@ -265,80 +266,88 @@ pub fn route_data(
                 prefix.expr(),
                 msg.wire_expr.suffix.as_ref()
             );
-            let expr = RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref());
-
-            #[cfg(feature = "stats")]
-            let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &tables);
-            #[cfg(feature = "stats")]
-            payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
-
-            if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
-                let route = get_data_route(
-                    tables_ref.hat_code.as_ref(),
-                    &tables,
+            RoutingExpr::new(prefix, msg.wire_expr.suffix.as_ref())
+        }
+        None => match face.get_late_mapping(&msg.wire_expr.scope, msg.wire_expr.mapping) {
+            Some(prefix) => {
+                late_expr = format!("{prefix}{}", msg.wire_expr.suffix.as_ref());
+                tracing::trace!("{} Route late data for res {}", face, late_expr);
+                RoutingExpr::new(&tables.root_res, late_expr.as_str())
+            }
+            None => {
+                tracing::error!(
+                    "{} Route data with unknown scope {}!",
                     face,
-                    &expr,
-                    msg.ext_nodeid.node_id,
+                    msg.wire_expr.scope
                 );
+                return;
+            }
+        },
+    };
 
-                if !route.is_empty() {
-                    treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
+    #[cfg(feature = "stats")]
+    let payload_observer = super::stats::PayloadObserver::new(msg, Some(&expr), &tables);
+    #[cfg(feature = "stats")]
+    payload_observer.observe_payload(zenoh_stats::Rx, face, msg);
 
-                    if route.len() == 1 {
-                        let (outface, key_expr, context) = route.iter().next().unwrap();
-                        if tables_ref
+    if tables_ref.hat_code.ingress_filter(&tables, face, &expr) {
+        let route = get_data_route(
+            tables_ref.hat_code.as_ref(),
+            &tables,
+            face,
+            &expr,
+            msg.ext_nodeid.node_id,
+        );
+
+        if !route.is_empty() {
+            treat_timestamp!(&tables.hlc, msg.payload, tables.drop_future_timestamp);
+
+            if route.len() == 1 {
+                let (outface, key_expr, context) = route.iter().next().unwrap();
+                if tables_ref
+                    .hat_code
+                    .egress_filter(&tables, face, outface, &expr)
+                {
+                    drop(tables);
+                    let mut msg_clone;
+                    let mut msg = &mut *msg;
+                    if !consume {
+                        msg_clone = msg.clone();
+                        msg = &mut msg_clone;
+                    }
+                    msg.wire_expr = key_expr.into();
+                    msg.ext_nodeid = ext::NodeIdType { node_id: *context };
+                    if outface.primitives.send_push(msg, reliability) {
+                        #[cfg(feature = "stats")]
+                        payload_observer.observe_payload(zenoh_stats::Tx, outface, msg);
+                    }
+                }
+            } else {
+                let route = route
+                    .iter()
+                    .filter(|(outface, _key_expr, _context)| {
+                        tables_ref
                             .hat_code
                             .egress_filter(&tables, face, outface, &expr)
-                        {
-                            drop(tables);
-                            let mut msg_clone;
-                            let mut msg = &mut *msg;
-                            if !consume {
-                                msg_clone = msg.clone();
-                                msg = &mut msg_clone;
-                            }
-                            msg.wire_expr = key_expr.into();
-                            msg.ext_nodeid = ext::NodeIdType { node_id: *context };
-                            if outface.primitives.send_push(msg, reliability) {
-                                #[cfg(feature = "stats")]
-                                payload_observer.observe_payload(zenoh_stats::Tx, outface, msg);
-                            }
-                        }
-                    } else {
-                        let route = route
-                            .iter()
-                            .filter(|(outface, _key_expr, _context)| {
-                                tables_ref
-                                    .hat_code
-                                    .egress_filter(&tables, face, outface, &expr)
-                            })
-                            .cloned()
-                            .collect::<Vec<Direction>>();
+                    })
+                    .cloned()
+                    .collect::<Vec<Direction>>();
 
-                        drop(tables);
-                        for (outface, key_expr, context) in route {
-                            let msg = &mut Push {
-                                wire_expr: key_expr,
-                                ext_qos: msg.ext_qos,
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType { node_id: context },
-                                payload: msg.payload.clone(),
-                            };
-                            if outface.primitives.send_push(msg, reliability) {
-                                #[cfg(feature = "stats")]
-                                payload_observer.observe_payload(zenoh_stats::Tx, &outface, msg);
-                            }
-                        }
+                drop(tables);
+                for (outface, key_expr, context) in route {
+                    let msg = &mut Push {
+                        wire_expr: key_expr,
+                        ext_qos: msg.ext_qos,
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType { node_id: context },
+                        payload: msg.payload.clone(),
+                    };
+                    if outface.primitives.send_push(msg, reliability) {
+                        #[cfg(feature = "stats")]
+                        payload_observer.observe_payload(zenoh_stats::Tx, &outface, msg);
                     }
                 }
             }
-        }
-        None => {
-            tracing::error!(
-                "{} Route data with unknown scope {}!",
-                face,
-                msg.wire_expr.scope
-            );
         }
     }
 }

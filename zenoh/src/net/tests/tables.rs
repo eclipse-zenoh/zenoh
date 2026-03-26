@@ -1103,6 +1103,123 @@ fn client_test() {
 }
 
 #[test]
+fn late_push_after_undeclare_keeps_routing() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let sub_info = SubscriberInfo;
+
+    let publisher_primitives = Arc::new(ClientPrimitives::new());
+    let publisher_face = Arc::downgrade(&router.new_primitives(publisher_primitives.clone()).state);
+    register_expr(
+        &tables,
+        &mut publisher_face.upgrade().unwrap(),
+        11,
+        &"test/late_push".into(),
+    );
+    Primitives::send_declare(
+        publisher_primitives.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/late_push".into(),
+            }),
+        },
+    );
+
+    let subscriber_primitives = Arc::new(ClientPrimitives::new());
+    let subscriber_face =
+        Arc::downgrade(&router.new_primitives(subscriber_primitives.clone()).state);
+    register_expr(
+        &tables,
+        &mut subscriber_face.upgrade().unwrap(),
+        21,
+        &"test/late_push".into(),
+    );
+    Primitives::send_declare(
+        subscriber_primitives.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 21,
+                wire_expr: "test/late_push".into(),
+            }),
+        },
+    );
+    declare_subscription(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut subscriber_face.upgrade().unwrap(),
+        0,
+        &WireExpr::from(21).with_suffix("/**"),
+        &sub_info,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    route_data(
+        &tables,
+        &publisher_face.upgrade().unwrap(),
+        &mut Push {
+            wire_expr: WireExpr::from(11).with_suffix("/before_undeclare"),
+            ..Put::default().into()
+        },
+        Reliability::Reliable,
+        true,
+    );
+    assert_eq!(
+        subscriber_primitives.get_last_name().unwrap(),
+        "test/late_push/before_undeclare"
+    );
+
+    subscriber_primitives.clear_data();
+    unregister_expr(&tables, &mut publisher_face.upgrade().unwrap(), 11);
+    assert!(publisher_face
+        .upgrade()
+        .unwrap()
+        .late_remote_mappings
+        .contains_key(&11));
+
+    route_data(
+        &tables,
+        &publisher_face.upgrade().unwrap(),
+        &mut Push {
+            wire_expr: WireExpr::from(11).with_suffix("/after_undeclare"),
+            ..Put::default().into()
+        },
+        Reliability::Reliable,
+        true,
+    );
+
+    assert_eq!(
+        subscriber_primitives.get_last_name().unwrap(),
+        "test/late_push/after_undeclare"
+    );
+
+    register_expr(
+        &tables,
+        &mut publisher_face.upgrade().unwrap(),
+        11,
+        &"test/late_push/reused".into(),
+    );
+    assert!(!publisher_face
+        .upgrade()
+        .unwrap()
+        .late_remote_mappings
+        .contains_key(&11));
+}
+
+#[test]
 fn get_best_key_test() {
     let router = new_router();
 

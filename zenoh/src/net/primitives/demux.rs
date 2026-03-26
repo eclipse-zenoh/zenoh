@@ -83,6 +83,17 @@ impl InterceptorContext for DeMuxContext<'_> {
                     self.expr
                         .set(prefix.expr().to_string() + wire_expr.suffix.as_ref())
                         .ok();
+                } else if matches!(msg.body, NetworkBodyMut::Push(_)) {
+                    if let Some(prefix) = self
+                        .demux
+                        .face
+                        .state
+                        .get_late_mapping(&wire_expr.scope, wire_expr.mapping)
+                    {
+                        self.expr
+                            .set(prefix.to_string() + wire_expr.suffix.as_ref())
+                            .ok();
+                    }
                 }
             }
         }
