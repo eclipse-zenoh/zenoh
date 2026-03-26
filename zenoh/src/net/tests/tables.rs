@@ -1219,6 +1219,139 @@ fn late_push_after_undeclare_keeps_routing() {
         .contains_key(&11));
 }
 
+/// close_face() drains remote_mappings into late cache so that
+/// queued Push messages on lower-priority channels still route.
+#[test]
+fn forced_face_close_preserves_late_routing() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let sub_info = SubscriberInfo;
+
+    let publisher_primitives = Arc::new(ClientPrimitives::new());
+    let publisher_face = Arc::downgrade(&router.new_primitives(publisher_primitives.clone()).state);
+    register_expr(
+        &tables,
+        &mut publisher_face.upgrade().unwrap(),
+        11,
+        &"test/close_face".into(),
+    );
+    Primitives::send_declare(
+        publisher_primitives.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/close_face".into(),
+            }),
+        },
+    );
+
+    let subscriber_primitives = Arc::new(ClientPrimitives::new());
+    let subscriber_face =
+        Arc::downgrade(&router.new_primitives(subscriber_primitives.clone()).state);
+    register_expr(
+        &tables,
+        &mut subscriber_face.upgrade().unwrap(),
+        21,
+        &"test/close_face".into(),
+    );
+    Primitives::send_declare(
+        subscriber_primitives.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 21,
+                wire_expr: "test/close_face".into(),
+            }),
+        },
+    );
+    declare_subscription(
+        tables.hat_code.as_ref(),
+        &tables,
+        &mut subscriber_face.upgrade().unwrap(),
+        0,
+        &WireExpr::from(21).with_suffix("/**"),
+        &sub_info,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    // Verify normal routing before close
+    route_data(
+        &tables,
+        &publisher_face.upgrade().unwrap(),
+        &mut Push {
+            wire_expr: WireExpr::from(11).with_suffix("/before_close"),
+            ..Put::default().into()
+        },
+        Reliability::Reliable,
+        true,
+    );
+    assert_eq!(
+        subscriber_primitives.get_last_name().unwrap(),
+        "test/close_face/before_close"
+    );
+
+    // Hold a strong ref so the FaceState survives close_face
+    subscriber_primitives.clear_data();
+    let mut publisher_arc = publisher_face.upgrade().unwrap();
+
+    // Force close the publisher face (simulates network timeout)
+    {
+        let ctrl_lock = zlock!(tables.ctrl_lock);
+        tables.hat_code.close_face(
+            &tables,
+            &tables,
+            &mut publisher_arc,
+            &mut |p, m| {
+                m.with_mut(|m| {
+                    p.send_declare(m);
+                })
+            },
+        );
+        drop(ctrl_lock);
+    }
+
+    // remote_mappings should be drained into late cache
+    assert!(
+        publisher_arc.remote_mappings.get(&11).is_none(),
+        "remote_mappings should be empty after close_face"
+    );
+    assert!(
+        publisher_arc.late_remote_mappings.contains_key(&11),
+        "late cache should contain the drained mapping"
+    );
+
+    // Route a late Push through the closed face via late cache fallback
+    route_data(
+        &tables,
+        &publisher_arc,
+        &mut Push {
+            wire_expr: WireExpr::from(11).with_suffix("/after_close"),
+            ..Put::default().into()
+        },
+        Reliability::Reliable,
+        true,
+    );
+
+    assert_eq!(
+        subscriber_primitives.get_last_name().unwrap(),
+        "test/close_face/after_close"
+    );
+}
+
+/// Byte budget eviction: large key expressions trigger eviction
+
 #[test]
 fn get_best_key_test() {
     let router = new_router();

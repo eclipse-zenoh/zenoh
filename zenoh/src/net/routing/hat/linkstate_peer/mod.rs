@@ -288,32 +288,42 @@ impl HatBaseTrait for HatCode {
         let mut wtables = zwrite!(tables.tables);
         let mut face_clone = face.clone();
         let face = get_mut_unchecked(face);
-        let hat_face = match face.hat.downcast_mut::<HatFace>() {
-            Some(hate_face) => hate_face,
-            None => {
-                tracing::error!("Error downcasting face hat in close_face!");
-                return;
-            }
-        };
-
-        hat_face.remote_interests.clear();
-        hat_face.local_subs.clear();
-        hat_face.local_qabls.clear();
-        hat_face.local_tokens.clear();
+        {
+            let hat_face = match face.hat.downcast_mut::<HatFace>() {
+                Some(hat_face) => hat_face,
+                None => {
+                    tracing::error!("Error downcasting face hat in close_face!");
+                    return;
+                }
+            };
+            hat_face.remote_interests.clear();
+            hat_face.local_subs.clear();
+            hat_face.local_qabls.clear();
+            hat_face.local_tokens.clear();
+        }
 
         for res in face.remote_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
         }
+        // close_face: drain remote_mappings into late cache before clearing.
+        // Protects queued Push messages in lower-priority channels after forced close.
+        let mappings_to_cache: Vec<_> = face
+            .remote_mappings
+            .iter()
+            .map(|(expr_id, res)| (*expr_id, res.expr().to_owned()))
+            .collect();
         face.remote_mappings.clear();
-        face.late_remote_mappings.clear();
-        face.late_remote_mappings_order.clear();
+        for (expr_id, expr) in mappings_to_cache {
+            face.insert_late_remote_mapping(expr_id, expr);
+        }
         for res in face.local_mappings.values_mut() {
             get_mut_unchecked(res).session_ctxs.remove(&face.id);
             Resource::clean(res);
         }
         face.local_mappings.clear();
 
+        let hat_face = face.hat.downcast_mut::<HatFace>().unwrap();
         let mut subs_matches = vec![];
         for (_id, mut res) in hat_face.remote_subs.drain() {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
