@@ -323,9 +323,6 @@ pub(crate) type QueryRoutes = Routes<Arc<QueryTargetQablSet>>;
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    // REVIEW(regions): added because e.g. router/router bounds needs separate Routes (WhatAmI,
-    // NodeId -> Route) since each linkstate has a NodeId space, but this is no longer true. Is this
-    // still needed?
     pub(crate) hats: RegionMap<HatResourceContext>,
     pub(crate) data_routes: RwLock<DataRoutes>,
     #[cfg(feature = "stats")]
@@ -1003,11 +1000,10 @@ pub(crate) fn register_expr(
 
                 let tables = &mut *wtables;
                 let hats = &mut tables.hats;
-                let tables = &mut tables.data;
                 let region = face.region;
 
-                hats[region].disable_data_routes(tables, &mut res);
-                hats[region].disable_query_routes(tables, &mut res);
+                hats[region].disable_data_routes(&mut res);
+                hats[region].disable_query_routes(&mut res);
 
                 face.update_interceptors_caches(&mut res);
                 drop(wtables);
@@ -1026,7 +1022,6 @@ pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, ex
 
     let tables = &mut *wtables;
     let hats = &mut tables.hats;
-    let tables = &mut tables.data;
     let region = face.region;
 
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
@@ -1034,8 +1029,8 @@ pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, ex
             if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&face.id) {
                 get_mut_unchecked(ctx).remote_expr_id = None;
             }
-            hats[region].disable_data_routes(tables, &mut res);
-            hats[region].disable_query_routes(tables, &mut res);
+            hats[region].disable_data_routes(&mut res);
+            hats[region].disable_query_routes(&mut res);
             face.update_interceptors_caches(&mut res);
             Resource::clean(&mut res);
         }

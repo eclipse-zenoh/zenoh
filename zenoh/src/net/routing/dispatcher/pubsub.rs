@@ -67,16 +67,16 @@ impl Face {
 
             hats[region].register_subscriber(ctx.reborrow(), id, res.clone(), node_id, sub_info);
 
-            hats[region].disable_data_routes(ctx.tables, &mut res);
+            hats[region].disable_data_routes(&mut res);
 
-            for region in hats.regions().collect_vec() {
+            for dst in hats.regions().collect_vec() {
                 let other_info = hats
                     .values()
-                    .filter(|hat| hat.region() != region)
+                    .filter(|hat| hat.region() != dst)
                     .flat_map(|hat| hat.remote_subscribers_of(ctx.tables, &res))
                     .reduce(|_, _| SubscriberInfo);
 
-                hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
+                hats[dst].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
             }
         });
     }
@@ -107,7 +107,7 @@ impl Face {
             if let Some(mut res) =
                 tables.hats[region].unregister_subscriber(ctx.reborrow(), id, res.clone(), node_id)
             {
-                tables.hats[region].disable_data_routes(ctx.tables, &mut res);
+                tables.hats[region].disable_data_routes(&mut res);
 
                 let mut remaining = tables
                     .hats

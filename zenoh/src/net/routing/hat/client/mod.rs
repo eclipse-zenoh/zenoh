@@ -154,10 +154,10 @@ impl HatBaseTrait for Hat {
         debug_assert!(ctx.src_face.region.bound().is_north());
         debug_assert_eq!(self.owned_faces(ctx.tables).count(), 1);
 
-        self.interests_new_face(ctx.reborrow(), &other_hats);
-        self.pubsub_new_face(ctx.reborrow(), &other_hats);
-        self.queries_new_face(ctx.reborrow(), &other_hats);
-        self.tokens_new_face(ctx.reborrow(), &other_hats);
+        self.repropagate_interests(ctx.reborrow(), &other_hats);
+        self.repropagate_subscribers(ctx.reborrow(), &other_hats);
+        self.repropagate_queryables(ctx.reborrow(), &other_hats);
+        self.repropagate_tokens(ctx.reborrow(), &other_hats);
         self.disable_all_routes(ctx.tables);
         Ok(())
     }
@@ -259,7 +259,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing as 0 is reserved for `INITIAL_INTEREST`
+            next_id: AtomicU32::new(1),
             remote_interests: HashMap::new(),
             local_subs: HashMap::new(),
             remote_subs: HashMap::new(),

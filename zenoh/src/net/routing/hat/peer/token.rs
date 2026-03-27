@@ -35,7 +35,8 @@ use crate::net::routing::{
 use crate::zenoh_core::polyfill::*;
 
 impl Hat {
-    pub(super) fn tokens_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_tokens(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
@@ -49,7 +50,7 @@ impl Hat {
             .values()
             .flat_map(|hat| hat.remote_tokens(ctx.tables).into_iter())
         {
-            // FIXME(regions): we always propagate entities in this codepath; the method name is misleading
+            // TODO(regions): we always propagate entities in this codepath; the method name is misleading
             self.maybe_propagate_token(&res, ctx.src_face, ctx.send_declare);
         }
     }
@@ -79,6 +80,7 @@ impl Hat {
                 .local_tokens
                 .insert(res.clone(), id);
             let key_expr = Resource::decl_key(res, dst_face);
+            tracing::debug!(dst = %dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -105,6 +107,7 @@ impl Hat {
         send_declare: &mut SendDeclare,
     ) {
         if let Some(id) = self.face_hat_mut(dst_face).local_tokens.remove(res) {
+            tracing::debug!(dst = %dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(
@@ -129,6 +132,7 @@ impl Hat {
         {
             // Token has never been declared on this face.
             // Send an Undeclare with a one shot generated id and a WireExpr ext.
+            tracing::debug!(dst = %dst_face);
             send_declare(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

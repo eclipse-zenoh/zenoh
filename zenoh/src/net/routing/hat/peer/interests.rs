@@ -42,13 +42,14 @@ use crate::net::routing::{
     gateway::SubscriberInfo,
     hat::{
         DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
-        RouteCurrentDeclareResult,
+        RouteCurrentDeclareResult, RouteInterestResult,
     },
     RoutingContext,
 };
 
 impl Hat {
-    pub(super) fn interests_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_interests(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
@@ -102,7 +103,9 @@ impl HatInterestTrait for Hat {
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteInterestResult {
+        use RouteInterestResult::*;
+
         debug_assert_ne!(msg.mode, InterestMode::Final);
         debug_assert!(self.region().bound().is_north());
         debug_assert_implies!(
@@ -111,15 +114,8 @@ impl HatInterestTrait for Hat {
         );
         debug_assert_implies!(msg.mode == InterestMode::Current, msg.options.tokens());
 
-        let interest = CurrentInterest {
-            src: src.clone(),
-            src_region: ctx.src_face.region,
-            src_interest_id: msg.id,
-            mode: msg.mode,
-        };
-
         if ctx.src_face.region.bound().is_north() {
-            return Some(interest);
+            return ResolvedCurrentInterest;
         }
 
         // NOTE(regions): `Current` (and not `CurrentFuture`) interests are stateless, i.e. gateways
@@ -141,8 +137,8 @@ impl HatInterestTrait for Hat {
                 )
                 .cloned()
                 .collect_vec()
-            // FIXME(regions): we may get duplicates tokens when sending to one gateway _and_ one
-            // peer with unfinalized initial interest.
+            // FIXME(regions): we may get duplicate tokens when sending to one gateway _and_ (at
+            // least) one peer with unfinalized initial interest.
         } else {
             self.owned_faces(ctx.tables)
                 .filter(|f| f.remote_bound.is_south())
@@ -150,7 +146,12 @@ impl HatInterestTrait for Hat {
                 .collect_vec()
         };
 
-        let interest = Arc::new(interest);
+        let interest = Arc::new(CurrentInterest {
+            src: src.clone(),
+            src_region: ctx.src_face.region,
+            src_interest_id: msg.id,
+            mode: msg.mode,
+        });
 
         for mut dst in dsts {
             let id = self.face_hat(&dst).next_id.fetch_add(1, Ordering::SeqCst);
@@ -200,13 +201,11 @@ impl HatInterestTrait for Hat {
             ));
         }
 
-        if msg.mode.is_current() {
-            if let Some(interest) = Arc::into_inner(interest) {
-                return Some(interest);
-            }
+        if msg.mode.is_current() && Arc::into_inner(interest).is_some() {
+            ResolvedCurrentInterest
+        } else {
+            Noop
         }
-
-        None
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
@@ -391,6 +390,7 @@ impl HatInterestTrait for Hat {
                 if msg.mode.is_current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
                     let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    tracing::debug!(dst = %ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -426,6 +426,7 @@ impl HatInterestTrait for Hat {
                     0
                 };
                 let wire_expr = Resource::decl_key(&sub, ctx.src_face);
+                tracing::debug!(dst = %ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -491,6 +492,7 @@ impl HatInterestTrait for Hat {
                 if let Some(ext_info) = msg.mode.is_current().then_some(qabl_info).flatten() {
                     // send declare only if there is at least one resource matching the aggregate
                     let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    tracing::debug!(dst = %ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -527,6 +529,7 @@ impl HatInterestTrait for Hat {
                     QueryableId::default()
                 };
                 let wire_expr = Resource::decl_key(&qabl, ctx.src_face);
+                tracing::debug!(dst = %ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -577,6 +580,7 @@ impl HatInterestTrait for Hat {
             };
 
             let wire_expr = Resource::decl_key(&token, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -622,6 +626,7 @@ impl HatInterestTrait for Hat {
         };
 
         let wire_expr = Resource::decl_key(&res, &mut dst.clone());
+        tracing::debug!(dst = %dst);
         (ctx.send_declare)(
             &dst.primitives,
             RoutingContext::with_expr(
@@ -643,6 +648,7 @@ impl HatInterestTrait for Hat {
 
         let dst_face = self.hat_remote(dst);
 
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::new(Declare {

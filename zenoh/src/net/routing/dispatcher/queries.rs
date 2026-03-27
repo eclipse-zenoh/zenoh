@@ -95,17 +95,17 @@ impl Face {
                 qabl_info,
             );
 
-            tables.hats[region].disable_query_routes(ctx.tables, &mut res);
+            tables.hats[region].disable_query_routes(&mut res);
 
-            for region in tables.hats.regions().collect_vec() {
+            for dst in tables.hats.regions().collect_vec() {
                 let other_info = tables
                     .hats
                     .values()
-                    .filter(|hat| hat.region() != region)
+                    .filter(|hat| hat.region() != dst)
                     .flat_map(|hat| hat.remote_queryables_of(ctx.tables, &res))
                     .reduce(merge_qabl_infos);
 
-                tables.hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
+                tables.hats[dst].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
             }
         });
     }
@@ -137,17 +137,17 @@ impl Face {
             {
                 UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
                 UnregisterEntityResult::InfoUpdate { mut res } => {
-                    tables.hats[region].disable_query_routes(ctx.tables, &mut res);
+                    tables.hats[region].disable_query_routes(&mut res);
 
-                    for region in tables.hats.regions().collect_vec() {
+                    for dst in tables.hats.regions().collect_vec() {
                         let other_info = tables
                             .hats
                             .values()
-                            .filter(|hat| hat.region() != region)
+                            .filter(|hat| hat.region() != dst)
                             .filter_map(|hat| hat.remote_queryables_of(ctx.tables, &res))
                             .reduce(merge_qabl_infos);
 
-                        tables.hats[region].propagate_queryable(
+                        tables.hats[dst].propagate_queryable(
                             ctx.reborrow(),
                             res.clone(),
                             other_info,
@@ -155,7 +155,7 @@ impl Face {
                     }
                 }
                 UnregisterEntityResult::LastUnregistered { mut res } => {
-                    tables.hats[region].disable_query_routes(ctx.tables, &mut res);
+                    tables.hats[region].disable_query_routes(&mut res);
 
                     let remainder = tables
                         .hats

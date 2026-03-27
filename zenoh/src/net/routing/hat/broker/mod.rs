@@ -266,7 +266,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
-            next_id: AtomicU32::new(1), // REVIEW(regions): changed form 0 to 1 to simplify testing as 0 is reserved for `INITIAL_INTEREST`
+            next_id: AtomicU32::new(1),
             remote_interests: HashMap::new(),
             local_subs: LocalSubscribers::new(),
             remote_subs: HashMap::new(),

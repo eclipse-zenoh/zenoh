@@ -307,13 +307,14 @@ impl HatBaseTrait for Hat {
             );
         }
 
-        self.interests_new_face(ctx.reborrow(), &other_hats);
-        self.pubsub_new_face(ctx.reborrow(), &other_hats);
-        self.queries_new_face(ctx.reborrow(), &other_hats);
-        self.tokens_new_face(ctx.reborrow(), &other_hats);
+        self.repropagate_interests(ctx.reborrow(), &other_hats);
+        self.repropagate_subscribers(ctx.reborrow(), &other_hats);
+        self.repropagate_queryables(ctx.reborrow(), &other_hats);
+        self.repropagate_tokens(ctx.reborrow(), &other_hats);
         self.disable_all_routes(ctx.tables);
 
         if do_initial_interest {
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::new(Declare {
@@ -375,7 +376,7 @@ impl HatBaseTrait for Hat {
                         bail!("failed to decode link state");
                     };
 
-                    tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
+                    tracing::trace!(linkstate = ?list);
 
                     net.link_states(list.link_states, ctx.src_face.zid, ctx.src_face.whatami);
                 }

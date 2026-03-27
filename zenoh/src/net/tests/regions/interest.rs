@@ -132,7 +132,15 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
 
+    assert_eq!(p0.recorder().declare_finals().len(), 1);
+    assert_eq!(p1.recorder().declare_finals().len(), 1);
+
     p0.interest_wildcard(42, InterestMode::Current, InterestOptions::TOKENS);
+
+    assert_eq!(p0.recorder().tokens().len(), 0);
+
+    assert_eq!(p0.recorder().declare_finals().len(), 2);
+    assert_eq!(p1.recorder().declare_finals().len(), 1);
 
     assert!(p0.recorder().interests().is_empty());
     assert!(p1.recorder().interests().is_empty());
@@ -153,7 +161,15 @@ fn test_p2p_interest_routing_with_finalized_initial_interests() {
     p0.declare_final(0);
     p1.declare_final(0);
 
+    assert_eq!(p0.recorder().declare_finals().len(), 1);
+    assert_eq!(p1.recorder().declare_finals().len(), 1);
+
     p0.interest_wildcard(42, InterestMode::Current, InterestOptions::TOKENS);
+
+    assert_eq!(p0.recorder().tokens().len(), 0);
+
+    assert_eq!(p0.recorder().declare_finals().len(), 2);
+    assert_eq!(p1.recorder().declare_finals().len(), 1);
 
     assert!(p0.recorder().interests().is_empty());
     assert!(p1.recorder().interests().is_empty());
@@ -220,4 +236,19 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     n.declare_queryable(Some(42), 1999, "k");
 
     assert_eq!(s.recorder().queryables().len(), 1);
+}
+
+/// Test that gateways send back declare final if there is no upstream.
+#[test_case::test_matrix([WhatAmI::Client, WhatAmI::Peer, WhatAmI::Router])]
+fn test_current_interest_finalization(mode: WhatAmI) {
+    let g = HarnessBuilder::new()
+        .mode(mode)
+        .subregions([Region::Local])
+        .build();
+
+    let s = g.new_session();
+
+    s.interest_wildcard(2, InterestMode::CurrentFuture, InterestOptions::ALL);
+
+    assert_eq!(s.recorder().declare_finals().len(), 1)
 }

@@ -95,8 +95,7 @@ impl Hat {
         );
 
         for update in qabls_to_notify {
-            // TODO(regions*): add this everywhere else
-            tracing::trace!(%dst);
+            tracing::debug!(dst = %dst);
             let key_expr = Resource::decl_key(&update.resource, dst);
             send_declare(
                 &dst.primitives,
@@ -131,6 +130,7 @@ impl Hat {
         {
             match update.update {
                 Some(new_qabl_info) => {
+                    tracing::debug!(dst = %face, update = true);
                     let key_expr = Resource::decl_key(&update.resource, face);
                     send_declare(
                         &face.primitives,
@@ -150,22 +150,25 @@ impl Hat {
                         ),
                     );
                 }
-                None => send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id: update.id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        update.resource.expr().to_string(),
-                    ),
-                ),
+                None => {
+                    tracing::debug!(dst = %face, update = false);
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id: update.id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            update.resource.expr().to_string(),
+                        ),
+                    );
+                }
             };
         }
     }
@@ -314,7 +317,7 @@ impl HatQueriesTrait for Hat {
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for ctx in self.owned_face_contexts(&mres) {
                 if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                    tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
+                    tracing::debug!(dst = %ctx.face, dst.has_queryable = true);
                     route.push(qabl);
                 }
             }
@@ -377,7 +380,6 @@ impl HatQueriesTrait for Hat {
             .face_hat(ctx.src_face)
             .remote_qabls
             .values()
-            // REVIEW(regions): use Arc::ptr_eq?
             .any(|(r, i)| r == &res && i == &info)
         {
             tracing::debug!("Duplicate");

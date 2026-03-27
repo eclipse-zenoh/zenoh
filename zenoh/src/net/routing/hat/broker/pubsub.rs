@@ -91,6 +91,7 @@ impl Hat {
         );
 
         for update in subs_to_notify {
+            tracing::debug!(dst = %dst_face);
             let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
@@ -123,6 +124,7 @@ impl Hat {
             .local_subs
             .remove_simple_resource(res)
         {
+            tracing::debug!(dst = %face);
             send_declare(
                 &face.primitives,
                 RoutingContext::with_expr(
@@ -262,7 +264,7 @@ impl HatPubSubTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
+                        tracing::debug!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),

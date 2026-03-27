@@ -696,7 +696,7 @@ impl Primitives for Face {
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
-    #[tracing::instrument(level = "debug", skip(self), fields(src = %self) ret)]
+    #[tracing::instrument(level = "debug", skip(self), fields(src = %self), ret)]
     fn send_close(&self) {
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
@@ -721,7 +721,7 @@ impl Primitives for Face {
         let src_fid = ctx.src_face.id;
 
         for mut res in hats[region].unregister_face_subscribers(ctx.reborrow()) {
-            hats[region].disable_data_routes(ctx.tables, &mut res);
+            hats[region].disable_data_routes(&mut res);
 
             let mut remaining = hats
                 .values_mut()
@@ -740,7 +740,7 @@ impl Primitives for Face {
         }
 
         for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
-            hats[region].disable_query_routes(ctx.tables, &mut res);
+            hats[region].disable_query_routes(&mut res);
 
             let remaining = hats
                 .iter()

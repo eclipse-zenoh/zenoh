@@ -37,12 +37,13 @@ use crate::net::routing::{
     gateway::SubscriberInfo,
     hat::{
         DispatcherContext, HatBaseTrait, HatInterestTrait, HatTrait, Remote,
-        RouteCurrentDeclareResult,
+        RouteCurrentDeclareResult, RouteInterestResult,
     },
     RoutingContext,
 };
 impl Hat {
-    pub(super) fn interests_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_interests(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
@@ -90,7 +91,9 @@ impl HatInterestTrait for Hat {
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteInterestResult {
+        use RouteInterestResult::*;
+
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
@@ -159,13 +162,11 @@ impl HatInterestTrait for Hat {
             tracing::debug!("Client region is empty");
         }
 
-        if msg.mode.is_current() {
-            if let Some(interest) = Arc::into_inner(interest) {
-                return Some(interest);
-            }
+        if msg.mode.is_current() && Arc::into_inner(interest).is_some() {
+            ResolvedCurrentInterest
+        } else {
+            Noop
         }
-
-        None
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]
@@ -321,7 +322,7 @@ impl HatInterestTrait for Hat {
     }
 
     fn send_declare_final(&mut self, _ctx: DispatcherContext, _id: InterestId, _src: &Remote) {
-        unreachable!("outh-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn register_interest(

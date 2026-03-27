@@ -151,8 +151,8 @@ impl Remote {
         self.0.as_any()
     }
 
-    pub(crate) fn downcast_ref_to_face(&self) -> &Arc<FaceState> {
-        self.as_any().downcast_ref().unwrap()
+    pub(crate) fn downcast_ref_to_face(&self) -> Option<&Arc<FaceState>> {
+        self.as_any().downcast_ref()
     }
 }
 
@@ -269,11 +269,8 @@ pub(crate) trait HatBaseTrait: Any {
         self.region() == face.region
     }
 
-    // TODO(regions): in the following two methods, `&mut self` is enough to ""ensure"" that we have
-    // the gateway lock, so `&mut TablesData` can be ""safely"" removed.
-
     /// Disables this hat's data routes for the given resource and all its matches.
-    fn disable_data_routes(&mut self, _tables: &mut TablesData, res: &mut Arc<Resource>) {
+    fn disable_data_routes(&mut self, res: &mut Arc<Resource>) {
         if res.ctx.is_some() {
             get_mut_unchecked(res).context_mut().hats[self.region()].disable_data_routes();
             get_mut_unchecked(res).context_mut().disable_data_routes();
@@ -292,7 +289,7 @@ pub(crate) trait HatBaseTrait: Any {
     }
 
     /// Disables this hat's query routes for the given resource and all its matches.
-    fn disable_query_routes(&mut self, _tables: &mut TablesData, res: &mut Arc<Resource>) {
+    fn disable_query_routes(&mut self, res: &mut Arc<Resource>) {
         if res.ctx.is_some() {
             get_mut_unchecked(res).context_mut().hats[self.region()].disable_query_routes();
 
@@ -326,7 +323,16 @@ pub(crate) enum RouteCurrentDeclareResult {
     NoBreadcrumb,
 }
 
-// REVIEW(regions): do resources need to be &mut Arc<Resource> instead of &Arc<Resource>?
+/// Return value of [`HatInterestTrait::route_interest`].
+#[derive(Debug)]
+pub(crate) enum RouteInterestResult {
+    /// Indicates that the caller should send [`zenoh_protocol::network::declare::DeclareFinal`] to
+    /// the interest source.
+    ResolvedCurrentInterest,
+    /// Indicates that the operation failed or has no effect on the dispatcher (e.g. interest is not
+    /// current and/or was not propagated upstream).
+    Noop,
+}
 
 /// Hat interest protocol interface.
 ///
@@ -359,7 +365,7 @@ pub(crate) trait HatInterestTrait {
         msg: &Interest,
         res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest>; // TODO(regions): it's odd that this needs to be `Some` for "resolved interest" (i.e. doing nothing for router hats).
+    ) -> RouteInterestResult;
 
     fn route_interest_final(
         &mut self,
@@ -412,12 +418,7 @@ pub(crate) trait HatInterestTrait {
         interest: CurrentInterest,
     );
 
-    fn send_declare_final(
-        &mut self,
-        ctx: DispatcherContext,
-        interest_id: InterestId, // TODO(regions): change to &Interest (?)
-        dst: &Remote,
-    );
+    fn send_declare_final(&mut self, ctx: DispatcherContext, interest_id: InterestId, dst: &Remote);
 
     fn register_interest(
         &mut self,

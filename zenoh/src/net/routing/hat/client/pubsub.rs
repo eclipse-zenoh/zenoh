@@ -43,7 +43,8 @@ use crate::net::routing::{
 };
 
 impl Hat {
-    pub(super) fn pubsub_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_subscribers(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
@@ -64,6 +65,7 @@ impl Hat {
                 .local_subs
                 .insert(res.clone(), id);
             let key_expr = Resource::decl_key(&res, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -147,7 +149,7 @@ impl HatPubSubTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() && *src_region != self.region() {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
+                        tracing::debug!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -170,7 +172,7 @@ impl HatPubSubTrait for Hat {
                         .and_then(|res| res.face_ctxs.get(&face.id))
                         .is_some_and(|ctx| ctx.subscriber_interest_finalized);
                     (!has_interest_finalized).then(|| {
-                        tracing::trace!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
+                        tracing::debug!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),
@@ -300,6 +302,7 @@ impl HatPubSubTrait for Hat {
             .local_subs
             .insert(res.clone(), id);
         let key_expr = Resource::decl_key(&res, &mut dst_face);
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -326,6 +329,7 @@ impl HatPubSubTrait for Hat {
         };
 
         if let Some(id) = self.face_hat_mut(&mut dst_face).local_subs.remove(&res) {
+            tracing::debug!(dst = %dst_face);
             (ctx.send_declare)(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

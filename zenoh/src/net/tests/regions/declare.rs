@@ -14,7 +14,10 @@
 
 //! Tests involving [`zenoh_protocol::network::declare`].
 
-use zenoh_protocol::core::{Bound, Region, WhatAmI};
+use zenoh_protocol::{
+    core::{Bound, Region, WhatAmI, WireExpr},
+    network::Mapping,
+};
 
 use super::{
     try_init_tracing_subscriber, Connection, EstablishedConnection, FaceDef, HarnessBuilder,
@@ -283,4 +286,48 @@ fn test_client_token_repropagation() {
     let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
 
     assert_eq!(n.recorder().tokens().len(), 3);
+}
+
+/// Tests that queryable declaration doesn't result in undeclaration of its duplicates.
+#[test]
+fn test_duplicate_queryable_undeclaration() {
+    try_init_tracing_subscriber();
+
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::Client)
+        .subregions([Region::default_south(WhatAmI::Client)])
+        .start_runtime(false)
+        .build();
+
+    let c0 = g.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(Region::default_south(WhatAmI::Client)),
+    );
+
+    c0.declare_keyexpr(None, 5, "k");
+
+    c0.declare_queryable(
+        None,
+        1,
+        WireExpr {
+            scope: 5,
+            suffix: "".into(),
+            mapping: Mapping::Sender,
+        },
+    );
+
+    c0.declare_queryable(None, 2, "k");
+
+    c0.undeclare_queryable(1);
+
+    let c1 = g.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(Region::default_south(WhatAmI::Client)),
+    );
+
+    c1.query(1, "k");
+
+    assert_eq!(c0.recorder().requests().len(), 1);
 }

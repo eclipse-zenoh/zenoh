@@ -48,7 +48,8 @@ use crate::net::routing::{
 };
 
 impl Hat {
-    pub(super) fn queries_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_queryables(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
@@ -78,6 +79,7 @@ impl Hat {
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(&res, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -162,7 +164,7 @@ impl HatQueriesTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if self.region() != *src_region {
                     if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region) {
-                        tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
+                        tracing::debug!(dst = %ctx.face, dst.has_queryable = true);
                         route.push(qabl);
                     }
                 }
@@ -179,7 +181,7 @@ impl HatQueriesTrait for Hat {
                     .and_then(|res| res.face_ctxs.get(&face.id))
                     .is_some_and(|ctx| ctx.queryable_interest_finalized);
                 if !has_interest_finalized {
-                    tracing::trace!(dst = %face, dst.has_unfinalized_queryable_interest = true);
+                    tracing::debug!(dst = %face, dst.has_unfinalized_queryable_interest = true);
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         info: None,
@@ -327,6 +329,7 @@ impl HatQueriesTrait for Hat {
             .local_qabls
             .insert(res.clone(), (id, info));
         let key_expr = Resource::decl_key(&res, &mut dst_face);
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -356,6 +359,7 @@ impl HatQueriesTrait for Hat {
         };
 
         if let Some((id, _)) = self.face_hat_mut(&mut dst_face).local_qabls.remove(&res) {
+            tracing::debug!(dst = %dst_face);
             (ctx.send_declare)(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

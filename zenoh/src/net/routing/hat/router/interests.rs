@@ -28,27 +28,25 @@ use crate::net::routing::{
         tables::TablesData,
     },
     gateway::SubscriberInfo,
-    hat::{DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentDeclareResult},
+    hat::{
+        DispatcherContext, HatBaseTrait, HatInterestTrait, Remote, RouteCurrentDeclareResult,
+        RouteInterestResult,
+    },
 };
 
 impl HatInterestTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(ctx, msg), fields(%src), ret)]
+    #[tracing::instrument(level = "debug", skip(ctx, _msg), fields(%src), ret)]
     fn route_interest(
         &mut self,
         ctx: DispatcherContext,
-        msg: &Interest,
+        _msg: &Interest,
         _res: Option<Arc<Resource>>,
         src: &Remote,
-    ) -> Option<CurrentInterest> {
+    ) -> RouteInterestResult {
         debug_assert!(self.region().bound().is_north());
         debug_assert!(ctx.src_face.region.bound().is_south());
 
-        Some(CurrentInterest {
-            src: src.clone(),
-            src_region: ctx.src_face.region,
-            src_interest_id: msg.id,
-            mode: msg.mode,
-        })
+        RouteInterestResult::ResolvedCurrentInterest
     }
 
     #[tracing::instrument(level = "debug", skip(ctx, _msg), ret)]

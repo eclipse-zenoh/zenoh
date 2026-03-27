@@ -361,8 +361,6 @@ impl HatBaseTrait for Hat {
                     .flat_map(|(_, node)| self.unregister_node_tokens(node))
                     .collect::<HashSet<_>>();
 
-                // TODO(regions): refactor?
-
                 let region = self.region();
 
                 let mut hats = other_hats
@@ -371,7 +369,7 @@ impl HatBaseTrait for Hat {
                     .collect::<RegionMap<_>>();
 
                 for mut res in removed_subscribers {
-                    hats[region].disable_data_routes(ctx.tables, &mut res);
+                    hats[region].disable_data_routes(&mut res);
 
                     let mut remaining = hats
                         .values_mut()
@@ -390,7 +388,7 @@ impl HatBaseTrait for Hat {
                 }
 
                 for mut res in removed_queryables {
-                    hats[region].disable_query_routes(ctx.tables, &mut res);
+                    hats[region].disable_query_routes(&mut res);
 
                     let remaining = hats
                         .iter()

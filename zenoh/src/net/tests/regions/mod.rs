@@ -297,6 +297,25 @@ impl RecordingPrimitives {
             .collect()
     }
 
+    pub(crate) fn declare_finals(&self) -> Vec<DeclareFinal> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Declare(Declare {
+                    body: DeclareBody::DeclareFinal(u),
+                    ..
+                }) = m
+                {
+                    Some(u.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub(crate) fn oams(&self) -> Vec<Oam> {
         self.messages
             .lock()

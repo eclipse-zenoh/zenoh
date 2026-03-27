@@ -102,6 +102,7 @@ impl Hat {
                         {
                             let key_expr = Resource::decl_key(res, &mut someface);
 
+                            tracing::debug!(dst = %someface);
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,
@@ -182,6 +183,7 @@ impl Hat {
                         {
                             let wire_expr = Resource::decl_key(res, &mut someface);
 
+                            tracing::debug!(dst = %someface);
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,
@@ -339,7 +341,7 @@ impl HatPubSubTrait for Hat {
                                 if net.graph.contains_node(direction) {
                                     if let Some(face) = this.face(tables, &net.graph[direction].zid)
                                     {
-                                        tracing::trace!(dst = %face, dst.has_subscriber = true);
+                                        tracing::debug!(dst = %face, dst.has_subscriber = true);
                                         route.insert(face.id, || {
                                             let wire_expr = expr.get_best_key(face.id);
                                             Direction {

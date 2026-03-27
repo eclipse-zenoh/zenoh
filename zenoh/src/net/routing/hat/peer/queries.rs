@@ -49,13 +49,14 @@ use crate::net::routing::{
 };
 
 impl Hat {
-    pub(super) fn queries_new_face(
+    #[tracing::instrument(level = "debug", skip_all, ret)]
+    pub(super) fn repropagate_queryables(
         &self,
         ctx: DispatcherContext,
         other_hats: &RegionMap<&dyn HatTrait>,
     ) {
         if ctx.src_face.region.bound().is_south() {
-            tracing::trace!(face = %ctx.src_face, "New south-bound peer remote; not propagating queryables");
+            tracing::debug!(face = %ctx.src_face, "New south-bound peer remote; not propagating queryables");
             return;
         }
 
@@ -72,7 +73,7 @@ impl Hat {
             });
 
         for (res, info) in qabls {
-            // NOTE(regions): we always propagate entities in this codepath; the method name is misleading
+            // TODO(regions): we always propagate entities in this codepath; the method name is misleading
             self.maybe_propagate_queryable(&res, &info, ctx.src_face, ctx.send_declare);
         }
     }
@@ -124,6 +125,7 @@ impl Hat {
         );
 
         for update in qabls_to_notify {
+            tracing::debug!(dst = %dst_face);
             let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
@@ -158,6 +160,7 @@ impl Hat {
         {
             match update.update {
                 Some(new_qabl_info) => {
+                    tracing::debug!(dst = %face, update = true);
                     let key_expr = Resource::decl_key(&update.resource, face);
                     send_declare(
                         &face.primitives,
@@ -177,22 +180,25 @@ impl Hat {
                         ),
                     );
                 }
-                None => send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id: update.id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        update.resource.expr().to_string(),
-                    ),
-                ),
+                None => {
+                    tracing::debug!(dst = %face, update = false);
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id: update.id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            update.resource.expr().to_string(),
+                        ),
+                    );
+                }
             };
         }
     }
@@ -283,7 +289,7 @@ impl HatQueriesTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if self.region() != *src_region {
                     if let Some(qabl) = QueryTargetQabl::new(ctx, expr, complete, &self.region()) {
-                        tracing::trace!(dst = %ctx.face, dst.has_queryable = true);
+                        tracing::debug!(dst = %ctx.face, dst.has_queryable = true);
                         route.push(qabl);
                     }
                 }
@@ -301,7 +307,7 @@ impl HatQueriesTrait for Hat {
                     .and_then(|res| res.face_ctxs.get(&face.id))
                     .is_some_and(|ctx| ctx.queryable_interest_finalized);
                 if !has_interest_finalized {
-                    tracing::trace!(dst = %face, dst.has_unfinalized_queryable_interest = true);
+                    tracing::debug!(dst = %face, dst.has_unfinalized_queryable_interest = true);
                     let wire_expr = expr.get_best_key(face.id);
                     route.push(QueryTargetQabl {
                         dir: Direction {
@@ -318,7 +324,7 @@ impl HatQueriesTrait for Hat {
             for face in self.owned_faces(tables).filter(|f| {
                 f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
             }) {
-                tracing::trace!(dst = %face, dst.has_unfinalized_initial_interest = true);
+                tracing::debug!(dst = %face, dst.has_unfinalized_initial_interest = true);
                 let wire_expr = expr.get_best_key(face.id);
                 route.push(QueryTargetQabl {
                     dir: Direction {
@@ -396,7 +402,6 @@ impl HatQueriesTrait for Hat {
             .face_hat(ctx.src_face)
             .remote_qabls
             .values()
-           // REVIEW(regions): use Arc::ptr_eq?
             .any(|(r, i)| r == &res && i == &info)
         {
             tracing::debug!("Duplicate");

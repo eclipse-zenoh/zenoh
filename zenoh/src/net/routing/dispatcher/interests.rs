@@ -36,7 +36,7 @@ use super::{face::FaceState, tables::TablesLock};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::Tables},
     gateway::{register_expr_interest, NodeId, Resource},
-    hat::{DispatcherContext, Remote, RouteCurrentDeclareResult, SendDeclare},
+    hat::{DispatcherContext, Remote, RouteCurrentDeclareResult, RouteInterestResult, SendDeclare},
     RoutingContext,
 };
 
@@ -94,8 +94,11 @@ pub(crate) fn finalize_pending_interest(
     let interest = pending_interest.interest;
     pending_interest.cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
-        // FIXME(regions): this code is specific to peer/client hats
-        let src_face = interest.src.downcast_ref_to_face();
+        // FIXME(regions): this is only safe as long as router interests remain unimplemented
+        let src_face = interest
+            .src
+            .downcast_ref_to_face()
+            .expect("interest source remote should be a face");
 
         tracing::debug!(
             "{}:{} Propagate DeclareFinal",
@@ -260,12 +263,12 @@ impl Face {
                 send_declare,
             };
 
-            let Some(remote) = hats[region].new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
+            let Some(src) = hats[region].new_remote(ctx.src_face, msg.ext_nodeid.node_id) else {
                 return;
             };
 
-            let resolved_interest_opt =
-                hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &remote);
+            let route_interest_res =
+                hats[Region::North].route_interest(ctx.reborrow(), msg, res.clone(), &src);
 
             if msg.mode.is_current() {
                 if msg.options.subscribers() {
@@ -325,15 +328,8 @@ impl Face {
                 hats[region].register_interest(ctx.reborrow(), msg, res);
             }
 
-            if let Some(resolved_interest) = resolved_interest_opt {
-                tracing::trace!(
-                    "Resolving current interest; it was not propagated in the north region"
-                );
-                hats[region].send_declare_final(
-                    ctx.reborrow(),
-                    resolved_interest.src_interest_id,
-                    &resolved_interest.src,
-                );
+            if let RouteInterestResult::ResolvedCurrentInterest = route_interest_res {
+                hats[region].send_declare_final(ctx.reborrow(), msg.id, &src);
             }
         });
     }
@@ -373,8 +369,6 @@ impl Face {
             return;
         };
 
-        // REVIEW(regions): do we need to check if any other subregion has the same remote interest
-        // before propagating interest final?
         hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
     }
 

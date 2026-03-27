@@ -145,7 +145,7 @@ impl<'conf> GatewayBuilder<'conf> {
             .stats
             .unwrap_or_else(|| zenoh_stats::StatsRegistry::new(zid, mode, &*crate::LONG_VERSION));
 
-        tracing::trace!(?regions, "New gateway");
+        tracing::debug!(?regions);
 
         let hats = regions
             .iter()
