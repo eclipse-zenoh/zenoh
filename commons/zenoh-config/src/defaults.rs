@@ -33,19 +33,10 @@ pub const mode: WhatAmI = WhatAmI::Peer;
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
 pub mod connect {
-    use super::{ModeDependentValue, ModeValues};
+    use super::ModeDependentValue;
 
-    pub const timeout_ms: ModeDependentValue<i64> = ModeDependentValue::Dependent(ModeValues {
-        router: Some(-1),
-        peer: Some(-1),
-        client: Some(0),
-    });
-    pub const exit_on_failure: ModeDependentValue<bool> =
-        ModeDependentValue::Dependent(ModeValues {
-            router: Some(false),
-            peer: Some(false),
-            client: Some(true),
-        });
+    pub const timeout_ms: ModeDependentValue<i64> = ModeDependentValue::Unique(-1);
+    pub const exit_on_failure: ModeDependentValue<bool> = ModeDependentValue::Unique(false);
 }
 
 #[allow(non_upper_case_globals)]
@@ -70,7 +61,7 @@ pub mod open {
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
 pub mod scouting {
-    pub const timeout: i64 = 3000;
+    pub const timeout: i64 = -1;
     pub const delay: u64 = 500;
     pub mod multicast {
         pub const enabled: bool = true;

@@ -38,7 +38,7 @@
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
     /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).
-    timeout_ms: { router: -1, peer: -1, client: 0 },
+    timeout_ms: -1,
 
     /// The list of endpoints to connect to.
     /// Accepts a single list (e.g. endpoints: ["tcp/10.10.10.10:7447", "tcp/11.11.11.11:7447"])
@@ -56,7 +56,9 @@
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
 
     /// exit from application, if timeout exceed
-    exit_on_failure: { router: false, peer: false, client: true },
+    /// Accepts a single value (e.g. exit_on_failure: false)
+    /// or different values for router, peer and client (e.g. exit_on_failure: { router: false, peer: false, client: true }).
+    exit_on_failure: false,
     /// connect establishing retry configuration
     retry: {
       /// initial wait timeout until next connect try
@@ -135,8 +137,8 @@
   scouting: {
     /// In client mode, the period in milliseconds dedicated to scouting for a router before failing.
     /// Set a negative value to scout in background.
-    timeout: 3000,
-    /// In peer mode, the maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
+    timeout: -1,
+    /// The maximum period in milliseconds dedicated to scouting remote peers before attempting other operations.
     delay: 500,
     /// The multicast scouting configuration.
     multicast: {
