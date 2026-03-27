@@ -156,7 +156,7 @@ impl Hat {
 
 impl HatTokenTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_tokens(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         let mut tokens = HashMap::new();
         for face in self.owned_faces(tables) {
             for token in self.face_hat(face).remote_tokens.values() {
@@ -164,7 +164,7 @@ impl HatTokenTrait for Hat {
                 srcs.peers.push(face.zid);
             }
         }
-        Vec::from_iter(tokens)
+        tokens
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]

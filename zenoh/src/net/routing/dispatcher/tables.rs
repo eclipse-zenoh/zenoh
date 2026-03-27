@@ -295,6 +295,64 @@ pub struct Tables {
 }
 
 impl Tables {
+    pub(crate) fn sourced_subscribers(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| {
+                self.add_north_source(&hat.region(), hat.sourced_subscribers(&self.data))
+            })
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_queryables(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| {
+                self.add_north_source(&hat.region(), hat.sourced_queryables(&self.data))
+            })
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    pub(crate) fn sourced_tokens(&self) -> HashMap<Arc<Resource>, Sources> {
+        self.hats
+            .values()
+            .flat_map(|hat| self.add_north_source(&hat.region(), hat.sourced_tokens(&self.data)))
+            .fold(HashMap::new(), |mut acc, (res, src)| {
+                acc.entry(res.clone())
+                    .and_modify(|s| s.extend(&src))
+                    .or_insert(src);
+                acc
+            })
+    }
+
+    /// For entities sourced from a south region, adds the gateway's own ZID as a north source so
+    /// they are visible to north-facing peers. Note that hats only return **remote** entities.
+    fn add_north_source(
+        &self,
+        region: &Region,
+        mut entities: HashMap<Arc<Resource>, Sources>,
+    ) -> HashMap<Arc<Resource>, Sources> {
+        if region.bound().is_south() {
+            let north_source =
+                Sources::empty().with_mode([self.data.zid], self.hats[Region::North].mode());
+            for entity in entities.values_mut().filter(|e| !e.is_empty()) {
+                entity.extend(&north_source);
+            }
+        }
+
+        entities
+    }
+
     pub(crate) fn sourced_publishers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()
@@ -307,46 +365,10 @@ impl Tables {
             })
     }
 
-    pub(crate) fn sourced_subscribers(&self) -> HashMap<Arc<Resource>, Sources> {
-        self.hats
-            .values()
-            .flat_map(|hat| hat.sourced_subscribers(&self.data))
-            .fold(HashMap::new(), |mut acc, (res, src)| {
-                acc.entry(res.clone())
-                    .and_modify(|s| s.extend(&src))
-                    .or_insert(src);
-                acc
-            })
-    }
-
-    pub(crate) fn sourced_queryables(&self) -> HashMap<Arc<Resource>, Sources> {
-        self.hats
-            .values()
-            .flat_map(|hat| hat.sourced_queryables(&self.data))
-            .fold(HashMap::new(), |mut acc, (res, src)| {
-                acc.entry(res.clone())
-                    .and_modify(|s| s.extend(&src))
-                    .or_insert(src);
-                acc
-            })
-    }
-
     pub(crate) fn sourced_queriers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()
             .flat_map(|hat| hat.sourced_queriers(&self.data))
-            .fold(HashMap::new(), |mut acc, (res, src)| {
-                acc.entry(res.clone())
-                    .and_modify(|s| s.extend(&src))
-                    .or_insert(src);
-                acc
-            })
-    }
-
-    pub(crate) fn sourced_tokens(&self) -> HashMap<Arc<Resource>, Sources> {
-        self.hats
-            .values()
-            .flat_map(|hat| hat.sourced_tokens(&self.data))
             .fold(HashMap::new(), |mut acc, (res, src)| {
                 acc.entry(res.clone())
                     .and_modify(|s| s.extend(&src))

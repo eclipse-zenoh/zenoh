@@ -272,15 +272,21 @@ impl Hat {
 }
 
 impl HatPubSubTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_subscribers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         self.router_subs
             .iter()
             .map(|sub| {
                 (
                     sub.clone(),
                     Sources {
-                        routers: Vec::from_iter(self.res_hat(sub).router_subs.iter().cloned()),
+                        routers: Vec::from_iter(
+                            self.res_hat(sub)
+                                .router_subs
+                                .iter()
+                                .copied()
+                                .filter(|router| router != &tables.zid),
+                        ),
                         peers: Vec::default(),
                         clients: Vec::default(),
                     },
@@ -290,8 +296,8 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_publishers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        Vec::default()
+    fn sourced_publishers(&self, _tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
+        HashMap::default()
     }
 
     /// Computes routing destination for `Push` messages.

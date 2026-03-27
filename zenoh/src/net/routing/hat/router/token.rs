@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
@@ -274,15 +277,21 @@ impl Hat {
 }
 
 impl HatTokenTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_tokens(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_tokens(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         self.router_tokens
             .iter()
             .map(|token| {
                 (
                     token.clone(),
                     Sources {
-                        routers: Vec::from_iter(self.res_hat(token).router_tokens.iter().cloned()),
+                        routers: Vec::from_iter(
+                            self.res_hat(token)
+                                .router_tokens
+                                .iter()
+                                .copied()
+                                .filter(|router| router != &tables.zid),
+                        ),
                         peers: Vec::default(),
                         clients: Vec::default(),
                     },

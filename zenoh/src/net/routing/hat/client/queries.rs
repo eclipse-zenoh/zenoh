@@ -105,7 +105,7 @@ lazy_static::lazy_static! {
 
 impl HatQueriesTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         let mut qabls = HashMap::new();
         for face in self.owned_faces(tables) {
             for (qabl, _) in self.face_hat(face).remote_qabls.values() {
@@ -117,12 +117,12 @@ impl HatQueriesTrait for Hat {
                 }
             }
         }
-        Vec::from_iter(qabls)
+        qabls
     }
 
     #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        Vec::default()
+    fn sourced_queriers(&self, _tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
+        HashMap::default()
     }
 
     /// Computes routing destination for `Request` messages.
