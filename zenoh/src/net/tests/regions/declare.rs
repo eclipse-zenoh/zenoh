@@ -16,7 +16,9 @@
 
 use zenoh_protocol::core::{Bound, Region, WhatAmI};
 
-use super::{try_init_tracing_subscriber, Connection, EstablishedConnection, FaceDef, Harness};
+use super::{
+    try_init_tracing_subscriber, Connection, EstablishedConnection, FaceDef, HarnessBuilder,
+};
 use crate::key_expr::KeyExpr;
 
 /// Tests that the gateway doesn't propagate tokens to the source router region.
@@ -24,12 +26,15 @@ use crate::key_expr::KeyExpr;
 fn test_against_invalid_token_propagation_to_source_south_router_region() {
     try_init_tracing_subscriber();
 
-    let n = Harness::with_subregions(
-        WhatAmI::Router,
-        [Region::default_south(WhatAmI::Router), Region::Local],
-    );
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router), Region::Local])
+        .build();
 
-    let s = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let s_n = Connection {
         a: &s,
@@ -59,8 +64,14 @@ fn test_against_invalid_token_propagation_to_source_south_router_region() {
 fn test_against_invalid_token_propagation_to_source_north_router_region() {
     try_init_tracing_subscriber();
 
-    let r0 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
-    let r1 = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let r0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let r0_r1 = Connection {
         a: &r0,
@@ -84,10 +95,22 @@ fn test_against_invalid_token_propagation_to_source_north_router_region() {
 fn test_multiple_gateways_r2r_token_propagation_upstream() {
     try_init_tracing_subscriber();
 
-    let g1 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
-    let s = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ss = s.new_session();
 
@@ -159,10 +182,22 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
 fn test_multiple_gateways_r2r_token_propagation_downstream() {
     try_init_tracing_subscriber();
 
-    let g1 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let g0 = Harness::with_subregions(WhatAmI::Router, [Region::default_south(WhatAmI::Router)]);
-    let n = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
-    let s = Harness::with_subregions(WhatAmI::Router, [Region::Local]);
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
 

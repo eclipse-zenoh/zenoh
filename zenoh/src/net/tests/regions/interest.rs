@@ -22,7 +22,7 @@ use zenoh_protocol::{
     },
 };
 
-use super::{try_init_tracing_subscriber, Connection, FaceDef, Harness};
+use super::{try_init_tracing_subscriber, Connection, FaceDef, Harness, HarnessBuilder};
 use crate::key_expr::KeyExpr;
 
 /// Test that current tokens are re-propagated even if they've already been propagated in future
@@ -135,7 +135,7 @@ fn test_current_token_repropagation() {
 fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
     try_init_tracing_subscriber();
 
-    let p = Harness::with_subregions(WhatAmI::Peer, []);
+    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([]).build();
 
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
@@ -150,7 +150,7 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
 /// interests before sending the current tokens interest.
 #[test]
 fn test_p2p_interest_routing_with_finalized_initial_interests() {
-    let p = Harness::with_subregions(WhatAmI::Peer, []);
+    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([]).build();
 
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
@@ -173,7 +173,7 @@ fn test_concurrent_current_future_interests(north: WhatAmI, south: WhatAmI) {
     try_init_tracing_subscriber();
 
     let r = Region::default_south(south);
-    let g = Harness::with_subregions(north, [r]);
+    let g = HarnessBuilder::new().mode(north).subregions([r]).build();
     let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
     let s0 = g.new_face(FaceDef::default().mode(south).region(r));
     let s1 = g.new_face(FaceDef::default().mode(south).region(r));
@@ -214,7 +214,7 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     try_init_tracing_subscriber();
 
     let r = Region::default_south(south);
-    let g = Harness::with_subregions(north, [r]);
+    let g = HarnessBuilder::new().mode(north).subregions([r]).build();
     let s = g.new_face(FaceDef::default().mode(south).region(r));
 
     s.interest(

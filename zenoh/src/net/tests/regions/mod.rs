@@ -22,6 +22,7 @@
 //! inject messages into those faces, and observe every message that the gateway routes to any other
 //! face.
 
+mod adminspace;
 mod declare;
 mod forwarding;
 mod interest;
@@ -614,6 +615,115 @@ impl MockFace {
     }
 }
 
+/// Builder for [`Harness`].
+///
+/// Obtain one via [`HarnessBuilder::new`] and call [`HarnessBuilder::build`] to construct
+/// the [`Harness`]. All fields have defaults identical to those previously used by
+/// `Harness::with_subregions`: router mode, no custom ZID, no subregions, runtime enabled,
+/// adminspace disabled.
+pub(crate) struct HarnessBuilder {
+    mode: WhatAmI,
+    zid: Option<ZenohId>,
+    subregions: Vec<Region>,
+    start_runtime: bool,
+    start_adminspace: bool,
+}
+
+impl HarnessBuilder {
+    pub(crate) fn new() -> Self {
+        Self {
+            mode: WhatAmI::default(),
+            zid: None,
+            subregions: Vec::new(),
+            start_runtime: true,
+            start_adminspace: false,
+        }
+    }
+
+    /// Set the [`WhatAmI`] mode of this harness.
+    pub(crate) fn mode(mut self, mode: WhatAmI) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Assign a specific [`ZenohId`] to this harness's runtime.
+    pub(crate) fn zid(mut self, zid: ZenohId) -> Self {
+        self.zid = Some(zid);
+        self
+    }
+
+    /// Set the subregions the gateway will route across.
+    pub(crate) fn subregions(mut self, subregions: impl Into<Vec<Region>>) -> Self {
+        self.subregions = subregions.into();
+        self
+    }
+
+    /// Control whether a real [`Runtime`] is started for this harness (default: `true`).
+    ///
+    /// When `false`, a [`GatewayBuilder`] is used directly and no runtime overhead is
+    /// incurred. This is equivalent to the old `Harness::with_subregions_noruntime`.
+    pub(crate) fn start_runtime(mut self, start_runtime: bool) -> Self {
+        self.start_runtime = start_runtime;
+        self
+    }
+
+    /// Control whether the admin space is enabled in the runtime config (default: `false`).
+    ///
+    /// Only meaningful when [`start_runtime`](Self::start_runtime) is `true`.
+    pub(crate) fn start_adminspace(mut self, start_adminspace: bool) -> Self {
+        self.start_adminspace = start_adminspace;
+        self
+    }
+
+    /// Consume this builder and produce a [`Harness`].
+    pub(crate) fn build(self) -> Harness {
+        if self.start_runtime {
+            let mut config = Config::default();
+            if let Some(zid) = self.zid {
+                config.set_id(Some(zid)).unwrap();
+            }
+            config.set_mode(Some(self.mode)).unwrap();
+
+            // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
+            config.listen.endpoints.set(vec![]).unwrap();
+            config.connect.endpoints.set(vec![]).unwrap();
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            config
+                .adminspace
+                .set_enabled(self.start_adminspace)
+                .unwrap();
+            config.plugins_loading.set_enabled(false).unwrap();
+
+            let runtime = block_on(
+                RuntimeBuilder::new(crate::api::config::Config(config))
+                    .subregions(self.subregions)
+                    .disable_async_tree_computation(true)
+                    .build(),
+            )
+            .unwrap();
+            let gateway = Gateway {
+                tables: runtime.router().tables.clone(),
+            };
+            Harness {
+                gateway,
+                _runtime: Some(runtime),
+            }
+        } else {
+            let mut config = Config::default().expanded();
+            config.set_mode(Some(self.mode)).unwrap();
+            let gateway = GatewayBuilder::new(&config)
+                .subregions(self.subregions)
+                .disable_async_tree_computation(true)
+                .build()
+                .unwrap();
+            Harness {
+                gateway,
+                _runtime: None,
+            }
+        }
+    }
+}
+
 /// Wraps a [`Gateway`] and provides ergonomic helpers for unit tests.
 pub(crate) struct Harness {
     pub(crate) gateway: Gateway,
@@ -631,11 +741,17 @@ impl Harness {
     ];
 
     pub(crate) fn new_client() -> Self {
-        Self::with_subregions(WhatAmI::Client, Self::DEFAULT_SUBREGIONS)
+        HarnessBuilder::new()
+            .mode(WhatAmI::Client)
+            .subregions(Self::DEFAULT_SUBREGIONS)
+            .build()
     }
 
     pub(crate) fn new_peer() -> Self {
-        Self::with_subregions(WhatAmI::Peer, Self::DEFAULT_SUBREGIONS)
+        HarnessBuilder::new()
+            .mode(WhatAmI::Peer)
+            .subregions(Self::DEFAULT_SUBREGIONS)
+            .build()
     }
 
     /// Build a gateway in router mode.
@@ -643,87 +759,10 @@ impl Harness {
     /// Uses a real [`Runtime`] so that [`Gateway::init_hats`] is called — required for the
     /// router hat's topology tracking to function correctly.
     pub(crate) fn new_router() -> Self {
-        Self::with_subregions(WhatAmI::Router, Self::DEFAULT_SUBREGIONS)
-    }
-
-    /// Build a gateway with a runtime (necessary for routers).
-    pub(crate) fn with_subregions<const N: usize>(mode: WhatAmI, subregions: [Region; N]) -> Self {
-        let mut config = Config::default();
-        config.set_mode(Some(mode)).unwrap();
-
-        // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
-        config.listen.endpoints.set(vec![]).unwrap();
-        config.connect.endpoints.set(vec![]).unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config.adminspace.set_enabled(false).unwrap();
-        config.plugins_loading.set_enabled(false).unwrap();
-
-        let runtime = block_on(
-            RuntimeBuilder::new(crate::api::config::Config(config))
-                .subregions(subregions.to_vec())
-                .disable_async_tree_computation(true)
-                .build(),
-        )
-        .unwrap();
-        let gateway = Gateway {
-            tables: runtime.router().tables.clone(),
-        };
-        Self {
-            gateway,
-            _runtime: Some(runtime),
-        }
-    }
-
-    /// Build a gateway with a runtime (necessary for routers).
-    pub(crate) fn with_subregions2<const N: usize>(
-        id: ZenohId,
-        mode: WhatAmI,
-        subregions: [Region; N],
-    ) -> Self {
-        let mut config = Config::default();
-        config.set_id(Some(id)).unwrap();
-        config.set_mode(Some(mode)).unwrap();
-
-        // NOTE(regions): these lines attempt to remove all side-effects of creating a runtime.
-        config.listen.endpoints.set(vec![]).unwrap();
-        config.connect.endpoints.set(vec![]).unwrap();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config.adminspace.set_enabled(false).unwrap();
-        config.plugins_loading.set_enabled(false).unwrap();
-        // config.scouting.gossip.set_multihop(Some(true)).unwrap();
-
-        let runtime = block_on(
-            RuntimeBuilder::new(crate::api::config::Config(config))
-                .subregions(subregions.to_vec())
-                .disable_async_tree_computation(true)
-                .build(),
-        )
-        .unwrap();
-        let gateway = Gateway {
-            tables: runtime.router().tables.clone(),
-        };
-        Self {
-            gateway,
-            _runtime: Some(runtime),
-        }
-    }
-
-    /// Build a gateway without a runtime.
-    pub(crate) fn with_subregions_noruntime<const N: usize>(
-        mode: WhatAmI,
-        subregions: [Region; N],
-    ) -> Self {
-        let mut config = Config::default().expanded();
-        config.set_mode(Some(mode)).unwrap();
-        let gateway = GatewayBuilder::new(&config)
-            .subregions(subregions.to_vec())
-            .disable_async_tree_computation(true)
+        HarnessBuilder::new()
+            .mode(WhatAmI::Router)
+            .subregions(Self::DEFAULT_SUBREGIONS)
             .build()
-            .unwrap();
-        Self {
-            gateway,
-            _runtime: None,
-        }
     }
 
     pub(crate) fn zid(&self) -> ZenohIdProto {
