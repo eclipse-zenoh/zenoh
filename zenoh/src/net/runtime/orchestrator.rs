@@ -425,23 +425,27 @@ impl Runtime {
             }
         }
 
-        if self.get_global_connect_retry_config().exit_on_failure {
-            // sequentially try to connect to one of the remaining peers
-            // respecting connection retry delays
-            match self.peers_connector_retry(peers_to_retry, true).await {
-                Ok(_) => Ok(()),
-                Err(_) => {
-                    let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                    tracing::warn!("{}", &e);
-                    Err(e.into())
+        if !peers_to_retry.is_empty() {
+            if self.get_global_connect_retry_config().exit_on_failure {
+                // sequentially try to connect to one of the remaining peers
+                // respecting connection retry delays
+                match self.peers_connector_retry(peers_to_retry, true).await {
+                    Ok(_) => Ok(()),
+                    Err(_) => {
+                        let e = zerror!("Unable to connect to any of {:?}! ", peers);
+                        tracing::warn!("{}", &e);
+                        Err(e.into())
+                    }
                 }
+            } else {
+                // try to connect in background
+                if let Err(e) = self.spawn_peers_connector(peers_to_retry).await {
+                    tracing::warn!("Error running background peers connector : {}", e);
+                    return Err(e);
+                }
+                Ok(())
             }
         } else {
-            // try to connect in background
-            if let Err(e) = self.spawn_peers_connector(peers_to_retry).await {
-                tracing::warn!("Error running background peers connector : {}", e);
-                return Err(e);
-            }
             Ok(())
         }
     }
