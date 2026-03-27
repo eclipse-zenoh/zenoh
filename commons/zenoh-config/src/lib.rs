@@ -458,6 +458,48 @@ fn config_keys() {
     dbg!(Vec::from_iter(c.keys()));
 }
 
+/// Deprecated wrapper for `routing.router.peers_failover_brokering`.
+/// Emits a warning on deserialization (both full-config and `--cfg` paths).
+#[derive(Clone, Debug, Default)]
+struct DeprecatedPeersFailoverBrokering(Option<bool>);
+
+impl serde::Serialize for DeprecatedPeersFailoverBrokering {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DeprecatedPeersFailoverBrokering {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        tracing::warn!(
+            "`routing.router.peers_failover_brokering` is deprecated and has no effect; \
+            please remove it from your configuration"
+        );
+        Option::<bool>::deserialize(deserializer).map(Self)
+    }
+}
+
+/// Deprecated wrapper for `routing.peer` (and its `mode` / `linkstate` sub-fields).
+/// Emits a warning on deserialization (both full-config and `--cfg` paths).
+#[derive(Clone, Debug, Default)]
+struct DeprecatedRoutingPeer(Option<Value>);
+
+impl serde::Serialize for DeprecatedRoutingPeer {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DeprecatedRoutingPeer {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        tracing::warn!(
+            "routing.peer.mode` and `routing.peer.linkstate` are deprecated and have no effect; \
+            please remove them from your configuration"
+        );
+        Option::<Value>::deserialize(deserializer).map(Self)
+    }
+}
+
 validated_struct::validator! {
     #[derive(Default)]
     #[recursive_attrs]
@@ -575,6 +617,9 @@ validated_struct::validator! {
             /// The routing strategy to use in routers and it's configuration.
             pub router: #[derive(Default)]
             RouterRoutingConf {
+                /// Deprecated: this field has no effect and will be removed in a future version.
+                #[serde(default, skip_serializing)]
+                peers_failover_brokering: DeprecatedPeersFailoverBrokering,
                 /// Linkstate mode configuration.
                 pub linkstate: #[derive(Default)]
                 LinkstateConf {
@@ -585,6 +630,9 @@ validated_struct::validator! {
                     pub transport_weights: Vec<TransportWeight>,
                 },
             },
+            /// Deprecated: these fields have no effect and will be removed in a future version.
+            #[serde(default, skip_serializing)]
+            peer: DeprecatedRoutingPeer,
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).
             pub interests: #[derive(Default)]
