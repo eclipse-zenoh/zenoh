@@ -943,16 +943,7 @@ pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, ex
             disable_matches_data_routes(&mut wtables, &mut res);
             disable_matches_query_routes(&mut wtables, &mut res);
             face.update_interceptors_caches(&mut res);
-            if let Some(evicted_expr) =
-                get_mut_unchecked(face).insert_late_remote_mapping(expr_id, res.expr().to_owned())
-            {
-                tracing::warn!(
-                    "{} Evict late remote mapping while caching expr {} -> {}",
-                    face,
-                    expr_id,
-                    evicted_expr
-                );
-            }
+            get_mut_unchecked(face).insert_late_remote_mapping(expr_id, res.expr().to_owned());
             Resource::clean(&mut res);
         }
         None => tracing::error!("{} Undeclare unknown resource!", face),

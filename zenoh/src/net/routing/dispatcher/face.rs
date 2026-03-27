@@ -204,22 +204,19 @@ impl FaceState {
         id
     }
 
-    pub(crate) fn insert_late_remote_mapping(
-        &mut self,
-        expr_id: ExprId,
-        expr: String,
-    ) -> Option<String> {
+    pub(crate) fn insert_late_remote_mapping(&mut self, expr_id: ExprId, expr: String) {
         let new_bytes = expr.len();
 
         // Skip entries that are unreasonably large (> half the byte budget)
         if new_bytes > MAX_LATE_REMOTE_MAPPINGS_BYTES / 2 {
             tracing::warn!(
-                "Late remote mapping for ExprId {} skipped: \
+                "{} Skip late remote mapping for ExprId {}: \
                  expression length {} exceeds per-entry limit",
+                self,
                 expr_id,
                 new_bytes
             );
-            return None;
+            return;
         }
 
         // Remove existing entry for this expr_id if present
@@ -234,7 +231,15 @@ impl FaceState {
         {
             if let Some(old_id) = self.late_remote_mappings_order.pop_front() {
                 if let Some(evicted) = self.late_remote_mappings.remove(&old_id) {
+                    let evicted_len = evicted.len();
                     self.late_remote_mappings_bytes -= evicted.len();
+                    tracing::warn!(
+                        "{} Evict late remote mapping ExprId {} ({} bytes) while caching ExprId {}",
+                        self,
+                        old_id,
+                        evicted_len,
+                        expr_id
+                    );
                 }
             } else {
                 break;
@@ -244,7 +249,6 @@ impl FaceState {
         self.late_remote_mappings_bytes += new_bytes;
         self.late_remote_mappings.insert(expr_id, expr);
         self.late_remote_mappings_order.push_back(expr_id);
-        None
     }
 
     pub(crate) fn remove_late_remote_mapping(&mut self, expr_id: &ExprId) -> Option<String> {
@@ -258,6 +262,10 @@ impl FaceState {
     }
 
     /// # Safety
+    ///
+    /// Callers must hold the routing tables lock while reading this fallback cache so lookups stay
+    /// synchronized with declare/undeclare/close paths that mutate the mappings under that same
+    /// lock.
     ///
     /// This fallback is only sound because transport delivery for a single face is expected to be
     /// observed in-order by routing. A stale late mapping must never outlive a newly declared

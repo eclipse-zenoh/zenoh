@@ -69,6 +69,29 @@ impl DeMuxContext<'_> {
         }
         None
     }
+
+    fn full_expr_value(&self, msg: &NetworkMessageMut) -> Option<String> {
+        let wire_expr = msg.wire_expr()?.to_owned();
+        let tables = zread!(self.demux.face.tables.tables);
+
+        if let Some(prefix) = tables
+            .get_mapping(&self.demux.face.state, &wire_expr.scope, wire_expr.mapping)
+            .cloned()
+        {
+            return Some(prefix.expr().to_string() + wire_expr.suffix.as_ref());
+        }
+
+        if matches!(msg.body, NetworkBodyMut::Push(_)) {
+            return self
+                .demux
+                .face
+                .state
+                .get_late_mapping(&wire_expr.scope, wire_expr.mapping)
+                .map(|prefix| prefix.to_string() + wire_expr.suffix.as_ref());
+        }
+
+        None
+    }
 }
 
 impl InterceptorContext for DeMuxContext<'_> {
@@ -78,23 +101,8 @@ impl InterceptorContext for DeMuxContext<'_> {
 
     fn full_expr(&self, msg: &NetworkMessageMut) -> Option<&str> {
         if self.expr.get().is_none() {
-            if let Some(wire_expr) = msg.wire_expr() {
-                if let Some(prefix) = self.prefix(msg) {
-                    self.expr
-                        .set(prefix.expr().to_string() + wire_expr.suffix.as_ref())
-                        .ok();
-                } else if matches!(msg.body, NetworkBodyMut::Push(_)) {
-                    if let Some(prefix) = self
-                        .demux
-                        .face
-                        .state
-                        .get_late_mapping(&wire_expr.scope, wire_expr.mapping)
-                    {
-                        self.expr
-                            .set(prefix.to_string() + wire_expr.suffix.as_ref())
-                            .ok();
-                    }
-                }
+            if let Some(expr) = self.full_expr_value(msg) {
+                self.expr.set(expr).ok();
             }
         }
         self.expr.get().map(|x| x.as_str())
