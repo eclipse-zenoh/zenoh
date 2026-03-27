@@ -545,6 +545,9 @@ validated_struct::validator! {
             /// Configure the conditions to be met before session open returns.
             pub return_conditions: #[derive(Default)]
             ReturnConditionsConf {
+                /// Session open waits to connect to configured peers and routers before returning.
+                /// When set to false, first publications and queries after session open from peers may be lost.
+                connect_configured: Option<bool>,
                 /// Session open waits to connect to scouted peers and routers before returning.
                 /// When set to false, first publications and queries after session open from peers may be lost.
                 connect_scouted: Option<bool>,

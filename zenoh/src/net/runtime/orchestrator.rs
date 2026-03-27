@@ -135,6 +135,7 @@ impl Runtime {
             listeners,
             peers,
             scouting,
+            wait_configured,
             wait_scouting,
             listen,
             autoconnect,
@@ -159,6 +160,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.open().return_conditions().connect_configured()),
                 unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().client()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
@@ -233,9 +235,7 @@ impl Runtime {
             self.connect_peers(&peers, true).await?;
         }
 
-        if wait_scouting
-            && scouting
-            && peers.is_empty()
+        if ((wait_scouting && scouting) || (wait_configured && !peers.is_empty()))
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
                 .is_err()
@@ -246,7 +246,18 @@ impl Runtime {
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
+        let (
+            listeners,
+            peers,
+            scouting,
+            wait_configured,
+            wait_scouting,
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            delay,
+        ) = {
             let guard = &self.state.config.lock();
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
@@ -257,6 +268,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.open().return_conditions().connect_configured()),
                 unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 AutoConnect::multicast(guard, WhatAmI::Peer, self.zid().into()),
@@ -274,8 +286,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if wait_scouting
-            && (scouting || !peers.is_empty())
+        if ((wait_scouting && scouting) || (wait_configured && !peers.is_empty()))
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
                 .is_err()
@@ -796,6 +807,11 @@ impl Runtime {
                 .is_err()
             {
                 tracing::warn!("Unable to connect to any of {:?}! ", peers);
+            } else {
+                this.state
+                    .start_conditions
+                    .terminate_peer_connector(0)
+                    .await;
             }
         });
         Ok(())

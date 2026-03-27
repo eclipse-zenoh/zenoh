@@ -61,6 +61,7 @@ pub mod listen {
 #[allow(dead_code)]
 pub mod open {
     pub mod return_conditions {
+        pub const connect_configured: bool = true;
         pub const connect_scouted: bool = true;
         pub const declares: bool = true;
     }

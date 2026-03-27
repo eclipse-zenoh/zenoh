@@ -119,6 +119,9 @@
   open: {
     /// Configure the conditions to be met before session open returns.
     return_conditions: {
+      /// Session open waits to connect to configured peers and routers before returning.
+      /// When set to false, first publications and queries after session open from peers may be lost.
+      connect_configured: true,
       /// Session open waits to connect to scouted peers and routers before returning.
       /// When set to false, first publications and queries after session open from peers may be lost.
       connect_scouted: true,
