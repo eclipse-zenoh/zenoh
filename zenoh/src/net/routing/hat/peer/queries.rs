@@ -200,7 +200,7 @@ impl Hat {
 
 impl HatQueriesTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         // Compute the list of known queryables (keys)
         let mut qabls = HashMap::new();
         for face in self.owned_faces(tables) {
@@ -211,11 +211,11 @@ impl HatQueriesTrait for Hat {
                 srcs.peers.push(face.zid);
             }
         }
-        Vec::from_iter(qabls)
+        qabls
     }
 
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_queriers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         let mut result = HashMap::new();
         for face in self.owned_faces(tables) {
             for res in self

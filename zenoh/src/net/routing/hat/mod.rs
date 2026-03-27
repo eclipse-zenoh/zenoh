@@ -81,6 +81,23 @@ impl Sources {
         }
     }
 
+    pub(crate) fn is_empty(&self) -> bool {
+        self.routers.is_empty() && self.peers.is_empty() && self.clients.is_empty()
+    }
+
+    pub(crate) fn with_mode(
+        mut self,
+        zids: impl IntoIterator<Item = ZenohIdProto>,
+        mode: WhatAmI,
+    ) -> Self {
+        match mode {
+            WhatAmI::Router => self.routers.extend(zids),
+            WhatAmI::Peer => self.peers.extend(zids),
+            WhatAmI::Client => self.clients.extend(zids),
+        }
+        self
+    }
+
     pub(crate) fn extend(&mut self, other: &Sources) {
         self.routers.extend(other.routers.iter().copied());
         self.peers.extend(other.peers.iter().copied());
@@ -518,9 +535,9 @@ pub(crate) trait HatPubSubTrait {
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, SubscriberInfo>;
 
-    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 
-    fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_publishers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 
     /// Computes routing destination for `Push` messages.
     ///
@@ -603,9 +620,9 @@ pub(crate) trait HatQueriesTrait {
     ) -> HashMap<Arc<Resource>, QueryableInfoType>;
 
     // TODO(region): replace return type with map
-    fn sourced_queryables(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 
-    fn sourced_queriers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_queriers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 
     /// Computes routing destination for `Request` messages.
     ///
@@ -682,5 +699,5 @@ pub(crate) trait HatTokenTrait {
         res: Option<&Resource>,
     ) -> HashSet<Arc<Resource>>;
 
-    fn sourced_tokens(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)>;
+    fn sourced_tokens(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 }

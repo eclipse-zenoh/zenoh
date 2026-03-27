@@ -176,19 +176,19 @@ impl Hat {
 
 impl HatPubSubTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         let mut subs = HashMap::new();
         for face in self.owned_faces(tables) {
-            for (sub, _) in self.face_hat(face).remote_qabls.values() {
+            for sub in self.face_hat(face).remote_subs.values() {
                 let srcs = subs.entry(sub.clone()).or_insert_with(Sources::empty);
                 srcs.peers.push(face.zid);
             }
         }
-        Vec::from_iter(subs)
+        subs
     }
 
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_publishers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_publishers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         let mut result = HashMap::new();
         for face in self.owned_faces(tables) {
             for res in self

@@ -277,8 +277,8 @@ impl Hat {
 }
 
 impl HatQueriesTrait for Hat {
-    #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_queryables(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    #[tracing::instrument(level = "debug", skip(tables), ret)]
+    fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         // Compute the list of known queryables (keys)
         self.router_qabls
             .iter()
@@ -286,7 +286,13 @@ impl HatQueriesTrait for Hat {
                 (
                     sub.clone(),
                     Sources {
-                        routers: Vec::from_iter(self.res_hat(sub).router_qabls.keys().cloned()),
+                        routers: Vec::from_iter(
+                            self.res_hat(sub)
+                                .router_qabls
+                                .keys()
+                                .copied()
+                                .filter(|router| router != &tables.zid),
+                        ),
                         peers: Vec::default(),
                         clients: Vec::default(),
                     },
@@ -296,8 +302,8 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_queriers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        Vec::default()
+    fn sourced_queriers(&self, _tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
+        HashMap::default()
     }
 
     /// Computes routing destination for `Request` messages.

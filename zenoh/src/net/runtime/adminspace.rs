@@ -232,7 +232,9 @@ impl AdminSpace {
         {
             let cfg_rx = admin.context.runtime.state.config.subscribe();
 
-            tokio::task::spawn({
+            // REVIEW(regions): this was changed from `tokio::task::spawn` in order to enable
+            // `plugins` builds to run outside the context of a Tokio executor.
+            zenoh_runtime::ZRuntime::Net.spawn({
                 let admin = admin.clone();
                 async move {
                     while let Ok(change) = cfg_rx.recv_async().await {

@@ -86,7 +86,7 @@ impl Hat {
 
 impl HatPubSubTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
-    fn sourced_subscribers(&self, tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
+    fn sourced_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
         // Compute the list of known subscribers (keys)
         let mut subs = HashMap::new();
         for face in self.owned_faces(tables) {
@@ -101,12 +101,12 @@ impl HatPubSubTrait for Hat {
                 }
             }
         }
-        Vec::from_iter(subs)
+        subs
     }
 
     #[tracing::instrument(level = "debug", skip(_tables), ret)]
-    fn sourced_publishers(&self, _tables: &TablesData) -> Vec<(Arc<Resource>, Sources)> {
-        Vec::default()
+    fn sourced_publishers(&self, _tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
+        HashMap::default()
     }
 
     /// Computes routing destination for `Push` messages.
