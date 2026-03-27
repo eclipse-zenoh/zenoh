@@ -236,7 +236,6 @@ impl Gateway {
             tables: self.tables.clone(),
             state: newface,
         };
-        let mut declares = vec![];
         tables.hats[face.state.region]
             // TODO(regions): rename caller to `new_local_face`
             .new_local_face(
@@ -244,16 +243,14 @@ impl Gateway {
                     tables_lock: &face.tables,
                     tables: &mut tables.data,
                     src_face: &mut face.state,
-                    send_declare: &mut |p, m| declares.push((p.clone(), m)),
+                    send_declare: &mut |_, _| bug!("no declarations should be pushed to new session faces"),
                 },
                 &self.tables,
             )
             .unwrap();
         drop(wtables);
         drop(ctrl_lock);
-        for (p, m) in declares {
-            m.with_mut(|m| p.send_declare(m));
-        }
+
         Arc::new(face)
     }
 
