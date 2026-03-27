@@ -131,7 +131,19 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+        let (
+            listeners,
+            peers,
+            scouting,
+            wait_scouting,
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            delay,
+            timeout,
+            multicast_ttl,
+        ) = {
             let guard = &self.state.config.lock();
             (
                 guard
@@ -147,10 +159,12 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                unwrap_or_default!(guard.open().return_conditions().connect_scouted()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().client()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
+                Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
                 zenoh_config::ms_to_duration(unwrap_or_default!(guard.scouting().timeout())),
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
@@ -211,15 +225,24 @@ impl Runtime {
                 }
             }
             if !peers.is_empty() {
-                self.connect_peers(&peers, true).await
-            } else {
-                Ok(())
+                self.connect_peers(&peers, true).await?;
             }
         } else if peers.is_empty() {
             bail!("No peer specified and multicast scouting deactivated!")
         } else {
-            self.connect_peers(&peers, true).await
+            self.connect_peers(&peers, true).await?;
         }
+
+        if wait_scouting
+            && scouting
+            && peers.is_empty()
+            && tokio::time::timeout(delay, self.state.start_conditions.notified())
+                .await
+                .is_err()
+        {
+            tracing::warn!("Scouting delay expired: Session open returned before return conditions are met (not connected).");
+        }
+        Ok(())
     }
 
     async fn start_peer(&self) -> ZResult<()> {
@@ -258,7 +281,9 @@ impl Runtime {
                 .is_err()
             && !peers.is_empty()
         {
-            tracing::warn!("Scouting delay elapsed before start conditions are met.");
+            tracing::warn!(
+                "Scouting delay expired: Session open returned before return conditions are met."
+            );
         }
         Ok(())
     }
@@ -1143,6 +1168,10 @@ impl Runtime {
                 tracing::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
                     if self.connect(&hello.zid, &hello.locators).await {
+                        self.state
+                            .start_conditions
+                            .terminate_peer_connector(0)
+                            .await;
                         return Loop::Break;
                     }
                 } else {
