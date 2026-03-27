@@ -40,9 +40,10 @@ pub struct ChunkHeaderType {
     len: AtomicUsize,
 }
 
-// SAFETY: all fields are atomic types which are Send
+// SAFETY: all fields are atomic types which are Send and Sync
 // This prevents the Rust trait solver to out of recursion budget
 unsafe impl Send for ChunkHeaderType {}
+unsafe impl Sync for ChunkHeaderType {}
 
 impl ChunkHeaderType {
     pub fn len(&self) -> NonZeroUsize {
