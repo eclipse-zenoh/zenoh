@@ -92,6 +92,7 @@ impl Hat {
                             .unwrap_or(true)
                         {
                             let key_expr = Resource::decl_key(res, &mut someface);
+                            tracing::debug!(dst = %someface);
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,
@@ -187,6 +188,7 @@ impl Hat {
                         {
                             let wire_expr = Resource::decl_key(res, &mut someface);
 
+                            tracing::debug!(dst = %someface);
                             someface.primitives.send_declare(RoutingContext::with_expr(
                                 &mut Declare {
                                     interest_id: None,

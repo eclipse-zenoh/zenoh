@@ -57,6 +57,7 @@ impl Hat {
                 .local_tokens
                 .insert(res.clone(), id);
             let key_expr = Resource::decl_key(&res, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -203,6 +204,7 @@ impl HatTokenTrait for Hat {
             .local_tokens
             .insert(res.clone(), id);
         let key_expr = Resource::decl_key(&res, &mut dst_face);
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -229,6 +231,7 @@ impl HatTokenTrait for Hat {
         };
 
         if let Some(id) = self.face_hat_mut(&mut dst_face).local_tokens.remove(&res) {
+            tracing::debug!(dst = %dst_face);
             (ctx.send_declare)(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

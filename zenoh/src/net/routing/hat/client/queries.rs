@@ -78,6 +78,7 @@ impl Hat {
                 .local_qabls
                 .insert(res.clone(), (id, info));
             let key_expr = Resource::decl_key(&res, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -327,6 +328,7 @@ impl HatQueriesTrait for Hat {
             .local_qabls
             .insert(res.clone(), (id, info));
         let key_expr = Resource::decl_key(&res, &mut dst_face);
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::with_expr(
@@ -356,6 +358,7 @@ impl HatQueriesTrait for Hat {
         };
 
         if let Some((id, _)) = self.face_hat_mut(&mut dst_face).local_qabls.remove(&res) {
+            tracing::debug!(dst = %dst_face);
             (ctx.send_declare)(
                 &dst_face.primitives,
                 RoutingContext::with_expr(

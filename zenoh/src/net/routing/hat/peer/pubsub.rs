@@ -123,6 +123,7 @@ impl Hat {
 
         for update in subs_to_notify {
             tracing::trace!(%dst_face, res = update.resource.expr());
+            tracing::debug!(dst = %dst_face);
             let key_expr = Resource::decl_key(&update.resource, dst_face);
             send_declare(
                 &dst_face.primitives,
@@ -154,6 +155,7 @@ impl Hat {
             .local_subs
             .remove_simple_resource(res)
         {
+            tracing::debug!(dst = %face);
             send_declare(
                 &face.primitives,
                 RoutingContext::with_expr(
@@ -252,7 +254,7 @@ impl HatPubSubTrait for Hat {
             for ctx in self.owned_face_contexts(&mres) {
                 if ctx.subs.is_some() && self.region() != *src_region {
                     route.insert(ctx.face.id, || {
-                        tracing::trace!(dst = %ctx.face, dst.has_subscriber = true);
+                        tracing::debug!(dst = %ctx.face, dst.has_subscriber = true);
                         let wire_expr = expr.get_best_key(ctx.face.id);
                         Direction {
                             dst_face: ctx.face.clone(),
@@ -275,7 +277,7 @@ impl HatPubSubTrait for Hat {
                         .and_then(|res| res.face_ctxs.get(&face.id))
                         .is_some_and(|ctx| ctx.subscriber_interest_finalized);
                     (!has_interest_finalized).then(|| {
-                        tracing::trace!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
+                        tracing::debug!(dst = %face, dst.has_unfinalized_subscriber_interest = true);
                         let wire_expr = expr.get_best_key(face.id);
                         Direction {
                             dst_face: face.clone(),
@@ -289,7 +291,7 @@ impl HatPubSubTrait for Hat {
             for face in self.owned_faces(tables).filter(|f| {
                 f.remote_bound.is_north() && initial_interest(f).is_some_and(|i| !i.finalized)
             }) {
-                tracing::trace!(dst = %face, dst.has_unfinalized_initial_interest = true);
+                tracing::debug!(dst = %face, dst.has_unfinalized_initial_interest = true);
                 route.insert(face.id, || {
                     let wire_expr = expr.get_best_key(face.id);
                     Direction {
@@ -425,6 +427,7 @@ impl HatPubSubTrait for Hat {
         {
             // HACK(regions): if we have a multicast group, we use it to propagate subscribers to upstream gateways.
             for group in self.multicast_groups(ctx.tables) {
+                tracing::debug!(dst = %group);
                 (ctx.send_declare)(
                     &group.primitives,
                     RoutingContext::with_expr(

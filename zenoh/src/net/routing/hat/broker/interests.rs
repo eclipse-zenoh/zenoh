@@ -138,6 +138,7 @@ impl HatInterestTrait for Hat {
                 if msg.mode.is_current() && sub_info.is_some() {
                     // send declare only if there is at least one resource matching the aggregate
                     let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    tracing::debug!(dst = %ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -173,6 +174,7 @@ impl HatInterestTrait for Hat {
                     SubscriberId::default()
                 };
                 let wire_expr = Resource::decl_key(&sub, ctx.src_face);
+                tracing::debug!(dst = %ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -255,6 +257,7 @@ impl HatInterestTrait for Hat {
                 if let Some(ext_info) = msg.mode.is_current().then_some(qabl_info).flatten() {
                     // send declare only if there is at least one resource matching the aggregate
                     let wire_expr = Resource::decl_key(aggregated_res, ctx.src_face);
+                    tracing::debug!(dst = %ctx.src_face);
                     (ctx.send_declare)(
                         &ctx.src_face.primitives,
                         RoutingContext::with_expr(
@@ -291,6 +294,7 @@ impl HatInterestTrait for Hat {
                     QueryableId::default()
                 };
                 let wire_expr = Resource::decl_key(&qabl, ctx.src_face);
+                tracing::debug!(dst = %ctx.src_face);
                 (ctx.send_declare)(
                     &ctx.src_face.primitives,
                     RoutingContext::with_expr(
@@ -351,6 +355,7 @@ impl HatInterestTrait for Hat {
             };
 
             let wire_expr = Resource::decl_key(&token, ctx.src_face);
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::with_expr(
@@ -396,6 +401,7 @@ impl HatInterestTrait for Hat {
         };
 
         let wire_expr = Resource::decl_key(&res, &mut dst);
+        tracing::debug!(dst = %dst);
         (ctx.send_declare)(
             &dst.primitives,
             RoutingContext::with_expr(
@@ -415,6 +421,7 @@ impl HatInterestTrait for Hat {
     fn send_declare_final(&mut self, ctx: DispatcherContext, id: InterestId, dst: &Remote) {
         let dst_face = self.hat_remote(dst);
 
+        tracing::debug!(dst = %dst_face);
         (ctx.send_declare)(
             &dst_face.primitives,
             RoutingContext::new(Declare {

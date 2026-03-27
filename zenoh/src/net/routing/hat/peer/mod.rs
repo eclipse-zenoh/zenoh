@@ -315,6 +315,7 @@ impl HatBaseTrait for Hat {
         self.disable_all_routes(ctx.tables);
 
         if do_initial_interest {
+            tracing::debug!(dst = %ctx.src_face);
             (ctx.send_declare)(
                 &ctx.src_face.primitives,
                 RoutingContext::new(Declare {

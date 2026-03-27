@@ -95,8 +95,7 @@ impl Hat {
         );
 
         for update in qabls_to_notify {
-            // TODO(regions*): add this everywhere else
-            tracing::trace!(%dst);
+            tracing::debug!(dst = %dst);
             let key_expr = Resource::decl_key(&update.resource, dst);
             send_declare(
                 &dst.primitives,
@@ -131,6 +130,7 @@ impl Hat {
         {
             match update.update {
                 Some(new_qabl_info) => {
+                    tracing::debug!(dst = %face);
                     let key_expr = Resource::decl_key(&update.resource, face);
                     send_declare(
                         &face.primitives,
@@ -150,22 +150,25 @@ impl Hat {
                         ),
                     );
                 }
-                None => send_declare(
-                    &face.primitives,
-                    RoutingContext::with_expr(
-                        Declare {
-                            interest_id: None,
-                            ext_qos: declare::ext::QoSType::DECLARE,
-                            ext_tstamp: None,
-                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id: update.id,
-                                ext_wire_expr: WireExprType::null(),
-                            }),
-                        },
-                        update.resource.expr().to_string(),
-                    ),
-                ),
+                None => {
+                    tracing::debug!(dst = %face);
+                    send_declare(
+                        &face.primitives,
+                        RoutingContext::with_expr(
+                            Declare {
+                                interest_id: None,
+                                ext_qos: declare::ext::QoSType::DECLARE,
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id: update.id,
+                                    ext_wire_expr: WireExprType::null(),
+                                }),
+                            },
+                            update.resource.expr().to_string(),
+                        ),
+                    );
+                }
             };
         }
     }
