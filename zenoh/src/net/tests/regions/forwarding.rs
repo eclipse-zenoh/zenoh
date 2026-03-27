@@ -18,14 +18,20 @@
 use std::str::FromStr;
 
 use zenoh_protocol::{
-    core::{Bound, Region, WhatAmI},
-    network::interest::{InterestMode, InterestOptions},
+    core::{Bound, Region, Reliability, WhatAmI, WireExpr},
+    network::{
+        interest::{InterestMode, InterestOptions},
+        Mapping, Push,
+    },
 };
 
 use super::{try_init_tracing_subscriber, FaceDef, HarnessBuilder};
 use crate::{
     key_expr::KeyExpr,
-    net::tests::regions::{Connection, EstablishedConnection},
+    net::{
+        primitives::Primitives,
+        tests::regions::{Connection, EstablishedConnection},
+    },
 };
 
 /// Tests data routing between peer subregions.
@@ -65,7 +71,10 @@ fn test_p2p_inter_subregion_data_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
 
     let p0 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S1));
     let p1 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S2));
@@ -97,7 +106,10 @@ fn test_p2p_inter_subregion_query_routing() {
         mode: WhatAmI::Peer,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
 
     let p0 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S1));
     let p1 = g.new_face(FaceDef::default().mode(WhatAmI::Peer).region(S2));
@@ -129,9 +141,18 @@ fn test_r2r_inter_subregion_data_routing() {
         mode: WhatAmI::Router,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
-    let r0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let r1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
+    let r0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let r0s = r0.new_session();
     let r1s = r1.new_session();
@@ -191,9 +212,18 @@ fn test_r2r_inter_subregion_query_routing() {
         mode: WhatAmI::Router,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
-    let r0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let r1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
+    let r0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let r0s = r0.new_session();
     let r1s = r1.new_session();
@@ -253,7 +283,10 @@ fn test_c2c_inter_subregion_data_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
 
     let c0 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S1));
     let c1 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S2));
@@ -285,7 +318,10 @@ fn test_c2c_inter_subregion_query_routing() {
         mode: WhatAmI::Client,
     };
 
-    let g = HarnessBuilder::new().mode(WhatAmI::default()).subregions([S1, S2]).build();
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::default())
+        .subregions([S1, S2])
+        .build();
 
     let c0 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S1));
     let c1 = g.new_face(FaceDef::default().mode(WhatAmI::Client).region(S2));
@@ -306,10 +342,22 @@ fn test_c2c_inter_subregion_query_routing() {
 fn test_multiple_gateways_data_routing_r2p_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -380,10 +428,22 @@ fn test_multiple_gateways_data_routing_r2p_downstream() {
 fn test_multiple_gateways_query_routing_r2p_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -464,8 +524,16 @@ fn test_multiple_gateways_data_routing_r2r_downstream() {
         .mode(WhatAmI::Router)
         .subregions([Region::default_south(WhatAmI::Router)])
         .build();
-    let n = HarnessBuilder::new().zid("a".parse().unwrap()).mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().zid("b".parse().unwrap()).mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let n = HarnessBuilder::new()
+        .zid("a".parse().unwrap())
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .zid("b".parse().unwrap())
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ss = s.new_session();
     let ns = n.new_session();
@@ -536,10 +604,22 @@ fn test_multiple_gateways_data_routing_r2r_downstream() {
 fn test_multiple_gateways_query_routing_r2r_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ss = s.new_session();
     let ns = n.new_session();
@@ -610,10 +690,22 @@ fn test_multiple_gateways_query_routing_r2r_downstream() {
 fn test_multiple_gateways_data_routing_p2r_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -685,10 +777,22 @@ fn test_multiple_gateways_data_routing_p2r_upstream() {
 fn test_multiple_gateways_data_routing_p2r_upstream_with_interest() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -767,10 +871,22 @@ fn test_multiple_gateways_data_routing_p2r_upstream_with_interest() {
 fn test_multiple_gateways_query_routing_p2r_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -842,10 +958,22 @@ fn test_multiple_gateways_query_routing_p2r_upstream() {
 fn test_multiple_gateways_query_routing_p2r_upstream_with_interest() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let r = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let r = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ps = p.new_session();
     let rs = r.new_session();
@@ -924,10 +1052,22 @@ fn test_multiple_gateways_query_routing_p2r_upstream_with_interest() {
 fn test_multiple_gateways_data_routing_r2r_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -998,10 +1138,22 @@ fn test_multiple_gateways_data_routing_r2r_upstream() {
 fn test_multiple_gateways_query_routing_r2r_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -1072,10 +1224,22 @@ fn test_multiple_gateways_query_routing_r2r_upstream() {
 fn test_multiple_gateways_data_routing_p2p_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ss = s.new_session();
     let ns = n.new_session();
@@ -1157,10 +1321,22 @@ fn test_multiple_gateways_data_routing_p2p_downstream() {
 fn test_multiple_gateways_query_routing_p2p_downstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ss = s.new_session();
     let ns = n.new_session();
@@ -1242,10 +1418,22 @@ fn test_multiple_gateways_query_routing_p2p_downstream() {
 fn test_multiple_gateways_data_routing_p2p_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -1327,10 +1515,22 @@ fn test_multiple_gateways_data_routing_p2p_upstream() {
 fn test_multiple_gateways_data_routing_p2p_upstream_with_interest() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -1420,10 +1620,22 @@ fn test_multiple_gateways_data_routing_p2p_upstream_with_interest() {
 fn test_multiple_gateways_query_routing_p2p_upstream() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -1505,10 +1717,22 @@ fn test_multiple_gateways_query_routing_p2p_upstream() {
 fn test_multiple_gateways_query_routing_p2p_upstream_with_interest() {
     try_init_tracing_subscriber();
 
-    let g0 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let g1 = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::default_south(WhatAmI::Peer)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
-    let s = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([Region::Local]).build();
+    let g0 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let g1 = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::default_south(WhatAmI::Peer)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let ss = s.new_session();
@@ -1613,9 +1837,18 @@ fn test_multiple_gateways_data_routing_r2r_upstream_gateway_source() {
         .mode(WhatAmI::Router)
         .subregions([Region::default_south(WhatAmI::Router), Region::Local])
         .build();
-    let g2 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let m = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let m = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let g1s = g1.new_session();
@@ -1693,9 +1926,18 @@ fn test_multiple_gateways_query_routing_r2r_upstream_gateway_source() {
         .mode(WhatAmI::Router)
         .subregions([Region::default_south(WhatAmI::Router), Region::Local])
         .build();
-    let g2 = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::default_south(WhatAmI::Router)]).build();
-    let n = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
-    let m = HarnessBuilder::new().mode(WhatAmI::Router).subregions([Region::Local]).build();
+    let g2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let m = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
 
     let ns = n.new_session();
     let g1s = g1.new_session();
@@ -1760,4 +2002,52 @@ fn test_multiple_gateways_query_routing_r2r_upstream_gateway_source() {
     assert!(n_g2.is_bi_complete());
     assert!(m_g1.is_bi_complete());
     assert!(m_g2.is_bi_complete());
+}
+
+/// In [route_data], we use [send_push_consume] consume to decide whether we may modify the source
+/// message in place for forwarding or not. This test ensures that the `consume` API is respected.
+///
+/// [route_data]: crate::net::routing::dispatcher::pubsub::route_data
+/// [send_push_consume]: crate::net::routing::dispatcher::face::Face
+#[test]
+fn test_push_message_consumption() {
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::Client) // Avoid the need for a runtime
+        .subregions([Region::Local])
+        .start_runtime(false)
+        .build();
+    let s1 = g.new_session();
+    let s2 = g.new_session();
+
+    s2.declare_subscriber(None, 3, &"k/*".parse::<KeyExpr>().unwrap());
+    s2.declare_keyexpr(None, 5, "k/0".into());
+
+    let mut push = Push::from(vec![42]);
+    push.wire_expr = "k/0".into();
+    let push_clone = push.clone();
+
+    // Here the wire expr is non-scoped
+    s1.face
+        .send_push_consume(&mut push, Reliability::default(), false);
+
+    assert_eq!(
+        s2.recorder().pushes().len(),
+        1,
+        "s2 should receive exactly one publication"
+    );
+
+    assert_eq!(
+        s2.recorder().pushes()[0].wire_expr,
+        WireExpr {
+            scope: 5,
+            suffix: "".into(),
+            mapping: Mapping::Receiver
+        },
+        "s2's received publication should be scoped"
+    );
+
+    assert_eq!(
+        push, push_clone,
+        "the push message should not be modified as `consume` is false"
+    );
 }

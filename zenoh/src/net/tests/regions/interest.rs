@@ -135,7 +135,10 @@ fn test_current_token_repropagation() {
 fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
     try_init_tracing_subscriber();
 
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([]).build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([])
+        .build();
 
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
@@ -150,7 +153,10 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
 /// interests before sending the current tokens interest.
 #[test]
 fn test_p2p_interest_routing_with_finalized_initial_interests() {
-    let p = HarnessBuilder::new().mode(WhatAmI::Peer).subregions([]).build();
+    let p = HarnessBuilder::new()
+        .mode(WhatAmI::Peer)
+        .subregions([])
+        .build();
 
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));

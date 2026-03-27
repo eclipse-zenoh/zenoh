@@ -38,7 +38,7 @@ use tracing_subscriber::EnvFilter;
 use zenoh_config::{Config, ZenohId};
 use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
-    core::{Bound, Region, Reliability, WhatAmI, ZenohIdProto},
+    core::{Bound, ExprId, Region, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType,
@@ -50,7 +50,7 @@ use zenoh_protocol::{
         ext::{self, NodeIdType},
         interest::{InterestId, InterestMode, InterestOptions},
         request::ext::QueryTarget,
-        Declare, DeclareBody, DeclareFinal, Interest, NetworkBody, NetworkBodyMut,
+        Declare, DeclareBody, DeclareFinal, DeclareKeyExpr, Interest, NetworkBody, NetworkBodyMut,
         NetworkMessageMut, Oam, Push, Request, RequestId, Response, ResponseFinal,
     },
     zenoh::{PushBody, Put, Query, RequestBody},
@@ -476,6 +476,22 @@ impl MockFace {
             },
             Reliability::BestEffort,
         );
+    }
+
+    /// Declare a keyexpr from this face's perspective.
+    pub(crate) fn declare_keyexpr(
+        &self,
+        interest_id: Option<InterestId>,
+        id: ExprId,
+        wire_expr: WireExpr<'static>,
+    ) {
+        self.face.send_declare(&mut Declare {
+            interest_id,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr { id, wire_expr }),
+        });
     }
 
     /// Declare a subscriber for `key_expr` from this face's perspective.
