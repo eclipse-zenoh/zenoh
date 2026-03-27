@@ -19,12 +19,11 @@ use alloc::{
 };
 use core::{
     convert::{From, TryFrom, TryInto},
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     hash::Hash,
     ops::{Deref, RangeInclusive},
     str::FromStr,
 };
-use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 pub use uhlc::{Timestamp, NTP64};
@@ -97,9 +96,9 @@ impl ZenohIdProto {
 pub struct ShortZenohIdProto(ZenohIdProto);
 
 impl Display for ShortZenohIdProto {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         type Repr = u32;
-        const L: usize = std::mem::size_of::<Repr>();
+        const L: usize = core::mem::size_of::<Repr>();
         let bytes = self.0.to_le_bytes();
         let start = self.0.size().saturating_sub(L);
         write!(
@@ -111,7 +110,7 @@ impl Display for ShortZenohIdProto {
 }
 
 impl Debug for ShortZenohIdProto {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{self}")
     }
 }
