@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![allow(dead_code)] // because every test doesn't use the whole common features
 use std::time::Duration;
 
 use zenoh::Session;
 use zenoh_core::ztimeout;
+use zenoh_link::EndPoint;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -121,4 +123,155 @@ pub async fn open_session_multilink(
     let session2 = ztimeout!(zenoh::open(config2)).unwrap();
 
     (session1, session2)
+}
+
+fn get_available_endpoints(num: usize) -> Vec<EndPoint> {
+    let ports = (0..num)
+        .map(|_| {
+            let listener =
+                std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind port 0");
+            listener.local_addr().unwrap().port()
+        })
+        .collect::<Vec<_>>();
+
+    ports
+        .iter()
+        .map(|p| format!("tcp/127.0.0.1:{}", p).parse::<EndPoint>().unwrap())
+        .collect::<Vec<_>>()
+}
+
+pub enum ConfigType {
+    Listener,
+    Connector,
+}
+
+pub struct TestScenarioBuilder {
+    link_num: usize,
+    listener_config: zenoh_config::Config,
+    connector_config: zenoh_config::Config,
+}
+
+impl TestScenarioBuilder {
+    pub fn new() -> TestScenarioBuilder {
+        let mut listener_config = zenoh_config::Config::default();
+        let mut connector_config = zenoh_config::Config::default();
+
+        // Disable multicast by default
+        listener_config
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+        connector_config
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
+            .unwrap();
+
+        TestScenarioBuilder {
+            link_num: 1,
+            listener_config,
+            connector_config,
+        }
+    }
+
+    pub fn with_multilink(mut self, link_num: usize) -> TestScenarioBuilder {
+        self.link_num = link_num;
+        self.listener_config
+            .transport
+            .unicast
+            .set_max_links(link_num)
+            .unwrap();
+        self.connector_config
+            .transport
+            .unicast
+            .set_max_links(link_num)
+            .unwrap();
+        self
+    }
+
+    pub fn with_config(
+        mut self,
+        config_type: ConfigType,
+        config: zenoh_config::Config,
+    ) -> TestScenarioBuilder {
+        match config_type {
+            ConfigType::Listener => self.listener_config = config,
+            ConfigType::Connector => self.connector_config = config,
+        }
+        self
+    }
+
+    pub async fn build(mut self) -> TestScenario {
+        let endpoints = get_available_endpoints(self.link_num);
+
+        // Create listener session
+        self.listener_config
+            .listen
+            .endpoints
+            .set(endpoints.clone())
+            .unwrap();
+
+        // Create connector session
+        self.connector_config
+            .connect
+            .endpoints
+            .set(endpoints)
+            .unwrap();
+
+        TestScenario {
+            listener_config: self.listener_config,
+            connector_config: self.connector_config,
+            listener_session: None,
+            connector_sessions: vec![],
+        }
+    }
+}
+
+pub struct TestScenario {
+    listener_config: zenoh_config::Config,
+    connector_config: zenoh_config::Config,
+    listener_session: Option<Session>,
+    connector_sessions: Vec<Session>,
+}
+
+impl TestScenario {
+    //pub fn get_session(&self) -> (Session, Session) {
+    //    (
+    //        self.listener_session.clone(),
+    //        self.connector_session.clone(),
+    //    )
+    //}
+
+    pub async fn open_listener(&mut self) -> Session {
+        let session = ztimeout!(zenoh::open(self.listener_config.clone())).unwrap();
+        self.listener_session = Some(session.clone());
+        session
+    }
+
+    pub async fn open_connector(&mut self) -> Session {
+        let session = ztimeout!(zenoh::open(self.connector_config.clone())).unwrap();
+        self.connector_sessions.push(session.clone());
+        session
+    }
+
+    pub async fn open_pairs(&mut self) -> (Session, Session) {
+        let listener_session = self.open_listener().await;
+        let connector_session = self.open_connector().await;
+        (listener_session, connector_session)
+    }
+
+    pub async fn close(&mut self) {
+        // Close all the connector sessions
+        for session in self.connector_sessions.drain(..) {
+            println!("Closing connector session");
+            ztimeout!(session.close()).unwrap();
+        }
+
+        // If self.listener_session is not None, close it and set it to None
+        if let Some(session) = self.listener_session.take() {
+            println!("Closing listener session");
+            ztimeout!(session.close()).unwrap();
+        }
+    }
 }
