@@ -143,37 +143,39 @@ fn reader_main() {
 
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    let _read_handle = zenoh_runtime::ZRuntime::Application.block_on( reader
-        .setup_fragmented_read(stream.as_raw_fd(), move |data| {
-            //if data.size() != BUF_SIZE-2 {
-            //    println!("Unexpected size: {}", data.size());
-            //    assert!(data.size() == BUF_SIZE-2);
-            //}
+    let _read_handle = zenoh_runtime::ZRuntime::Application
+        .block_on(
+            reader.setup_fragmented_read(stream.as_raw_fd(), move |data| {
+                //if data.size() != BUF_SIZE-2 {
+                //    println!("Unexpected size: {}", data.size());
+                //    assert!(data.size() == BUF_SIZE-2);
+                //}
 
-            let time = monotonic_now_ns();
+                let time = monotonic_now_ns();
 
-            let bytes = data
-                .iter()
-                .take(16)
-                .enumerate()
-                .try_fold([0u8; 16], |mut acc, (i, b)| {
-                    acc[i] = *b;
-                    Ok::<_, ()>(acc)
-                })
-                .ok()
-                .unwrap(); // unwrap if you know there are 2 bytes
+                let bytes = data
+                    .iter()
+                    .take(16)
+                    .enumerate()
+                    .try_fold([0u8; 16], |mut acc, (i, b)| {
+                        acc[i] = *b;
+                        Ok::<_, ()>(acc)
+                    })
+                    .ok()
+                    .unwrap(); // unwrap if you know there are 2 bytes
 
-            let restored = u128::from_le_bytes(bytes);
+                let restored = u128::from_le_bytes(bytes);
 
-            let latency = (time - restored) as usize;
-            //println!("latency: {latency} ns");
+                let latency = (time - restored) as usize;
+                //println!("latency: {latency} ns");
 
-            c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            c_len.fetch_add(data.size(), std::sync::atomic::Ordering::SeqCst);
-            c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
+                c_ctr.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                c_len.fetch_add(data.size(), std::sync::atomic::Ordering::SeqCst);
+                c_accum_latency.fetch_add(latency, std::sync::atomic::Ordering::SeqCst);
 
-            Ok(())
-        }))
+                Ok(())
+            }),
+        )
         .unwrap();
 
     /*

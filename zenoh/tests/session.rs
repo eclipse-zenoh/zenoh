@@ -291,6 +291,7 @@ async fn zenoh_session_multicast() {
 
 #[cfg(feature = "internal")]
 async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
+    zenoh::init_log_from_env_or("error");
     // Open the sessions
     let mut config = zenoh::Config::default();
     config

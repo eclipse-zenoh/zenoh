@@ -39,8 +39,8 @@ const H_LEN: usize = BatchHeader::SIZE;
 
 // Split the inner buffer into (length, header, payload) immutable slices
 macro_rules! zsplit {
-    ($slice:expr, $config:expr) => {{
-        match ($config.is_streamed, $config.has_header()) {
+    ($slice:expr, $is_streamed:expr, $has_header:expr) => {{
+        match ($is_streamed, $has_header) {
             (true, true) => {
                 let (l, s) = $slice.split_at(L_LEN);
                 let (h, p) = s.split_at(H_LEN);
@@ -282,7 +282,7 @@ impl WBatch {
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
     fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
-        zsplit!(buffer, config)
+        zsplit!(buffer, config.is_streamed, config.has_header())
     }
 
     // Split (length, header, payload) internal buffer slice
@@ -454,7 +454,23 @@ impl RBatch {
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
     fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
-        zsplit!(buffer, config)
+        zsplit!(buffer, config.is_streamed, config.has_header())
+    }
+
+    // Split (length, header, payload) internal buffer slice
+    #[cfg(feature = "uring")]
+    #[inline(always)]
+    fn split_uring<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
+        zsplit!(buffer, false, config.has_header())
+    }
+
+    #[cfg(feature = "uring")]
+    pub fn initialize_uring<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
+    where
+        C: Fn() -> T + Copy,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
+    {
+        self.initialize_inner(buff, true)
     }
 
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
@@ -462,6 +478,31 @@ impl RBatch {
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
+        self.initialize_inner(
+            buff,
+            #[cfg(feature = "uring")]
+            false,
+        )
+    }
+
+    fn initialize_inner<C, T>(
+        &mut self,
+        #[allow(unused_variables)] buff: C,
+        #[cfg(feature = "uring")] uring: bool,
+    ) -> ZResult<()>
+    where
+        C: Fn() -> T + Copy,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
+    {
+        #[cfg(feature = "uring")]
+        #[allow(unused_variables)]
+        let (l, h, p) = if uring {
+            Self::split_uring(self.buffer.as_slice(), &self.config)
+        } else {
+            Self::split(self.buffer.as_slice(), &self.config)
+        };
+
+        #[cfg(not(feature = "uring"))]
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
 

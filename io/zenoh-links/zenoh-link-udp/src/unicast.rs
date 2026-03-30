@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "uring")]
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::RawFd;
 use std::{
     collections::HashMap,
     fmt,
@@ -236,6 +236,9 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[cfg(feature = "uring")]
     fn get_fd(&self) -> ZResult<RawFd> {
+        bail!("FD unavailable")
+        // TODO: UDP temporarily disabled because it has some issue in uring support
+        /*
         let fd = match &self.variant {
             LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
                 link_unicast_udp_connected.socket.as_raw_fd()
@@ -253,6 +256,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
             fd if fd < 0 => bail!("FD unavailable"),
             fd => Ok(fd),
         }
+        */
     }
 }
 

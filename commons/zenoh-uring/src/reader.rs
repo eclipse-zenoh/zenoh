@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use flume::{Receiver, Sender};
 use std::{
     cell::UnsafeCell,
     num::{NonZeroU32, NonZeroU64},
@@ -20,6 +19,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc},
 };
 
+use flume::{Receiver, Sender};
 use io_uring::{opcode, squeue::Flags, types, IoUring, SubmissionQueue};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
@@ -235,6 +235,34 @@ impl FragmentedBatch {
         None
     }
 
+    // TODO: change to zerocopy approach with multi-slice support for read codec
+    pub fn contagious_copy(&self) -> Vec<u8> {
+        let mut result = Vec::with_capacity(self.size);
+
+        let mut leftover = self.size;
+
+        for (i, buf) in self.buffers.iter().enumerate() {
+            let first = i == 0;
+            let last = i == self.buffers.len() - 1;
+
+            let mut slice: &[u8] = buf.deref(); // assuming RxBuffer exposes this
+
+            if first {
+                slice = &slice[self.data_offset..];
+            }
+
+            if last {
+                slice = &slice[..leftover];
+            }
+
+            result.extend_from_slice(slice);
+
+            leftover -= slice.len();
+        }
+
+        result
+    }
+
     pub fn size(&self) -> usize {
         self.size
     }
@@ -292,14 +320,10 @@ impl RxWindow {
     {
         tracing::trace!("Buffer len: {}", buffer.len());
 
-        fn parse_size(bytes: [u8; 2]) -> ZResult<usize> {
+        fn parse_size(bytes: [u8; 2]) -> usize {
             let size = u16::from_le_bytes(bytes) as usize;
-            assert!(size != 0);
-            if size == 0 {
-                bail!("Zero-sized buffer in stream!");
-            }
             tracing::trace!("parsed size: {}", size);
-            Ok(size)
+            size
         }
 
         match &mut self.state {
@@ -314,7 +338,8 @@ impl RxWindow {
                         break;
                     }
 
-                    let size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
+                    // size may be 0!
+                    let size = parse_size(buffer[pos..pos + 2].try_into().unwrap());
                     pos += 2;
                     leftover -= 2;
 
@@ -325,9 +350,14 @@ impl RxWindow {
                             data_offset: 0,
                             buffers: vec![],
                         };
-                        let accumulator = BatchAccumulator::new(leftover, fragment);
-                        self.state = RxWindowState::Accumulating(accumulator);
-                        assert!(size != 0);
+
+                        if size == 0 {
+                            on_batch(fragment)?;
+                            self.state = RxWindowState::Initial;
+                        } else {
+                            let accumulator = BatchAccumulator::new(leftover, fragment);
+                            self.state = RxWindowState::Accumulating(accumulator);
+                        }
                         break;
                     }
 
@@ -344,11 +374,18 @@ impl RxWindow {
                         break;
                     }
 
+                    // don't borrow buffer for ephimeral batches
+                    let buffers = if size == 0 {
+                        vec![]
+                    } else {
+                        vec![buffer.clone()]
+                    };
+
                     // buffer contains at least one more batch
                     let batch = FragmentedBatch {
                         size,
                         data_offset: pos,
-                        buffers: vec![buffer.clone()],
+                        buffers,
                     };
                     tracing::trace!("on_batch");
                     on_batch(batch)?;
@@ -358,7 +395,8 @@ impl RxWindow {
             }
             RxWindowState::SizeFragmented(size_fragment) => {
                 // defragment size
-                let mut size = parse_size([*size_fragment, buffer[0]])?;
+                // size may be 0!
+                let mut size = parse_size([*size_fragment, buffer[0]]);
                 let mut leftover = buffer.len() - 1;
                 let mut pos = 1;
 
@@ -370,9 +408,14 @@ impl RxWindow {
                             data_offset: 0,
                             buffers: vec![],
                         };
-                        let accumulator = BatchAccumulator::new(leftover, fragment);
-                        self.state = RxWindowState::Accumulating(accumulator);
-                        assert!(size != 0);
+
+                        if size == 0 {
+                            on_batch(fragment)?;
+                            self.state = RxWindowState::Initial;
+                        } else {
+                            let accumulator = BatchAccumulator::new(leftover, fragment);
+                            self.state = RxWindowState::Accumulating(accumulator);
+                        }
                         break;
                     }
 
@@ -389,11 +432,18 @@ impl RxWindow {
                         break;
                     }
 
+                    // don't borrow buffer for ephimeral batches
+                    let buffers = if size == 0 {
+                        vec![]
+                    } else {
+                        vec![buffer.clone()]
+                    };
+
                     // buffer contains at least one more batch
                     let batch = FragmentedBatch {
                         size,
                         data_offset: pos,
-                        buffers: vec![buffer.clone()],
+                        buffers,
                     };
                     tracing::trace!("on_batch");
                     on_batch(batch)?;
@@ -412,7 +462,8 @@ impl RxWindow {
                         break;
                     }
 
-                    size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
+                    // size may be 0!
+                    size = parse_size(buffer[pos..pos + 2].try_into().unwrap());
                     pos += 2;
                     leftover -= 2;
                 }
@@ -453,7 +504,8 @@ impl RxWindow {
                             break;
                         }
 
-                        let size = parse_size(buffer[pos..pos + 2].try_into().unwrap())?;
+                        // size may be 0!
+                        let size = parse_size(buffer[pos..pos + 2].try_into().unwrap());
                         pos += 2;
                         leftover -= 2;
 
@@ -464,10 +516,16 @@ impl RxWindow {
                                 data_offset: 0,
                                 buffers: vec![],
                             };
-                            let accumulator = BatchAccumulator::new(leftover, fragment);
-                            self.state = RxWindowState::Accumulating(accumulator);
-                            assert!(size != 0);
-                            tracing::trace!("Accumulating -> Accumulating (only size)");
+
+                            if size == 0 {
+                                on_batch(fragment)?;
+                                self.state = RxWindowState::Initial;
+                                tracing::trace!("Accumulating -> Initial");
+                            } else {
+                                let accumulator = BatchAccumulator::new(leftover, fragment);
+                                self.state = RxWindowState::Accumulating(accumulator);
+                                tracing::trace!("Accumulating -> Accumulating (only size)");
+                            }
                             break;
                         }
 
@@ -485,11 +543,18 @@ impl RxWindow {
                             break;
                         }
 
+                        // don't borrow buffer for ephimeral batches
+                        let buffers = if size == 0 {
+                            vec![]
+                        } else {
+                            vec![buffer.clone()]
+                        };
+
                         // buffer contains at least one more batch
                         let batch = FragmentedBatch {
                             size,
                             data_offset: pos,
-                            buffers: vec![buffer.clone()],
+                            buffers,
                         };
                         tracing::trace!("on_batch");
                         on_batch(batch)?;
@@ -833,7 +898,10 @@ impl Reader {
             fn roll_cmds(
                 receiver: &Receiver<ReactorCmd>,
                 context_storage: &mut RxContextStorage,
+                arena: &ReservableArena,
                 sq: &mut SubmissionQueue<'_>,
+                ctr: &mut i32,
+                batch_count: usize,
             ) -> ZResult<()> {
                 //tracing::debug!("Reading cmds....");
 
@@ -846,6 +914,9 @@ impl Reader {
                             let rx_context = Arc::new(Rx::new(fd, callback, error_sender));
                             let index = context_storage.alloc(rx_context);
                             set_once.set(index)?;
+
+                            *ctr -= (batch_count / 2) as i32;
+                            roll_ring_batches(arena, ctr, sq)?;
 
                             let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
                                 .build()
@@ -863,6 +934,8 @@ impl Reader {
                                 .flags(io_uring::squeue::Flags::ASYNC);
 
                             unsafe { sq.push(&event)? }
+
+                            *ctr += (batch_count / 2) as i32;
                         }
                     }
                 }
@@ -894,7 +967,14 @@ impl Reader {
                     let mut sq = unsafe { ring.submission_shared() };
 
                     roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
-                    roll_cmds(&receiver, &mut context_storage, &mut sq)?;
+                    roll_cmds(
+                        &receiver,
+                        &mut context_storage,
+                        &arena,
+                        &mut sq,
+                        &mut batch_ctr,
+                        batch_count,
+                    )?;
 
                     match e.user_data() {
                         IndexGeneration::INVALID_MIN => {
@@ -937,7 +1017,14 @@ impl Reader {
                 roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
 
                 // receive external submissions
-                roll_cmds(&receiver, &mut context_storage, &mut sq)?;
+                roll_cmds(
+                    &receiver,
+                    &mut context_storage,
+                    &arena,
+                    &mut sq,
+                    &mut batch_ctr,
+                    batch_count,
+                )?;
 
                 //let len = sq.len();
 
@@ -1070,7 +1157,7 @@ impl Reader {
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
-                    tracing::trace!("ENOBUFS: Restart multishot receive for task {:?}", index);
+                    tracing::debug!("ENOBUFS: Restart multishot receive for task {:?}", index);
 
                     let recv = opcode::RecvMulti::new(types::Fd(context.fd), 0)
                         .build()

@@ -426,7 +426,7 @@ async fn rx_task_uring(
     let batch_config = link.config.batch;
 
     ///////
-    //let reader = zenoh_uring::reader::Reader::new(65537, 16)?;
+    //let r = zenoh_uring::reader::Reader::new(65537, 16)?;
 
     let r = transport.manager.state.uring.reader.clone();
 
@@ -434,9 +434,6 @@ async fn rx_task_uring(
         match link.link.is_streamed() {
             true => {
                 let ring_cb = move |data: FragmentedBatch| {
-                    let mut batch_config = batch_config;
-                    batch_config.is_streamed = false;
-
                     let buffer: ZSlice = match data.try_contagious_zerocopy() {
                         Some(buffer) => ZSlice::new(
                             std::sync::Arc::new(ZRxBuffer(buffer)),
@@ -445,13 +442,13 @@ async fn rx_task_uring(
                         )
                         .map_err(|_| zerror!("Error constructing slice...."))?,
                         None => {
-                            let contagious_data: Vec<u8> = data.iter().copied().collect();
+                            let contagious_data = data.contagious_copy();
                             std::sync::Arc::new(contagious_data).into()
                         }
                     };
 
                     let mut batch = RBatch::new(batch_config, buffer);
-                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+                    batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
 
                     #[cfg(feature = "stats")]
                     {
