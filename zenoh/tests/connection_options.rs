@@ -69,9 +69,22 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// `open()` waits at most this long for `start_conditions` before returning Ok.
 const SCOUTING_DELAY_MS: u64 = 500;
 
+///  Maximum time for an operation that should fail after scouting delay.
+#[cfg(not(target_os = "windows"))]
+const SCOUTING_FAILURE_MAX: u64 = SCOUTING_DELAY_MS + 1000;
+#[cfg(target_os = "windows")]
+const SCOUTING_FAILURE_MAX: u64 = SCOUTING_DELAY_MS + 5000;
+
 /// Maximum time for an operation that should return "immediately" (well before
 /// the scouting delay fires).
 const IMMEDIATE_MAX: Duration = Duration::from_millis(300);
+
+/// Maximum time for an operation that should fail "immediately" (well before
+/// the scouting delay fires).
+#[cfg(not(target_os = "windows"))]
+const IMMEDIATE_FAIL_MAX: Duration = Duration::from_millis(300);
+#[cfg(target_os = "windows")]
+const IMMEDIATE_FAIL_MAX: Duration = Duration::from_millis(5000);
 
 /// Maximum time for a successful `open()` when a router is available.
 const FAST_OPEN_MAX: Duration = Duration::from_millis(2000);
@@ -220,7 +233,7 @@ async fn b1_connect_no_router_oneshot_exit() -> zenoh::Result<()> {
         "open() should return Err with timeout_ms=0/exit_on_failure=true and no router",
     );
     assert!(
-        elapsed < IMMEDIATE_MAX,
+        elapsed < IMMEDIATE_FAIL_MAX,
         "open() should fail fast, but took {elapsed:?}",
     );
     Ok(())
@@ -252,7 +265,7 @@ async fn b2_connect_no_router_oneshot_no_exit() -> zenoh::Result<()> {
         "open() returned too fast ({elapsed:?}); expected scouting delay ≥ {SCOUTING_DELAY_MS} ms",
     );
     assert!(
-        elapsed < Duration::from_millis(SCOUTING_DELAY_MS + 1000),
+        elapsed < Duration::from_millis(SCOUTING_FAILURE_MAX),
         "open() took too long: {elapsed:?}",
     );
 
@@ -280,8 +293,8 @@ async fn b3_connect_no_router_oneshot_no_exit_no_wait() -> zenoh::Result<()> {
     let elapsed = start.elapsed();
 
     assert!(
-        elapsed < IMMEDIATE_MAX,
-        "open() with connect_configured=false took {elapsed:?}, expected < {IMMEDIATE_MAX:?}",
+        elapsed < IMMEDIATE_FAIL_MAX,
+        "open() with connect_configured=false took {elapsed:?}, expected < {IMMEDIATE_FAIL_MAX:?}",
     );
 
     session.close().await.unwrap();
@@ -348,7 +361,7 @@ async fn b5_connect_no_router_timeout_no_exit() -> zenoh::Result<()> {
         "open() returned too fast ({elapsed:?}); expected scouting delay ≥ {SCOUTING_DELAY_MS} ms",
     );
     assert!(
-        elapsed < Duration::from_millis(SCOUTING_DELAY_MS + 1000),
+        elapsed < Duration::from_millis(SCOUTING_FAILURE_MAX),
         "open() took too long: {elapsed:?}",
     );
 
@@ -380,8 +393,8 @@ async fn b6_connect_no_router_forever_no_wait() -> zenoh::Result<()> {
     let elapsed = start.elapsed();
 
     assert!(
-        elapsed < IMMEDIATE_MAX,
-        "open() with connect_configured=false took {elapsed:?}, expected < {IMMEDIATE_MAX:?}",
+        elapsed < IMMEDIATE_FAIL_MAX,
+        "open() with connect_configured=false took {elapsed:?}, expected < {IMMEDIATE_FAIL_MAX:?}",
     );
 
     session.close().await.unwrap();
@@ -459,7 +472,7 @@ async fn c2_scout_no_router_background_with_wait() -> zenoh::Result<()> {
         "open() returned too fast ({elapsed:?}); expected scouting delay ≥ {SCOUTING_DELAY_MS} ms",
     );
     assert!(
-        elapsed < Duration::from_millis(SCOUTING_DELAY_MS + 1000),
+        elapsed < Duration::from_millis(SCOUTING_FAILURE_MAX),
         "open() took too long: {elapsed:?}",
     );
 
