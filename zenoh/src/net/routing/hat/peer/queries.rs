@@ -504,7 +504,11 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_queryables_of(&self, _tables: &TablesData, res: &Resource) -> Option<QueryableInfoType> {
+    fn remote_queryables_of(
+        &self,
+        _tables: &TablesData,
+        res: &Resource,
+    ) -> Option<QueryableInfoType> {
         self.owned_face_contexts(res)
             .filter_map(|ctx| ctx.qabl)
             .reduce(merge_qabl_infos)

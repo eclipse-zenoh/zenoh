@@ -48,8 +48,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _remote: &Remote,
     ) -> Option<CurrentInterest> {
-        bug!("North-bound broker hat");
-        None
+        unreachable!("north-bound broker hat");
     }
 
     fn route_interest_final(
@@ -58,7 +57,7 @@ impl HatInterestTrait for Hat {
         _msg: &Interest,
         _remote_interest: &RemoteInterest,
     ) {
-        bug!("North-bound broker hat");
+        unreachable!("north-bound broker hat");
     }
 
     fn route_declare_final(
@@ -66,8 +65,7 @@ impl HatInterestTrait for Hat {
         _ctx: DispatcherContext,
         _interest_id: InterestId,
     ) -> RouteCurrentDeclareResult {
-        bug!("North-bound broker hat");
-        RouteCurrentDeclareResult::Noop
+        unreachable!("north-bound broker hat");
     }
 
     fn route_current_token(
@@ -76,8 +74,7 @@ impl HatInterestTrait for Hat {
         _interest_id: InterestId,
         _res: Arc<Resource>,
     ) -> RouteCurrentDeclareResult {
-        bug!("North-bound broker hat");
-        RouteCurrentDeclareResult::Noop
+        unreachable!("north-bound broker hat");
     }
 
     #[allow(clippy::incompatible_msrv)]

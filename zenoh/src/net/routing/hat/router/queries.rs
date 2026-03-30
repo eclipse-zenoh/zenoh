@@ -555,7 +555,11 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_queryables_of(&self, tables: &TablesData, res: &Resource) -> Option<QueryableInfoType> {
+    fn remote_queryables_of(
+        &self,
+        tables: &TablesData,
+        res: &Resource,
+    ) -> Option<QueryableInfoType> {
         self.res_hat(res)
             .router_qabls
             .iter()

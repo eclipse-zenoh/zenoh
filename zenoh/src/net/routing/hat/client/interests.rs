@@ -288,7 +288,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, SubscriberInfo>,
     ) {
-        bug!("South-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn send_current_queryables(
@@ -298,7 +298,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashMap<Arc<Resource>, QueryableInfoType>,
     ) {
-        bug!("South-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn send_current_tokens(
@@ -308,7 +308,7 @@ impl HatInterestTrait for Hat {
         _res: Option<Arc<Resource>>,
         _other_matches: HashSet<Arc<Resource>>,
     ) {
-        bug!("South-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn propagate_current_token(
@@ -317,11 +317,11 @@ impl HatInterestTrait for Hat {
         _res: Arc<Resource>,
         _interest: CurrentInterest,
     ) {
-        bug!("South-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn send_declare_final(&mut self, _ctx: DispatcherContext, _id: InterestId, _src: &Remote) {
-        bug!("South-bound client hat")
+        unreachable!("outh-bound client hat")
     }
 
     fn register_interest(
@@ -330,7 +330,7 @@ impl HatInterestTrait for Hat {
         _msg: &Interest,
         _res: Option<Arc<Resource>>,
     ) {
-        bug!("South-bound client hat")
+        unreachable!("south-bound client hat")
     }
 
     fn unregister_interest(
@@ -338,8 +338,7 @@ impl HatInterestTrait for Hat {
         _ctx: DispatcherContext,
         _msg: &Interest,
     ) -> Option<RemoteInterest> {
-        bug!("South-bound client hat");
-        None
+        unreachable!("south-bound client hat");
     }
 
     #[tracing::instrument(level = "trace", skip(_tables), ret)]

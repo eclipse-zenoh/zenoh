@@ -362,11 +362,7 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn propagate_token(
-        &mut self,
-        ctx: DispatcherContext,
-        mut res: Arc<Resource>,
-    ) {
+    fn propagate_token(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::register_token
             return;

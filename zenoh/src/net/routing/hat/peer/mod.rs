@@ -25,7 +25,6 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
-use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use zenoh_config::{unwrap_or_default, ModeDependent};
 use zenoh_protocol::{
@@ -440,14 +439,6 @@ impl HatBaseTrait for Hat {
             bug!("Invalid peer hat");
             return None;
         };
-
-        tracing::trace!(
-            net.graph = ?net
-                .graph
-                .node_weights()
-                .map(|n| (n.zid, n.is_gateway, n.links.keys().collect_vec()))
-                .collect_vec()
-        );
 
         let links = net
             .graph

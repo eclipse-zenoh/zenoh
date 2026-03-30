@@ -346,7 +346,11 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_subscribers_of(&self, _tables: &TablesData, res: &Resource) -> Option<SubscriberInfo> {
+    fn remote_subscribers_of(
+        &self,
+        _tables: &TablesData,
+        res: &Resource,
+    ) -> Option<SubscriberInfo> {
         self.owned_face_contexts(res)
             .filter_map(|ctx| ctx.subs)
             .reduce(|_, _| SubscriberInfo)

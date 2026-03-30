@@ -227,7 +227,6 @@ impl HatTokenTrait for Hat {
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
-
         // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
         // session-local tokens in liveliness queries/subscribers.
         for dst_face in self.owned_faces_mut(ctx.tables) {

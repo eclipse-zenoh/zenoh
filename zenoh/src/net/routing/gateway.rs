@@ -249,7 +249,7 @@ impl Gateway {
                     tables: &mut tables.data,
                     src_face: &mut face.state,
                     send_declare: &mut |_, _| {
-                        bug!("no declarations should be pushed to new session faces")
+                        unreachable!("no declarations should be pushed to new session faces")
                     },
                 },
                 &self.tables,
