@@ -24,7 +24,6 @@ use zenoh_protocol::{
 };
 
 use super::{Connection, FaceDef, HarnessBuilder};
-use crate::key_expr::KeyExpr;
 
 #[test_case::test_matrix([WhatAmI::Router, WhatAmI::Peer])]
 fn test_sourced_entities_and_interests(mode: WhatAmI) {
@@ -60,32 +59,20 @@ fn test_sourced_entities_and_interests(mode: WhatAmI) {
     );
 
     for (prefix, face) in [("g", &g), ("s", &s), ("c", &c), ("p", &p)] {
-        face.declare_subscriber(
-            None,
-            1,
-            &format!("{prefix}/subscriber").parse::<KeyExpr>().unwrap(),
-        );
-        face.declare_queryable(
-            None,
-            1,
-            &format!("{prefix}/queryable").parse::<KeyExpr>().unwrap(),
-        );
-        face.declare_token(
-            None,
-            1,
-            &format!("{prefix}/token").parse::<KeyExpr>().unwrap(),
-        );
+        face.declare_subscriber(None, 1, format!("{prefix}/subscriber"));
+        face.declare_queryable(None, 1, format!("{prefix}/queryable"));
+        face.declare_token(None, 1, format!("{prefix}/token"));
         face.interest(
             1,
             InterestMode::CurrentFuture,
             InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
-            Some(&format!("{prefix}/publisher").parse::<KeyExpr>().unwrap()),
+            format!("{prefix}/publisher"),
         );
         face.interest(
             2,
             InterestMode::CurrentFuture,
             InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
-            Some(&format!("{prefix}/querier").parse::<KeyExpr>().unwrap()),
+            format!("{prefix}/querier"),
         );
     }
 
@@ -133,7 +120,7 @@ fn test_sourced_entities_and_interests(mode: WhatAmI) {
     }
 
     let mut get = |ke: &str| -> HashSet<(String, Sources)> {
-        s.query(1, &ke.parse::<KeyExpr>().unwrap());
+        s.query(1, ke.to_string());
         g0_g1.bi_fwd();
         let replies = s.recorder().responses();
         s.recorder().clear();

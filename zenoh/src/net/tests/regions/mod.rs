@@ -36,7 +36,6 @@ use std::{
 use futures::executor::block_on;
 use tracing_subscriber::EnvFilter;
 use zenoh_config::{Config, ZenohId};
-use zenoh_keyexpr::keyexpr;
 use zenoh_protocol::{
     core::{Bound, ExprId, Region, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
@@ -432,10 +431,10 @@ impl Debug for MockFace {
 
 impl MockFace {
     /// Inject a `Put` with an explicit payload.
-    pub(crate) fn put(&self, key_expr: &keyexpr, payload: Vec<u8>) {
+    pub(crate) fn put(&self, wire_expr: impl Into<WireExpr<'static>>, payload: Vec<u8>) {
         self.face.send_push(
             &mut Push {
-                wire_expr: key_expr.as_str().to_string().into(),
+                wire_expr: wire_expr.into(),
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
@@ -449,10 +448,10 @@ impl MockFace {
     }
 
     /// Inject a `Get` with an explicit payload.
-    pub(crate) fn query(&self, id: RequestId, key_expr: &keyexpr) {
+    pub(crate) fn query(&self, id: RequestId, wire_expr: impl Into<WireExpr<'static>>) {
         self.face.send_request(&mut Request {
             id,
-            wire_expr: key_expr.as_str().to_string().into(),
+            wire_expr: wire_expr.into(),
             ext_qos: ext::QoSType::DEFAULT,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
@@ -464,11 +463,11 @@ impl MockFace {
     }
 
     /// Inject a `Delete` publication (tombstone) into the gateway.
-    pub(crate) fn delete(&self, key_expr: &keyexpr) {
+    pub(crate) fn delete(&self, wire_expr: impl Into<WireExpr<'static>>) {
         use zenoh_protocol::zenoh::{Del, PushBody};
         self.face.send_push(
             &mut Push {
-                wire_expr: key_expr.as_str().to_string().into(),
+                wire_expr: wire_expr.into(),
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
@@ -483,14 +482,17 @@ impl MockFace {
         &self,
         interest_id: Option<InterestId>,
         id: ExprId,
-        wire_expr: WireExpr<'static>,
+        wire_expr: impl Into<WireExpr<'static>>,
     ) {
         self.face.send_declare(&mut Declare {
             interest_id,
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
-            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr { id, wire_expr }),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id,
+                wire_expr: wire_expr.into(),
+            }),
         });
     }
 
@@ -499,7 +501,7 @@ impl MockFace {
         &self,
         interest_id: Option<InterestId>,
         id: SubscriberId,
-        key_expr: &keyexpr,
+        wire_expr: impl Into<WireExpr<'static>>,
     ) {
         self.face.send_declare(&mut Declare {
             interest_id,
@@ -508,7 +510,7 @@ impl MockFace {
             ext_nodeid: NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id,
-                wire_expr: key_expr.as_str().to_string().into(),
+                wire_expr: wire_expr.into(),
             }),
         });
     }
@@ -532,7 +534,7 @@ impl MockFace {
         &self,
         interest_id: Option<InterestId>,
         id: QueryableId,
-        key_expr: &keyexpr,
+        wire_expr: impl Into<WireExpr<'static>>,
     ) {
         use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
         self.face.send_declare(&mut Declare {
@@ -542,7 +544,7 @@ impl MockFace {
             ext_nodeid: NodeIdType::DEFAULT,
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id,
-                wire_expr: key_expr.as_str().to_string().into(),
+                wire_expr: wire_expr.into(),
                 ext_info: QueryableInfoType::DEFAULT,
             }),
         });
@@ -567,7 +569,7 @@ impl MockFace {
         &self,
         interest_id: Option<InterestId>,
         id: TokenId,
-        key_expr: &keyexpr,
+        wire_expr: impl Into<WireExpr<'static>>,
     ) {
         self.face.send_declare(&mut Declare {
             interest_id,
@@ -576,7 +578,7 @@ impl MockFace {
             ext_nodeid: NodeIdType::DEFAULT,
             body: DeclareBody::DeclareToken(DeclareToken {
                 id,
-                wire_expr: key_expr.as_str().to_string().into(),
+                wire_expr: wire_expr.into(),
             }),
         });
     }
@@ -601,13 +603,31 @@ impl MockFace {
         id: InterestId,
         mode: InterestMode,
         options: InterestOptions,
-        key_expr: Option<&keyexpr>,
+        wire_expr: impl Into<WireExpr<'static>>,
     ) {
         self.face.send_interest(&mut Interest {
             id,
             mode,
             options,
-            wire_expr: key_expr.map(|ke| ke.as_str().to_string().into()),
+            wire_expr: Some(wire_expr.into()),
+            ext_qos: ext::QoSType::DEFAULT,
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::DEFAULT,
+        });
+    }
+
+    /// Declare an interest without a key expression.
+    pub(crate) fn interest_wildcard(
+        &self,
+        id: InterestId,
+        mode: InterestMode,
+        options: InterestOptions,
+    ) {
+        self.face.send_interest(&mut Interest {
+            id,
+            mode,
+            options,
+            wire_expr: None,
             ext_qos: ext::QoSType::DEFAULT,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,

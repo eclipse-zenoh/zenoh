@@ -19,7 +19,6 @@ use zenoh_protocol::core::{Bound, Region, WhatAmI};
 use super::{
     try_init_tracing_subscriber, Connection, EstablishedConnection, FaceDef, HarnessBuilder,
 };
-use crate::key_expr::KeyExpr;
 
 /// Tests that the gateway doesn't propagate tokens to the source router region.
 #[test]
@@ -51,8 +50,7 @@ fn test_against_invalid_token_propagation_to_source_south_router_region() {
     s_n.bi_fwd();
 
     let ss = s.new_session();
-    let ke = "k".parse::<KeyExpr>().unwrap();
-    ss.declare_token(None, 1, &ke);
+    ss.declare_token(None, 1, "k");
     s_n.bi_fwd();
 
     assert!(s_n.b2a.recorder().tokens().is_empty());
@@ -84,8 +82,7 @@ fn test_against_invalid_token_propagation_to_source_north_router_region() {
     r0_r1.bi_fwd();
 
     let r0s = r0.new_session();
-    let ke = "k".parse::<KeyExpr>().unwrap();
-    r0s.declare_token(None, 1, &ke);
+    r0s.declare_token(None, 1, "k");
     r0_r1.bi_fwd();
 
     assert!(r0_r1.b2a.recorder().tokens().is_empty());
@@ -160,9 +157,7 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
 
     bi_fwd_all();
 
-    let ke = "k".parse::<KeyExpr>().unwrap();
-
-    ss.declare_token(None, 1, &ke);
+    ss.declare_token(None, 1, "k");
     bi_fwd_all();
 
     // Only one gateway should forward the token
@@ -247,9 +242,7 @@ fn test_multiple_gateways_r2r_token_propagation_downstream() {
 
     bi_fwd_all();
 
-    let ke = "k".parse::<KeyExpr>().unwrap();
-
-    ns.declare_token(None, 1, &ke);
+    ns.declare_token(None, 1, "k");
     bi_fwd_all();
 
     // Only one gateway should forward the token
@@ -263,4 +256,31 @@ fn test_multiple_gateways_r2r_token_propagation_downstream() {
     assert!(n_g1.is_bi_complete());
     assert!(s_g0.is_bi_complete());
     assert!(s_g1.is_bi_complete());
+}
+
+#[test]
+fn test_client_token_repropagation() {
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::Client)
+        .subregions([Region::Local, Region::default_south(WhatAmI::Client)])
+        .start_runtime(false)
+        .build();
+
+    let s0 = g.new_session();
+
+    let s1 = g.new_face(
+        FaceDef::default()
+            .region(Region::default_south(WhatAmI::Client))
+            .mode(WhatAmI::Client),
+    );
+
+    s0.declare_token(None, 1, "k/a");
+    s0.declare_token(None, 2, "k/b");
+
+    s1.declare_token(None, 1, "k/b");
+    s1.declare_token(None, 2, "k/c");
+
+    let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
+
+    assert_eq!(n.recorder().tokens().len(), 3);
 }

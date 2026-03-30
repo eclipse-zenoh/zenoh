@@ -23,7 +23,6 @@ use zenoh_protocol::{
 };
 
 use super::{try_init_tracing_subscriber, Connection, FaceDef, Harness, HarnessBuilder};
-use crate::key_expr::KeyExpr;
 
 /// Test that current tokens are re-propagated even if they've already been propagated in future
 /// mode.
@@ -78,15 +77,10 @@ fn test_current_token_repropagation() {
     .establish();
     c2_r.bi_fwd();
 
-    s1.interest(
-        1,
-        InterestMode::Future,
-        InterestOptions::TOKENS,
-        Some("test".try_into().unwrap()),
-    );
+    s1.interest(1, InterestMode::Future, InterestOptions::TOKENS, "test");
     c1_r.bi_fwd();
 
-    s2.declare_token(None, 1, "test".try_into().unwrap());
+    s2.declare_token(None, 1, "test");
     c2_r.bi_fwd();
     c1_r.bi_fwd();
 
@@ -98,12 +92,7 @@ fn test_current_token_repropagation() {
         }]
     );
 
-    s1.interest(
-        1,
-        InterestMode::Current,
-        InterestOptions::TOKENS,
-        Some("test".try_into().unwrap()),
-    );
+    s1.interest(1, InterestMode::Current, InterestOptions::TOKENS, "test");
     c1_r.bi_fwd();
 
     assert_eq!(
@@ -143,7 +132,7 @@ fn test_p2p_interest_routing_with_unfinalized_initial_interests() {
     let p0 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
     let p1 = p.new_face(FaceDef::default().mode(WhatAmI::Peer));
 
-    p0.interest(42, InterestMode::Current, InterestOptions::TOKENS, None);
+    p0.interest_wildcard(42, InterestMode::Current, InterestOptions::TOKENS);
 
     assert!(p0.recorder().interests().is_empty());
     assert!(p1.recorder().interests().is_empty());
@@ -164,7 +153,7 @@ fn test_p2p_interest_routing_with_finalized_initial_interests() {
     p0.declare_final(0);
     p1.declare_final(0);
 
-    p0.interest(42, InterestMode::Current, InterestOptions::TOKENS, None);
+    p0.interest_wildcard(42, InterestMode::Current, InterestOptions::TOKENS);
 
     assert!(p0.recorder().interests().is_empty());
     assert!(p1.recorder().interests().is_empty());
@@ -186,23 +175,21 @@ fn test_concurrent_current_future_interests(north: WhatAmI, south: WhatAmI) {
 
     assert_eq!(n.recorder().interests().len(), 0);
 
-    s0.interest(
+    s0.interest_wildcard(
         42,
         InterestMode::CurrentFuture,
         InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
-        None,
     );
 
-    s1.interest(
+    s1.interest_wildcard(
         42,
         InterestMode::CurrentFuture,
         InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
-        None,
     );
 
     assert_eq!(n.recorder().interests().len(), 2);
 
-    n.declare_subscriber(Some(42), 1999, &"k".parse::<KeyExpr>().unwrap());
+    n.declare_subscriber(Some(42), 1999, "k");
 
     assert_eq!(s0.recorder().subscribers().len(), 1);
     assert_eq!(s1.recorder().subscribers().len(), 1);
@@ -223,19 +210,14 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     let g = HarnessBuilder::new().mode(north).subregions([r]).build();
     let s = g.new_face(FaceDef::default().mode(south).region(r));
 
-    s.interest(
-        42,
-        InterestMode::CurrentFuture,
-        InterestOptions::QUERYABLES,
-        None,
-    );
+    s.interest_wildcard(42, InterestMode::CurrentFuture, InterestOptions::QUERYABLES);
 
     let n = g.new_face(FaceDef::default().remote_bound(Bound::South));
 
     assert_eq!(n.recorder().interests().len(), 1);
     assert_eq!(s.recorder().queryables().len(), 0);
 
-    n.declare_queryable(Some(42), 1999, &"k".parse::<KeyExpr>().unwrap());
+    n.declare_queryable(Some(42), 1999, "k");
 
     assert_eq!(s.recorder().queryables().len(), 1);
 }
