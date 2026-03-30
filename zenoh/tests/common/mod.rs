@@ -14,6 +14,8 @@
 #![allow(dead_code)] // because every test doesn't use the whole common features
 use std::time::Duration;
 
+#[cfg(feature = "internal")]
+use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::Session;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
@@ -52,14 +54,6 @@ pub async fn open_session_connect(endpoints: &[&str]) -> Session {
     ztimeout!(zenoh::open(config)).unwrap()
 }
 
-pub async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
-    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
-    let peer01 = open_session_listen(endpoints).await;
-    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
-    let peer02 = open_session_connect(endpoints).await;
-    (peer01, peer02)
-}
-
 #[allow(dead_code)]
 pub async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     println!("[  ][01a] Opening peer01 session: {endpoint01}");
@@ -74,55 +68,6 @@ pub async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer01.close()).unwrap();
     println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close()).unwrap();
-}
-
-/// Open sessions configured for multilink (max_links > 1)
-#[allow(dead_code)]
-pub async fn open_session_multilink(
-    listen_endpoints: &[&str],
-    connect_endpoints: &[&str],
-) -> (Session, Session) {
-    // Session1: listener with multilink enabled
-    let mut config1 = zenoh_config::Config::default();
-    config1
-        .listen
-        .endpoints
-        .set(
-            listen_endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config1
-        .transport
-        .unicast
-        .set_max_links(listen_endpoints.len())
-        .unwrap();
-    let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-
-    // Session2: connector with multilink enabled
-    let mut config2 = zenoh_config::Config::default();
-    config2
-        .connect
-        .endpoints
-        .set(
-            connect_endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config2
-        .transport
-        .unicast
-        .set_max_links(connect_endpoints.len())
-        .unwrap();
-    let session2 = ztimeout!(zenoh::open(config2)).unwrap();
-
-    (session1, session2)
 }
 
 fn get_available_endpoints(num: usize) -> Vec<EndPoint> {
@@ -259,6 +204,21 @@ impl TestScenario {
         let listener_session = self.open_listener().await;
         let connector_session = self.open_connector().await;
         (listener_session, connector_session)
+    }
+
+    #[cfg(feature = "internal")]
+    pub async fn open_pairs_runtime(&mut self) -> (Runtime, Runtime) {
+        let mut listener_runtime = RuntimeBuilder::new(self.listener_config.clone().into())
+            .build()
+            .await
+            .unwrap();
+        listener_runtime.start().await.unwrap();
+        let mut connector_runtime = RuntimeBuilder::new(self.connector_config.clone().into())
+            .build()
+            .await
+            .unwrap();
+        connector_runtime.start().await.unwrap();
+        (listener_runtime, connector_runtime)
     }
 
     pub async fn close(&mut self) {
