@@ -138,9 +138,7 @@ impl FromStr for Region {
 
                 let mode = mode_str.parse().map_err(InvalidRegionIdError::BadWhatAmI)?;
 
-                if substrings.next().is_some() {
-                    return Err(InvalidRegionIdError::ExpectedEof);
-                }
+                debug_assert!(substrings.next().is_none());
 
                 Ok(Region::South { id: number, mode })
             }
@@ -302,5 +300,68 @@ impl<'de> Deserialize<'de> for RegionName {
         String::deserialize(deserializer)?
             .parse()
             .map_err(de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::core::{Region, WhatAmI};
+
+    #[test]
+    fn test_region_parsing() {
+        assert!(Region::from_str("north:0:router").is_err());
+        assert!(Region::from_str("south").is_err());
+        assert!(Region::from_str("south:42").is_err());
+        assert!(Region::from_str("south:42:broker").is_err());
+        assert!(Region::from_str("south:0.1:router").is_err());
+        assert!(Region::from_str("south:3:router:???").is_err());
+
+        assert_eq!(Region::from_str("north").unwrap(), Region::North);
+        assert_eq!(Region::from_str("local").unwrap(), Region::Local);
+        assert_eq!(
+            Region::from_str("south:2000:peer").unwrap(),
+            Region::South {
+                id: 2000,
+                mode: WhatAmI::Peer
+            }
+        );
+    }
+
+    #[test]
+    fn test_region_formatting() {
+        assert_eq!(&format!("{}", Region::North), "north");
+        assert_eq!(&format!("{}", Region::Local), "local");
+        assert_eq!(
+            &format!(
+                "{}",
+                Region::South {
+                    id: 1,
+                    mode: WhatAmI::Client
+                }
+            ),
+            "south:1:client"
+        );
+        assert_eq!(
+            &format!(
+                "{}",
+                Region::South {
+                    id: 2,
+                    mode: WhatAmI::Peer
+                }
+            ),
+            "south:2:peer"
+        );
+        assert_eq!(
+            &format!(
+                "{}",
+                Region::South {
+                    id: 3,
+                    mode: WhatAmI::Router
+                }
+            ),
+            "south:3:router"
+        );
     }
 }
