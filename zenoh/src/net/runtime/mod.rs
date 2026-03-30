@@ -863,6 +863,12 @@ impl Runtime {
     pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
         &self.state.stats
     }
+
+    #[cfg(feature = "test")]
+    #[allow(dead_code)]
+    pub(crate) fn state_weak(&self) -> Weak<RuntimeState> {
+        Arc::downgrade(&self.state)
+    }
 }
 
 impl From<Runtime> for DynamicRuntime {

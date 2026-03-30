@@ -14,7 +14,7 @@
 
 #![allow(dead_code)]
 
-//! Routing unit-test scaffolding.
+//! Routing test framework.
 //!
 //! Provides building blocks for writing routing integration tests that interact directly with a
 //! [`Gateway`] without the transport and orchestrator layers. Tests can configure one or more
