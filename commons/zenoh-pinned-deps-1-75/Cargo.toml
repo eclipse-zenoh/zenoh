@@ -92,6 +92,7 @@ ignored = [
   "potential_utf",
   "prost",
   "prost-derive",
+  "rustc-hash",
   "security-framework",
   "serde_spanned",
   "serde_with",
