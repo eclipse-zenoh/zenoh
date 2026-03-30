@@ -16,6 +16,7 @@ use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::{Deref, DerefMut, Neg},
     os::fd::{AsRawFd, RawFd},
+    rc::Rc,
     sync::{atomic::AtomicBool, Arc},
 };
 
@@ -135,7 +136,7 @@ impl ReadTask {
         submitter.submit(start_rx_cmd)?;
 
         tracing::debug!("Start waiting index for read task: fd = {fd}");
-        let index = index.wait().await.clone();
+        let index = *index.wait().await;
         tracing::debug!("Got index {:?} for read task: fd = {fd}", index);
 
         Ok(Self {
@@ -674,12 +675,12 @@ impl ReservableArena {
 
 #[derive(Debug)]
 struct RxContextCell {
-    context: Option<Arc<Rx>>,
+    context: Option<Rc<Rx>>,
     generation: NonZeroU32,
 }
 
 impl RxContextCell {
-    fn new(context: Arc<Rx>, generation: NonZeroU32) -> Self {
+    fn new(context: Rc<Rx>, generation: NonZeroU32) -> Self {
         Self {
             context: Some(context),
             generation,
@@ -697,7 +698,7 @@ impl RxContextCell {
         if self.generation == generation {
             if let Some(context) = self.context.take() {
                 tracing::debug!("Begin RxContext destroy {:?}", context);
-                assert!(Arc::strong_count(&context) == 1);
+                assert!(Rc::strong_count(&context) == 1);
                 drop(context);
                 tracing::debug!("End RxContext destroy!");
             }
@@ -709,7 +710,7 @@ impl RxContextCell {
         }
     }
 
-    fn try_alloc(&mut self, generation: NonZeroU32, context: &Arc<Rx>) -> bool {
+    fn try_alloc(&mut self, generation: NonZeroU32, context: &Rc<Rx>) -> bool {
         if self.context.is_none() {
             self.context = Some(context.clone());
             self.generation = generation;
@@ -741,7 +742,7 @@ impl RxContextStorage {
         self.data[id.index() as usize].free(id.generation())
     }
 
-    fn alloc(&mut self, context: Arc<Rx>) -> IndexGeneration {
+    fn alloc(&mut self, context: Rc<Rx>) -> IndexGeneration {
         self.next_generation = self.next_generation.saturating_add(1);
         if self.next_generation == NonZeroU32::MAX {
             self.next_generation = NonZeroU32::MIN;
@@ -911,7 +912,7 @@ impl Reader {
 
                     match val {
                         ReactorCmd::StartRx(fd, callback, set_once, error_sender) => {
-                            let rx_context = Arc::new(Rx::new(fd, callback, error_sender));
+                            let rx_context = Rc::new(Rx::new(fd, callback, error_sender));
                             let index = context_storage.alloc(rx_context);
                             set_once.set(index)?;
 

@@ -169,10 +169,12 @@ impl TestSocket for UdpSocket {
     }
 }
 
+type ConnectSocketType = (RawFd, Box<dyn TestSocket>, Option<Box<dyn AsRawFd>>);
+
 fn connect_socket<A: ToSocketAddrs>(
     is_tcp: bool,
     remote_addr: A,
-) -> std::io::Result<(RawFd, Box<dyn TestSocket>, Option<Box<dyn AsRawFd>>)> {
+) -> std::io::Result<ConnectSocketType> {
     if is_tcp {
         // TCP: directly connect to the remote address
         let stream = TcpStream::connect(remote_addr)?;
@@ -187,10 +189,9 @@ fn connect_socket<A: ToSocketAddrs>(
     }
 }
 
-fn bind_socket<A: ToSocketAddrs>(
-    is_tcp: bool,
-    addr: A,
-) -> std::io::Result<(Box<dyn AsRawFd>, Option<Box<dyn AsRawFd>>)> {
+type BindSocketType = (Box<dyn AsRawFd>, Option<Box<dyn AsRawFd>>);
+
+fn bind_socket<A: ToSocketAddrs>(is_tcp: bool, addr: A) -> std::io::Result<BindSocketType> {
     if is_tcp {
         let listener = TcpListener::bind(addr)?;
         let (stream, _) = listener.accept()?;
