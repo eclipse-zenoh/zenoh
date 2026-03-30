@@ -320,7 +320,7 @@ async fn test_regions_scenario7_order1_getque() {
         .multicast("224.7.1.3:9300")
         .open());
     let z9301 = ztimeout!(Node::new(Router, "71ac9301")
-        .endpoints("tcp/0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
+        .endpoints("tcp/0.0.0.0:0", &[loc!(z9300), loc!(z9100), loc!(z9200)])
         .multicast("224.7.1.3:9300")
         .open());
 
