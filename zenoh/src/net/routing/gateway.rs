@@ -40,7 +40,8 @@ use crate::net::{
     primitives::{DeMux, DummyPrimitives, EPrimitives, McastMux, Mux},
     routing::{
         dispatcher::{
-            face::{FaceState, FaceStateBuilder},
+            face::FaceStateBuilder,
+            region::RegionMap,
             tables::{self, Tables},
         },
         hat::{DispatcherContext, HatTrait},
@@ -146,56 +147,52 @@ impl<'conf> GatewayBuilder<'conf> {
 
         tracing::trace!(?regions, "New gateway");
 
+        let hats = regions
+            .iter()
+            .copied()
+            .map(|region| -> (Region, Box<dyn HatTrait + Send + Sync>) {
+                (
+                    region,
+                    match (region.bound(), region.mode().unwrap_or(mode)) {
+                        (Bound::North, WhatAmI::Client) => Box::new(hat::client::Hat::new(region)),
+                        (Bound::South, WhatAmI::Client) => Box::new(hat::broker::Hat::new(region)),
+                        (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(region)),
+                        (_, WhatAmI::Router) => {
+                            #[cfg(test)]
+                            {
+                                let mut hat = hat::router::Hat::new(region);
+                                hat.set_disable_async_tree_computation(
+                                    self.disable_async_tree_computation,
+                                );
+                                Box::new(hat)
+                            }
+
+                            #[cfg(not(test))]
+                            Box::new(hat::router::Hat::new(region))
+                        }
+                    },
+                )
+            })
+            .collect::<RegionMap<_>>();
+
+        let data = TablesData::new(
+            zid,
+            self.hlc,
+            self.config,
+            regions
+                .iter()
+                .copied()
+                .map(|b| (b, tables::HatTablesData::new()))
+                .collect(),
+            #[cfg(feature = "stats")]
+            stats,
+        )?;
+
         Ok(Gateway {
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables {
-                    data: TablesData::new(
-                        zid,
-                        self.hlc,
-                        self.config,
-                        regions
-                            .iter()
-                            .copied()
-                            .map(|b| (b, tables::HatTablesData::new()))
-                            .collect(),
-                        #[cfg(feature = "stats")]
-                        stats,
-                    )?,
-                    hats: regions
-                        .iter()
-                        .copied()
-                        .map(|region| -> (Region, Box<dyn HatTrait + Send + Sync>) {
-                            (
-                                region,
-                                match (region.bound(), region.mode().unwrap_or(mode)) {
-                                    (Bound::North, WhatAmI::Client) => {
-                                        Box::new(hat::client::Hat::new(region))
-                                    }
-                                    (Bound::South, WhatAmI::Client) => {
-                                        Box::new(hat::broker::Hat::new(region))
-                                    }
-                                    (_, WhatAmI::Peer) => Box::new(hat::peer::Hat::new(region)),
-                                    (_, WhatAmI::Router) => {
-                                        #[cfg(test)]
-                                        {
-                                            let mut hat = hat::router::Hat::new(region);
-                                            hat.set_disable_async_tree_computation(
-                                                self.disable_async_tree_computation,
-                                            );
-                                            Box::new(hat)
-                                        }
-
-                                        #[cfg(not(test))]
-                                        Box::new(hat::router::Hat::new(region))
-                                    }
-                                },
-                            )
-                        })
-                        .collect(),
-                }),
+                tables: RwLock::new(Tables { data, hats }),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
-                zid,
             }),
         })
     }
@@ -220,46 +217,12 @@ impl Gateway {
         Ok(())
     }
 
-    pub(crate) fn new_face<F>(&self, state: F) -> Arc<Face>
-    where
-        F: FnOnce(&mut Tables) -> FaceState,
-    {
+    pub(crate) fn new_session(&self, primitives: Arc<dyn EPrimitives + Send + Sync>) -> Arc<Face> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let newface = Arc::new(state(tables));
-        tables.data.faces.insert(newface.id, newface.clone());
-        tracing::debug!("New {}", newface);
-
-        let mut face = Face {
-            tables: self.tables.clone(),
-            state: newface,
-        };
-        tables.hats[face.state.region]
-            // TODO(regions): rename caller to `new_local_face`
-            .new_local_face(
-                DispatcherContext {
-                    tables_lock: &face.tables,
-                    tables: &mut tables.data,
-                    src_face: &mut face.state,
-                    send_declare: &mut |_, _| bug!("no declarations should be pushed to new session faces"),
-                },
-                &self.tables,
-            )
-            .unwrap();
-        drop(wtables);
-        drop(ctrl_lock);
-
-        Arc::new(face)
-    }
-
-    // TODO(regions): rename this
-    pub(crate) fn new_primitives(
-        &self,
-        primitives: Arc<dyn EPrimitives + Send + Sync>,
-    ) -> Arc<Face> {
-        self.new_face(|tables| {
+        let newface = Arc::new(
             FaceStateBuilder::new(
                 tables.data.new_face_id(),
                 tables.data.zid,
@@ -270,8 +233,32 @@ impl Gateway {
             )
             .whatami(WhatAmI::Client)
             .local(true)
-            .build()
-        })
+            .build(),
+        );
+        tables.data.faces.insert(newface.id, newface.clone());
+        tracing::debug!("New {}", newface);
+
+        let mut face = Face {
+            tables: self.tables.clone(),
+            state: newface,
+        };
+        tables.hats[face.state.region]
+            .new_local_face(
+                DispatcherContext {
+                    tables_lock: &face.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut face.state,
+                    send_declare: &mut |_, _| {
+                        bug!("no declarations should be pushed to new session faces")
+                    },
+                },
+                &self.tables,
+            )
+            .unwrap();
+        drop(wtables);
+        drop(ctrl_lock);
+
+        Arc::new(face)
     }
 
     pub fn new_transport_unicast(
@@ -285,9 +272,9 @@ impl Gateway {
         let tables = &mut *wtables;
 
         let whatami = transport.get_whatami()?;
-        let fid = tables.data.face_counter;
-        tables.data.face_counter += 1;
+        let fid = tables.data.new_face_id();
         let zid = transport.get_zid()?;
+        let this_zid = tables.data.zid;
 
         let ingress = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
@@ -339,7 +326,7 @@ impl Gateway {
         owner_hat.new_transport_unicast_face(
             ctx,
             &transport,
-            other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+            other_hats.map(|hat| &**hat as &dyn HatTrait),
         )?;
         drop(wtables);
         drop(ctrl_lock);
@@ -347,7 +334,12 @@ impl Gateway {
             m.with_mut(|m| p.send_declare(m));
         }
 
-        Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
+        Ok(Arc::new(DeMux::new(
+            face,
+            Some(transport),
+            ingress,
+            this_zid,
+        )))
     }
 
     pub fn new_transport_multicast(
@@ -359,8 +351,7 @@ impl Gateway {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let fid = tables.data.face_counter;
-        tables.data.face_counter += 1;
+        let fid = tables.data.new_face_id();
         let mux = Arc::new(McastMux::new(transport.clone(), InterceptorsChain::empty()));
 
         #[cfg(feature = "stats")]
@@ -414,9 +405,9 @@ impl Gateway {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
-        let fid = tables.data.face_counter;
-        tables.data.face_counter += 1;
+        let fid = tables.data.new_face_id();
         let interceptor = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
+        let this_zid = tables.data.zid;
 
         #[cfg(feature = "stats")]
         let stats = transport.get_stats().ok();
@@ -459,6 +450,7 @@ impl Gateway {
             },
             None,
             interceptor,
+            this_zid,
         )))
     }
 }

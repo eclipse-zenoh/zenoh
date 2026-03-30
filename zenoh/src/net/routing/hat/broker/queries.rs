@@ -339,7 +339,6 @@ impl HatQueriesTrait for Hat {
             let res = get_mut_unchecked(&mut res);
             match res.face_ctxs.get_mut(&ctx.src_face.id) {
                 Some(ctx) => {
-                    // TODO(regions): this is an update for all queryables on the resource (?)
                     get_mut_unchecked(ctx).qabl = Some(*info);
                 }
                 None => {
@@ -490,7 +489,7 @@ impl HatQueriesTrait for Hat {
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unpropagate_last_non_owned_queryable(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
-        debug_assert!(self.remote_queryables_of(&res).is_some());
+        debug_assert!(self.remote_queryables_of(ctx.tables, &res).is_some());
 
         if let Ok(face) = self
             .owned_face_contexts(&res)
@@ -503,7 +502,11 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
+    fn remote_queryables_of(
+        &self,
+        _tables: &TablesData,
+        res: &Resource,
+    ) -> Option<QueryableInfoType> {
         self.owned_face_contexts(res)
             .filter_map(|ctx| ctx.qabl)
             .reduce(merge_qabl_infos)

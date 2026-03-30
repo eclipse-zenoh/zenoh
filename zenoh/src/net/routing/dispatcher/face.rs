@@ -142,7 +142,6 @@ pub struct FaceState {
     pub(crate) stats: Option<zenoh_stats::TransportStats>,
 }
 
-// TODO(regions): expose constructor fields as a struct
 pub(crate) struct FaceStateBuilder(FaceState);
 
 impl FaceStateBuilder {
@@ -446,7 +445,7 @@ impl Face {
         tracing::debug!(?expr, expr.mapped = ?res);
 
         let tables = &mut *wtables;
-        f(tables, res) // TODO(regions): construct DispatcherContext here?
+        f(tables, res)
 
         // wtables is dropped
     }
@@ -726,7 +725,7 @@ impl Primitives for Face {
 
             let mut remaining = hats
                 .values_mut()
-                .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                .filter(|hat| hat.remote_subscribers_of(ctx.tables, &res).is_some())
                 .collect_vec();
 
             if remaining.is_empty() {
@@ -745,7 +744,10 @@ impl Primitives for Face {
 
             let remaining = hats
                 .iter()
-                .filter_map(|(rgn, hat)| hat.remote_queryables_of(&res).map(|info| (rgn, info)))
+                .filter_map(|(rgn, hat)| {
+                    hat.remote_queryables_of(ctx.tables, &res)
+                        .map(|info| (rgn, info))
+                })
                 .collect_vec();
 
             match &*remaining {
@@ -774,7 +776,7 @@ impl Primitives for Face {
         for mut res in hats[region].unregister_face_tokens(ctx.reborrow()) {
             let mut remaining = hats
                 .values_mut()
-                .filter(|hat| hat.remote_tokens_of(&res))
+                .filter(|hat| hat.remote_tokens_of(ctx.tables, &res))
                 .collect_vec();
 
             if remaining.is_empty() {

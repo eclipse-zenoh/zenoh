@@ -21,8 +21,10 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::ZBuf;
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_protocol::{
-    core::{Encoding, Region, WireExpr, ZenohIdProto},
+    core::{Encoding, Region, WireExpr},
     network::{
         declare::{queryable::ext::QueryableInfoType, QueryableId},
         request::{self, ext::QueryTarget, Request, RequestId},
@@ -44,7 +46,7 @@ use crate::net::routing::{
         local_resources::{LocalResourceInfoTrait, LocalResources},
         tables::{InterRegionFilter, Tables},
     },
-    gateway::{get_or_set_route, node_id_as_source, QueryDirection, RouteBuilder},
+    gateway::{get_or_set_route, node_id_as_source, QueryDirection, QueryTargetQabl, RouteBuilder},
     hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
 };
 
@@ -100,7 +102,7 @@ impl Face {
                     .hats
                     .values()
                     .filter(|hat| hat.region() != region)
-                    .flat_map(|hat| hat.remote_queryables_of(&res))
+                    .flat_map(|hat| hat.remote_queryables_of(ctx.tables, &res))
                     .reduce(merge_qabl_infos);
 
                 tables.hats[region].propagate_queryable(ctx.reborrow(), res.clone(), other_info);
@@ -142,7 +144,7 @@ impl Face {
                             .hats
                             .values()
                             .filter(|hat| hat.region() != region)
-                            .filter_map(|hat| hat.remote_queryables_of(&res))
+                            .filter_map(|hat| hat.remote_queryables_of(ctx.tables, &res))
                             .reduce(merge_qabl_infos);
 
                         tables.hats[region].propagate_queryable(
@@ -160,7 +162,7 @@ impl Face {
                         .values()
                         .filter_map(|hat| {
                             (hat.region() != region)
-                                .then(|| hat.remote_queryables_of(&res))
+                                .then(|| hat.remote_queryables_of(ctx.tables, &res))
                                 .flatten()
                                 .map(|info| (hat.region(), info))
                         })
@@ -226,30 +228,35 @@ impl Face {
                     src_qos: msg.ext_qos,
                 });
 
-                for (region, hat) in rtables.hats.iter() {
-                    if hat.ingress_filter(&rtables.data, &self.state, &expr) {
-                        let qabls = get_query_route(
-                            &rtables,
-                            &self.state,
-                            &expr,
-                            msg.ext_nodeid.node_id,
-                            &region,
-                        );
+                let src_face = &self.state;
 
-                        let src_zid = rtables.hats[self.state.region]
-                            .remote_node_id_to_zid(&self.state, msg.ext_nodeid.node_id);
+                if !rtables.ingress_filter(src_face) {
+                    return;
+                }
 
-                        compute_final_route(
-                            &rtables,
-                            &mut builder,
-                            &qabls,
-                            &self.state,
-                            &expr,
-                            msg.ext_target,
-                            &query,
-                            src_zid.as_ref(),
-                        );
-                    }
+                for dst in rtables.hats.regions() {
+                    let qabls =
+                        get_query_route(&rtables, src_face, &expr, msg.ext_nodeid.node_id, &dst);
+
+                    let filter = {
+                        let src_zid = rtables.hats[src_face.region]
+                            .remote_node_id_to_zid(src_face, msg.ext_nodeid.node_id);
+                        let tables = &rtables;
+
+                        move |q: &QueryTargetQabl| {
+                            InterRegionFilter {
+                                src: &src_face.region,
+                                dst: &q.region,
+                                src_zid: src_zid.as_ref(),
+                                fwd_zid: Some(&self.state.zid),
+                                dst_zid: Some(&q.dir.dst_face.zid),
+                            }
+                            .resolve(tables)
+                                && tables.egress_filter(src_face, &q.dir.dst_face)
+                        }
+                    };
+
+                    self.compute_final_route(msg.ext_target, &mut builder, &query, &qabls, filter);
                 }
 
                 // NOTE: it's important to drop the `Arc<Query>` object immediately otherwise
@@ -340,122 +347,54 @@ impl Face {
             }
         }
     }
-}
 
-#[allow(clippy::too_many_arguments)] // FIXME(regions)
-fn compute_final_route(
-    tables: &Tables,
-    route: &mut RouteBuilder<QueryDirection>,
-    qabls: &Arc<QueryTargetQablSet>,
-    src_face: &Arc<FaceState>,
-    expr: &RoutingExpr,
-    target: QueryTarget,
-    query: &Arc<Query>,
-    src_zid: Option<&ZenohIdProto>,
-) {
-    match target {
-        QueryTarget::All => {
-            for qabl in qabls.iter().filter(|q| {
-                InterRegionFilter {
-                    src: &src_face.region,
-                    dst: &q.region,
-                    src_zid,
-                    fwd_zid: Some(&src_face.zid),
-                    dst_zid: Some(&q.dir.dst_face.zid),
-                }
-                .resolve(tables)
-            }) {
-                if tables.hats[qabl.region].egress_filter(
-                    &tables.data,
-                    src_face,
-                    &qabl.dir.dst_face,
-                    expr,
-                ) {
+    #[allow(clippy::incompatible_msrv)]
+    fn compute_final_route(
+        &self,
+        target: QueryTarget,
+        route: &mut RouteBuilder<QueryDirection>,
+        query: &Arc<Query>,
+        qabls: &Arc<QueryTargetQablSet>,
+        filter: impl Fn(&QueryTargetQabl) -> bool,
+    ) {
+        match target {
+            QueryTarget::All => {
+                for qabl in qabls.iter().filter(|q| filter(q)) {
                     route.insert(qabl.dir.dst_face.id, || {
                         let mut dir = qabl.dir.clone();
                         let rid = insert_pending_query(&mut dir.dst_face, query.clone());
-                        tracing::debug!(
-                            src = %query.src_face,
-                            src_rid = query.src_qid,
-                            dst = %dir.dst_face,
-                            dst_rid = rid,
-                            strong_count = Arc::strong_count(query)
-                        );
+                        tracing::debug!(dst = %dir.dst_face, dst.target = "all");
                         QueryDirection { dir, rid }
                     });
                 }
             }
-        }
-        QueryTarget::AllComplete => {
-            for qabl in qabls.iter().filter(|q| {
-                InterRegionFilter {
-                    src: &src_face.region,
-                    dst: &q.region,
-                    src_zid,
-                    fwd_zid: Some(&src_face.zid),
-                    dst_zid: Some(&q.dir.dst_face.zid),
-                }
-                .resolve(tables)
-            }) {
-                if qabl.info.map(|info| info.complete).unwrap_or(true)
-                    && tables.hats[qabl.region].egress_filter(
-                        &tables.data,
-                        src_face,
-                        &qabl.dir.dst_face,
-                        expr,
-                    )
+            QueryTarget::AllComplete => {
+                for qabl in qabls
+                    .iter()
+                    .filter(|q| q.info.is_none_or(|info| info.complete) && filter(q))
                 {
                     route.insert(qabl.dir.dst_face.id, || {
                         let mut dir = qabl.dir.clone();
                         let rid = insert_pending_query(&mut dir.dst_face, query.clone());
-                        tracing::debug!(
-                            src = %query.src_face,
-                            src_rid = query.src_qid,
-                            dst = %dir.dst_face,
-                            dst_rid = rid,
-                            strong_count = Arc::strong_count(query)
-                        );
+                        tracing::debug!(dst = %dir.dst_face, dst.target = "all-complete");
                         QueryDirection { dir, rid }
                     });
                 }
             }
-        }
-        QueryTarget::BestMatching => {
-            if let Some(qabl) = qabls.iter().find(|q| {
-                q.dir.dst_face.id != src_face.id
-                    && q.info.is_some_and(|info| info.complete)
-                    && InterRegionFilter {
-                        src: &src_face.region,
-                        dst: &q.region,
-                        src_zid,
-                        fwd_zid: Some(&src_face.zid),
-                        dst_zid: Some(&q.dir.dst_face.zid),
-                    }
-                    .resolve(tables)
-            }) {
-                route.insert(qabl.dir.dst_face.id, || {
-                    let mut dir = qabl.dir.clone();
-                    let rid = insert_pending_query(&mut dir.dst_face, query.clone());
-                    tracing::debug!(
-                        src = %query.src_face,
-                        src_rid = query.src_qid,
-                        dst = %dir.dst_face,
-                        dst_rid = rid,
-                        strong_count = Arc::strong_count(query)
-                    );
-                    QueryDirection { dir, rid }
-                });
-            } else {
-                compute_final_route(
-                    tables,
-                    route,
-                    qabls,
-                    src_face,
-                    expr,
-                    QueryTarget::All,
-                    query,
-                    src_zid,
-                )
+            QueryTarget::BestMatching => {
+                if let Some(qabl) = qabls
+                    .iter()
+                    .find(|q| q.info.is_some_and(|info| info.complete) && filter(q))
+                {
+                    route.insert(qabl.dir.dst_face.id, || {
+                        let mut dir = qabl.dir.clone();
+                        let rid = insert_pending_query(&mut dir.dst_face, query.clone());
+                        tracing::debug!(dst = %dir.dst_face, dst.target = "best-matching");
+                        QueryDirection { dir, rid }
+                    });
+                } else {
+                    self.compute_final_route(QueryTarget::All, route, query, qabls, filter)
+                }
             }
         }
     }

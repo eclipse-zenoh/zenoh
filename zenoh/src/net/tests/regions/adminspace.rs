@@ -92,8 +92,8 @@ fn test_sourced_entities_and_interests(mode: WhatAmI) {
     let mut g0_g1 = Connection {
         a: &g0,
         b: &g1,
-        ab: FaceDef::default().mode(mode),
-        ba: FaceDef::default().mode(mode),
+        a2b: FaceDef::default().mode(mode),
+        b2a: FaceDef::default().mode(mode),
     }
     .establish();
     g0_g1.bi_fwd();

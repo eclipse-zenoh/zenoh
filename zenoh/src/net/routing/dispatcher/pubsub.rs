@@ -73,7 +73,7 @@ impl Face {
                 let other_info = hats
                     .values()
                     .filter(|hat| hat.region() != region)
-                    .flat_map(|hat| hat.remote_subscribers_of(&res))
+                    .flat_map(|hat| hat.remote_subscribers_of(ctx.tables, &res))
                     .reduce(|_, _| SubscriberInfo);
 
                 hats[region].propagate_subscriber(ctx.reborrow(), res.clone(), other_info);
@@ -112,7 +112,7 @@ impl Face {
                 let mut remaining = tables
                     .hats
                     .values_mut()
-                    .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                    .filter(|hat| hat.remote_subscribers_of(ctx.tables, &res).is_some())
                     .collect_vec();
 
                 if (*remaining).is_empty() {

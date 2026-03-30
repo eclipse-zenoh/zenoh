@@ -40,7 +40,7 @@ use zenoh_transport::unicast::TransportUnicast;
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
+        tables::{NodeId, Resource, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait,
 };
@@ -192,8 +192,6 @@ impl HatBaseTrait for Hat {
         &mut self,
         _ctx: DispatcherContext,
         _oam: &mut Oam,
-        _zid: &ZenohIdProto,
-        _whatami: WhatAmI,
         _other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         Ok(())
@@ -207,23 +205,6 @@ impl HatBaseTrait for Hat {
         _routing_context: NodeId,
     ) -> NodeId {
         0
-    }
-
-    #[inline]
-    fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
-        true
-    }
-
-    #[inline]
-    fn egress_filter(
-        &self,
-        _tables: &TablesData,
-        src_face: &FaceState,
-        out_face: &Arc<FaceState>,
-        _expr: &RoutingExpr,
-    ) -> bool {
-        src_face.id != out_face.id
-            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self) -> String {

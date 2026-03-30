@@ -502,15 +502,11 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo> {
-        // FIXME(regions): use TablesData::zid?
-        let net = self.net();
-        let this_router = &net.graph[net.idx].zid;
-
+    fn remote_subscribers_of(&self, tables: &TablesData, res: &Resource) -> Option<SubscriberInfo> {
         self.res_hat(res)
             .router_subs
             .iter()
-            .any(|router| router != this_router)
+            .any(|router| router != &tables.zid)
             .then_some(SubscriberInfo)
     }
 

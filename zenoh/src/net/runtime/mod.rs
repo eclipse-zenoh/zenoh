@@ -361,11 +361,11 @@ impl IRuntime for RuntimeState {
             Some(ns) => {
                 let face = self
                     .router
-                    .new_primitives(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
+                    .new_session(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
                 (face.state.id, Arc::new(Namespace::new(ns.clone(), face)))
             }
             None => {
-                let face = self.router.new_primitives(e_primitives);
+                let face = self.router.new_session(e_primitives);
                 (face.state.id, face)
             }
         }

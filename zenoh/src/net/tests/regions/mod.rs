@@ -722,10 +722,14 @@ impl HarnessBuilder {
             };
             Harness {
                 gateway,
+                zid: runtime.zid().into(),
                 _runtime: Some(runtime),
             }
         } else {
             let mut config = Config::default().expanded();
+            if let Some(zid) = self.zid {
+                config.set_id(Some(zid)).unwrap();
+            }
             config.set_mode(Some(self.mode)).unwrap();
             let gateway = GatewayBuilder::new(&config)
                 .subregions(self.subregions)
@@ -734,6 +738,7 @@ impl HarnessBuilder {
                 .unwrap();
             Harness {
                 gateway,
+                zid: config.id().into(),
                 _runtime: None,
             }
         }
@@ -743,6 +748,7 @@ impl HarnessBuilder {
 /// Wraps a [`Gateway`] and provides ergonomic helpers for unit tests.
 pub(crate) struct Harness {
     pub(crate) gateway: Gateway,
+    zid: ZenohIdProto,
     /// Kept alive so that the runtime's transport manager and background tasks outlive the harness.
     /// `None` for client/peer harnesses that don't need a runtime.
     _runtime: Option<Runtime>,
@@ -782,12 +788,12 @@ impl Harness {
     }
 
     pub(crate) fn zid(&self) -> ZenohIdProto {
-        self.gateway.tables.zid
+        self.zid
     }
 
     pub(crate) fn new_session(&self) -> MockFace {
         let recorder = Arc::new(RecordingPrimitives::new());
-        let face = self.gateway.new_primitives(recorder.clone());
+        let face = self.gateway.new_session(recorder.clone());
         MockFace {
             face,
             recorder,
@@ -876,9 +882,9 @@ impl FaceDef {
 #[derive(Debug)]
 pub(crate) struct EstablishedConnection {
     /// A's face for B.
-    pub(crate) ab: MockFace,
+    pub(crate) a2b: MockFace,
     /// B's face for A.
-    pub(crate) ba: MockFace,
+    pub(crate) b2a: MockFace,
     nfwd: usize,
     rev_nfwd: usize,
 }
@@ -888,18 +894,18 @@ pub(crate) struct Connection<'a> {
     /// Gateway A.
     pub(crate) a: &'a Harness,
     /// A's face for B.
-    pub(crate) ab: FaceDef,
+    pub(crate) a2b: FaceDef,
     /// Gateway B.
     pub(crate) b: &'a Harness,
     /// B's face for A.
-    pub(crate) ba: FaceDef,
+    pub(crate) b2a: FaceDef,
 }
 
 impl Connection<'_> {
     pub(crate) fn establish(self) -> EstablishedConnection {
         EstablishedConnection {
-            ab: self.a.new_face(self.ab.zid(self.b.zid())),
-            ba: self.b.new_face(self.ba.zid(self.a.zid())),
+            a2b: self.a.new_face(self.a2b.zid(self.b.zid())),
+            b2a: self.b.new_face(self.b2a.zid(self.a.zid())),
             nfwd: 0,
             rev_nfwd: 0,
         }
@@ -907,57 +913,58 @@ impl Connection<'_> {
 }
 
 impl EstablishedConnection {
-    /// Messages recorded for transmission **from A to B**.
-    pub(crate) fn a2b(&self) -> &RecordingPrimitives {
-        self.ab.recorder()
-    }
-
-    /// Messages recorded for transmission **from B to A**.
-    pub(crate) fn b2a(&self) -> &RecordingPrimitives {
-        self.ba.recorder()
-    }
-
     /// Forward one pending message **from A to B**.
-    #[tracing::instrument(level = "info", skip(self), fields(from = %self.ba.face, to = %self.ab.face.state.zid.short()), ret)]
+    #[tracing::instrument(level = "info", skip(self), fields(from = %self.b2a.face, to = %self.a2b.face.state.zid.short()), ret)]
     pub(crate) fn fwd1(&mut self) -> Option<Message> {
         let msg = self
-            .ab
+            .a2b
             .recorder
             .with_messages(|msgs| msgs.get(self.nfwd).cloned())?;
-        Self::inject(&self.ba, &msg);
+        Self::inject(&self.b2a, &msg);
         self.nfwd += 1;
         Some(msg)
     }
 
     /// Forward one pending message in the reverse direction, i.e. **from B to A**.
-    #[tracing::instrument(level = "info", skip(self), fields(from = %self.ab.face, to = %self.ba.face.state.zid.short()), ret)]
+    #[tracing::instrument(level = "info", skip(self), fields(from = %self.a2b.face, to = %self.b2a.face.state.zid.short()), ret)]
     pub(crate) fn rev_fwd1(&mut self) -> Option<Message> {
         let msg = self
-            .ba
+            .b2a
             .recorder
             .with_messages(|msgs| msgs.get(self.rev_nfwd).cloned())?;
-        Self::inject(&self.ab, &msg);
+        Self::inject(&self.a2b, &msg);
         self.rev_nfwd += 1;
         Some(msg)
     }
 
     /// Forward all pending messages **from A to B**.
     pub(crate) fn fwd(&mut self) -> Vec<Message> {
-        // FIXME(regions): take the lock once
-        let mut msgs = Vec::new();
-        while let Some(msg) = self.fwd1() {
-            msgs.push(msg);
-        }
-        msgs
+        self.a2b.recorder().with_messages(|msgs| {
+            let mut out = Vec::new();
+
+            while let Some(msg) = msgs.get(self.nfwd).cloned() {
+                Self::inject(&self.b2a, &msg);
+                self.nfwd += 1;
+                out.push(msg);
+            }
+
+            out
+        })
     }
 
     /// Forward one pending message in the reverse direction, i.e. **from B to A**.
     pub(crate) fn rev_fwd(&mut self) -> Vec<Message> {
-        let mut msgs = Vec::new();
-        while let Some(msg) = self.rev_fwd1() {
-            msgs.push(msg);
-        }
-        msgs
+        self.b2a.recorder().with_messages(|msgs| {
+            let mut out = Vec::new();
+
+            while let Some(msg) = msgs.get(self.rev_nfwd).cloned() {
+                Self::inject(&self.a2b, &msg);
+                self.rev_nfwd += 1;
+                out.push(msg);
+            }
+
+            out
+        })
     }
 
     /// Bi-directionally forward all pending messages, i.e. **from A to B and from B to A**.
@@ -1019,13 +1026,13 @@ impl EstablishedConnection {
     }
 
     fn is_complete(&self) -> bool {
-        self.ab
+        self.a2b
             .recorder
             .with_messages(|msgs| msgs.len() == self.nfwd)
     }
 
     fn is_rev_complete(&self) -> bool {
-        self.ba
+        self.b2a
             .recorder
             .with_messages(|msgs| msgs.len() == self.rev_nfwd)
     }

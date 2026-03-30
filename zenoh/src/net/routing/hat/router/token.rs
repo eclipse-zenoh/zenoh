@@ -366,7 +366,6 @@ impl HatTokenTrait for Hat {
         &mut self,
         ctx: DispatcherContext,
         mut res: Arc<Resource>,
-        other_tokens: bool,
     ) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::register_token
@@ -404,15 +403,11 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_tokens_of(&self, res: &Resource) -> bool {
-        // FIXME(regions): use TablesData::zid?
-        let net = self.net();
-        let this_router = &net.graph[net.idx].zid;
-
+    fn remote_tokens_of(&self, tables: &TablesData, res: &Resource) -> bool {
         self.res_hat(res)
             .router_tokens
             .iter()
-            .any(|router| router != this_router)
+            .any(|router| router != &tables.zid)
     }
 
     #[allow(clippy::incompatible_msrv)]

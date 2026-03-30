@@ -45,7 +45,7 @@ use zenoh_transport::unicast::TransportUnicast;
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
+        tables::{NodeId, Resource, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait,
 };
@@ -358,8 +358,6 @@ impl HatBaseTrait for Hat {
         &mut self,
         ctx: DispatcherContext,
         oam: &mut Oam,
-        zid: &ZenohIdProto,
-        whatami: WhatAmI,
         _other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
@@ -380,7 +378,7 @@ impl HatBaseTrait for Hat {
 
                     tracing::trace!(id = %"OAM_LINKSTATE", linkstate = ?list);
 
-                    net.link_states(list.link_states, *zid, whatami);
+                    net.link_states(list.link_states, ctx.src_face.zid, ctx.src_face.whatami);
                 }
             }
         }
@@ -396,23 +394,6 @@ impl HatBaseTrait for Hat {
         _routing_context: NodeId,
     ) -> NodeId {
         0
-    }
-
-    #[inline]
-    fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
-        true
-    }
-
-    #[inline]
-    fn egress_filter(
-        &self,
-        _tables: &TablesData,
-        src_face: &FaceState,
-        out_face: &Arc<FaceState>,
-        _expr: &RoutingExpr,
-    ) -> bool {
-        src_face.id != out_face.id
-            && (out_face.mcast_group.is_none() || src_face.mcast_group.is_none())
     }
 
     fn info(&self) -> String {

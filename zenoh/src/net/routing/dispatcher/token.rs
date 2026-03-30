@@ -67,29 +67,30 @@ impl Face {
                 };
             }
 
-            let src_zid = tables.hats[region].remote_node_id_to_zid(ctx!().src_face, node_id);
+            let mut ctx = ctx!();
 
-            match interest_id.map(|id| {
-                tables.hats[region].route_current_token(ctx!().reborrow(), id, res.clone())
-            }) {
+            let src_zid = tables.hats[region].remote_node_id_to_zid(ctx.src_face, node_id);
+
+            match interest_id
+                .map(|id| tables.hats[region].route_current_token(ctx.reborrow(), id, res.clone()))
+            {
                 Some(RouteCurrentDeclareResult::Noop) => {} // ¯\_(ツ)_/¯
                 Some(RouteCurrentDeclareResult::Breadcrumb { interest }) => {
                     if interest.mode.is_future() {
-                        tables.hats[region].register_token(ctx!(), id, res.clone(), node_id);
+                        tables.hats[region].register_token(
+                            ctx.reborrow(),
+                            id,
+                            res.clone(),
+                            node_id,
+                        );
                     }
 
-                    tables.hats[interest.src_region].propagate_current_token(ctx!(), res, interest);
+                    tables.hats[interest.src_region].propagate_current_token(ctx, res, interest);
                 }
                 Some(RouteCurrentDeclareResult::NoBreadcrumb) | None => {
-                    tables.hats[region].register_token(ctx!(), id, res.clone(), node_id);
+                    tables.hats[region].register_token(ctx, id, res.clone(), node_id);
 
                     for dst in tables.hats.regions().collect_vec() {
-                        let other_tokens = tables
-                            .hats
-                            .values()
-                            .filter(|hat| hat.region() != dst)
-                            .any(|hat| hat.remote_tokens_of(&res));
-
                         let filter = InterRegionFilter {
                             src: &region,
                             dst: &dst,
@@ -99,7 +100,15 @@ impl Face {
                         };
 
                         if filter.resolve(tables) {
-                            tables.hats[dst].propagate_token(ctx!(), res.clone(), other_tokens);
+                            debug_assert_implies!(
+                                !tables
+                                    .hats
+                                    .values()
+                                    .filter(|hat| hat.region() != dst)
+                                    .any(|hat| hat.remote_tokens_of(&tables.data, &res)),
+                                tables.hats[dst].owns(&self.state)
+                            );
+                            tables.hats[dst].propagate_token(ctx!(), res.clone());
                         }
                     }
                 }
@@ -144,7 +153,10 @@ impl Face {
                     let rem = tables
                         .hats
                         .values_mut()
-                        .filter_map(|hat| hat.remote_tokens_of(&res).then_some(hat.region()))
+                        .filter_map(|hat| {
+                            hat.remote_tokens_of(ctx.tables, &res)
+                                .then_some(hat.region())
+                        })
                         .collect_vec();
 
                     tracing::trace!(?rem);

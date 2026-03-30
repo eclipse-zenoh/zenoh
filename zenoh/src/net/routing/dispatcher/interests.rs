@@ -95,7 +95,6 @@ pub(crate) fn finalize_pending_interest(
     pending_interest.cancellation_token.cancel();
     if let Some(interest) = Arc::into_inner(interest) {
         // FIXME(regions): this code is specific to peer/client hats
-
         let src_face = interest.src.downcast_ref_to_face();
 
         tracing::debug!(

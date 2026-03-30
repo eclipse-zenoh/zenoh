@@ -307,7 +307,7 @@ impl AdminSpace {
             tracing::debug_span!("adminspace", zid = %ZenohIdProto::from(admin.zid).short())
                 .entered();
 
-        let primitives = runtime.state.router.new_primitives(admin.clone());
+        let primitives = runtime.state.router.new_session(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(&mut Declare {

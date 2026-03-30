@@ -266,7 +266,6 @@ pub struct TablesLock {
     pub tables: RwLock<Tables>,
     pub(crate) ctrl_lock: Mutex<()>,
     pub(crate) queries_lock: RwLock<()>,
-    pub(crate) zid: ZenohIdProto, // FIXME(regions): refactor/remove
 }
 
 /// Gateway state.

@@ -49,7 +49,7 @@ impl Hat {
             .values()
             .flat_map(|hat| hat.remote_tokens(ctx.tables).into_iter())
         {
-            // FIXME(regions): We always propagate entities in this codepath; the method name is misleading
+            // FIXME(regions): we always propagate entities in this codepath; the method name is misleading
             self.maybe_propagate_token(&res, ctx.src_face, ctx.send_declare);
         }
     }
@@ -253,9 +253,8 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool) {
-        if !other_tokens {
-            debug_assert!(self.owns(ctx.src_face));
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
+        if self.owns(ctx.src_face) {
             return;
         };
 
@@ -276,7 +275,7 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_tokens_of(&self, res: &Resource) -> bool {
+    fn remote_tokens_of(&self, _tables: &TablesData, res: &Resource) -> bool {
         self.owned_face_contexts(res).any(|ctx| ctx.token)
     }
 

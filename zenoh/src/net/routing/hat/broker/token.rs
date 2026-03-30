@@ -226,8 +226,7 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool) {
-        debug_assert_implies!(!other_tokens, self.owns(ctx.src_face));
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
 
         // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
         // session-local tokens in liveliness queries/subscribers.
@@ -247,7 +246,7 @@ impl HatTokenTrait for Hat {
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn unpropagate_last_non_owned_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
-        debug_assert!(self.remote_tokens_of(&res));
+        debug_assert!(self.remote_tokens_of(ctx.tables, &res));
 
         if let Ok(face) = self
             .owned_face_contexts(&res)
@@ -261,7 +260,7 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_tokens_of(&self, res: &Resource) -> bool {
+    fn remote_tokens_of(&self, _tables: &TablesData, res: &Resource) -> bool {
         self.owned_face_contexts(res).any(|ctx| ctx.token)
     }
 

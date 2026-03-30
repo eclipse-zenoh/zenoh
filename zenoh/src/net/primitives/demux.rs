@@ -15,9 +15,12 @@ use std::{any::Any, cell::OnceCell, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use zenoh_link::Link;
-use zenoh_protocol::network::{
-    ext, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageExt as _,
-    NetworkMessageMut, ResponseFinal,
+use zenoh_protocol::{
+    core::ZenohIdProto,
+    network::{
+        ext, Declare, DeclareBody, DeclareFinal, NetworkBodyMut, NetworkMessageExt as _,
+        NetworkMessageMut, ResponseFinal,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{unicast::TransportUnicast, TransportPeerEventHandler};
@@ -35,6 +38,7 @@ pub struct DeMux {
     pub(crate) face: Face,
     pub(crate) transport: Option<TransportUnicast>,
     pub(crate) interceptor: Arc<ArcSwapOption<InterceptorsChain>>,
+    zid: ZenohIdProto,
 }
 
 impl DeMux {
@@ -42,11 +46,13 @@ impl DeMux {
         face: Face,
         transport: Option<TransportUnicast>,
         interceptor: Arc<ArcSwapOption<InterceptorsChain>>,
+        zid: ZenohIdProto,
     ) -> Self {
         Self {
             face,
             transport,
             interceptor,
+            zid,
         }
     }
 }
@@ -115,7 +121,7 @@ impl TransportPeerEventHandler for DeMux {
         let _span = tracing::enabled!(tracing::Level::DEBUG).then(|| {
             tracing::debug_span!(
                 "demux",
-                zid = %self.face.tables.zid.short(),
+                zid = %self.zid,
                 src = %self.face
             )
             .entered()
@@ -179,38 +185,38 @@ impl TransportPeerEventHandler for DeMux {
             NetworkBodyMut::Response(m) => self.face.send_response(m),
             NetworkBodyMut::ResponseFinal(m) => self.face.send_response_final(m),
             NetworkBodyMut::OAM(m) => {
-                if let Some(transport) = self.transport.as_ref() {
-                    let mut declares = vec![];
-                    let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
-                    let mut wtables = zwrite!(self.face.tables.tables);
-                    let tables = &mut *wtables;
+                if self.transport.is_none() {
+                    bail!("Received network OAM from face w/o transport");
+                }
 
-                    let ctx = DispatcherContext {
-                        tables_lock: &self.face.tables,
-                        tables: &mut tables.data,
-                        src_face: &mut self.face.state.clone(),
-                        send_declare: &mut |p, m| declares.push((p.clone(), m)),
-                    };
+                let mut declares = vec![];
+                let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
+                let mut wtables = zwrite!(self.face.tables.tables);
+                let tables = &mut *wtables;
 
-                    let (owner_hat, other_hats) = tables
-                        .hats
-                        .partition_mut(&self.face.state.region)
-                        .expect("face region should have a corresponding hat");
+                let ctx = DispatcherContext {
+                    tables_lock: &self.face.tables,
+                    tables: &mut tables.data,
+                    src_face: &mut self.face.state.clone(),
+                    send_declare: &mut |p, m| declares.push((p.clone(), m)),
+                };
 
-                    owner_hat.handle_oam(
-                        ctx,
-                        m,
-                        // TODO(regions): are these ever different from the face's?
-                        &transport.get_zid()?,
-                        transport.get_whatami()?,
-                        other_hats.map(|hat| &mut **hat as &mut dyn HatTrait), // FIXME(regions)
-                    )?;
+                let (owner_hat, other_hats) = tables
+                    .hats
+                    .partition_mut(&self.face.state.region)
+                    .expect("face region should have a corresponding hat");
 
-                    drop(wtables);
-                    drop(ctrl_lock);
-                    for (p, m) in declares {
-                        m.with_mut(|m| p.send_declare(m));
-                    }
+                owner_hat.handle_oam(
+                    ctx,
+                    m,
+                    other_hats.map(|hat| &mut **hat as &mut dyn HatTrait),
+                )?;
+
+                drop(wtables);
+                drop(ctrl_lock);
+
+                for (p, m) in declares {
+                    m.with_mut(|m| p.send_declare(m));
                 }
             }
         }

@@ -942,7 +942,6 @@ impl Resource {
     }
 }
 
-// TODO(regions): move under `Face`
 pub(crate) fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,

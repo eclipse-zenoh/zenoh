@@ -62,18 +62,18 @@ fn test_current_token_repropagation() {
 
     let mut c1_r = Connection {
         a: &c1,
-        ab: r_face,
+        a2b: r_face,
         b: &r,
-        ba: c_face,
+        b2a: c_face,
     }
     .establish();
     c1_r.bi_fwd();
 
     let mut c2_r = Connection {
         a: &c2,
-        ab: r_face,
+        a2b: r_face,
         b: &r,
-        ba: c_face,
+        b2a: c_face,
     }
     .establish();
     c2_r.bi_fwd();

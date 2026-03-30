@@ -198,7 +198,6 @@ impl<D> Index<&Region> for RegionMap<D> {
     }
 }
 
-// REVIEW(regions): do we need two `Index` impls?
 impl<D> Index<Region> for RegionMap<D> {
     type Output = D;
 
@@ -213,7 +212,6 @@ impl<D> IndexMut<&Region> for RegionMap<D> {
     }
 }
 
-// REVIEW(regions): do we need two `IndexMut` impls?
 impl<D> IndexMut<Region> for RegionMap<D> {
     fn index_mut(&mut self, region: Region) -> &mut Self::Output {
         self.index_mut(&region)

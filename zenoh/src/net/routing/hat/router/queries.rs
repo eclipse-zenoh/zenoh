@@ -465,14 +465,14 @@ impl HatQueriesTrait for Hat {
             return Noop;
         };
 
-        let Some(old_info) = self.remote_queryables_of(&res) else {
+        let Some(old_info) = self.remote_queryables_of(ctx.tables, &res) else {
             tracing::error!("Queryable undeclaration in router region with no info");
             return Noop;
         };
 
         self.res_hat_mut(&mut res).router_qabls.remove(&router);
 
-        let new_info = self.remote_queryables_of(&res);
+        let new_info = self.remote_queryables_of(ctx.tables, &res);
 
         if new_info.is_none() {
             self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
@@ -555,15 +555,11 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType> {
-        // FIXME(regions): use TablesData::zid?
-        let net = self.net();
-        let this_router = &net.graph[net.idx].zid;
-
+    fn remote_queryables_of(&self, tables: &TablesData, res: &Resource) -> Option<QueryableInfoType> {
         self.res_hat(res)
             .router_qabls
             .iter()
-            .filter_map(|(router, info)| (router != this_router).then_some(*info))
+            .filter_map(|(router, info)| (router != &tables.zid).then_some(*info))
             .reduce(merge_qabl_infos)
     }
 

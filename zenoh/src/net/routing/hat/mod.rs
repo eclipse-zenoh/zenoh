@@ -151,7 +151,6 @@ impl Remote {
         self.0.as_any()
     }
 
-    // FIXME(regions): remove this
     pub(crate) fn downcast_ref_to_face(&self) -> &Arc<FaceState> {
         self.as_any().downcast_ref().unwrap()
     }
@@ -188,9 +187,6 @@ pub(crate) trait HatBaseTrait: Any {
 
     fn new_resource(&self) -> Box<dyn Any + Send + Sync>;
 
-    // REVIEW(regions): it would be better if this returned a Result instead
-    // Currently errors are logged in router::Hat::get_router.
-
     fn new_remote(&self, face: &Arc<FaceState>, nid: NodeId) -> Option<Remote>;
 
     fn new_local_face(
@@ -210,8 +206,6 @@ pub(crate) trait HatBaseTrait: Any {
         &mut self,
         ctx: DispatcherContext,
         oam: &mut Oam,
-        zid: &ZenohIdProto,
-        whatami: WhatAmI,
         other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()>;
 
@@ -221,17 +215,6 @@ pub(crate) trait HatBaseTrait: Any {
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId;
-
-    fn ingress_filter(&self, tables: &TablesData, face: &FaceState, expr: &RoutingExpr) -> bool;
-
-    // TODO(regions): review multicast-related logic
-    fn egress_filter(
-        &self,
-        tables: &TablesData,
-        src_face: &FaceState,
-        out_face: &Arc<FaceState>,
-        expr: &RoutingExpr,
-    ) -> bool;
 
     fn info(&self) -> String;
 
@@ -398,10 +381,6 @@ pub(crate) trait HatInterestTrait {
         res: Arc<Resource>,
     ) -> RouteCurrentDeclareResult;
 
-    // FIXME(regions): only the _declaration_ owner hat should store inbound entities in its specific way.
-    // Thus the _interest_ owner hat doesn't have all declarations and the .propagate_declarations(..) fn
-    // should be reworked.
-
     fn send_current_subscribers(
         &self,
         ctx: DispatcherContext,
@@ -469,7 +448,6 @@ pub(crate) enum UnregisterEntityResult {
     LastUnregistered { res: Arc<Resource> },
 }
 
-// TODO(regions): update comments
 pub(crate) trait HatPubSubTrait {
     /// Register a subscriber entity.
     ///
@@ -522,7 +500,7 @@ pub(crate) trait HatPubSubTrait {
         self.unpropagate_subscriber(ctx, res);
     }
 
-    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo>;
+    fn remote_subscribers_of(&self, tables: &TablesData, res: &Resource) -> Option<SubscriberInfo>;
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn remote_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, SubscriberInfo> {
@@ -561,7 +539,6 @@ pub(crate) trait HatPubSubTrait {
     ) -> Arc<Route>;
 }
 
-// TODO(regions): update comments
 pub(crate) trait HatQueriesTrait {
     /// Register a queryable entity.
     ///
@@ -590,7 +567,7 @@ pub(crate) trait HatQueriesTrait {
 
     /// Propagate a queryable entity.
     ///
-    /// The callee hat will only push the subscriber if is the north hat.
+    /// The callee hat will only push the queryable if is the north hat.
     fn propagate_queryable(
         &mut self,
         ctx: DispatcherContext,
@@ -606,7 +583,11 @@ pub(crate) trait HatQueriesTrait {
         self.unpropagate_queryable(ctx, res);
     }
 
-    fn remote_queryables_of(&self, res: &Resource) -> Option<QueryableInfoType>;
+    fn remote_queryables_of(
+        &self,
+        tables: &TablesData,
+        res: &Resource,
+    ) -> Option<QueryableInfoType>;
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn remote_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, QueryableInfoType> {
@@ -619,7 +600,6 @@ pub(crate) trait HatQueriesTrait {
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, QueryableInfoType>;
 
-    // TODO(region): replace return type with map
     fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
 
     fn sourced_queriers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources>;
@@ -646,7 +626,6 @@ pub(crate) trait HatQueriesTrait {
     ) -> Arc<QueryTargetQablSet>;
 }
 
-// TODO(regions): update comments
 pub(crate) trait HatTokenTrait {
     /// Register a token entity.
     ///
@@ -672,13 +651,10 @@ pub(crate) trait HatTokenTrait {
 
     fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
-    // FIXME(regions): `other_tokens` is not necessary and should be removed
     /// Propagate a token entity.
-    ///
-    /// The callee hat will only push the subscriber if is the north hat.
-    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>, other_tokens: bool);
+    fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>);
 
-    /// Unpropagate a queryable entity.
+    /// Unpropagate a token entity.
     fn unpropagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>);
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -686,7 +662,7 @@ pub(crate) trait HatTokenTrait {
         self.unpropagate_token(ctx, res);
     }
 
-    fn remote_tokens_of(&self, res: &Resource) -> bool;
+    fn remote_tokens_of(&self, tables: &TablesData, res: &Resource) -> bool;
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn remote_tokens(&self, tables: &TablesData) -> HashSet<Arc<Resource>> {

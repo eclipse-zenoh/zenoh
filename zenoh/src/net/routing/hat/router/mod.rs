@@ -40,7 +40,7 @@ use zenoh_transport::unicast::TransportUnicast;
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{NodeId, Resource, RoutingExpr, TablesData, TablesLock},
+        tables::{NodeId, Resource, TablesData, TablesLock},
     },
     HatBaseTrait, HatTrait,
 };
@@ -103,7 +103,7 @@ pub(crate) struct Hat {
     /// All tokens declared by routers in the network.
     router_tokens: HashSet<Arc<Resource>>,
     router_qabls: HashSet<Arc<Resource>>,
-    routers_net: Option<Network>, // TODO(regions): remove Option?
+    routers_net: Option<Network>,
     routers_trees_worker: TreesComputationWorker,
     #[cfg(test)]
     disable_async_tree_computation: bool,
@@ -135,11 +135,15 @@ impl Hat {
     }
 
     pub(crate) fn net(&self) -> &Network {
-        self.routers_net.as_ref().unwrap()
+        self.routers_net
+            .as_ref()
+            .expect("router Network should be initialized")
     }
 
     pub(crate) fn net_mut(&mut self) -> &mut Network {
-        self.routers_net.as_mut().unwrap()
+        self.routers_net
+            .as_mut()
+            .expect("router Network should be initialized")
     }
 
     pub(self) fn res_hat<'r>(&self, res: &'r Resource) -> &'r HatContext {
@@ -318,8 +322,6 @@ impl HatBaseTrait for Hat {
         &mut self,
         mut ctx: DispatcherContext,
         oam: &mut Oam,
-        zid: &ZenohIdProto,
-        whatami: WhatAmI,
         other_hats: RegionMap<&mut dyn HatTrait>,
     ) -> ZResult<()> {
         if oam.id == OAM_LINKSTATE {
@@ -341,7 +343,7 @@ impl HatBaseTrait for Hat {
 
                 let removed_nodes = self
                     .net_mut()
-                    .link_states(list.link_states, *zid)
+                    .link_states(list.link_states, ctx.src_face.zid)
                     .removed_nodes;
 
                 let removed_subscribers = removed_nodes
@@ -373,7 +375,7 @@ impl HatBaseTrait for Hat {
 
                     let mut remaining = hats
                         .values_mut()
-                        .filter(|hat| hat.remote_subscribers_of(&res).is_some())
+                        .filter(|hat| hat.remote_subscribers_of(ctx.tables, &res).is_some())
                         .collect_vec();
 
                     if remaining.is_empty() {
@@ -393,7 +395,8 @@ impl HatBaseTrait for Hat {
                     let remaining = hats
                         .iter()
                         .filter_map(|(rgn, hat)| {
-                            hat.remote_queryables_of(&res).map(|info| (rgn, info))
+                            hat.remote_queryables_of(ctx.tables, &res)
+                                .map(|info| (rgn, info))
                         })
                         .collect_vec();
 
@@ -424,7 +427,7 @@ impl HatBaseTrait for Hat {
                 for mut res in removed_tokens {
                     let mut remaining = hats
                         .values_mut()
-                        .filter(|hat| hat.remote_tokens_of(&res))
+                        .filter(|hat| hat.remote_tokens_of(ctx.tables, &res))
                         .collect_vec();
 
                     if remaining.is_empty() {
@@ -456,27 +459,6 @@ impl HatBaseTrait for Hat {
         } else {
             DEFAULT_NODE_ID
         }
-    }
-
-    #[inline]
-    fn ingress_filter(&self, _tables: &TablesData, _face: &FaceState, _expr: &RoutingExpr) -> bool {
-        // FIXME(regions): ensure that there is a south-bound peer that can
-        // handle duplicated messages through gossip from peers with multiple
-        // connections to the same router gateway.
-        true
-    }
-
-    #[inline]
-    fn egress_filter(
-        &self,
-        _tables: &TablesData,
-        src_face: &FaceState,
-        out_face: &Arc<FaceState>,
-        _expr: &RoutingExpr,
-    ) -> bool {
-        src_face.id != out_face.id
-            && out_face.mcast_group.is_none()
-            && src_face.mcast_group.is_none()
     }
 
     fn info(&self) -> String {

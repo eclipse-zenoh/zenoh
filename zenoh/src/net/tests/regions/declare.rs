@@ -39,10 +39,10 @@ fn test_against_invalid_token_propagation_to_source_south_router_region() {
     let s_n = Connection {
         a: &s,
         b: &n,
-        ab: FaceDef::default()
+        a2b: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
-        ba: FaceDef::default()
+        b2a: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     };
@@ -55,7 +55,7 @@ fn test_against_invalid_token_propagation_to_source_south_router_region() {
     ss.declare_token(None, 1, &ke);
     s_n.bi_fwd();
 
-    assert!(s_n.b2a().tokens().is_empty());
+    assert!(s_n.b2a.recorder().tokens().is_empty());
 }
 
 /// Same as [`test_against_invalid_token_propagation_to_source_south_router_region`] but for north
@@ -76,8 +76,8 @@ fn test_against_invalid_token_propagation_to_source_north_router_region() {
     let r0_r1 = Connection {
         a: &r0,
         b: &r1,
-        ab: FaceDef::default().mode(WhatAmI::Router),
-        ba: FaceDef::default().mode(WhatAmI::Router),
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
     };
 
     let mut r0_r1 = r0_r1.establish();
@@ -88,7 +88,7 @@ fn test_against_invalid_token_propagation_to_source_north_router_region() {
     r0s.declare_token(None, 1, &ke);
     r0_r1.bi_fwd();
 
-    assert!(r0_r1.b2a().tokens().is_empty());
+    assert!(r0_r1.b2a.recorder().tokens().is_empty());
 }
 
 #[test]
@@ -117,26 +117,26 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
     let mut n_g1 = Connection {
         a: &n,
         b: &g1,
-        ab: FaceDef::default().mode(WhatAmI::Router),
-        ba: FaceDef::default().mode(WhatAmI::Router),
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g0 = Connection {
         a: &n,
         b: &g0,
-        ab: FaceDef::default().mode(WhatAmI::Router),
-        ba: FaceDef::default().mode(WhatAmI::Router),
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g1 = Connection {
         a: &s,
         b: &g1,
-        ab: FaceDef::default()
+        a2b: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
-        ba: FaceDef::default()
+        b2a: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -144,11 +144,11 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceDef::default()
+        a2b: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceDef::default()
+        b2a: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -166,11 +166,11 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
     bi_fwd_all();
 
     // Only one gateway should forward the token
-    assert!((n_g0.b2a().tokens().len() == 1) ^ (n_g1.b2a().tokens().len() == 1));
+    assert!((n_g0.b2a.recorder().tokens().len() == 1) ^ (n_g1.b2a.recorder().tokens().len() == 1));
 
     // The token should not be re-propagated downstream
-    assert!(s_g0.b2a().tokens().is_empty());
-    assert!(s_g1.b2a().tokens().is_empty());
+    assert!(s_g0.b2a.recorder().tokens().is_empty());
+    assert!(s_g1.b2a.recorder().tokens().is_empty());
 
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());
@@ -204,26 +204,26 @@ fn test_multiple_gateways_r2r_token_propagation_downstream() {
     let mut n_g1 = Connection {
         a: &n,
         b: &g1,
-        ab: FaceDef::default().mode(WhatAmI::Router),
-        ba: FaceDef::default().mode(WhatAmI::Router),
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut n_g0 = Connection {
         a: &n,
         b: &g0,
-        ab: FaceDef::default().mode(WhatAmI::Router),
-        ba: FaceDef::default().mode(WhatAmI::Router),
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
     }
     .establish();
 
     let mut s_g1 = Connection {
         a: &s,
         b: &g1,
-        ab: FaceDef::default()
+        a2b: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
-        ba: FaceDef::default()
+        b2a: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -231,11 +231,11 @@ fn test_multiple_gateways_r2r_token_propagation_downstream() {
 
     let mut s_g0 = Connection {
         a: &s,
-        ab: FaceDef::default()
+        a2b: FaceDef::default()
             .mode(WhatAmI::Router)
             .remote_bound(Bound::South),
         b: &g0,
-        ba: FaceDef::default()
+        b2a: FaceDef::default()
             .mode(WhatAmI::Router)
             .region(Region::default_south(WhatAmI::Router)),
     }
@@ -253,11 +253,11 @@ fn test_multiple_gateways_r2r_token_propagation_downstream() {
     bi_fwd_all();
 
     // Only one gateway should forward the token
-    assert!((s_g0.b2a().tokens().len() == 1) ^ (s_g1.b2a().tokens().len() == 1));
+    assert!((s_g0.b2a.recorder().tokens().len() == 1) ^ (s_g1.b2a.recorder().tokens().len() == 1));
 
     // The token should not be re-propagated upstream
-    assert!(n_g0.b2a().tokens().is_empty());
-    assert!(n_g1.b2a().tokens().is_empty());
+    assert!(n_g0.b2a.recorder().tokens().is_empty());
+    assert!(n_g1.b2a.recorder().tokens().is_empty());
 
     assert!(n_g0.is_bi_complete());
     assert!(n_g1.is_bi_complete());

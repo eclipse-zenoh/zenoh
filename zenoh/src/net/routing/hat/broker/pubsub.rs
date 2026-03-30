@@ -403,7 +403,7 @@ impl HatPubSubTrait for Hat {
         ctx: DispatcherContext,
         res: Arc<Resource>,
     ) {
-        debug_assert!(self.remote_subscribers_of(&res).is_some());
+        debug_assert!(self.remote_subscribers_of(ctx.tables, &res).is_some());
 
         if let Ok(face) = self
             .owned_face_contexts(&res)
@@ -417,7 +417,7 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "trace", ret)]
-    fn remote_subscribers_of(&self, res: &Resource) -> Option<SubscriberInfo> {
+    fn remote_subscribers_of(&self, _tables: &TablesData, res: &Resource) -> Option<SubscriberInfo> {
         self.owned_face_contexts(res)
             .filter_map(|ctx| ctx.subs)
             .reduce(|_, _| SubscriberInfo)
