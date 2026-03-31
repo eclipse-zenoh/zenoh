@@ -11,12 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio_util::sync::CancellationToken;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use zenoh_buffers::ZSlice;
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::Link;
@@ -28,7 +28,7 @@ use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 use zenoh_task::TaskController;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
@@ -296,7 +296,7 @@ async fn rx_task(
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
     cancellation_token: CancellationToken,
 ) -> ZResult<()> {
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     if link.link.get_fd().is_ok() {
         return rx_task_uring(
             link,
@@ -378,11 +378,11 @@ async fn rx_task_non_uring(
     }
 }
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 #[derive(Debug)]
 struct ZRxBuffer(Arc<RxBuffer>);
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 impl ZSliceBuffer for ZRxBuffer {
     fn as_slice(&self) -> &[u8] {
         &self.0
@@ -397,7 +397,7 @@ impl ZSliceBuffer for ZRxBuffer {
     }
 }
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,

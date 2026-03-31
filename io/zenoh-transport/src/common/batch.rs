@@ -458,13 +458,13 @@ impl RBatch {
     }
 
     // Split (length, header, payload) internal buffer slice
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     #[inline(always)]
     fn split_uring<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
         zsplit!(buffer, false, config.has_header())
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     pub fn initialize_uring<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
@@ -480,7 +480,7 @@ impl RBatch {
     {
         self.initialize_inner(
             buff,
-            #[cfg(feature = "uring")]
+            #[cfg(all(feature = "uring", target_os = "linux"))]
             false,
         )
     }
@@ -488,13 +488,13 @@ impl RBatch {
     fn initialize_inner<C, T>(
         &mut self,
         #[allow(unused_variables)] buff: C,
-        #[cfg(feature = "uring")] uring: bool,
+        #[cfg(all(feature = "uring", target_os = "linux"))] uring: bool,
     ) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
     {
-        #[cfg(feature = "uring")]
+        #[cfg(all(feature = "uring", target_os = "linux"))]
         #[allow(unused_variables)]
         let (l, h, p) = if uring {
             Self::split_uring(self.buffer.as_slice(), &self.config)

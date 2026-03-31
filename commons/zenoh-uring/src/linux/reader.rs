@@ -29,7 +29,7 @@ use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
-use crate::batch_arena::BatchArena;
+use super::batch_arena::BatchArena;
 
 type RxCallbackImpl = dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + Send + 'static;
 

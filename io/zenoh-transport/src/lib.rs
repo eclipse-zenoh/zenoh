@@ -26,7 +26,7 @@ pub mod unicast;
 pub mod shm;
 #[cfg(feature = "shared-memory")]
 mod shm_context;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 mod uring;
 
 use std::{any::Any, sync::Arc};

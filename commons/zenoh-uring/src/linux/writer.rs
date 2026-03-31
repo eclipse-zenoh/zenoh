@@ -20,7 +20,7 @@ use std::{
 use io_uring::{cqueue, opcode, types, IoUring};
 use zenoh_result::ZResult;
 
-use crate::batch_arena::BatchArena;
+use super::batch_arena::BatchArena;
 /*
 |____________________ARENA______________________|
 |__Segment__|__Segment__|__Segment__|__Segment__|

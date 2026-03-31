@@ -17,7 +17,7 @@ use std::ops::{Index, IndexMut};
 use io_uring::opcode;
 use zenoh_result::ZResult;
 
-use crate::page_arena::PageArena;
+use super::page_arena::PageArena;
 
 #[derive(Debug)]
 pub(crate) struct BatchArena {

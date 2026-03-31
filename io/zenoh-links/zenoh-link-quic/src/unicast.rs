@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::RawFd;
 use std::{
     fmt,
@@ -192,7 +192,7 @@ impl LinkUnicastTrait for LinkUnicastQuic {
         &self.auth_identifier
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         //TODO: expose FD for quinn???
         bail!("Not supported");

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::RawFd;
 use std::{
     cell::UnsafeCell,
@@ -262,7 +262,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         &self.auth_identifier
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         bail!("Correct FD unavailable for TLS extension")
     }

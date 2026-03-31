@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, collections::HashMap, fmt, sync::Arc, time::Duration};
 
@@ -197,7 +197,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         &LinkAuthId::Vsock
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         match unsafe { &*self.socket.get() }.as_raw_fd() {
             fd if fd < 0 => bail!("FD unavailable"),

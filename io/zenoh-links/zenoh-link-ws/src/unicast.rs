@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::RawFd;
 use std::{
     collections::HashMap,
@@ -233,7 +233,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
         &LinkAuthId::Ws
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         bail!("Not supported");
     }

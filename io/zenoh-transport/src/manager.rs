@@ -40,7 +40,7 @@ use crate::multicast::manager::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use crate::uring::Uring;
 
 fn duration_from_i64us(us: i64) -> Duration {
@@ -131,7 +131,7 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     pub uring: Uring,
 }
 
@@ -383,7 +383,7 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
-            #[cfg(feature = "uring")]
+            #[cfg(all(feature = "uring", target_os = "linux"))]
             uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)?,
         };
 

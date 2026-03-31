@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::AsRawFd;
 use std::{
     cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
@@ -27,7 +27,7 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use zenoh_core::bail;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
@@ -153,7 +153,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         &LinkAuthId::UnixsockStream
     }
 
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         match unsafe { &*self.socket.get() }.as_raw_fd() {
             fd if fd < 0 => bail!("FD unavailable"),

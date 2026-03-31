@@ -18,7 +18,7 @@ use core::{
     ops::Deref,
 };
 use std::net::SocketAddr;
-#[cfg(feature = "uring")]
+#[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::RawFd;
 
 use async_trait::async_trait;
@@ -61,7 +61,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
-    #[cfg(feature = "uring")]
+    #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd>;
 }
 

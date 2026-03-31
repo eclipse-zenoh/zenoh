@@ -12,642 +12,650 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    io::Write,
-    net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket},
-    os::fd::{AsRawFd, RawFd},
-    sync::{
-        atomic::{AtomicBool, AtomicUsize},
-        Arc,
-    },
-    time::Duration,
-    vec,
-};
+#[cfg(target_os = "linux")]
+mod linux_tests {
 
-use libc::rand;
-use test_case::test_case;
-use zenoh_core::bail;
-use zenoh_result::ZResult;
-use zenoh_uring::reader::Reader;
+    use std::{
+        io::Write,
+        net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket},
+        os::fd::{AsRawFd, RawFd},
+        sync::{
+            atomic::{AtomicBool, AtomicUsize},
+            Arc,
+        },
+        time::Duration,
+        vec,
+    };
 
-pub mod common;
+    use libc::rand;
+    use test_case::test_case;
+    use zenoh_core::bail;
+    use zenoh_result::ZResult;
+    use zenoh_uring::reader::Reader;
 
-pub const ITERATION_COUNT: usize = 10000;
+    pub const ITERATION_COUNT: usize = 10000;
 
-struct ManagedTask {
-    handle: Option<std::thread::JoinHandle<ZResult<()>>>,
-    finished: Arc<AtomicBool>,
-}
-
-impl ManagedTask {
-    fn new(
+    struct ManagedTask {
         handle: Option<std::thread::JoinHandle<ZResult<()>>>,
         finished: Arc<AtomicBool>,
-    ) -> Self {
-        Self { handle, finished }
     }
 
-    fn wait_for_complete(mut self) -> ZResult<()> {
-        self.handle.take().unwrap().join().unwrap()
-    }
-
-    fn poll_complete(&self) -> ZResult<bool> {
-        match &self.handle {
-            Some(val) => Ok(val.is_finished()),
-            None => bail!("Already joined"),
+    impl ManagedTask {
+        fn new(
+            handle: Option<std::thread::JoinHandle<ZResult<()>>>,
+            finished: Arc<AtomicBool>,
+        ) -> Self {
+            Self { handle, finished }
         }
-    }
 
-    fn interrupt(&self) {
-        self.finished
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-impl Drop for ManagedTask {
-    fn drop(&mut self) {
-        self.interrupt();
-        if let Some(handle) = self.handle.take() {
-            handle.join().unwrap().unwrap();
+        fn wait_for_complete(mut self) -> ZResult<()> {
+            self.handle.take().unwrap().join().unwrap()
         }
-    }
-}
 
-struct WriterTask;
-
-impl WriterTask {
-    pub fn make(
-        port: u16,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        is_tcp: bool,
-    ) -> ManagedTask {
-        let addr = ("127.0.0.1", port);
-
-        let finished = Arc::new(AtomicBool::new(false));
-
-        let c_finished = finished.clone();
-        let handle = Some(std::thread::spawn(move || {
-            Self::writer_main(addr, iteration_count, interval, c_finished, is_tcp)
-        }));
-
-        ManagedTask::new(handle, finished)
-    }
-
-    fn writer_main<A: ToSocketAddrs>(
-        addr: A,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        finished: Arc<AtomicBool>,
-        is_tcp: bool,
-    ) -> ZResult<()> {
-        let (_fd, mut socket, _) = loop {
-            if let Ok(connected) = connect_socket(is_tcp, &addr) {
-                break connected;
-            }
-            tracing::error!("Unable to connect to socket!");
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                bail!("unable to connect!");
-            }
-        };
-
-        let max_size = if is_tcp { 65535u32 } else { 65000 };
-
-        let iterations = {
-            if is_tcp {
-                iteration_count
-            } else {
-                usize::MAX
-            }
-        };
-
-        let mut i = 0u8;
-        for _ in 0..iterations {
-            let size =
-                std::cmp::max(1, std::cmp::min(unsafe { rand().unsigned_abs() }, max_size)) as u16;
-
-            let mut data = Vec::with_capacity(size as usize + 2);
-            data.write_all(&size.to_le_bytes())?;
-
-            for _ in 0..size {
-                data.push(i);
-                i = i.wrapping_add(1);
-            }
-
-            let result = socket._write_all(&data);
-            if is_tcp {
-                result?;
-            }
-
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-
-            if let Some(interval) = &interval {
-                std::thread::sleep(**interval);
+        fn poll_complete(&self) -> ZResult<bool> {
+            match &self.handle {
+                Some(val) => Ok(val.is_finished()),
+                None => bail!("Already joined"),
             }
         }
 
-        Ok(())
-    }
-}
-
-trait TestSocket: AsRawFd {
-    fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()>;
-}
-
-impl TestSocket for TcpStream {
-    fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.write_all(buf)
-    }
-}
-impl TestSocket for UdpSocket {
-    fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        self.send(buf).map(|val| {
-            assert_eq!(buf.len(), val);
-        })
-    }
-}
-
-type ConnectSocketType = (RawFd, Box<dyn TestSocket>, Option<Box<dyn AsRawFd>>);
-
-fn connect_socket<A: ToSocketAddrs>(
-    is_tcp: bool,
-    remote_addr: A,
-) -> std::io::Result<ConnectSocketType> {
-    if is_tcp {
-        // TCP: directly connect to the remote address
-        let stream = TcpStream::connect(remote_addr)?;
-        let fd = stream.as_raw_fd();
-        Ok((fd, Box::new(stream), None))
-    } else {
-        // UDP: bind to an ephemeral local port, then set the default remote address
-        let socket = UdpSocket::bind("0.0.0.0:0")?; // any interface, OS‑assigned port
-        socket.connect(remote_addr)?; // sets the remote for send/recv
-        let fd = socket.as_raw_fd();
-        Ok((fd, Box::new(socket), None))
-    }
-}
-
-type BindSocketType = (Box<dyn AsRawFd>, Option<Box<dyn AsRawFd>>);
-
-fn bind_socket<A: ToSocketAddrs>(is_tcp: bool, addr: A) -> std::io::Result<BindSocketType> {
-    if is_tcp {
-        let listener = TcpListener::bind(addr)?;
-        let (stream, _) = listener.accept()?;
-        Ok((Box::new(stream), Some(Box::new(listener))))
-    } else {
-        let socket = UdpSocket::bind(addr)?;
-        Ok((Box::new(socket), None))
-    }
-}
-
-struct ReaderTask;
-
-impl ReaderTask {
-    pub fn make(
-        reader: Reader,
-        port: u16,
-        iteration_count: usize,
-        is_tcp: bool,
-        accumulate_buffers: bool,
-    ) -> ManagedTask {
-        let addr = ("127.0.0.1", port);
-
-        let finished = Arc::new(AtomicBool::new(false));
-
-        let c_finished = finished.clone();
-        let handle = Some(std::thread::spawn(move || {
-            Self::reader_main(
-                reader,
-                addr,
-                iteration_count,
-                c_finished,
-                is_tcp,
-                accumulate_buffers,
-            )
-        }));
-
-        ManagedTask::new(handle, finished)
+        fn interrupt(&self) {
+            self.finished
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 
-    fn reader_main<A: ToSocketAddrs>(
-        reader: Reader,
-        addr: A,
-        iteration_count: usize,
-        finished: Arc<AtomicBool>,
-        is_tcp: bool,
-        accumulate_buffers: bool,
-    ) -> ZResult<()> {
-        let (socket, _) = bind_socket(is_tcp, addr)?;
+    impl Drop for ManagedTask {
+        fn drop(&mut self) {
+            self.interrupt();
+            if let Some(handle) = self.handle.take() {
+                handle.join().unwrap().unwrap();
+            }
+        }
+    }
 
-        let iteration = Arc::new(AtomicUsize::new(0));
-        let c_iteration = iteration.clone();
+    struct WriterTask;
 
-        let mut i = 0u8;
+    impl WriterTask {
+        pub fn make(
+            port: u16,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            is_tcp: bool,
+        ) -> ManagedTask {
+            let addr = ("127.0.0.1", port);
 
-        let mut batches = vec![];
+            let finished = Arc::new(AtomicBool::new(false));
 
-        let mut read_handle = zenoh_runtime::ZRuntime::Application.block_on(
-            reader.setup_fragmented_read(socket.as_raw_fd(), move |data| {
-                //            println!("Got {} bytes!", data.size());
+            let c_finished = finished.clone();
+            let handle = Some(std::thread::spawn(move || {
+                Self::writer_main(addr, iteration_count, interval, c_finished, is_tcp)
+            }));
 
-                if data.size() == 0 {
-                    println!("Unexpected size: {}", data.size());
-                    assert!(data.size() != 0);
+            ManagedTask::new(handle, finished)
+        }
+
+        fn writer_main<A: ToSocketAddrs>(
+            addr: A,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            finished: Arc<AtomicBool>,
+            is_tcp: bool,
+        ) -> ZResult<()> {
+            let (_fd, mut socket, _) = loop {
+                if let Ok(connected) = connect_socket(is_tcp, &addr) {
+                    break connected;
                 }
+                tracing::error!("Unable to connect to socket!");
+                if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                    bail!("unable to connect!");
+                }
+            };
 
+            let max_size = if is_tcp { 65535u32 } else { 65000 };
+
+            let iterations = {
                 if is_tcp {
-                    for cell in data.iter() {
-                        assert!(*cell == i);
-                        i = i.wrapping_add(1);
-                    }
+                    iteration_count
+                } else {
+                    usize::MAX
+                }
+            };
+
+            let mut i = 0u8;
+            for _ in 0..iterations {
+                let size =
+                    std::cmp::max(1, std::cmp::min(unsafe { rand().unsigned_abs() }, max_size))
+                        as u16;
+
+                let mut data = Vec::with_capacity(size as usize + 2);
+                data.write_all(&size.to_le_bytes())?;
+
+                for _ in 0..size {
+                    data.push(i);
+                    i = i.wrapping_add(1);
                 }
 
-                c_iteration.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-                if accumulate_buffers {
-                    batches.push(data);
+                let result = socket._write_all(&data);
+                if is_tcp {
+                    result?;
                 }
 
-                Ok(())
-            }),
-        )?;
+                if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
 
-        assert!(Arc::strong_count(&iteration) == 2);
-
-        while read_handle.try_read_error_sync().is_err()
-            && !finished.load(std::sync::atomic::Ordering::Relaxed)
-            && iteration.load(std::sync::atomic::Ordering::SeqCst) < iteration_count
-        {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-
-        drop(read_handle);
-
-        // wait for strong_count to become exclusive which means ReadTask dropped it's callback
-        for _ in 0..100 {
-            if Arc::strong_count(&iteration) == 1 {
-                break;
+                if let Some(interval) = &interval {
+                    std::thread::sleep(**interval);
+                }
             }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        assert!(Arc::strong_count(&iteration) == 1);
 
-        Ok(())
-    }
-}
-
-struct RWTask;
-
-impl RWTask {
-    pub fn make(
-        reader: Reader,
-        port: u16,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        is_tcp: bool,
-        accumulate_buffers: bool,
-    ) -> ManagedTask {
-        let finished = Arc::new(AtomicBool::new(false));
-
-        let c_finished = finished.clone();
-        let handle = Some(std::thread::spawn(move || {
-            Self::rw_main(
-                reader,
-                port,
-                iteration_count,
-                interval,
-                c_finished,
-                is_tcp,
-                accumulate_buffers,
-            )
-        }));
-
-        ManagedTask::new(handle, finished)
-    }
-
-    fn rw_main(
-        reader: Reader,
-        port: u16,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        finished: Arc<AtomicBool>,
-        is_tcp: bool,
-        accumulate_buffers: bool,
-    ) -> ZResult<()> {
-        let reader = ReaderTask::make(reader, port, iteration_count, is_tcp, accumulate_buffers);
-        let writer = WriterTask::make(port, iteration_count, interval, is_tcp);
-
-        while !finished.load(std::sync::atomic::Ordering::Relaxed)
-            && !reader.poll_complete()?
-            && !writer.poll_complete()?
-        {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-
-        if finished.load(std::sync::atomic::Ordering::Relaxed) {
-            reader.interrupt();
-        }
-        reader.wait_for_complete()?;
-
-        if !is_tcp || finished.load(std::sync::atomic::Ordering::Relaxed) {
-            writer.interrupt();
-            let _ = writer.wait_for_complete();
             Ok(())
-        } else {
-            writer.wait_for_complete()
         }
     }
-}
 
-struct StartStopTask;
-
-impl StartStopTask {
-    pub fn make<F: Fn() -> Reader + Send + 'static>(
-        reader_fn: F,
-        port: u16,
-        iteration_count: usize,
-        start_stop_count: usize,
-        writer_ends_first: bool,
-        interval: Option<Arc<Duration>>,
-        is_tcp: bool,
-    ) -> ManagedTask {
-        let finished = Arc::new(AtomicBool::new(false));
-
-        let c_finished = finished.clone();
-        let handle = Some(std::thread::spawn(move || {
-            if writer_ends_first {
-                Self::start_stop_main_writer_ends_first(
-                    reader_fn,
-                    port,
-                    iteration_count,
-                    interval,
-                    start_stop_count,
-                    c_finished,
-                    is_tcp,
-                )
-            } else {
-                Self::start_stop_main_reader_ends_first(
-                    reader_fn,
-                    port,
-                    iteration_count,
-                    interval,
-                    start_stop_count,
-                    c_finished,
-                    is_tcp,
-                )
-            }
-        }));
-
-        ManagedTask::new(handle, finished)
+    trait TestSocket: AsRawFd {
+        fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()>;
     }
 
-    fn start_stop_main_writer_ends_first<F: Fn() -> Reader>(
-        reader_fn: F,
-        port: u16,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        start_stop_count: usize,
-        finished: Arc<AtomicBool>,
+    impl TestSocket for TcpStream {
+        fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+            self.write_all(buf)
+        }
+    }
+    impl TestSocket for UdpSocket {
+        fn _write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+            self.send(buf).map(|val| {
+                assert_eq!(buf.len(), val);
+            })
+        }
+    }
+
+    type ConnectSocketType = (RawFd, Box<dyn TestSocket>, Option<Box<dyn AsRawFd>>);
+
+    fn connect_socket<A: ToSocketAddrs>(
         is_tcp: bool,
-    ) -> ZResult<()> {
-        for _ in 0..start_stop_count {
+        remote_addr: A,
+    ) -> std::io::Result<ConnectSocketType> {
+        if is_tcp {
+            // TCP: directly connect to the remote address
+            let stream = TcpStream::connect(remote_addr)?;
+            let fd = stream.as_raw_fd();
+            Ok((fd, Box::new(stream), None))
+        } else {
+            // UDP: bind to an ephemeral local port, then set the default remote address
+            let socket = UdpSocket::bind("0.0.0.0:0")?; // any interface, OS‑assigned port
+            socket.connect(remote_addr)?; // sets the remote for send/recv
+            let fd = socket.as_raw_fd();
+            Ok((fd, Box::new(socket), None))
+        }
+    }
+
+    type BindSocketType = (Box<dyn AsRawFd>, Option<Box<dyn AsRawFd>>);
+
+    fn bind_socket<A: ToSocketAddrs>(is_tcp: bool, addr: A) -> std::io::Result<BindSocketType> {
+        if is_tcp {
+            let listener = TcpListener::bind(addr)?;
+            let (stream, _) = listener.accept()?;
+            Ok((Box::new(stream), Some(Box::new(listener))))
+        } else {
+            let socket = UdpSocket::bind(addr)?;
+            Ok((Box::new(socket), None))
+        }
+    }
+
+    struct ReaderTask;
+
+    impl ReaderTask {
+        pub fn make(
+            reader: Reader,
+            port: u16,
+            iteration_count: usize,
+            is_tcp: bool,
+            accumulate_buffers: bool,
+        ) -> ManagedTask {
+            let addr = ("127.0.0.1", port);
+
+            let finished = Arc::new(AtomicBool::new(false));
+
+            let c_finished = finished.clone();
+            let handle = Some(std::thread::spawn(move || {
+                Self::reader_main(
+                    reader,
+                    addr,
+                    iteration_count,
+                    c_finished,
+                    is_tcp,
+                    accumulate_buffers,
+                )
+            }));
+
+            ManagedTask::new(handle, finished)
+        }
+
+        fn reader_main<A: ToSocketAddrs>(
+            reader: Reader,
+            addr: A,
+            iteration_count: usize,
+            finished: Arc<AtomicBool>,
+            is_tcp: bool,
+            accumulate_buffers: bool,
+        ) -> ZResult<()> {
+            let (socket, _) = bind_socket(is_tcp, addr)?;
+
+            let iteration = Arc::new(AtomicUsize::new(0));
+            let c_iteration = iteration.clone();
+
+            let mut i = 0u8;
+
+            let mut batches = vec![];
+
+            let mut read_handle = zenoh_runtime::ZRuntime::Application.block_on(
+                reader.setup_fragmented_read(socket.as_raw_fd(), move |data| {
+                    //            println!("Got {} bytes!", data.size());
+
+                    if data.size() == 0 {
+                        println!("Unexpected size: {}", data.size());
+                        assert!(data.size() != 0);
+                    }
+
+                    if is_tcp {
+                        for cell in data.iter() {
+                            assert!(*cell == i);
+                            i = i.wrapping_add(1);
+                        }
+                    }
+
+                    c_iteration.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+                    if accumulate_buffers {
+                        batches.push(data);
+                    }
+
+                    Ok(())
+                }),
+            )?;
+
+            assert!(Arc::strong_count(&iteration) == 2);
+
+            while read_handle.try_read_error_sync().is_err()
+                && !finished.load(std::sync::atomic::Ordering::Relaxed)
+                && iteration.load(std::sync::atomic::Ordering::SeqCst) < iteration_count
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+
+            drop(read_handle);
+
+            // wait for strong_count to become exclusive which means ReadTask dropped it's callback
+            for _ in 0..100 {
+                if Arc::strong_count(&iteration) == 1 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            assert!(Arc::strong_count(&iteration) == 1);
+
+            Ok(())
+        }
+    }
+
+    struct RWTask;
+
+    impl RWTask {
+        pub fn make(
+            reader: Reader,
+            port: u16,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            is_tcp: bool,
+            accumulate_buffers: bool,
+        ) -> ManagedTask {
+            let finished = Arc::new(AtomicBool::new(false));
+
+            let c_finished = finished.clone();
+            let handle = Some(std::thread::spawn(move || {
+                Self::rw_main(
+                    reader,
+                    port,
+                    iteration_count,
+                    interval,
+                    c_finished,
+                    is_tcp,
+                    accumulate_buffers,
+                )
+            }));
+
+            ManagedTask::new(handle, finished)
+        }
+
+        fn rw_main(
+            reader: Reader,
+            port: u16,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            finished: Arc<AtomicBool>,
+            is_tcp: bool,
+            accumulate_buffers: bool,
+        ) -> ZResult<()> {
+            let reader =
+                ReaderTask::make(reader, port, iteration_count, is_tcp, accumulate_buffers);
+            let writer = WriterTask::make(port, iteration_count, interval, is_tcp);
+
+            while !finished.load(std::sync::atomic::Ordering::Relaxed)
+                && !reader.poll_complete()?
+                && !writer.poll_complete()?
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+
+            if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                reader.interrupt();
+            }
+            reader.wait_for_complete()?;
+
+            if !is_tcp || finished.load(std::sync::atomic::Ordering::Relaxed) {
+                writer.interrupt();
+                let _ = writer.wait_for_complete();
+                Ok(())
+            } else {
+                writer.wait_for_complete()
+            }
+        }
+    }
+
+    struct StartStopTask;
+
+    impl StartStopTask {
+        pub fn make<F: Fn() -> Reader + Send + 'static>(
+            reader_fn: F,
+            port: u16,
+            iteration_count: usize,
+            start_stop_count: usize,
+            writer_ends_first: bool,
+            interval: Option<Arc<Duration>>,
+            is_tcp: bool,
+        ) -> ManagedTask {
+            let finished = Arc::new(AtomicBool::new(false));
+
+            let c_finished = finished.clone();
+            let handle = Some(std::thread::spawn(move || {
+                if writer_ends_first {
+                    Self::start_stop_main_writer_ends_first(
+                        reader_fn,
+                        port,
+                        iteration_count,
+                        interval,
+                        start_stop_count,
+                        c_finished,
+                        is_tcp,
+                    )
+                } else {
+                    Self::start_stop_main_reader_ends_first(
+                        reader_fn,
+                        port,
+                        iteration_count,
+                        interval,
+                        start_stop_count,
+                        c_finished,
+                        is_tcp,
+                    )
+                }
+            }));
+
+            ManagedTask::new(handle, finished)
+        }
+
+        fn start_stop_main_writer_ends_first<F: Fn() -> Reader>(
+            reader_fn: F,
+            port: u16,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            start_stop_count: usize,
+            finished: Arc<AtomicBool>,
+            is_tcp: bool,
+        ) -> ZResult<()> {
+            for _ in 0..start_stop_count {
+                let rw = RWTask::make(
+                    reader_fn(),
+                    port,
+                    iteration_count,
+                    interval.clone(),
+                    is_tcp,
+                    false,
+                );
+
+                while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_complete()? {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+
+                if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                    rw.interrupt();
+                    rw.wait_for_complete()?;
+                    break;
+                } else {
+                    rw.wait_for_complete()?;
+                }
+            }
+            Ok(())
+        }
+
+        fn start_stop_main_reader_ends_first<F: Fn() -> Reader>(
+            reader_fn: F,
+            port: u16,
+            iteration_count: usize,
+            interval: Option<Arc<Duration>>,
+            start_stop_count: usize,
+            finished: Arc<AtomicBool>,
+            is_tcp: bool,
+        ) -> ZResult<()> {
+            for _ in 0..start_stop_count {
+                let reader = ReaderTask::make(reader_fn(), port, iteration_count, is_tcp, false);
+                let writer = WriterTask::make(port, usize::MAX, interval.clone(), is_tcp);
+
+                while !finished.load(std::sync::atomic::Ordering::Relaxed)
+                    && !reader.poll_complete()?
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+
+                if reader.poll_complete()? {
+                    reader.wait_for_complete()?;
+                } else {
+                    // drop reader first!
+                    drop(reader);
+                    break;
+                }
+
+                if !is_tcp {
+                    writer.interrupt();
+                }
+
+                while !finished.load(std::sync::atomic::Ordering::Relaxed)
+                    && !writer.poll_complete()?
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+
+                if finished.load(std::sync::atomic::Ordering::Relaxed) {
+                    writer.interrupt();
+                    let _ = writer.wait_for_complete();
+                    break;
+                } else {
+                    let _ = writer.wait_for_complete();
+                }
+            }
+            Ok(())
+        }
+    }
+
+    #[test_case(true; "tcp")]
+    #[test_case(false; "udp")]
+    fn rw_single_simple(is_tcp: bool) {
+        zenoh_util::try_init_log_from_env();
+
+        let r = Reader::new(65535 + 2, 16).unwrap();
+
+        let port = 7780;
+        let interval = None;
+        let reader = ReaderTask::make(r.clone(), port, 100, is_tcp, false);
+        let writer = WriterTask::make(port, 100, interval, is_tcp);
+
+        reader.wait_for_complete().unwrap();
+
+        if !is_tcp {
+            writer.interrupt();
+        }
+        writer.wait_for_complete().unwrap();
+
+        tracing::debug!("Dropping reader...");
+        drop(r);
+        tracing::debug!("Done!");
+    }
+
+    #[test_case(true; "tcp")]
+    #[test_case(false; "udp")]
+    fn rw_single_pause_after_interrupt(is_tcp: bool) {
+        zenoh_util::try_init_log_from_env();
+
+        let reader = Reader::new(65535 + 2, 16).unwrap();
+
+        let port = 7781;
+        let interval = None;
+        let reader = ReaderTask::make(reader, port, ITERATION_COUNT, is_tcp, false);
+        let writer = WriterTask::make(port, ITERATION_COUNT, interval, is_tcp);
+
+        reader.wait_for_complete().unwrap();
+
+        std::thread::sleep(Duration::from_secs(1));
+
+        if !is_tcp {
+            writer.interrupt();
+        }
+        writer.wait_for_complete().unwrap();
+    }
+
+    #[test_case(true; "tcp")]
+    #[test_case(false; "udp")]
+    fn rw_parallel(is_tcp: bool) {
+        zenoh_util::try_init_log_from_env();
+
+        let reader = Reader::new(65535 + 2, 16).unwrap();
+        let count = 64;
+        let base_port = 7782;
+        let base_interval = None;
+
+        let mut rw_tasks = vec![];
+        for pair in 0..count {
             let rw = RWTask::make(
-                reader_fn(),
-                port,
-                iteration_count,
-                interval.clone(),
+                reader.clone(),
+                base_port + pair,
+                ITERATION_COUNT / count as usize,
+                base_interval.clone(),
                 is_tcp,
                 false,
             );
-
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_complete()? {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                rw.interrupt();
-                rw.wait_for_complete()?;
-                break;
-            } else {
-                rw.wait_for_complete()?;
-            }
+            rw_tasks.push(rw);
         }
-        Ok(())
+
+        for rw in rw_tasks {
+            rw.wait_for_complete().unwrap();
+        }
     }
 
-    fn start_stop_main_reader_ends_first<F: Fn() -> Reader>(
-        reader_fn: F,
-        port: u16,
-        iteration_count: usize,
-        interval: Option<Arc<Duration>>,
-        start_stop_count: usize,
-        finished: Arc<AtomicBool>,
+    #[test_case(8200, 1, true; "single_tcp")]
+    #[test_case(8201, 10, true; "many_tcp")]
+    #[test_case(8200, 1, false; "single_udp")]
+    #[test_case(8201, 10, false; "many_udp")]
+    fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
+        zenoh_util::try_init_log_from_env();
+
+        let max_memory_consume = 10 * 1024 * 1024;
+        let buffer_avg_size = 65535 / 2;
+        let buffer_count = max_memory_consume / count as usize / buffer_avg_size;
+        println!("Running rw_add_batches for buffer_count: {buffer_count}");
+
+        let reader = Reader::new(65535 + 2, 4).unwrap();
+        let base_interval = None;
+
+        let mut rw_tasks = vec![];
+        for pair in 0..count {
+            let rw = RWTask::make(
+                reader.clone(),
+                base_port + pair,
+                buffer_count,
+                base_interval.clone(),
+                is_tcp,
+                true,
+            );
+            rw_tasks.push(rw);
+        }
+
+        for rw in rw_tasks {
+            rw.wait_for_complete().unwrap();
+        }
+    }
+
+    #[test_case(true,  true,  true, 0;  "tcp_writer_first_shared_reader")]
+    #[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
+    #[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
+    #[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
+    //#[test_case(false, true,  true, 0;  "udp_writer_first_shared_reader")]
+    //#[test_case(false, true,  false, 1; "udp_writer_first_exclusive_reader")]
+    //#[test_case(false, false, true, 2;  "udp_reader_first_shared_reader")]
+    //#[test_case(false, false, false, 3; "udp_reader_first_exclusive_reader")]
+    fn rw_parallel_and_start_stop(
         is_tcp: bool,
-    ) -> ZResult<()> {
-        for _ in 0..start_stop_count {
-            let reader = ReaderTask::make(reader_fn(), port, iteration_count, is_tcp, false);
-            let writer = WriterTask::make(port, usize::MAX, interval.clone(), is_tcp);
+        writer_ends_first: bool,
+        shared_reader: bool,
+        port_offset: u16,
+    ) {
+        zenoh_util::try_init_log_from_env();
 
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !reader.poll_complete()? {
-                std::thread::sleep(Duration::from_millis(10));
-            }
+        let reader = Reader::new(65535 + 2, 16).unwrap();
+        let count = 20;
+        let base_port = 13000 + port_offset * (count + 1);
+        let base_interval = Some(Arc::new(Duration::from_millis(1)));
 
-            if reader.poll_complete()? {
-                reader.wait_for_complete()?;
-            } else {
-                // drop reader first!
-                drop(reader);
-                break;
-            }
-
-            if !is_tcp {
-                writer.interrupt();
-            }
-
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !writer.poll_complete()? {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-
-            if finished.load(std::sync::atomic::Ordering::Relaxed) {
-                writer.interrupt();
-                let _ = writer.wait_for_complete();
-                break;
-            } else {
-                let _ = writer.wait_for_complete();
-            }
+        let mut rw_background = vec![];
+        for i in 0..count {
+            let rw = RWTask::make(
+                reader.clone(),
+                base_port + i,
+                usize::MAX,
+                base_interval.clone(),
+                is_tcp,
+                false,
+            );
+            rw_background.push(rw);
         }
-        Ok(())
-    }
-}
 
-#[test_case(true; "tcp")]
-#[test_case(false; "udp")]
-fn rw_single_simple(is_tcp: bool) {
-    zenoh_util::try_init_log_from_env();
+        let run_start_stop_session = |reader_fn: Arc<dyn Fn() -> Reader + Send + Sync>| {
+            let c_reader_fn = reader_fn.clone();
+            let start_stop_writer_ends_first = StartStopTask::make(
+                move || c_reader_fn(),
+                base_port + count,
+                ITERATION_COUNT / 1000,
+                10,
+                writer_ends_first,
+                None,
+                is_tcp,
+            );
+            start_stop_writer_ends_first.wait_for_complete().unwrap();
+        };
 
-    let r = Reader::new(65535 + 2, 16).unwrap();
+        if shared_reader {
+            tracing::info!("Shared Reader...");
+            run_start_stop_session(Arc::new(move || reader.clone()));
+        } else {
+            tracing::info!("Exclusive Reader...");
+            run_start_stop_session(Arc::new(|| Reader::new(65535 + 2, 16).unwrap()));
+        }
 
-    let port = 7780;
-    let interval = None;
-    let reader = ReaderTask::make(r.clone(), port, 100, is_tcp, false);
-    let writer = WriterTask::make(port, 100, interval, is_tcp);
-
-    reader.wait_for_complete().unwrap();
-
-    if !is_tcp {
-        writer.interrupt();
-    }
-    writer.wait_for_complete().unwrap();
-
-    tracing::debug!("Dropping reader...");
-    drop(r);
-    tracing::debug!("Done!");
-}
-
-#[test_case(true; "tcp")]
-#[test_case(false; "udp")]
-fn rw_single_pause_after_interrupt(is_tcp: bool) {
-    zenoh_util::try_init_log_from_env();
-
-    let reader = Reader::new(65535 + 2, 16).unwrap();
-
-    let port = 7781;
-    let interval = None;
-    let reader = ReaderTask::make(reader, port, ITERATION_COUNT, is_tcp, false);
-    let writer = WriterTask::make(port, ITERATION_COUNT, interval, is_tcp);
-
-    reader.wait_for_complete().unwrap();
-
-    std::thread::sleep(Duration::from_secs(1));
-
-    if !is_tcp {
-        writer.interrupt();
-    }
-    writer.wait_for_complete().unwrap();
-}
-
-#[test_case(true; "tcp")]
-#[test_case(false; "udp")]
-fn rw_parallel(is_tcp: bool) {
-    zenoh_util::try_init_log_from_env();
-
-    let reader = Reader::new(65535 + 2, 16).unwrap();
-    let count = 64;
-    let base_port = 7782;
-    let base_interval = None;
-
-    let mut rw_tasks = vec![];
-    for pair in 0..count {
-        let rw = RWTask::make(
-            reader.clone(),
-            base_port + pair,
-            ITERATION_COUNT / count as usize,
-            base_interval.clone(),
-            is_tcp,
-            false,
-        );
-        rw_tasks.push(rw);
-    }
-
-    for rw in rw_tasks {
-        rw.wait_for_complete().unwrap();
-    }
-}
-
-#[test_case(8200, 1, true; "single_tcp")]
-#[test_case(8201, 10, true; "many_tcp")]
-#[test_case(8200, 1, false; "single_udp")]
-#[test_case(8201, 10, false; "many_udp")]
-fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
-    zenoh_util::try_init_log_from_env();
-
-    let max_memory_consume = 10 * 1024 * 1024;
-    let buffer_avg_size = 65535 / 2;
-    let buffer_count = max_memory_consume / count as usize / buffer_avg_size;
-    println!("Running rw_add_batches for buffer_count: {buffer_count}");
-
-    let reader = Reader::new(65535 + 2, 4).unwrap();
-    let base_interval = None;
-
-    let mut rw_tasks = vec![];
-    for pair in 0..count {
-        let rw = RWTask::make(
-            reader.clone(),
-            base_port + pair,
-            buffer_count,
-            base_interval.clone(),
-            is_tcp,
-            true,
-        );
-        rw_tasks.push(rw);
-    }
-
-    for rw in rw_tasks {
-        rw.wait_for_complete().unwrap();
-    }
-}
-
-#[test_case(true,  true,  true, 0;  "tcp_writer_first_shared_reader")]
-#[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
-#[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
-#[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
-//#[test_case(false, true,  true, 0;  "udp_writer_first_shared_reader")]
-//#[test_case(false, true,  false, 1; "udp_writer_first_exclusive_reader")]
-//#[test_case(false, false, true, 2;  "udp_reader_first_shared_reader")]
-//#[test_case(false, false, false, 3; "udp_reader_first_exclusive_reader")]
-fn rw_parallel_and_start_stop(
-    is_tcp: bool,
-    writer_ends_first: bool,
-    shared_reader: bool,
-    port_offset: u16,
-) {
-    zenoh_util::try_init_log_from_env();
-
-    let reader = Reader::new(65535 + 2, 16).unwrap();
-    let count = 20;
-    let base_port = 13000 + port_offset * (count + 1);
-    let base_interval = Some(Arc::new(Duration::from_millis(1)));
-
-    let mut rw_background = vec![];
-    for i in 0..count {
-        let rw = RWTask::make(
-            reader.clone(),
-            base_port + i,
-            usize::MAX,
-            base_interval.clone(),
-            is_tcp,
-            false,
-        );
-        rw_background.push(rw);
-    }
-
-    let run_start_stop_session = |reader_fn: Arc<dyn Fn() -> Reader + Send + Sync>| {
-        let c_reader_fn = reader_fn.clone();
-        let start_stop_writer_ends_first = StartStopTask::make(
-            move || c_reader_fn(),
-            base_port + count,
-            ITERATION_COUNT / 1000,
-            10,
-            writer_ends_first,
-            None,
-            is_tcp,
-        );
-        start_stop_writer_ends_first.wait_for_complete().unwrap();
-    };
-
-    if shared_reader {
-        tracing::info!("Shared Reader...");
-        run_start_stop_session(Arc::new(move || reader.clone()));
-    } else {
-        tracing::info!("Exclusive Reader...");
-        run_start_stop_session(Arc::new(|| Reader::new(65535 + 2, 16).unwrap()));
-    }
-
-    // stop background tasks
-    tracing::info!("Stopping background tasks...");
-    for rw in rw_background {
-        drop(rw);
+        // stop background tasks
+        tracing::info!("Stopping background tasks...");
+        for rw in rw_background {
+            drop(rw);
+        }
     }
 }
