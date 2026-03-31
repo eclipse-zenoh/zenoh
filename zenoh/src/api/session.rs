@@ -731,6 +731,12 @@ impl Session {
             inner: ManuallyDrop::new(Session(self.0.clone())),
         }
     }
+
+    #[cfg(feature = "test")]
+    #[allow(dead_code)]
+    pub(crate) fn inner_weak(&self) -> std::sync::Weak<SessionInner> {
+        Arc::downgrade(&self.0)
+    }
 }
 
 impl Clone for Session {
