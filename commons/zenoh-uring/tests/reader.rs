@@ -556,10 +556,10 @@ fn rw_parallel(is_tcp: bool) {
     }
 }
 
-#[test_case(8100, 1, true; "single_tcp")]
-#[test_case(8101, 10, true; "many_tcp")]
-#[test_case(8100, 1, false; "single_udp")]
-#[test_case(8101, 10, false; "many_udp")]
+#[test_case(8200, 1, true; "single_tcp")]
+#[test_case(8201, 10, true; "many_tcp")]
+#[test_case(8200, 1, false; "single_udp")]
+#[test_case(8201, 10, false; "many_udp")]
 fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
 
