@@ -17,51 +17,11 @@ use std::time::Duration;
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::Session;
+use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-
-pub async fn open_session_listen(endpoints: &[&str]) -> Session {
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    ztimeout!(zenoh::open(config)).unwrap()
-}
-
-pub async fn open_session_connect(endpoints: &[&str]) -> Session {
-    let mut config = zenoh_config::Config::default();
-    config
-        .connect
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    ztimeout!(zenoh::open(config)).unwrap()
-}
-
-#[allow(dead_code)]
-pub async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
-    println!("[  ][01a] Opening peer01 session: {endpoint01}");
-    let peer01 = open_session_listen(&[endpoint01]).await;
-    println!("[  ][02a] Opening peer02 session: {endpoint02}");
-    let peer02 = open_session_listen(&[endpoint02]).await;
-    (peer01, peer02)
-}
 
 pub async fn close_session(peer01: Session, peer02: Session) {
     println!("[  ][01d] Closing peer01 session");
@@ -70,134 +30,94 @@ pub async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close()).unwrap();
 }
 
-fn get_available_endpoints(num: usize) -> Vec<EndPoint> {
-    let ports = (0..num)
-        .map(|_| {
-            let listener =
-                std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind port 0");
-            listener.local_addr().unwrap().port()
-        })
-        .collect::<Vec<_>>();
-
-    ports
-        .iter()
-        .map(|p| format!("tcp/127.0.0.1:{}", p).parse::<EndPoint>().unwrap())
-        .collect::<Vec<_>>()
-}
-
-pub enum ConfigType {
-    Listener,
-    Connector,
-}
-
-pub struct TestScenarioBuilder {
-    link_num: usize,
-    listener_config: zenoh_config::Config,
-    connector_config: zenoh_config::Config,
-}
-
-impl TestScenarioBuilder {
-    pub fn new() -> TestScenarioBuilder {
-        let mut listener_config = zenoh_config::Config::default();
-        let mut connector_config = zenoh_config::Config::default();
-
-        // Disable multicast by default
-        listener_config
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
-        connector_config
-            .scouting
-            .multicast
-            .set_enabled(Some(false))
-            .unwrap();
-
-        TestScenarioBuilder {
-            link_num: 1,
-            listener_config,
-            connector_config,
-        }
-    }
-
-    pub fn with_multilink(mut self, link_num: usize) -> TestScenarioBuilder {
-        self.link_num = link_num;
-        self.listener_config
-            .transport
-            .unicast
-            .set_max_links(link_num)
-            .unwrap();
-        self.connector_config
-            .transport
-            .unicast
-            .set_max_links(link_num)
-            .unwrap();
-        self
-    }
-
-    pub fn with_config(
-        mut self,
-        config_type: ConfigType,
-        config: zenoh_config::Config,
-    ) -> TestScenarioBuilder {
-        match config_type {
-            ConfigType::Listener => self.listener_config = config,
-            ConfigType::Connector => self.connector_config = config,
-        }
-        self
-    }
-
-    pub async fn build(mut self) -> TestScenario {
-        let endpoints = get_available_endpoints(self.link_num);
-
-        // Create listener session
-        self.listener_config
-            .listen
-            .endpoints
-            .set(endpoints.clone())
-            .unwrap();
-
-        // Create connector session
-        self.connector_config
-            .connect
-            .endpoints
-            .set(endpoints)
-            .unwrap();
-
-        TestScenario {
-            listener_config: self.listener_config,
-            connector_config: self.connector_config,
-            listener_session: None,
-            connector_sessions: vec![],
-        }
-    }
-}
-
-pub struct TestScenario {
-    listener_config: zenoh_config::Config,
-    connector_config: zenoh_config::Config,
-    listener_session: Option<Session>,
+pub struct TestContext {
+    locators: Vec<EndPoint>,
+    listener_session: Vec<Session>,
     connector_sessions: Vec<Session>,
 }
 
-impl TestScenario {
-    //pub fn get_session(&self) -> (Session, Session) {
-    //    (
-    //        self.listener_session.clone(),
-    //        self.connector_session.clone(),
-    //    )
-    //}
+impl TestContext {
+    pub async fn new() -> Self {
+        TestContext {
+            locators: vec![],
+            listener_session: vec![],
+            connector_sessions: vec![],
+        }
+    }
+
+    fn get_listener_config(&self, endpoint: &str, link_num: usize) -> zenoh_config::Config {
+        let endpoints: Vec<EndPoint> = (0..link_num).map(|_| endpoint.parse().unwrap()).collect();
+
+        let mut config = zenoh_config::Config::default();
+        // Disable multicast by default
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        // Listen to port 0 to get a random port
+        config.listen.endpoints.set(endpoints).unwrap();
+        // Configure link_num
+        config.transport.unicast.set_max_links(link_num).unwrap();
+
+        config
+    }
+
+    fn get_connector_config_with_endpoint(&self, locators: Vec<EndPoint>) -> zenoh_config::Config {
+        println!("Connecting to {:?}", locators);
+        let mut config = zenoh_config::Config::default();
+        // Disable multicast by default
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        // Configure link_num
+        config
+            .transport
+            .unicast
+            .set_max_links(locators.len())
+            .unwrap();
+        // Connect to the locator
+        config
+            .connect
+            .set_endpoints(ModeDependentValue::Unique(locators))
+            .unwrap();
+
+        config
+    }
+
+    fn get_connector_config(&self) -> zenoh_config::Config {
+        self.get_connector_config_with_endpoint(self.locators.clone())
+    }
+
+    pub async fn open_listener_with_links(&mut self, link_num: usize) -> Session {
+        let config = self.get_listener_config("tcp/127.0.0.1:0", link_num);
+
+        let session = ztimeout!(zenoh::open(config)).unwrap();
+        // Extract the actual tcp endpoint that session1 is listening on
+        let locators: Vec<EndPoint> = session
+            .info()
+            .locators()
+            .await
+            .into_iter()
+            .map(|l| l.to_endpoint())
+            .collect();
+
+        println!("Listening to {:?}", locators);
+        // Store session and locator
+        self.listener_session.push(session.clone());
+        self.locators = locators;
+
+        session
+    }
 
     pub async fn open_listener(&mut self) -> Session {
-        let session = ztimeout!(zenoh::open(self.listener_config.clone())).unwrap();
-        self.listener_session = Some(session.clone());
+        self.open_listener_with_links(1).await
+    }
+
+    pub async fn open_connector_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
+        let session = ztimeout!(zenoh::open(config)).unwrap();
+        self.connector_sessions.push(session.clone());
+
         session
     }
 
     pub async fn open_connector(&mut self) -> Session {
-        let session = ztimeout!(zenoh::open(self.connector_config.clone())).unwrap();
-        self.connector_sessions.push(session.clone());
-        session
+        let config = self.get_connector_config();
+        self.open_connector_with_cfg(config).await
     }
 
     pub async fn open_pairs(&mut self) -> (Session, Session) {
@@ -206,18 +126,57 @@ impl TestScenario {
         (listener_session, connector_session)
     }
 
+    pub async fn open_pairs_client(&mut self) -> (Session, Session) {
+        let listener_session = self.open_listener().await;
+
+        let mut config = self.get_connector_config();
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        let connector_session = self.open_connector_with_cfg(config).await;
+
+        (listener_session, connector_session)
+    }
+
+    pub async fn open_pairs_multicast(&mut self, endpoint: &str) -> (Session, Session) {
+        // Open 1st listener with port 0
+        let config = self.get_listener_config(endpoint, 1);
+        let session01 = ztimeout!(zenoh::open(config.clone())).unwrap();
+        self.listener_session.push(session01.clone());
+        let locator = session01
+            .info()
+            .locators()
+            .await
+            .into_iter()
+            .find(|l| l.protocol().as_str() == "udp")
+            .expect("Expected at least one UDP locator")
+            .to_string();
+        println!("Connecting to {:?}", locator);
+        // Open 2nd listener with port got from 1st listener
+        let config = self.get_listener_config(&locator, 1);
+        let session02 = ztimeout!(zenoh::open(config)).unwrap();
+        self.listener_session.push(session02.clone());
+
+        (session01, session02)
+    }
+
     #[cfg(feature = "internal")]
     pub async fn open_pairs_runtime(&mut self) -> (Runtime, Runtime) {
-        let mut listener_runtime = RuntimeBuilder::new(self.listener_config.clone().into())
-            .build()
-            .await
-            .unwrap();
+        // Create listener runtime
+        let config = self.get_listener_config("tcp/127.0.0.1:0", 1);
+        let mut listener_runtime = RuntimeBuilder::new(config.into()).build().await.unwrap();
         listener_runtime.start().await.unwrap();
-        let mut connector_runtime = RuntimeBuilder::new(self.connector_config.clone().into())
-            .build()
-            .await
-            .unwrap();
+
+        // Extract the actual tcp endpoint that listener_runtime is listening on
+        let locators = listener_runtime
+            .get_locators()
+            .into_iter()
+            .map(|l| l.to_endpoint())
+            .collect();
+
+        // Create connector runtime
+        let config = self.get_connector_config_with_endpoint(locators);
+        let mut connector_runtime = RuntimeBuilder::new(config.into()).build().await.unwrap();
         connector_runtime.start().await.unwrap();
+
         (listener_runtime, connector_runtime)
     }
 
@@ -228,8 +187,8 @@ impl TestScenario {
             ztimeout!(session.close()).unwrap();
         }
 
-        // If self.listener_session is not None, close it and set it to None
-        if let Some(session) = self.listener_session.take() {
+        // Close all the listener sessions
+        for session in self.listener_session.drain(..) {
             println!("Closing listener session");
             ztimeout!(session.close()).unwrap();
         }

@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
+mod common;
+use crate::common::TestContext;
 
 fn run_in_separate_process(main_name: &str, must_panic: bool) {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -87,15 +90,8 @@ async fn session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:19446".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-
-    let s = zenoh::open(config).await.unwrap();
+    let mut test_context = TestContext::new().await;
+    let s = test_context.open_listener().await;
     let _session = SESSION.get_or_init(move || s);
 
     unsafe { libc::atexit(close_session_in_atexit) };
@@ -133,15 +129,8 @@ async fn background_session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:19445".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-
-    let s = zenoh::open(config).await.unwrap();
+    let mut test_context = TestContext::new().await;
+    let s = test_context.open_listener().await;
     let session = BACKGROUND_SESSION.get_or_init(move || s);
 
     let _close = CLOSE.get_or_init(|| Mutex::new(Some(session.close().in_background().wait())));

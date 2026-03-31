@@ -28,7 +28,7 @@ use zenoh::{
 use zenoh_config::Config;
 use zenoh_core::ztimeout;
 
-use crate::common::TestScenarioBuilder;
+use crate::common::TestContext;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -66,8 +66,8 @@ fn create_callback<T>() -> (impl Fn(T) + Send + Sync + 'static, Arc<AtomicBool>)
 async fn test_callback_drop_on_undeclare_subscriber() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/subscriber_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
     let (cb, n) = create_callback::<Sample>();
     let subscriber = ztimeout!(session1.declare_subscriber(ke).callback(cb)).unwrap();
 
@@ -130,8 +130,8 @@ async fn test_callback_drop_on_undeclare_subscriber_local() {
 async fn test_callback_drop_on_undeclare_queryable() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/queryable_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
     let (cb, n) = create_callback::<Query>();
     let queryable = ztimeout!(session1.declare_queryable(ke).callback(cb)).unwrap();
 
@@ -192,8 +192,8 @@ async fn test_callback_drop_on_undeclare_queryable_local() {
 async fn test_callback_drop_on_undeclare_liveliness_subscriber() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/liveliness_subscriber_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
     let (cb, n) = create_callback::<Sample>();
     let subscriber = ztimeout!(session1.liveliness().declare_subscriber(ke).callback(cb)).unwrap();
 
@@ -228,8 +228,8 @@ async fn test_callback_drop_on_undeclare_liveliness_subscriber() {
 async fn test_callback_drop_on_undeclare_querier() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/querier_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
 
     let querier = ztimeout!(session1.declare_querier(ke)).unwrap();
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
@@ -335,8 +335,8 @@ async fn test_callback_drop_on_undeclare_querier_local() {
 async fn test_callback_drop_on_undeclare_publisher() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/publisher_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
 
     // check matching listener
     let publisher = ztimeout!(session1.declare_publisher(ke)).unwrap();
@@ -405,8 +405,8 @@ async fn test_callback_drop_on_undeclare_publisher_local() {
 async fn test_callback_drop_on_undeclare_get() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/get_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
 
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -449,8 +449,8 @@ async fn test_callback_drop_on_undeclare_get_local() {
 async fn test_callback_drop_on_undeclare_liveliness_get() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/liveliness_get_callback_drop";
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (session1, session2) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (session1, session2) = test_context.open_pairs().await;
 
     let _token = ztimeout!(session2.liveliness().declare_token(ke)).unwrap();
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -465,12 +465,12 @@ async fn test_callback_drop_on_undeclare_liveliness_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_transport_events_listener() {
     zenoh::init_log_from_env_or("error");
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let session1 = test_scenario.open_listener().await;
+    let mut test_context = TestContext::new().await;
+    let session1 = test_context.open_listener().await;
     let (cb, n) = create_callback::<TransportEvent>();
     let listener = ztimeout!(session1.info().transport_events_listener().callback(cb)).unwrap();
 
-    let session2 = test_scenario.open_connector().await;
+    let session2 = test_context.open_connector().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
@@ -485,7 +485,7 @@ async fn test_callback_drop_on_undeclare_transport_events_listener() {
         .callback(cb)
         .background())
     .unwrap();
-    let _session2 = test_scenario.open_connector().await;
+    let _session2 = test_context.open_connector().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
@@ -495,12 +495,12 @@ async fn test_callback_drop_on_undeclare_transport_events_listener() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_link_events_listener() {
     zenoh::init_log_from_env_or("error");
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let session1 = test_scenario.open_listener().await;
+    let mut test_context = TestContext::new().await;
+    let session1 = test_context.open_listener().await;
     let (cb, n) = create_callback::<LinkEvent>();
     let listener = ztimeout!(session1.info().link_events_listener().callback(cb)).unwrap();
 
-    let session2 = test_scenario.open_connector().await;
+    let session2 = test_context.open_connector().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     ztimeout!(listener.undeclare().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));
@@ -515,7 +515,7 @@ async fn test_callback_drop_on_undeclare_link_events_listener() {
         .callback(cb)
         .background())
     .unwrap();
-    let _session2 = test_scenario.open_connector().await;
+    let _session2 = test_context.open_connector().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
     ztimeout!(session1.close().wait_callbacks()).unwrap();
     assert!(n.load(std::sync::atomic::Ordering::SeqCst));

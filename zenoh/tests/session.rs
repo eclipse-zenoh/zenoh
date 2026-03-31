@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "unstable")]
 mod common;
 
 use std::{
@@ -33,7 +33,7 @@ use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
 
-use crate::common::{close_session, open_session_multicast, TestScenarioBuilder};
+use crate::common::{close_session, TestContext};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -271,19 +271,19 @@ async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Rel
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
     zenoh::init_log_from_env_or("error");
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (peer01, peer02) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (peer01, peer02) = test_context.open_pairs().await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
-    test_scenario.close().await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
     zenoh::init_log_from_env_or("error");
-    let (peer01, peer02) =
-        open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
+    let mut test_context = TestContext::new().await;
+    let (peer01, peer02) = test_context.open_pairs_multicast("udp/224.0.0.1:0").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
     close_session(peer01, peer02).await;
 }
@@ -291,8 +291,8 @@ async fn zenoh_session_multicast() {
 #[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (r1, r2) = test_scenario.open_pairs_runtime().await;
+    let mut test_context = TestContext::new().await;
+    let (r1, r2) = test_context.open_pairs_runtime().await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
     let peer01 = zenoh::session::init(r1.clone().into()).await.unwrap();
     println!("[RI][02b] Creating peer02 session from runtime 2");
@@ -312,9 +312,9 @@ async fn zenoh_2sessions_1runtime_init() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_close() {
     zenoh::init_log_from_env_or("error");
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (_peer01, _peer02) = test_scenario.open_pairs().await;
-    test_scenario.close().await;
+    let mut test_context = TestContext::new().await;
+    let (_peer01, _peer02) = test_context.open_pairs().await;
+    test_context.close().await;
 }
 
 #[cfg(all(feature = "internal", feature = "unstable"))]
@@ -322,8 +322,8 @@ async fn zenoh_session_close() {
 async fn zenoh_session_close_in_background_async() {
     zenoh::init_log_from_env_or("error");
 
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (peer01, peer02) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
 
@@ -339,8 +339,8 @@ async fn zenoh_session_close_in_background_async() {
 async fn zenoh_session_close_in_background_sync() {
     zenoh::init_log_from_env_or("error");
 
-    let mut test_scenario = TestScenarioBuilder::new().build().await;
-    let (peer01, peer02) = test_scenario.open_pairs().await;
+    let mut test_context = TestContext::new().await;
+    let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
 
