@@ -221,7 +221,9 @@ jobs:
 
       - name: Run tests stable (uring)
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo nextest run -p zenoh -F "uring"
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo nextest run -p zenoh -F uring
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
