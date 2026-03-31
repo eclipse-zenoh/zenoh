@@ -12,37 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    cell::UnsafeCell,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
 
 use io_uring::{cqueue, opcode, types, IoUring};
 use zenoh_result::ZResult;
 
-use super::batch_arena::BatchArena;
-/*
-|____________________ARENA______________________|
-|__Segment__|__Segment__|__Segment__|__Segment__|
-|buf|buf|buf|buf|buf|buf|buf|buf|buf|buf|buf|buf|
-
-Ringbuf reclamation happens on Segment basis
-
-*/
-
-/*
-struct BatchSegment {
-}
-
-struct BatchStorage {
-    arena: BatchArena,
-    segments: Vec<Arc<BatchSegment>>
-}
-*/
-
-enum WriterUserData {
-    WriteFixed(u64),
-}
+use crate::{
+    batch_arena::BatchArena,
+    writer::{BufferPool, WriterUserData},
+};
 
 pub struct BorrowedBuffer<'a> {
     index: u16,
@@ -64,7 +42,7 @@ impl<'a> DerefMut for BorrowedBuffer<'a> {
 }
 
 impl<'a> BorrowedBuffer<'a> {
-    fn new(
+    pub(crate) fn new(
         arena: &'a mut BatchArena,
         available_buffers: &atomic_queue::Queue<u16>,
     ) -> Option<Self> {
@@ -73,47 +51,10 @@ impl<'a> BorrowedBuffer<'a> {
             .map(|index| Self::from_index(arena, index))
     }
 
-    fn from_index(arena: &'a mut BatchArena, index: u16) -> Self {
+    pub(crate) fn from_index(arena: &'a mut BatchArena, index: u16) -> Self {
         Self { index, arena }
     }
 }
-
-struct BufferPool {
-    arena: UnsafeCell<BatchArena>,
-    available_buffers: atomic_queue::Queue<u16>,
-}
-
-impl BufferPool {
-    fn new(ring: &IoUring, batch_size: usize, batch_count: usize) -> Self {
-        let mut arena =
-            UnsafeCell::new(BatchArena::new(batch_size, batch_count, batch_count).unwrap());
-        let write_buffers = arena.get_mut().register_buffers();
-        unsafe { ring.submitter().register_buffers(&write_buffers).unwrap() };
-
-        let available_buffers = atomic_queue::bounded(write_buffers.len());
-        for i in 0..write_buffers.len() {
-            available_buffers.push(i as u16);
-        }
-
-        Self {
-            arena,
-            available_buffers,
-        }
-    }
-
-    fn reuse_busy_buffer(&'_ self, index: u16) -> BorrowedBuffer<'_> {
-        let mutable_arena = unsafe { &mut *self.arena.get() };
-        BorrowedBuffer::from_index(mutable_arena, index)
-    }
-
-    fn try_select_available_buffer(&'_ self) -> Option<BorrowedBuffer<'_>> {
-        let mutable_arena = unsafe { &mut *self.arena.get() };
-        BorrowedBuffer::new(mutable_arena, &self.available_buffers)
-    }
-}
-
-unsafe impl Send for BufferPool {}
-unsafe impl Sync for BufferPool {}
 
 pub struct Writer {
     ring: IoUring,

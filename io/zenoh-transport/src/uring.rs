@@ -15,7 +15,7 @@
 use std::cmp::max;
 
 use zenoh_result::ZResult;
-use zenoh_uring::reader::Reader;
+use zenoh_uring::api::reader::Reader;
 
 #[derive(Clone)]
 pub struct Uring {

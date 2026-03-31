@@ -29,7 +29,7 @@ use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 use zenoh_task::TaskController;
 #[cfg(all(feature = "uring", target_os = "linux"))]
-use zenoh_uring::reader::{FragmentedBatch, RxBuffer};
+use zenoh_uring::api::reader::{fragmented_batch::FragmentedBatch, rx_buffer::RxBuffer};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{

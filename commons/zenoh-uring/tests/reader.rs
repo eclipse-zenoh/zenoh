@@ -31,7 +31,7 @@ mod linux_tests {
     use test_case::test_case;
     use zenoh_core::bail;
     use zenoh_result::ZResult;
-    use zenoh_uring::reader::Reader;
+    use zenoh_uring::api::reader::Reader;
 
     pub const ITERATION_COUNT: usize = 10000;
 

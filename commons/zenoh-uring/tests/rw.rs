@@ -14,7 +14,6 @@
 
 #[cfg(target_os = "linux")]
 mod linux_tests {
-
     use std::{
         io::Write,
         net::{TcpListener, TcpStream},
@@ -23,7 +22,13 @@ mod linux_tests {
         time::Duration,
     };
 
-    use zenoh_uring::{reader::Reader, BUF_COUNT, BUF_SIZE};
+    use zenoh_uring::api::reader::Reader;
+
+    pub const BUF_SIZE: usize = 65537;
+    //pub const BUF_COUNT: usize = 1 * 1024 * 1024 / BUF_SIZE;
+
+    //const BUF_SIZE: usize = 16;
+    pub const BUF_COUNT: usize = 16;
 
     pub fn monotonic_now_ns() -> u128 {
         unsafe {

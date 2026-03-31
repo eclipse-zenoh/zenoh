@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025 ZettaScale Technology
+// Copyright (c) 2026 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,15 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! ⚠️ WARNING ⚠️
-//!
-//! This module is intended for Zenoh's internal use.
-//!
-//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
+use std::{os::fd::RawFd, sync::Arc};
 
-pub(crate) mod batch_arena;
-pub(crate) mod page_arena;
-pub(crate) mod reader;
-pub(crate) mod writer;
+use tokio::sync::mpsc::UnboundedSender;
 
-pub mod api;
+use crate::reader::{index::IndexGeneration, rx_context::RxCallback};
+
+#[derive(Debug)]
+pub(crate) enum ReactorCmd {
+    StartRx(
+        RawFd,
+        RxCallback,
+        Arc<tokio::sync::SetOnce<IndexGeneration>>,
+        UnboundedSender<zenoh_result::Error>,
+    ),
+    StopRx(IndexGeneration),
+}
