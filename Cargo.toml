@@ -29,8 +29,8 @@ members = [
   "commons/zenoh-stats",
   "commons/zenoh-sync",
   "commons/zenoh-task",
-  "commons/zenoh-util",
   "commons/zenoh-uring",
+  "commons/zenoh-util",
   "examples",
   "io/zenoh-link",
   "io/zenoh-link-commons",
@@ -116,8 +116,8 @@ hmac = { version = "0.12.1", features = ["std"] }
 home = "0.5.9"
 http-types = "2.12.0"
 humantime = "2.3.0"
-itertools = "0.14.0"
 io-uring = "0.7.10"
+itertools = "0.14.0"
 json5 = "0.4.1"
 jsonschema = { version = "0.20", default-features = false } # Don't bump jsonschem version because of invalid license while running `cargo deny check licenses`
 keyed-set = "1.1.0"
@@ -244,8 +244,8 @@ zenoh-stats = { version = "=1.8.0", path = "commons/zenoh-stats" }
 zenoh-sync = { version = "=1.8.0", path = "commons/zenoh-sync" }
 zenoh-task = { version = "=1.8.0", path = "commons/zenoh-task" }
 zenoh-transport = { version = "=1.8.0", path = "io/zenoh-transport", default-features = false }
-zenoh-util = { version = "=1.8.0", path = "commons/zenoh-util" }
 zenoh-uring = { version = "=1.8.0", path = "commons/zenoh-uring" }
+zenoh-util = { version = "=1.8.0", path = "commons/zenoh-util" }
 zenoh_backend_traits = { version = "=1.8.0", path = "plugins/zenoh-backend-traits", default-features = false }
 
 [profile.dev]

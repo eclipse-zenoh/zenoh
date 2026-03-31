@@ -51,7 +51,7 @@ impl ManagedTask {
         self.handle.take().unwrap().join().unwrap()
     }
 
-    fn poll_comlete(&self) -> ZResult<bool> {
+    fn poll_complete(&self) -> ZResult<bool> {
         match &self.handle {
             Some(val) => Ok(val.is_finished()),
             None => bail!("Already joined"),
@@ -340,8 +340,8 @@ impl RWTask {
         let writer = WriterTask::make(port, iteration_count, interval, is_tcp);
 
         while !finished.load(std::sync::atomic::Ordering::Relaxed)
-            && !reader.poll_comlete()?
-            && !writer.poll_comlete()?
+            && !reader.poll_complete()?
+            && !writer.poll_complete()?
         {
             std::thread::sleep(Duration::from_millis(10));
         }
@@ -422,7 +422,7 @@ impl StartStopTask {
                 false,
             );
 
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_comlete()? {
+            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !rw.poll_complete()? {
                 std::thread::sleep(Duration::from_millis(10));
             }
 
@@ -450,11 +450,11 @@ impl StartStopTask {
             let reader = ReaderTask::make(reader_fn(), port, iteration_count, is_tcp, false);
             let writer = WriterTask::make(port, usize::MAX, interval.clone(), is_tcp);
 
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !reader.poll_comlete()? {
+            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !reader.poll_complete()? {
                 std::thread::sleep(Duration::from_millis(10));
             }
 
-            if reader.poll_comlete()? {
+            if reader.poll_complete()? {
                 reader.wait_for_complete()?;
             } else {
                 // drop reader first!
@@ -466,7 +466,7 @@ impl StartStopTask {
                 writer.interrupt();
             }
 
-            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !writer.poll_comlete()? {
+            while !finished.load(std::sync::atomic::Ordering::Relaxed) && !writer.poll_complete()? {
                 std::thread::sleep(Duration::from_millis(10));
             }
 
@@ -563,12 +563,12 @@ fn rw_parallel(is_tcp: bool) {
 fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
     zenoh_util::try_init_log_from_env();
 
-    let max_memory_consume = 100 * 1024 * 1024;
+    let max_memory_consume = 10 * 1024 * 1024;
     let buffer_avg_size = 65535 / 2;
     let buffer_count = max_memory_consume / count as usize / buffer_avg_size;
     println!("Running rw_add_batches for buffer_count: {buffer_count}");
 
-    let reader = Reader::new(65535 + 2, 16).unwrap();
+    let reader = Reader::new(65535 + 2, 4).unwrap();
     let base_interval = None;
 
     let mut rw_tasks = vec![];

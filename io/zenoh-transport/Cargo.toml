@@ -89,8 +89,8 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-stats = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
-zenoh-util = { workspace = true }
 zenoh-uring = { workspace = true, optional = true }
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

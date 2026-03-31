@@ -375,7 +375,7 @@ impl RxWindow {
                         break;
                     }
 
-                    // don't borrow buffer for ephimeral batches
+                    // don't borrow buffer for ephemeral batches
                     let buffers = if size == 0 {
                         vec![]
                     } else {
@@ -433,7 +433,7 @@ impl RxWindow {
                         break;
                     }
 
-                    // don't borrow buffer for ephimeral batches
+                    // don't borrow buffer for ephemeral batches
                     let buffers = if size == 0 {
                         vec![]
                     } else {
@@ -544,7 +544,7 @@ impl RxWindow {
                             break;
                         }
 
-                        // don't borrow buffer for ephimeral batches
+                        // don't borrow buffer for ephemeral batches
                         let buffers = if size == 0 {
                             vec![]
                         } else {

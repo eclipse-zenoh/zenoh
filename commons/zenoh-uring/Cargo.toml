@@ -12,9 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-authors = [
-  "Dmitrii Bannov <dmitrii.bannov@zettascale.tech>",
-]
+authors = ["Dmitrii Bannov <dmitrii.bannov@zettascale.tech>"]
 categories = { workspace = true }
 description = "Internal crate for zenoh."
 edition = { workspace = true }
@@ -28,19 +26,19 @@ version = { workspace = true }
 
 [dependencies]
 atomic-queue = { workspace = true }
+flume = { workspace = true }
 io-uring = { workspace = true }
-zenoh-core = { workspace = true }
-zenoh-result = { workspace = true }
-zenoh-runtime = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["event"] }
 thread-priority = { workspace = true }
-tracing = { workspace = true }
 tokio = { workspace = true }
-flume = { workspace = true }
+tracing = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
 
 [dev-dependencies]
-zenoh-result = { workspace = true }
-zenoh-util = { workspace = true }
-zenoh-runtime = { workspace = true }
 test-case = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
+zenoh-util = { workspace = true }
