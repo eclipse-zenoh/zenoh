@@ -502,7 +502,7 @@ impl RBatch {
             Self::split(self.buffer.as_slice(), &self.config)
         };
 
-        #[cfg(not(feature = "uring"))]
+        #[cfg(not(all(feature = "uring", target_os = "linux")))]
         #[allow(unused_variables)]
         let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
 
