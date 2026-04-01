@@ -6569,8 +6569,10 @@ name = "zenoh-sync"
 version = "1.8.0"
 dependencies = [
  "arc-swap",
+ "criterion",
  "event-listener 5.4.1",
  "futures",
+ "parking_lot",
  "tokio",
  "zenoh-buffers",
  "zenoh-collections",

@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{num::NonZeroUsize, ptr::NonNull, sync::Arc};
+use std::{
+    num::NonZeroUsize,
+    ptr::NonNull,
+    sync::{Arc, Weak},
+};
 
 use zenoh_result::ZResult;
 
@@ -25,7 +29,7 @@ use crate::{
             memory_layout::MemoryLayout,
         },
     },
-    posix_shm::array::ArrayInSHM,
+    posix_shm::{array::ArrayInSHM, pool::ShmSegmentPool, pooled_segment::PooledPosixShmSegment},
 };
 
 #[derive(Debug)]
@@ -57,6 +61,27 @@ impl PosixShmSegment {
                 layout.size(),
             ),
             data: PtrInSegment::new(buf.as_ptr(), self),
+        }
+    }
+
+    /// Like [`allocated_chunk`], but wraps the segment in a [`PooledPosixShmSegment`]
+    /// so that when the last ZSlice referencing this chunk is dropped, the segment is
+    /// returned to the pool rather than unmapped.
+    pub(crate) fn allocated_chunk_pooled(
+        self: Arc<Self>,
+        buf: NonNull<u8>,
+        layout: &MemoryLayout,
+        pool: Weak<ShmSegmentPool>,
+        size: NonZeroUsize,
+    ) -> AllocatedChunk {
+        let pooled = Arc::new(PooledPosixShmSegment::new(self, size, pool));
+        AllocatedChunk {
+            descriptor: ChunkDescriptor::new(
+                pooled.inner.segment.id(),
+                unsafe { pooled.inner.segment.index(buf.as_ptr()) },
+                layout.size(),
+            ),
+            data: PtrInSegment::new(buf.as_ptr(), pooled),
         }
     }
 }

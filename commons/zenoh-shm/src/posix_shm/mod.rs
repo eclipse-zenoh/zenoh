@@ -13,6 +13,8 @@
 //
 
 pub mod array;
+pub mod pool;
+pub mod pooled_segment;
 pub mod struct_in_shm;
 tested_crate_module!(segment);
 pub(crate) mod cleanup;
