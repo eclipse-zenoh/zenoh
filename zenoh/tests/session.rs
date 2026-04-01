@@ -33,7 +33,7 @@ use zenoh_core::ztimeout;
 #[cfg(not(feature = "unstable"))]
 use zenoh_protocol::core::Reliability;
 
-use crate::common::{close_session, TestContext};
+use crate::common::{close_session, TestSessions};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -271,7 +271,7 @@ async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Rel
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (peer01, peer02) = test_context.open_pairs().await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
@@ -282,7 +282,7 @@ async fn zenoh_session_unicast() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (peer01, peer02) = test_context.open_pairs_multicast("udp/224.0.0.1:0").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
     close_session(peer01, peer02).await;
@@ -291,7 +291,7 @@ async fn zenoh_session_multicast() {
 #[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (r1, r2) = test_context.open_pairs_runtime().await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
     let peer01 = zenoh::session::init(r1.clone().into()).await.unwrap();
@@ -312,7 +312,7 @@ async fn zenoh_2sessions_1runtime_init() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_close() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (_peer01, _peer02) = test_context.open_pairs().await;
     test_context.close().await;
 }
@@ -322,7 +322,7 @@ async fn zenoh_session_close() {
 async fn zenoh_session_close_in_background_async() {
     zenoh::init_log_from_env_or("error");
 
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
@@ -339,7 +339,7 @@ async fn zenoh_session_close_in_background_async() {
 async fn zenoh_session_close_in_background_sync() {
     zenoh::init_log_from_env_or("error");
 
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
@@ -389,7 +389,7 @@ async fn test_session_from_cloned_config() {
     let sub_session = zenoh::open(sub_config).await.unwrap();
 
     // Update pub_config (connector)
-    let locator = TestContext::get_locators_from_session(&sub_session).await;
+    let locator = TestSessions::get_locators_from_session(&sub_session).await;
     pub_config.connect.endpoints.set(locator).unwrap();
 
     // Create pub session

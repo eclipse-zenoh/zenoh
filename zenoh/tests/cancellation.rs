@@ -21,14 +21,14 @@ use std::sync::{atomic::AtomicBool, Arc};
 use zenoh::handlers::CallbackDrop;
 use zenoh_core::ztimeout;
 
-use crate::common::TestContext;
+use crate::common::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_get() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (session1, session2) = test_context.open_pairs_client().await;
     let queryable = ztimeout!(session1.declare_queryable("test/query_cancellation")).unwrap();
 
@@ -92,7 +92,7 @@ async fn test_cancellation_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_liveliness_get() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (session1, session2) = test_context.open_pairs_client().await;
     let _token = ztimeout!(session1
         .liveliness()
@@ -140,7 +140,7 @@ async fn test_cancellation_liveliness_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_querier_get() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (session1, session2) = test_context.open_pairs_client().await;
     let queryable = ztimeout!(session1.declare_queryable("test/querier_cancellation")).unwrap();
 
@@ -203,7 +203,7 @@ async fn test_cancellation_querier_get() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_cancellation_does_not_prevent_session_from_close() {
     zenoh::init_log_from_env_or("error");
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let (session1, session2) = test_context.open_pairs_client().await;
     let cancellation_token = zenoh::cancellation::CancellationToken::default();
 

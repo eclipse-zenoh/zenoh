@@ -30,17 +30,17 @@ pub async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close()).unwrap();
 }
 
-pub struct TestContext {
+pub struct TestSessions {
     locators: Vec<EndPoint>,
-    listener_session: Vec<Session>,
+    listener_sessions: Vec<Session>,
     connector_sessions: Vec<Session>,
 }
 
-impl TestContext {
-    pub async fn new() -> Self {
-        TestContext {
+impl TestSessions {
+    pub fn new() -> Self {
+        TestSessions {
             locators: vec![],
-            listener_session: vec![],
+            listener_sessions: vec![],
             connector_sessions: vec![],
         }
     }
@@ -98,11 +98,11 @@ impl TestContext {
 
         let session = ztimeout!(zenoh::open(config)).unwrap();
         // Extract the actual tcp endpoint that session1 is listening on
-        let locators = TestContext::get_locators_from_session(&session).await;
+        let locators = TestSessions::get_locators_from_session(&session).await;
 
         println!("Listening to {:?}", locators);
         // Store session and locator
-        self.listener_session.push(session.clone());
+        self.listener_sessions.push(session.clone());
         self.locators = locators;
 
         session
@@ -144,7 +144,7 @@ impl TestContext {
         // Open 1st listener with port 0
         let config = self.get_listener_config(endpoint, 1);
         let session01 = ztimeout!(zenoh::open(config.clone())).unwrap();
-        self.listener_session.push(session01.clone());
+        self.listener_sessions.push(session01.clone());
         let locator = session01
             .info()
             .locators()
@@ -157,7 +157,7 @@ impl TestContext {
         // Open 2nd listener with port got from 1st listener
         let config = self.get_listener_config(&locator, 1);
         let session02 = ztimeout!(zenoh::open(config)).unwrap();
-        self.listener_session.push(session02.clone());
+        self.listener_sessions.push(session02.clone());
 
         (session01, session02)
     }
@@ -192,7 +192,7 @@ impl TestContext {
         }
 
         // Close all the listener sessions
-        for session in self.listener_session.drain(..) {
+        for session in self.listener_sessions.drain(..) {
             println!("Closing listener session");
             ztimeout!(session.close()).unwrap();
         }

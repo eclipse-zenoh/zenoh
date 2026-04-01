@@ -13,7 +13,7 @@
 //
 #![cfg(feature = "unstable")]
 mod common;
-use crate::common::TestContext;
+use crate::common::TestSessions;
 
 fn run_in_separate_process(main_name: &str, must_panic: bool) {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
@@ -90,7 +90,7 @@ async fn session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let s = test_context.open_listener().await;
     let _session = SESSION.get_or_init(move || s);
 
@@ -129,7 +129,7 @@ async fn background_session_close_in_atexit_main() {
     }
 
     // Open the sessions
-    let mut test_context = TestContext::new().await;
+    let mut test_context = TestSessions::new();
     let s = test_context.open_listener().await;
     let session = BACKGROUND_SESSION.get_or_init(move || s);
 

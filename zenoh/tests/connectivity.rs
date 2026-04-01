@@ -26,7 +26,7 @@ mod tests {
 
     use zenoh::sample::SampleKind;
 
-    use crate::common::TestContext;
+    use crate::common::TestSessions;
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
         let mut collected = Vec::new();
@@ -45,7 +45,7 @@ mod tests {
     async fn test_info_transports() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let (session1, session2) = test_context.open_pairs().await;
 
         tokio::time::sleep(SLEEP).await;
@@ -76,7 +76,7 @@ mod tests {
     async fn test_info_links() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let (session1, session2) = test_context.open_pairs().await;
 
         tokio::time::sleep(SLEEP).await;
@@ -108,7 +108,7 @@ mod tests {
     async fn test_transport_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener().await;
 
         // Subscribe to transport events with history
@@ -151,7 +151,7 @@ mod tests {
     async fn test_link_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener().await;
 
         // Subscribe to link events with history
@@ -210,7 +210,7 @@ mod tests {
     async fn test_link_events_multilink() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener_with_links(2).await;
         let session2 = test_context.open_connector().await;
 
@@ -257,7 +257,7 @@ mod tests {
     async fn test_event_history() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let (session1, _session2) = test_context.open_pairs().await;
 
         // Wait for connection to establish
@@ -317,7 +317,7 @@ mod tests {
     async fn test_links_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener().await;
         let _session2 = test_context.open_connector().await;
         let _session3 = test_context.open_connector().await;
@@ -374,7 +374,7 @@ mod tests {
     async fn test_link_events_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener().await;
         let session2 = test_context.open_connector().await;
 
@@ -444,7 +444,7 @@ mod tests {
     async fn test_transport_events_background() {
         zenoh_util::init_log_from_env_or("error");
 
-        let mut test_context = TestContext::new().await;
+        let mut test_context = TestSessions::new();
         let session1 = test_context.open_listener().await;
 
         // Track events using atomic counters
