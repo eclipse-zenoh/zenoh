@@ -3504,24 +3504,13 @@ impl Closee for WeakSession {
     type CloseArgs = SessionCloseArgs;
     #[allow(unused_variables)] // SessionCloseArgs are only required for wait until callback execution ends under unstable
     async fn close_inner(&self, close_args: SessionCloseArgs) {
-        let Some(primitives) = zwrite!(self.0.state).primitives.take() else {
-            return;
-        };
-
-        if let Some(r) = self.0.runtime.static_runtime() {
-            // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
-            info!(zid = %self.zid(), "close session");
-            self.0.task_controller.terminate_all_async().await;
-            let closee = r.get_closee();
-            closee.close_inner(()).await;
-        } else {
-            self.0.task_controller.terminate_all_async().await;
-            primitives.send_close();
-        }
+        let primitives = zwrite!(self.0.state).primitives.take();
 
         // defer the cleanup of internal data structures by taking them out of the locked state
         // this is needed because callbacks may contain entities which need to acquire the
         // lock to be dropped, so callback must be dropped without the lock held
+        // Do this step before closing runtime and transport to prevent new callbacks from being called
+        // while closing
         {
             let mut state = zwrite!(self.0.state);
             let _queryables = std::mem::take(&mut state.queryables);
@@ -3535,8 +3524,26 @@ impl Closee for WeakSession {
             let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
             drop(state);
         }
+        // after this point, no callbacks can be present in session anymore,
+        // since all existing ones have been dropped and no new ones can be created since primitives have been taken out of session state
+
         if close_args.wait_callbacks {
             self.0.callbacks_drop_sync_group.wait_async().await;
+        }
+
+        let Some(primitives) = primitives else {
+            return;
+        };
+
+        if let Some(r) = self.0.runtime.static_runtime() {
+            // session created by plugins never have a copy of static_runtime, so the code below will run only inside zenohd
+            info!(zid = %self.zid(), "close session");
+            self.0.task_controller.terminate_all_async().await;
+            let closee = r.get_closee();
+            closee.close_inner(()).await;
+        } else {
+            self.0.task_controller.terminate_all_async().await;
+            primitives.send_close();
         }
     }
 }

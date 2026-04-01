@@ -514,4 +514,73 @@ mod tests {
         session1.close().await.unwrap();
         session3.close().await.unwrap();
     }
+
+    /// Test that transport and link event listeners are NOT triggered when the local session closes
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_transport_events_not_triggered_on_local_session_close() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let session1 = open_session_listen(&["tcp/127.0.0.1:17461"]).await;
+        let session2 = open_session_connect(&["tcp/127.0.0.1:17461"]).await;
+
+        tokio::time::sleep(SLEEP).await;
+
+        let transport_delete_count = Arc::new(AtomicUsize::new(0));
+        let transport_delete_count_clone = transport_delete_count.clone();
+
+        let link_delete_count = Arc::new(AtomicUsize::new(0));
+        let link_delete_count_clone = link_delete_count.clone();
+
+        session1
+            .info()
+            .transport_events_listener()
+            .history(false)
+            .callback(move |event| {
+                if event.kind() == SampleKind::Delete {
+                    transport_delete_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    println!("Unexpected transport Delete event received on local session close");
+                }
+            })
+            .background()
+            .await
+            .unwrap();
+
+        session1
+            .info()
+            .link_events_listener()
+            .history(false)
+            .callback(move |event| {
+                if event.kind() == SampleKind::Delete {
+                    link_delete_count_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    println!("Unexpected link Delete event received on local session close");
+                }
+            })
+            .background()
+            .await
+            .unwrap();
+
+        // Close the local session - listeners should NOT fire Delete events
+        session1.close().await.unwrap();
+
+        // Give time for any potential spurious events to arrive
+        tokio::time::sleep(SLEEP * 2).await;
+
+        let transport_deletes = transport_delete_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            transport_deletes, 0,
+            "Transport Delete event should NOT be triggered when the local session closes, got {} events",
+            transport_deletes
+        );
+
+        let link_deletes = link_delete_count.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            link_deletes, 0,
+            "Link Delete event should NOT be triggered when the local session closes, got {} events",
+            link_deletes
+        );
+
+        println!("Verified: no Delete events fired when local session closes");
+
+        session2.close().await.unwrap();
+    }
 }
