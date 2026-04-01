@@ -364,32 +364,34 @@ async fn test_undeclare_subscribers_same_keyexpr() {
 async fn test_session_from_cloned_config() {
     use zenoh::Config;
 
-    let (pub_config, sub_config) = {
+    let (mut pub_config, mut sub_config) = {
         let mut common_config = Config::default();
-        let locator = "tcp/127.0.0.1:38446";
         common_config
             .scouting
             .multicast
             .set_enabled(Some(false))
             .unwrap();
 
-        let mut pub_config = common_config.clone();
-        let mut sub_config = common_config;
-
-        sub_config
-            .listen
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
-        pub_config
-            .connect
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
+        let pub_config = common_config.clone();
+        let sub_config = common_config;
 
         (pub_config, sub_config)
     };
 
+    // Update sub_config (listener)
+    sub_config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
+        .unwrap();
+
+    // Create sub session
+    let sub_session = zenoh::open(sub_config).await.unwrap();
+
+    // Update pub_config (connector)
+    let locator = TestContext::get_locators_from_session(&sub_session).await;
+    pub_config.connect.endpoints.set(locator).unwrap();
+
+    // Create pub session
     let _pub_session = zenoh::open(pub_config).await.unwrap();
-    let _sub_session = zenoh::open(sub_config).await.unwrap();
 }
