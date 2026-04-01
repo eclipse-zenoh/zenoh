@@ -375,17 +375,24 @@ pub fn get_interface_names_by_addr(addr: IpAddr) -> ZResult<Vec<String>> {
     }
 }
 
+/// Return all IPv4 unicast addresses to listen on the specified interface, or all addresses except loopback if `interface` is `None`.
+/// If no addresses are found and the interface is `None`, return the loopback address.
 pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
-    let addrs: Vec<_> = get_local_addresses(interface)
-        .unwrap_or_else(|_| vec![])
-        .drain(..)
+    let addrs = get_local_addresses(interface).unwrap_or_else(|_| vec![]);
+
+    filter_ipv4_addrs_for_interface(interface, addrs)
+}
+
+fn filter_ipv4_addrs_for_interface(interface: Option<&str>, all_addrs: Vec<IpAddr>) -> Vec<IpAddr> {
+    let addrs = all_addrs
+        .into_iter()
         .filter_map(|x| match x {
             IpAddr::V4(a) => Some(a),
             IpAddr::V6(_) => None,
         })
         .filter(|x| (!x.is_loopback() || interface.is_some()) && !x.is_multicast())
         .map(IpAddr::V4)
-        .collect();
+        .collect::<Vec<_>>();
 
     if addrs.is_empty() && interface.is_none() {
         vec![Ipv4Addr::LOCALHOST.into()]
@@ -394,15 +401,27 @@ pub fn get_ipv4_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
     }
 }
 
+/// Return unicast addresses to listen on the specified interface, or all addresses except loopback if `interface` is `None`.
+/// The addresses are sorted by the following order:
+/// 1. Non-linklocal IPv6 addresses
+/// 2. Public IPv4 addresses
+/// 3. Linklocal IPv6 addresses
+/// 4. Private IPv4 addresses
+///
+/// If no addresses are found and the interface is `None`, return the loopback address.
 pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
+    let ipaddrs = get_local_addresses(interface).unwrap_or_else(|_| vec![]);
+
+    filter_ipv6_addrs_for_interface(interface, ipaddrs)
+}
+
+fn filter_ipv6_addrs_for_interface(interface: Option<&str>, all_addrs: Vec<IpAddr>) -> Vec<IpAddr> {
     const fn is_unicast_link_local(addr: &Ipv6Addr) -> bool {
         (addr.segments()[0] & 0xffc0) == 0xfe80
     }
 
-    let ipaddrs = get_local_addresses(interface).unwrap_or_else(|_| vec![]);
-
     // Get first all IPv4 addresses
-    let ipv4_iter = ipaddrs
+    let ipv4_iter = all_addrs
         .iter()
         .filter_map(|x| match x {
             IpAddr::V4(a) => Some(a),
@@ -416,7 +435,7 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>) -> Vec<IpAddr> {
         });
 
     // Get next all IPv6 addresses
-    let ipv6_iter = ipaddrs.iter().filter_map(|x| match x {
+    let ipv6_iter = all_addrs.iter().filter_map(|x| match x {
         IpAddr::V4(_) => None,
         IpAddr::V6(a) => Some(a),
     });
@@ -484,4 +503,126 @@ pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
     tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS, iOS, and Windows");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_ipv4_addrs_for_interface() {
+        let addrs = vec![
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ];
+        let filtered_addrs = filter_ipv4_addrs_for_interface(None, addrs);
+
+        assert_eq!(
+            filtered_addrs,
+            vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))]
+        );
+    }
+
+    #[test]
+    fn test_filter_ipv4_addrs_for_loopback() {
+        let addrs = vec![
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ];
+        let filtered_addrs = filter_ipv4_addrs_for_interface(Some("lo"), addrs);
+
+        assert_eq!(filtered_addrs, vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    }
+
+    #[test]
+    fn test_filter_ipv4_addrs_return_loopback_when_no_other_choice() {
+        let addrs = vec![
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ];
+        let filtered_addrs = filter_ipv4_addrs_for_interface(None, addrs);
+
+        assert_eq!(filtered_addrs, vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    }
+
+    #[test]
+    fn test_filter_ipv4_addrs_return_nothing_if_interface_doesn_t_have_any_addr() {
+        let addrs = vec![IpAddr::V4(Ipv4Addr::new(224, 0, 0, 1))];
+        let filtered_addrs = filter_ipv4_addrs_for_interface(Some("eno1"), addrs);
+
+        assert_eq!(filtered_addrs.len(), 0);
+    }
+
+    #[test]
+    fn test_filter_ipv4_addrs_fall_back_on_loopback() {
+        let filtered_addrs = filter_ipv4_addrs_for_interface(None, vec![]);
+
+        assert_eq!(filtered_addrs, vec![IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    }
+
+    #[test]
+    fn test_filter_ipv6_addrs_for_interface() {
+        let addrs = vec![
+            IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 2)),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+        ];
+        let filtered_addrs = filter_ipv6_addrs_for_interface(Some("abc"), addrs);
+
+        assert_eq!(
+            filtered_addrs,
+            vec![
+                IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1)),
+                IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 2)),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_filter_ipv6_addrs_for_lo() {
+        let addrs = vec![
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ];
+        let filtered_addrs = filter_ipv6_addrs_for_interface(Some("lo"), addrs);
+
+        assert_eq!(
+            filtered_addrs,
+            vec![
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_filter_ipv6_addrs_no_interface() {
+        let addrs = vec![
+            IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1)),
+            IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 2)),
+            IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            IpAddr::V6(Ipv6Addr::LOCALHOST),
+        ];
+        let filtered_addrs = filter_ipv6_addrs_for_interface(None, addrs);
+
+        assert_eq!(
+            filtered_addrs,
+            vec![
+                IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 1)),
+                IpAddr::V6(Ipv6Addr::new(0x2001, 0, 0, 0, 0, 0, 0, 2)),
+                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))
+            ]
+        );
+    }
+
+    #[test]
+    fn test_filter_ipv6_addrs_fallback_on_loopback() {
+        let filtered_addrs = filter_ipv6_addrs_for_interface(None, vec![]);
+
+        assert_eq!(filtered_addrs, vec![IpAddr::V6(Ipv6Addr::LOCALHOST)]);
+    }
 }
