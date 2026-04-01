@@ -26,10 +26,7 @@ mod tests {
 
     use zenoh::sample::SampleKind;
 
-    use crate::common::{
-        close_session, open_session_connect, open_session_listen, open_session_multilink,
-        open_session_unicast,
-    };
+    use crate::common::TestSessions;
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
         let mut collected = Vec::new();
@@ -48,7 +45,8 @@ mod tests {
     async fn test_info_transports() {
         zenoh_util::init_log_from_env_or("error");
 
-        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
+        let mut test_context = TestSessions::new();
+        let (session1, session2) = test_context.open_pairs().await;
 
         tokio::time::sleep(SLEEP).await;
 
@@ -70,7 +68,7 @@ mod tests {
             "Session2 should have at least one transport"
         );
 
-        close_session(session1, session2).await;
+        test_context.close().await;
     }
 
     /// Test that links() returns an iterator of Link objects
@@ -78,7 +76,8 @@ mod tests {
     async fn test_info_links() {
         zenoh_util::init_log_from_env_or("error");
 
-        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17448"]).await;
+        let mut test_context = TestSessions::new();
+        let (session1, session2) = test_context.open_pairs().await;
 
         tokio::time::sleep(SLEEP).await;
 
@@ -101,7 +100,7 @@ mod tests {
             "Session2 should have at least one link"
         );
 
-        close_session(session1, session2).await;
+        test_context.close().await;
     }
 
     /// Test that transport_events_listener() delivers events when transports open and close
@@ -109,7 +108,8 @@ mod tests {
     async fn test_transport_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17450"]).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener().await;
 
         // Subscribe to transport events with history
         let events = session1
@@ -120,7 +120,7 @@ mod tests {
             .await
             .expect("Failed to declare transport events listener");
 
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17450"]).await;
+        let session2 = test_context.open_connector().await;
         tokio::time::sleep(SLEEP).await;
 
         // Collect transport opened events - should be exactly 1 Put
@@ -151,7 +151,8 @@ mod tests {
     async fn test_link_events() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17451"]).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener().await;
 
         // Subscribe to link events with history
         let events = session1
@@ -163,8 +164,8 @@ mod tests {
             .expect("Failed to declare link events listener");
 
         // Connect two sessions
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
-        let session3 = open_session_connect(&["tcp/127.0.0.1:17451"]).await;
+        let session2 = test_context.open_connector().await;
+        let session3 = test_context.open_connector().await;
         tokio::time::sleep(SLEEP).await;
 
         // Collect link added events - should be exactly 2 Put
@@ -209,8 +210,9 @@ mod tests {
     async fn test_link_events_multilink() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoints = &["tcp/127.0.0.1:17470", "tcp/127.0.0.1:17471"];
-        let (session1, session2) = open_session_multilink(endpoints, endpoints).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener_with_links(2).await;
+        let session2 = test_context.open_connector().await;
 
         tokio::time::sleep(SLEEP).await;
 
@@ -255,7 +257,8 @@ mod tests {
     async fn test_event_history() {
         zenoh_util::init_log_from_env_or("error");
 
-        let (session1, session2) = open_session_unicast(&["tcp/127.0.0.1:17452"]).await;
+        let mut test_context = TestSessions::new();
+        let (session1, _session2) = test_context.open_pairs().await;
 
         // Wait for connection to establish
         tokio::time::sleep(SLEEP).await;
@@ -306,7 +309,7 @@ mod tests {
             event.link().dst()
         );
 
-        close_session(session1, session2).await;
+        test_context.close().await;
     }
 
     /// Test that links() can be filtered by transport ZID
@@ -314,9 +317,10 @@ mod tests {
     async fn test_links_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17458"]).await;
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17458"]).await;
-        let session3 = open_session_connect(&["tcp/127.0.0.1:17458"]).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener().await;
+        let _session2 = test_context.open_connector().await;
+        let _session3 = test_context.open_connector().await;
 
         // Wait for connections
         tokio::time::sleep(SLEEP).await;
@@ -362,8 +366,7 @@ mod tests {
 
         println!("Successfully verified links() filtering by transport");
 
-        close_session(session1, session2).await;
-        session3.close().await.unwrap();
+        test_context.close().await;
     }
 
     /// Test that links_events_listener() can be filtered by transport ZID
@@ -371,8 +374,9 @@ mod tests {
     async fn test_link_events_filter_by_transport() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17459"]).await;
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener().await;
+        let session2 = test_context.open_connector().await;
 
         tokio::time::sleep(SLEEP).await;
 
@@ -394,7 +398,7 @@ mod tests {
             .await;
 
         // Create third peer that connects - should NOT trigger events (different transport)
-        let session3 = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
+        let session3 = test_context.open_connector().await;
 
         // Wait for potential events
         tokio::time::sleep(SLEEP).await;
@@ -410,7 +414,7 @@ mod tests {
         session2.close().await.unwrap();
         tokio::time::sleep(SLEEP).await;
 
-        let _session2_new = open_session_connect(&["tcp/127.0.0.1:17459"]).await;
+        let _session2_new = test_context.open_connector().await;
 
         // Wait for events (poll with timeout)
         let start = std::time::Instant::now();
@@ -440,7 +444,8 @@ mod tests {
     async fn test_transport_events_background() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17460"]).await;
+        let mut test_context = TestSessions::new();
+        let session1 = test_context.open_listener().await;
 
         // Track events using atomic counters
         let opened_count = Arc::new(AtomicUsize::new(0));
@@ -468,7 +473,7 @@ mod tests {
             .await
             .unwrap();
 
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17460"]).await;
+        let session2 = test_context.open_connector().await;
 
         // Wait for connection to establish and event to be processed
         tokio::time::sleep(SLEEP * 2).await;
@@ -496,7 +501,7 @@ mod tests {
         println!("Received {} transport closed events", closed);
 
         // Verify the background listener is still working by creating another connection
-        let session3 = open_session_connect(&["tcp/127.0.0.1:17460"]).await;
+        let session3 = test_context.open_connector().await;
 
         tokio::time::sleep(SLEEP * 2).await;
 
