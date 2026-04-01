@@ -525,8 +525,8 @@ mod tests {
     async fn test_transport_events_not_triggered_on_local_session_close() {
         zenoh_util::init_log_from_env_or("error");
 
-        let session1 = open_session_listen(&["tcp/127.0.0.1:17461"]).await;
-        let session2 = open_session_connect(&["tcp/127.0.0.1:17461"]).await;
+        let mut test_context = TestSessions::new();
+        let (session1, session2) = test_context.open_pairs().await;
 
         tokio::time::sleep(SLEEP).await;
 
