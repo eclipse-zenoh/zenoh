@@ -33,7 +33,6 @@ mod runtime_state_weak_tests {
         listen_endpoints: Vec<EndPoint>,
         connect_endpoints: Vec<EndPoint>,
         gossip: bool,
-        peer_mode: &str,
     ) -> Session {
         let mut config = Config::default();
         let _ = config.set_mode(Some(mode)).unwrap();
@@ -41,12 +40,6 @@ mod runtime_state_weak_tests {
 
         config.connect.endpoints.set(connect_endpoints).unwrap();
         config.listen.endpoints.set(listen_endpoints).unwrap();
-
-        config
-            .routing
-            .peer
-            .set_mode(Some(peer_mode.to_string()))
-            .unwrap();
 
         config.scouting.gossip.set_enabled(Some(gossip)).unwrap();
         if gossip {
@@ -61,18 +54,17 @@ mod runtime_state_weak_tests {
     }
 
     // Helper to create a session with a specific mode and no network endpoints.
-    async fn create_silent_session(mode: WhatAmI, gossip: bool, peer_mode: &str) -> Session {
-        create_session(mode, vec![], vec![], gossip, peer_mode).await
+    async fn create_silent_session(mode: WhatAmI, gossip: bool) -> Session {
+        create_session(mode, vec![], vec![], gossip).await
     }
 
     #[test_matrix(
         [WhatAmI::Peer],
-        [true, false],
-        ["peer_to_peer", "linkstate"]
+        [true, false]
     )]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn alive_before_close(mode: WhatAmI, gossip: bool, peer_mode: &str) {
-        let session = create_silent_session(mode, gossip, peer_mode).await;
+    async fn alive_before_close(mode: WhatAmI, gossip: bool) {
+        let session = create_silent_session(mode, gossip).await;
         let runtime = get_static_runtime(&session).expect("runtime should be present");
         let weak = runtime.state_weak();
         assert!(weak.upgrade().is_some());
@@ -80,12 +72,11 @@ mod runtime_state_weak_tests {
 
     #[test_matrix(
         [WhatAmI::Peer],
-        [true, false],
-        ["peer_to_peer", "linkstate"]
+        [true, false]
     )]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn still_alive_after_close(mode: WhatAmI, gossip: bool, peer_mode: &str) {
-        let session = create_silent_session(mode, gossip, peer_mode).await;
+    async fn still_alive_after_close(mode: WhatAmI, gossip: bool) {
+        let session = create_silent_session(mode, gossip).await;
         let runtime = get_static_runtime(&session).unwrap();
         let weak = runtime.state_weak();
         session.close().await.unwrap();
@@ -95,12 +86,11 @@ mod runtime_state_weak_tests {
 
     #[test_matrix(
         [WhatAmI::Peer],
-        [true, false],
-        ["peer_to_peer", "linkstate"]
+        [true, false]
     )]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn dead_after_drop(mode: WhatAmI, gossip: bool, peer_mode: &str) {
-        let session = create_silent_session(mode, gossip, peer_mode).await;
+    async fn dead_after_drop(mode: WhatAmI, gossip: bool) {
+        let session = create_silent_session(mode, gossip).await;
         let runtime = get_static_runtime(&session).unwrap();
         let weak = runtime.state_weak();
         session.close().await.unwrap(); // ensure tasks are cancelled
@@ -110,16 +100,15 @@ mod runtime_state_weak_tests {
 
     #[test_matrix(
         [WhatAmI::Peer],
-        [true, false],
-        ["peer_to_peer", "linkstate"]
+        [true, false]
     )]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn multiple_sessions_independent(mode: WhatAmI, gossip: bool, peer_mode: &str) {
-        let session1 = create_silent_session(mode, gossip, peer_mode).await;
+    async fn multiple_sessions_independent(mode: WhatAmI, gossip: bool) {
+        let session1 = create_silent_session(mode, gossip).await;
         let runtime1 = get_static_runtime(&session1).unwrap();
         let weak1 = runtime1.state_weak();
 
-        let session2 = create_silent_session(mode, gossip, peer_mode).await;
+        let session2 = create_silent_session(mode, gossip).await;
         let runtime2 = get_static_runtime(&session2).unwrap();
         let weak2 = runtime2.state_weak();
 
@@ -152,42 +141,24 @@ mod runtime_state_weak_tests {
     }
 
     // Helper to create a client and a peer that are connected.
-    async fn create_clique(
-        num: usize,
-        mode: WhatAmI,
-        gossip: bool,
-        peer_mode: &str,
-    ) -> Vec<Session> {
-        let port_offset = calc_offset(mode, gossip, peer_mode);
+    async fn create_clique(num: usize, mode: WhatAmI, gossip: bool) -> Vec<Session> {
+        let port_offset = calc_offset(mode, gossip);
         let port = 12450 + port_offset;
         let peer_endpoint = format!("tcp/127.0.0.1:{}", port);
-        let main = create_session(
-            mode,
-            vec![peer_endpoint.parse().unwrap()],
-            vec![],
-            gossip,
-            peer_mode,
-        )
-        .await;
+        let main = create_session(mode, vec![peer_endpoint.parse().unwrap()], vec![], gossip).await;
 
         let mut result = vec![main];
 
         for _ in 0..num {
-            let client = create_session(
-                mode,
-                vec![],
-                vec![peer_endpoint.parse().unwrap()],
-                gossip,
-                peer_mode,
-            )
-            .await;
+            let client =
+                create_session(mode, vec![], vec![peer_endpoint.parse().unwrap()], gossip).await;
             result.push(client);
         }
 
         result
     }
 
-    fn calc_offset(mode: WhatAmI, gossip: bool, peer_mode: &str) -> u16 {
+    fn calc_offset(mode: WhatAmI, gossip: bool) -> u16 {
         let mode = match mode {
             WhatAmI::Router => 0,
             WhatAmI::Peer => 1,
@@ -199,26 +170,17 @@ mod runtime_state_weak_tests {
             false => 1,
         };
 
-        let peer_mode = if peer_mode == "linkstate" {
-            0
-        } else if peer_mode == "peer_to_peer" {
-            1
-        } else {
-            panic!("Unsupported");
-        };
-
-        mode + gossip * 3 + peer_mode * 3 * 2
+        mode + gossip * 3
     }
 
     #[test_matrix(
         [WhatAmI::Peer],
-        [true, false],
-        ["peer_to_peer", "linkstate"]
+        [true, false]
     )]
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn dead_after_drop_many_times(mode: WhatAmI, gossip: bool, peer_mode: &str) {
+    async fn dead_after_drop_many_times(mode: WhatAmI, gossip: bool) {
         let num_clients = 10;
-        let sessions = create_clique(num_clients, mode, gossip, peer_mode).await;
+        let sessions = create_clique(num_clients, mode, gossip).await;
 
         // All weak references should be alive initially.
         for session in &sessions {

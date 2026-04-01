@@ -210,11 +210,11 @@ jobs:
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -p zenoh
+        run: sudo cargo nextest run -p zenoh -F test
 
       - name: Run tests stable
         if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -p zenoh
+        run: cargo nextest run -p zenoh -F test
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}

@@ -345,6 +345,7 @@ impl TransportMulticastInner {
             #[cfg(feature = "shared-memory")]
             is_shm,
             links: vec![link],
+            region_name: None, // TODO(regions): region names are unsupported for multicast transports
         };
 
         let handler = match zread!(self.callback).as_ref() {
@@ -467,6 +468,7 @@ impl TransportMulticastInner {
                     #[cfg(feature = "shared-memory")]
                     is_shm: self.is_shm(),
                     links: vec![link],
+                    region_name: None,
                 }
             })
             .collect()

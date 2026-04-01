@@ -26,6 +26,7 @@ use zenoh_core::{zlock, ztimeout};
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 const KEY_EXPR: &str = "test/demo";
+const KEY_EXPR2: &str = "test/demo2";
 const VALUE: &str = "zenoh";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -1572,10 +1573,20 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
     tokio::time::sleep(SLEEP).await;
     assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
 
+    // NOTE(fuzzypixelz): had this query been on KEY_EXPR, it would've returned the token above.
+    // This is because the client gateway registers tokens received for the future interest.
+
     // test if query receives token reply
+    let _liveliness2 = writer_session
+        .liveliness()
+        .declare_token(KEY_EXPR2)
+        .await
+        .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
     reader_session
         .liveliness()
-        .get(KEY_EXPR)
+        .get(KEY_EXPR2)
         .timeout(TIMEOUT)
         .callback(move |reply| match reply.result() {
             Ok(_) => {
@@ -1614,7 +1625,7 @@ async fn test_liveliness_allow_deny_query(port: u16) {
                             permission: "deny",
                             messages: ["liveliness_query"],
                             flows: ["ingress", "egress"],
-                            key_exprs: ["test/demo"],
+                            key_exprs: ["test/demo2"],
                         },
                     ],
                     "subjects": [
@@ -1665,10 +1676,20 @@ async fn test_liveliness_allow_deny_query(port: u16) {
     tokio::time::sleep(SLEEP).await;
     assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
 
+    // NOTE(fuzzypixelz): had this query been on KEY_EXPR, it would've returned the token above.
+    // This is because the client gateway registers tokens received for the future interest.
+
     // test if query receives token reply
+    let _liveliness2 = writer_session
+        .liveliness()
+        .declare_token(KEY_EXPR2)
+        .await
+        .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
     reader_session
         .liveliness()
-        .get(KEY_EXPR)
+        .get(KEY_EXPR2)
         .timeout(TIMEOUT)
         .callback(move |reply| match reply.result() {
             Ok(_) => {
