@@ -32,12 +32,14 @@ version = { workspace = true }
 arc-swap = { workspace = true }
 event-listener = { workspace = true }
 futures = { workspace = true }
+parking_lot = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 zenoh-buffers = { workspace = true }
 zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true }
 tokio = { workspace = true, features = [
   "macros",
   "rt-multi-thread",
@@ -45,3 +47,7 @@ tokio = { workspace = true, features = [
   "time",
 ] }
 zenoh-result = { workspace = true }
+
+[[bench]]
+harness = false
+name = "notify_wait"
