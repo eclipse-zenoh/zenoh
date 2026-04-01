@@ -22,18 +22,20 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "unstable")]
-use zenoh::qos::Reliability;
 #[cfg(all(feature = "internal", feature = "unstable"))]
 use zenoh::Wait;
 use zenoh::{
-    key_expr::KeyExpr, qos::CongestionControl, query::Querier, sample::SampleKind, Session,
+    key_expr::KeyExpr,
+    qos::{CongestionControl, Reliability},
+    query::Querier,
+    sample::SampleKind,
+    Session,
 };
 use zenoh_core::ztimeout;
-#[cfg(not(feature = "unstable"))]
-use zenoh_protocol::core::Reliability;
 
-use crate::common::{close_session, TestSessions};
+#[cfg(feature = "internal")]
+use crate::common::close_session;
+use crate::common::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -285,7 +287,7 @@ async fn zenoh_session_multicast() {
     let mut test_context = TestSessions::new();
     let (peer01, peer02) = test_context.open_pairs_multicast("udp/224.0.0.1:0").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[cfg(feature = "internal")]
