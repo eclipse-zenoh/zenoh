@@ -110,7 +110,7 @@ impl LinkKind {
                 #[cfg(all(feature = "transport_quic_datagram", not(feature = "transport_quic")))]
                 QUIC_DATAGRAM_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
                 #[cfg(all(feature = "transport_quic", not(feature = "transport_quic_datagram")))]
-                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
+                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::Quic),
                 #[cfg(all(feature = "transport_quic", feature = "transport_quic_datagram"))]
                 QUIC_LOCATOR_PREFIX => {
                     supported_links.push(LinkKind::Quic);
