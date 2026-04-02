@@ -31,9 +31,7 @@ use zenoh_config::{
     ConnectionRetryPeriod, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
-use zenoh_protocol::core::{
-    whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto,
-};
+use zenoh_protocol::core::{EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto};
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
