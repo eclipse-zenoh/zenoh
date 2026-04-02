@@ -213,6 +213,7 @@ impl<'a> Undeclarable<(), SubscriberUndeclaration<'a>> for SubscriberInner<'a> {
 /// subscriber.undeclare().res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberUndeclaration<'a> {
     subscriber: SubscriberInner<'a>,
 }
@@ -297,8 +298,8 @@ impl From<PushMode> for Mode {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,

@@ -30,6 +30,7 @@ use std::collections::{
 
 use crate::keyexpr_tree::*;
 
+#[cfg_attr(not(feature = "std"), allow(deprecated))]
 pub struct HashMapProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
     core::marker::PhantomData<Hash>,
 );

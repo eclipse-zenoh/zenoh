@@ -18,7 +18,6 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
-use std::sync::Arc;
 use zenoh_config::Config;
 use zenoh_result::{bail, ZResult};
 
@@ -206,23 +205,27 @@ impl LinkManagerBuilderUnicast {
     pub fn make(_manager: NewLinkChannelSender, protocol: &str) -> ZResult<LinkManagerUnicast> {
         match protocol {
             #[cfg(feature = "transport_tcp")]
-            TCP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastTcp::new(_manager))),
+            TCP_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastTcp::new(_manager))),
             #[cfg(feature = "transport_udp")]
-            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastUdp::new(_manager))),
+            UDP_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastUdp::new(_manager))),
             #[cfg(feature = "transport_tls")]
-            TLS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastTls::new(_manager))),
+            TLS_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastTls::new(_manager))),
             #[cfg(feature = "transport_quic")]
-            QUIC_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastQuic::new(_manager))),
+            QUIC_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastQuic::new(_manager))),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            UNIXSOCKSTREAM_LOCATOR_PREFIX => {
-                Ok(Arc::new(LinkManagerUnicastUnixSocketStream::new(_manager)))
-            }
+            UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(std::sync::Arc::new(
+                LinkManagerUnicastUnixSocketStream::new(_manager),
+            )),
             #[cfg(feature = "transport_ws")]
-            WS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastWs::new(_manager))),
+            WS_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastWs::new(_manager))),
             #[cfg(feature = "transport_serial")]
-            SERIAL_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastSerial::new(_manager))),
+            SERIAL_LOCATOR_PREFIX => {
+                Ok(std::sync::Arc::new(LinkManagerUnicastSerial::new(_manager)))
+            }
             #[cfg(feature = "transport_unixpipe")]
-            UNIXPIPE_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastPipe::new(_manager))),
+            UNIXPIPE_LOCATOR_PREFIX => {
+                Ok(std::sync::Arc::new(LinkManagerUnicastPipe::new(_manager)))
+            }
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }
@@ -238,7 +241,7 @@ impl LinkManagerBuilderMulticast {
     pub fn make(protocol: &str) -> ZResult<LinkManagerMulticast> {
         match protocol {
             #[cfg(feature = "transport_udp")]
-            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerMulticastUdp)),
+            UDP_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerMulticastUdp)),
             _ => bail!("Multicast not supported for {} protocol", protocol),
         }
     }

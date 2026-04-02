@@ -28,7 +28,6 @@ pub mod vec;
 mod zbuf;
 mod zslice;
 
-use alloc::{borrow::Cow, vec::Vec};
 pub use bbuf::*;
 pub use zbuf::*;
 pub use zslice::*;
@@ -73,6 +72,45 @@ macro_rules! unsafe_slice_mut {
     };
 }
 
+pub mod buffer {
+    use alloc::{borrow::Cow, vec::Vec};
+
+    pub trait Buffer {
+        /// Returns the number of bytes in the buffer.
+        fn len(&self) -> usize;
+
+        /// Returns `true` if the buffer has a length of 0.
+        fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+    }
+
+    /// A trait for buffers that can be composed of multiple non contiguous slices.
+    pub trait SplitBuffer: Buffer {
+        type Slices<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator
+        where
+            Self: 'a;
+
+        /// Gets all the slices of this buffer.
+        fn slices(&self) -> Self::Slices<'_>;
+
+        /// Returns all the bytes of this buffer in a conitguous slice.
+        /// This may require allocation and copy if the original buffer
+        /// is not contiguous.
+        fn contiguous(&self) -> Cow<'_, [u8]> {
+            let mut slices = self.slices();
+            match slices.len() {
+                0 => Cow::Borrowed(b""),
+                1 => Cow::Borrowed(slices.next().unwrap()),
+                _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
+                    acc.extend(it);
+                    acc
+                })),
+            }
+        }
+    }
+}
+
 pub mod writer {
     use crate::ZSlice;
     use core::num::NonZeroUsize;
@@ -100,6 +138,7 @@ pub mod writer {
         where
             F: FnOnce(&mut [u8]) -> usize;
     }
+
     pub trait BacktrackableWriter: Writer {
         type Mark;
 
@@ -173,38 +212,5 @@ pub mod reader {
 
         /// Returns the most appropriate reader for `self`
         fn reader(self) -> Self::Reader;
-    }
-}
-
-/// A trait for buffers that can be composed of multiple non contiguous slices.
-pub trait SplitBuffer<'a> {
-    type Slices: Iterator<Item = &'a [u8]> + ExactSizeIterator;
-
-    /// Gets all the slices of this buffer.
-    fn slices(&'a self) -> Self::Slices;
-
-    /// Returns `true` if the buffer has a length of 0.
-    fn is_empty(&'a self) -> bool {
-        self.slices().all(<[u8]>::is_empty)
-    }
-
-    /// Returns the number of bytes in the buffer.
-    fn len(&'a self) -> usize {
-        self.slices().fold(0, |acc, it| acc + it.len())
-    }
-
-    /// Returns all the bytes of this buffer in a conitguous slice.
-    /// This may require allocation and copy if the original buffer
-    /// is not contiguous.
-    fn contiguous(&'a self) -> Cow<'a, [u8]> {
-        let mut slices = self.slices();
-        match slices.len() {
-            0 => Cow::Borrowed(b""),
-            1 => Cow::Borrowed(slices.next().unwrap()),
-            _ => Cow::Owned(slices.fold(Vec::new(), |mut acc, it| {
-                acc.extend(it);
-                acc
-            })),
-        }
     }
 }

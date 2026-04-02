@@ -121,6 +121,37 @@ impl SeqNum {
         Ok((gap != 0) && ((gap & !(self.mask >> 1)) == 0))
     }
 
+    /// Checks to see if two sequence number are in a precedence relationship,
+    /// while taking into account roll backs AND do update the sn value if check succeed.
+    ///
+    /// Two case are considered:
+    ///
+    /// ## Case 1: sna < snb
+    ///
+    /// In this case *sna* precedes *snb* iff (snb - sna) <= semi_int where
+    /// semi_int is defined as half the sequence number resolution.
+    /// In other terms, sna precedes snb iff there are less than half
+    /// the length for the interval that separates them.
+    ///
+    /// ## Case 2: sna > snb
+    ///
+    /// In this case *sna* precedes *snb* iff (sna - snb) > semi_int.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` -  The sequence number which should be checked for precedence relation.
+    pub(crate) fn roll(&mut self, value: TransportSn) -> ZResult<bool> {
+        if (value & !self.mask) != 0 {
+            bail!("The sequence number value must be smaller than the resolution");
+        }
+        let gap = value.wrapping_sub(self.value) & self.mask;
+        if (gap != 0) && ((gap & !(self.mask >> 1)) == 0) {
+            self.value = value;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     /// Computes the modulo gap between two sequence numbers.
     #[cfg(test)] // @TODO: remove #[cfg(test)] once reliability is implemented
     pub(crate) fn gap(&self, value: TransportSn) -> ZResult<TransportSn> {

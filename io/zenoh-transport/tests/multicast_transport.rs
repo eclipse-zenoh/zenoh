@@ -42,8 +42,8 @@ mod tests {
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportMulticast,
-        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+        TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -273,6 +273,7 @@ mod tests {
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
+                ext_attachment: None,
                 ext_unknown: vec![],
             }
             .into(),
@@ -330,7 +331,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "transport_udp")]
+    #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
     #[test]
     fn transport_multicast_udp_only() {
         env_logger::init();
@@ -342,7 +343,7 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:7447",
+                "udp/224.{}.{}.{}:20000",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
                 rand::random::<u8>()

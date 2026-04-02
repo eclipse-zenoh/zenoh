@@ -17,6 +17,7 @@ name = "zenoh-plugin-example"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+publish = false
 
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"

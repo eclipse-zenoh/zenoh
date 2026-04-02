@@ -30,7 +30,11 @@ use zenoh_protocol::{
 
 impl LCodec<&PrioritySn> for Zenoh080 {
     fn w_len(self, p: &PrioritySn) -> usize {
-        self.w_len(p.reliable) + self.w_len(p.best_effort)
+        let PrioritySn {
+            reliable,
+            best_effort,
+        } = p;
+        self.w_len(*reliable) + self.w_len(*best_effort)
     }
 }
 
@@ -41,8 +45,13 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &PrioritySn) -> Self::Output {
-        self.write(&mut *writer, x.reliable)?;
-        self.write(&mut *writer, x.best_effort)?;
+        let PrioritySn {
+            reliable,
+            best_effort,
+        } = x;
+
+        self.write(&mut *writer, reliable)?;
+        self.write(&mut *writer, best_effort)?;
         Ok(())
     }
 }
@@ -129,52 +138,64 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Join) -> Self::Output {
+        let Join {
+            version,
+            whatami,
+            zid,
+            resolution,
+            batch_size,
+            lease,
+            next_sn,
+            ext_qos,
+            ext_shm,
+        } = x;
+
         // Header
         let mut header = id::JOIN;
-        if x.lease.as_millis() % 1_000 == 0 {
+        if lease.as_millis() % 1_000 == 0 {
             header |= flag::T;
         }
-        if x.resolution != Resolution::default() || x.batch_size != batch_size::MULTICAST {
+        if resolution != &Resolution::default() || batch_size != &batch_size::MULTICAST {
             header |= flag::S;
         }
-        let mut n_exts = (x.ext_qos.is_some() as u8) + (x.ext_shm.is_some() as u8);
+        let mut n_exts = (ext_qos.is_some() as u8) + (ext_shm.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.version)?;
+        self.write(&mut *writer, version)?;
 
-        let whatami: u8 = match x.whatami {
+        let whatami: u8 = match whatami {
             WhatAmI::Router => 0b00,
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let flags: u8 = ((x.zid.size() as u8 - 1) << 4) | whatami;
+        let flags: u8 = ((zid.size() as u8 - 1) << 4) | whatami;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(x.zid.size());
-        lodec.write(&mut *writer, &x.zid)?;
+        let lodec = Zenoh080Length::new(zid.size());
+        lodec.write(&mut *writer, zid)?;
 
         if imsg::has_flag(header, flag::S) {
-            self.write(&mut *writer, x.resolution.as_u8())?;
-            self.write(&mut *writer, x.batch_size.to_le_bytes())?;
+            self.write(&mut *writer, resolution.as_u8())?;
+            self.write(&mut *writer, batch_size.to_le_bytes())?;
         }
 
         if imsg::has_flag(header, flag::T) {
-            self.write(&mut *writer, x.lease.as_secs())?;
+            self.write(&mut *writer, lease.as_secs())?;
         } else {
-            self.write(&mut *writer, x.lease.as_millis() as u64)?;
+            self.write(&mut *writer, lease.as_millis() as u64)?;
         }
-        self.write(&mut *writer, &x.next_sn)?;
+        self.write(&mut *writer, next_sn)?;
 
         // Extensions
-        if let Some(qos) = x.ext_qos.as_ref() {
+        if let Some(qos) = ext_qos.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (qos, n_exts != 0))?;
         }
-        if let Some(shm) = x.ext_shm.as_ref() {
+        if let Some(shm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
         }

@@ -11,31 +11,248 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::{pipeline::TransmissionPipeline, priority::TransportPriorityTx};
-use super::transport::TransportMulticastInner;
-use crate::common::batch::WBatch;
-use crate::common::pipeline::{
-    TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
-};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use zenoh_buffers::ZSlice;
-use zenoh_core::zlock;
-use zenoh_link::{LinkMulticast, Locator};
+use crate::{
+    common::{
+        batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
+        pipeline::{
+            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+            TransmissionPipelineProducer,
+        },
+        priority::TransportPriorityTx,
+    },
+    multicast::transport::TransportMulticastInner,
+    TransportExecutor,
+};
+use async_executor::Task;
+use async_std::{
+    prelude::FutureExt,
+    task::{self, JoinHandle},
+};
+use std::{
+    convert::TryInto,
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_core::{zcondfeat, zlock};
+use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
-    transport::{BatchSize, Join, PrioritySn, TransportMessage, TransportSn},
+    transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
 };
-use zenoh_result::{bail, zerror, ZResult};
-use zenoh_sync::{RecyclingObjectPool, Signal};
+use zenoh_result::{zerror, ZResult};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
-pub(super) struct TransportLinkMulticastConfig {
+/****************************/
+/* TRANSPORT MULTICAST LINK */
+/****************************/
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct TransportLinkMulticastConfig {
+    pub(crate) batch: BatchConfig,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct TransportLinkMulticast {
+    pub(crate) link: LinkMulticast,
+    pub(crate) config: TransportLinkMulticastConfig,
+}
+
+impl TransportLinkMulticast {
+    pub(crate) fn new(link: LinkMulticast, mut config: TransportLinkMulticastConfig) -> Self {
+        config.batch.mtu = link.get_mtu().min(config.batch.mtu);
+        config.batch.is_streamed = false;
+        Self { link, config }
+    }
+
+    pub(crate) fn tx(&self) -> TransportLinkMulticastTx {
+        TransportLinkMulticastTx {
+            inner: self.clone(),
+            buffer: zcondfeat!(
+                "transport_compression",
+                self.config
+                    .batch
+                    .is_compression
+                    .then_some(BBuf::with_capacity(
+                        lz4_flex::block::get_maximum_output_size(
+                            self.config.batch.max_buffer_size()
+                        ),
+                    )),
+                None
+            ),
+        }
+    }
+
+    pub(crate) fn rx(&self) -> TransportLinkMulticastRx {
+        TransportLinkMulticastRx {
+            inner: self.clone(),
+        }
+    }
+
+    pub(crate) async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
+        let mut link = self.tx();
+        link.send(msg).await
+    }
+
+    // pub(crate) async fn recv(&self) -> ZResult<(TransportMessage, Locator)> {
+    //     let mut link = self.rx();
+    //     link.recv().await
+    // }
+
+    pub(crate) async fn close(&self, reason: Option<u8>) -> ZResult<()> {
+        if let Some(reason) = reason {
+            // Build the close message
+            let message: TransportMessage = Close {
+                reason,
+                session: false,
+            }
+            .into();
+            // Send the close message on the link
+            let _ = self.send(&message).await;
+        }
+        self.link.close().await
+    }
+}
+
+impl fmt::Display for TransportLinkMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.link)
+    }
+}
+
+impl fmt::Debug for TransportLinkMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportLinkMulticast")
+            .field("link", &self.link)
+            .field("config", &self.config)
+            .finish()
+    }
+}
+
+impl From<&TransportLinkMulticast> for Link {
+    fn from(link: &TransportLinkMulticast) -> Self {
+        Link::from(&link.link)
+    }
+}
+
+impl From<TransportLinkMulticast> for Link {
+    fn from(link: TransportLinkMulticast) -> Self {
+        Link::from(link.link)
+    }
+}
+
+pub(crate) struct TransportLinkMulticastTx {
+    pub(crate) inner: TransportLinkMulticast,
+    pub(crate) buffer: Option<BBuf>,
+}
+
+impl TransportLinkMulticastTx {
+    pub(crate) async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
+        const ERR: &str = "Write error on link: ";
+
+        let res = batch
+            .finalize(self.buffer.as_mut())
+            .map_err(|_| zerror!("{ERR}{self}"))?;
+
+        let bytes = match res {
+            Finalize::Batch => batch.as_slice(),
+            Finalize::Buffer => self
+                .buffer
+                .as_ref()
+                .ok_or_else(|| zerror!("Invalid buffer finalization"))?
+                .as_slice(),
+        };
+
+        // Send the message on the link
+        self.inner.link.write_all(bytes).await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn send(&mut self, msg: &TransportMessage) -> ZResult<usize> {
+        const ERR: &str = "Write error on link: ";
+
+        // Create the batch for serializing the message
+        let mut batch = WBatch::new(self.inner.config.batch);
+        batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
+        let len = batch.len() as usize;
+        self.send_batch(&mut batch).await?;
+        Ok(len)
+    }
+}
+
+impl fmt::Display for TransportLinkMulticastTx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+impl fmt::Debug for TransportLinkMulticastTx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = f.debug_struct("TransportLinkMulticastRx");
+        s.field("link", &self.inner.link)
+            .field("config", &self.inner.config);
+        #[cfg(feature = "transport_compression")]
+        {
+            s.field("buffer", &self.buffer.as_ref().map(|b| b.capacity()));
+        }
+        s.finish()
+    }
+}
+
+pub(crate) struct TransportLinkMulticastRx {
+    pub(crate) inner: TransportLinkMulticast,
+}
+
+impl TransportLinkMulticastRx {
+    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch, Locator)>
+    where
+        C: Fn() -> T + Copy,
+        T: ZSliceBuffer + 'static,
+    {
+        const ERR: &str = "Read error from link: ";
+
+        let mut into = (buff)();
+        let (n, locator) = self.inner.link.read(into.as_mut_slice()).await?;
+        let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
+        let mut batch = RBatch::new(self.inner.config.batch, buffer);
+        batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+        Ok((batch, locator.into_owned()))
+    }
+
+    // pub async fn recv(&mut self) -> ZResult<(TransportMessage, Locator)> {
+    //     let mtu = self.inner.config.mtu as usize;
+    //     let (mut batch, locator) = self
+    //         .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
+    //         .await?;
+    //     let msg = batch
+    //         .decode()
+    //         .map_err(|_| zerror!("Decode error on link: {}", self))?;
+    //     Ok((msg, locator))
+    // }
+}
+
+impl fmt::Display for TransportLinkMulticastRx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+impl fmt::Debug for TransportLinkMulticastRx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportLinkMulticastRx")
+            .field("link", &self.inner.link)
+            .field("config", &self.inner.config)
+            .finish()
+    }
+}
+
+/**************************************/
+/* TRANSPORT MULTICAST LINK UNIVERSAL */
+/**************************************/
+pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) version: u8,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
@@ -46,25 +263,25 @@ pub(super) struct TransportLinkMulticastConfig {
 }
 
 #[derive(Clone)]
-pub(super) struct TransportLinkMulticast {
+pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
-    pub(super) link: LinkMulticast,
+    pub(super) link: TransportLinkMulticast,
     // The transmission pipeline
     pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>,
+    handle_tx: Option<Arc<Task<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
-impl TransportLinkMulticast {
+impl TransportLinkMulticastUniversal {
     pub(super) fn new(
         transport: TransportMulticastInner,
-        link: LinkMulticast,
-    ) -> TransportLinkMulticast {
-        TransportLinkMulticast {
+        link: TransportLinkMulticast,
+    ) -> TransportLinkMulticastUniversal {
+        TransportLinkMulticastUniversal {
             transport,
             link,
             pipeline: None,
@@ -75,11 +292,12 @@ impl TransportLinkMulticast {
     }
 }
 
-impl TransportLinkMulticast {
+impl TransportLinkMulticastUniversal {
     pub(super) fn start_tx(
         &mut self,
-        config: TransportLinkMulticastConfig,
+        config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
+        executor: &TransportExecutor,
     ) {
         let initial_sns: Vec<PrioritySn> = priority_tx
             .iter()
@@ -105,8 +323,7 @@ impl TransportLinkMulticast {
 
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
-                is_streamed: false,
-                batch_size: config.batch_size,
+                batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
             };
@@ -117,10 +334,10 @@ impl TransportLinkMulticast {
             // Spawn the TX task
             let c_link = self.link.clone();
             let ctransport = self.transport.clone();
-            let handle = task::spawn(async move {
+            let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
-                    c_link.clone(),
+                    c_link.tx(),
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
@@ -155,7 +372,7 @@ impl TransportLinkMulticast {
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
-                    c_link.clone(),
+                    c_link.rx(),
                     ctransport.clone(),
                     c_signal.clone(),
                     c_rx_buffer_size,
@@ -194,7 +411,7 @@ impl TransportLinkMulticast {
             handle_tx.await;
         }
 
-        self.link.close().await
+        self.link.close(None).await
     }
 }
 
@@ -203,8 +420,8 @@ impl TransportLinkMulticast {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    link: LinkMulticast,
-    config: TransportLinkMulticastConfig,
+    mut link: TransportLinkMulticastTx,
+    config: TransportLinkMulticastConfigUniversal,
     mut last_sns: Vec<PrioritySn>,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -237,21 +454,20 @@ async fn tx_task(
             .race(join(last_join, config.join_interval))
             .await
         {
-            Action::Pull((batch, priority)) => {
+            Action::Pull((mut batch, priority)) => {
                 // Send the buffer on the link
-                let bytes = batch.as_bytes();
-                link.write_all(bytes).await?;
+                link.send_batch(&mut batch).await?;
                 // Keep track of next SNs
-                if let Some(sn) = batch.latest_sn.reliable {
+                if let Some(sn) = batch.codec.latest_sn.reliable {
                     last_sns[priority].reliable = sn;
                 }
-                if let Some(sn) = batch.latest_sn.best_effort {
+                if let Some(sn) = batch.codec.latest_sn.best_effort {
                     last_sns[priority].best_effort = sn;
                 }
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                    stats.inc_tx_bytes(bytes.len());
+                    stats.inc_tx_bytes(batch.len() as usize);
                 }
                 // Reinsert the batch into the queue
                 pipeline.refill(batch, priority);
@@ -297,8 +513,8 @@ async fn tx_task(
             Action::Stop => {
                 // Drain the transmission pipeline and write remaining bytes on the wire
                 let mut batches = pipeline.drain();
-                for (b, _) in batches.drain(..) {
-                    link.write_all(b.as_bytes())
+                for (mut b, _) in batches.drain(..) {
+                    link.send_batch(&mut b)
                         .timeout(config.join_interval)
                         .await
                         .map_err(|_| {
@@ -324,20 +540,30 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    link: LinkMulticast,
+    mut link: TransportLinkMulticastRx,
     transport: TransportMulticastInner,
     signal: Signal,
     rx_buffer_size: usize,
     batch_size: BatchSize,
 ) -> ZResult<()> {
     enum Action {
-        Read((usize, Locator)),
+        Read((RBatch, Locator)),
         Stop,
     }
 
-    async fn read(link: &LinkMulticast, buffer: &mut [u8]) -> ZResult<Action> {
-        let (n, loc) = link.read(buffer).await?;
-        Ok(Action::Read((n, loc.into_owned())))
+    async fn read<T, F>(
+        link: &mut TransportLinkMulticastRx,
+        pool: &RecyclingObjectPool<T, F>,
+    ) -> ZResult<Action>
+    where
+        T: ZSliceBuffer + 'static,
+        F: Fn() -> T,
+        RecyclingObject<T>: ZSliceBuffer,
+    {
+        let (rbatch, locator) = link
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+            .await?;
+        Ok(Action::Read((rbatch, locator)))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -346,35 +572,26 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.inner.config.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
+
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
-        // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(&link, &mut buffer).race(stop(signal.clone())).await?;
+        let action = read(&mut link, &pool).race(stop(signal.clone())).await?;
         match action {
-            Action::Read((n, loc)) => {
-                if n == 0 {
-                    // Reading 0 bytes means error
-                    bail!("{}: zero bytes reading", link);
-                }
-
+            Action::Read((batch, locator)) => {
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(n);
+                transport.stats.inc_rx_bytes(batch.len());
 
                 // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), 0, n)
-                    .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
                 transport.read_messages(
-                    zslice,
-                    &link,
+                    batch,
+                    locator,
                     batch_size,
-                    &loc,
                     #[cfg(feature = "stats")]
                     &transport,
                 )?;

@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
+use crate::{
+    buffer::{Buffer, SplitBuffer},
+    reader::{BacktrackableReader, DidntRead, HasReader, Reader},
+};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
@@ -19,6 +22,7 @@ use core::{
     fmt,
     num::NonZeroUsize,
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
+    option,
 };
 
 /*************************************/
@@ -269,6 +273,34 @@ where
 {
     fn from(buf: T) -> Self {
         Self::from(Arc::new(buf))
+    }
+}
+
+// Buffer
+impl Buffer for ZSlice {
+    fn len(&self) -> usize {
+        ZSlice::len(self)
+    }
+}
+
+impl Buffer for &ZSlice {
+    fn len(&self) -> usize {
+        ZSlice::len(self)
+    }
+}
+
+impl Buffer for &mut ZSlice {
+    fn len(&self) -> usize {
+        ZSlice::len(self)
+    }
+}
+
+// SplitBuffer
+impl SplitBuffer for ZSlice {
+    type Slices<'a> = option::IntoIter<&'a [u8]>;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        Some(self.as_slice()).into_iter()
     }
 }
 

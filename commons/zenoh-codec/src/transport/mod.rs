@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod batch;
 mod close;
 mod fragment;
 mod frame;
@@ -39,7 +40,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &TransportMessageLowLatency) -> Self::Output {
-        match &x.body {
+        let TransportMessageLowLatency { body } = x;
+
+        match body {
             TransportBodyLowLatency::Network(b) => self.write(&mut *writer, b),
             TransportBodyLowLatency::KeepAlive(b) => self.write(&mut *writer, b),
             TransportBodyLowLatency::Close(b) => self.write(&mut *writer, b),
@@ -78,7 +81,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
-        match &x.body {
+        let TransportMessage { body, .. } = x;
+
+        match body {
             TransportBody::Frame(b) => self.write(&mut *writer, b),
             TransportBody::Fragment(b) => self.write(&mut *writer, b),
             TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
@@ -141,6 +146,7 @@ where
     fn write(self, writer: &mut W, x: (ext::QoSType<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
         let ext: ZExtZ64<{ ID }> = x.into();
+
         self.write(&mut *writer, (&ext, more))
     }
 }

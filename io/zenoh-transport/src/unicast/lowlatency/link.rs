@@ -14,29 +14,26 @@
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::TransportExecutor;
+use crate::unicast::link::TransportLinkUnicastRx;
+use crate::{unicast::link::TransportLinkUnicast, TransportExecutor};
 use async_std::task;
 use async_std::{prelude::FutureExt, sync::RwLock};
-use zenoh_codec::*;
-use zenoh_core::{zasyncread, zasyncwrite};
-
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
-use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::{
-    BatchSize, KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency,
-};
+use zenoh_codec::*;
+use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
 pub(crate) async fn send_with_link(
-    link: &LinkUnicast,
+    link: &TransportLinkUnicast,
     msg: TransportMessageLowLatency,
     #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
 ) -> ZResult<()> {
     let len;
-    if link.is_streamed() {
+    if link.link.is_streamed() {
         let mut buffer = vec![0, 0, 0, 0];
         let codec = Zenoh080::new();
         let mut writer = buffer.writer();
@@ -49,7 +46,7 @@ pub(crate) async fn send_with_link(
 
         buffer[0..4].copy_from_slice(&le);
 
-        link.write_all(&buffer).await?;
+        link.link.write_all(&buffer).await?;
     } else {
         let mut buffer = vec![];
         let codec = Zenoh080::new();
@@ -62,7 +59,7 @@ pub(crate) async fn send_with_link(
         {
             len = buffer.len() as u32;
         }
-        link.write_all(&buffer).await?;
+        link.link.write_all(&buffer).await?;
     }
     log::trace!("Sent: {:?}", msg);
 
@@ -81,8 +78,9 @@ impl TransportUnicastLowlatency {
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         send_with_link(
-            &guard,
+            link,
             msg,
             #[cfg(feature = "stats")]
             &self.stats,
@@ -131,17 +129,17 @@ impl TransportUnicastLowlatency {
         }
     }
 
-    pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
+    pub(super) fn internal_start_rx(&self, lease: Duration) {
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let guard = zasyncread!(c_transport.link);
-            let link = guard.clone();
+            let link = guard.as_ref().unwrap().rx();
             drop(guard);
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
             // Start the rx task
-            let res = rx_task(link, c_transport.clone(), lease, batch_size, rx_buffer_size).await;
+            let res = rx_task(link, c_transport.clone(), lease, rx_buffer_size).await;
             log::debug!(
                 "[{}] Rx task finished with result {:?}",
                 c_transport.manager.config.zid,
@@ -177,7 +175,7 @@ impl TransportUnicastLowlatency {
 /*              TASKS                */
 /*************************************/
 async fn keepalive_task(
-    link: Arc<RwLock<LinkUnicast>>,
+    link: Arc<RwLock<Option<TransportLinkUnicast>>>,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -189,8 +187,9 @@ async fn keepalive_task(
         };
 
         let guard = zasyncwrite!(link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         let _ = send_with_link(
-            &guard,
+            link,
             keepailve,
             #[cfg(feature = "stats")]
             &stats,
@@ -201,27 +200,26 @@ async fn keepalive_task(
 }
 
 async fn rx_task_stream(
-    link: LinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(link: &TransportLinkUnicastRx, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
-        link.read_exact(&mut length).await?;
+        link.link.read_exact(&mut length).await?;
         let n = u32::from_le_bytes(length) as usize;
         let len = buffer.len();
         let b = buffer.get_mut(0..n).ok_or_else(|| {
             zerror!("Batch len is invalid. Received {n} but negotiated max len is {len}.")
         })?;
-        link.read_exact(b).await?;
+        link.link.read_exact(b).await?;
         Ok(n)
     }
 
     // The pool of buffers
-    let mtu = link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -242,19 +240,18 @@ async fn rx_task_stream(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 
 async fn rx_task_dgram(
-    link: LinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -266,30 +263,31 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let bytes =
-            link.read(&mut buffer).timeout(lease).await.map_err(|_| {
-                zerror!("{}: expired after {} milliseconds", link, lease.as_millis())
-            })??;
+        let bytes = link
+            .link
+            .read(&mut buffer)
+            .timeout(lease)
+            .await
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
 
         #[cfg(feature = "stats")]
         transport.stats.inc_rx_bytes(bytes);
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 
 async fn rx_task(
-    link: LinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    if link.is_streamed() {
-        rx_task_stream(link, transport, lease, rx_batch_size, rx_buffer_size).await
+    if link.link.is_streamed() {
+        rx_task_stream(link, transport, lease, rx_buffer_size).await
     } else {
-        rx_task_dgram(link, transport, lease, rx_batch_size, rx_buffer_size).await
+        rx_task_dgram(link, transport, lease, rx_buffer_size).await
     }
 }

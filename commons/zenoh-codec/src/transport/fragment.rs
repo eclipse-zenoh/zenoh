@@ -33,25 +33,32 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &FragmentHeader) -> Self::Output {
+        let FragmentHeader {
+            reliability,
+            more,
+            sn,
+            ext_qos,
+        } = x;
+
         // Header
         let mut header = id::FRAGMENT;
-        if let Reliability::Reliable = x.reliability {
+        if let Reliability::Reliable = reliability {
             header |= flag::R;
         }
-        if x.more {
+        if *more {
             header |= flag::M;
         }
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.sn)?;
+        self.write(&mut *writer, sn)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
-            self.write(&mut *writer, (x.ext_qos, false))?;
+        if ext_qos != &ext::QoSType::default() {
+            self.write(&mut *writer, (*ext_qos, false))?;
         }
 
         Ok(())
@@ -125,17 +132,25 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Fragment) -> Self::Output {
+        let Fragment {
+            reliability,
+            more,
+            sn,
+            payload,
+            ext_qos,
+        } = x;
+
         // Header
         let header = FragmentHeader {
-            reliability: x.reliability,
-            more: x.more,
-            sn: x.sn,
-            ext_qos: x.ext_qos,
+            reliability: *reliability,
+            more: *more,
+            sn: *sn,
+            ext_qos: *ext_qos,
         };
         self.write(&mut *writer, &header)?;
 
         // Body
-        writer.write_zslice(&x.payload)?;
+        writer.write_zslice(payload)?;
 
         Ok(())
     }

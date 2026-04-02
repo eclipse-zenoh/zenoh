@@ -153,7 +153,9 @@ where
 // Extension: SourceInfo
 impl<const ID: u8> LCodec<&ext::SourceInfoType<{ ID }>> for Zenoh080 {
     fn w_len(self, x: &ext::SourceInfoType<{ ID }>) -> usize {
-        1 + self.w_len(&x.zid) + self.w_len(x.eid) + self.w_len(x.sn)
+        let ext::SourceInfoType { zid, eid, sn } = x;
+
+        1 + self.w_len(zid) + self.w_len(*eid) + self.w_len(*sn)
     }
 }
 
@@ -165,17 +167,19 @@ where
 
     fn write(self, writer: &mut W, x: (&ext::SourceInfoType<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
+        let ext::SourceInfoType { zid, eid, sn } = x;
+
         let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(x));
         self.write(&mut *writer, (&header, more))?;
 
-        let flags: u8 = (x.zid.size() as u8 - 1) << 4;
+        let flags: u8 = (zid.size() as u8 - 1) << 4;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(x.zid.size());
-        lodec.write(&mut *writer, &x.zid)?;
+        let lodec = Zenoh080Length::new(zid.size());
+        lodec.write(&mut *writer, zid)?;
 
-        self.write(&mut *writer, x.eid)?;
-        self.write(&mut *writer, x.sn)?;
+        self.write(&mut *writer, eid)?;
+        self.write(&mut *writer, sn)?;
         Ok(())
     }
 }
@@ -211,7 +215,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: (&ext::ShmType<{ ID }>, bool)) -> Self::Output {
-        let (_, more) = x;
+        let (x, more) = x;
+        let ext::ShmType = x;
+
         let header: ZExtUnit<{ ID }> = ZExtUnit::new();
         self.write(&mut *writer, (&header, more))?;
         Ok(())
@@ -241,25 +247,31 @@ where
 
     fn write(self, writer: &mut W, x: (&ext::ValueType<{ VID }, { SID }>, bool)) -> Self::Output {
         let (x, more) = x;
+        let ext::ValueType {
+            encoding,
+            payload,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
+        } = x;
 
         #[cfg(feature = "shared-memory")] // Write Shm extension if present
-        if let Some(eshm) = x.ext_shm.as_ref() {
+        if let Some(eshm) = ext_shm.as_ref() {
             self.write(&mut *writer, (eshm, true))?;
         }
 
         // Compute extension length
-        let mut len = self.w_len(&x.encoding);
+        let mut len = self.w_len(encoding);
 
         #[cfg(feature = "shared-memory")]
         {
-            let codec = Zenoh080Sliced::<u32>::new(x.ext_shm.is_some());
-            len += codec.w_len(&x.payload);
+            let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
+            len += codec.w_len(payload);
         }
 
         #[cfg(not(feature = "shared-memory"))]
         {
             let codec = Zenoh080Bounded::<u32>::new();
-            len += codec.w_len(&x.payload);
+            len += codec.w_len(payload);
         }
 
         // Write ZExtBuf header
@@ -267,7 +279,7 @@ where
         self.write(&mut *writer, (&header, more))?;
 
         // Write encoding
-        self.write(&mut *writer, &x.encoding)?;
+        self.write(&mut *writer, encoding)?;
 
         // Write payload
         fn write<W>(writer: &mut W, payload: &ZBuf) -> Result<(), DidntWrite>
@@ -283,17 +295,17 @@ where
 
         #[cfg(feature = "shared-memory")]
         {
-            if x.ext_shm.is_some() {
+            if ext_shm.is_some() {
                 let codec = Zenoh080Sliced::<u32>::new(true);
-                codec.write(&mut *writer, &x.payload)?;
+                codec.write(&mut *writer, payload)?;
             } else {
-                write(&mut *writer, &x.payload)?;
+                write(&mut *writer, payload)?;
             }
         }
 
         #[cfg(not(feature = "shared-memory"))]
         {
-            write(&mut *writer, &x.payload)?;
+            write(&mut *writer, payload)?;
         }
 
         Ok(())
@@ -365,5 +377,41 @@ where
             },
             more,
         ))
+    }
+}
+
+// Extension: Attachment
+impl<W, const ID: u8> WCodec<(&ext::AttachmentType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::AttachmentType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext::AttachmentType { buffer } = x;
+
+        let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(buffer));
+        self.write(&mut *writer, (&header, more))?;
+        for s in buffer.zslices() {
+            writer.write_zslice(s)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::AttachmentType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::AttachmentType<{ ID }>, bool), Self::Error> {
+        let (h, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
+        let mut buffer = ZBuf::empty();
+        reader.read_zslices(h.len, |s| buffer.push_zslice(s))?;
+
+        Ok((ext::AttachmentType { buffer }, more))
     }
 }

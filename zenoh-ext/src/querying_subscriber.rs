@@ -27,6 +27,7 @@ use zenoh::SessionRef;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
@@ -340,6 +341,7 @@ struct InnerState {
 }
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct FetchingSubscriberBuilder<
     'a,
     'b,
@@ -675,7 +677,9 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
 
         let key_expr = conf.key_expr?;
 
-        // declare subscriber at first
+        // register fetch handler
+        let handler = register_handler(state.clone(), callback.clone());
+        // declare subscriber
         let subscriber = match conf.session.clone() {
             SessionRef::Borrow(session) => match conf.key_space.into() {
                 crate::KeySpace::User => session
@@ -705,15 +709,15 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
             },
         };
 
-        let mut fetch_subscriber = FetchingSubscriber {
+        let fetch_subscriber = FetchingSubscriber {
             subscriber,
             callback,
             state,
             receiver,
         };
 
-        // start fetch
-        fetch_subscriber.fetch(conf.fetch).res_sync()?;
+        // run fetch
+        run_fetch(conf.fetch, handler)?;
 
         Ok(fetch_subscriber)
     }
@@ -774,7 +778,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
-        &mut self,
+        &self,
         fetch: Fetch,
     ) -> impl Resolve<ZResult<()>>
     where
@@ -850,6 +854,7 @@ impl Drop for RepliesHandler {
 ///     .unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct FetchBuilder<
     Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
     TryIntoSample,
@@ -879,22 +884,8 @@ where
     <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        zlock!(self.state).pending_fetches += 1;
-        // pending fetches will be decremented in RepliesHandler drop()
-        let handler = RepliesHandler {
-            state: self.state,
-            callback: self.callback,
-        };
-
-        log::debug!("Fetch");
-        (self.fetch)(Box::new(move |s: TryIntoSample| match s.try_into() {
-            Ok(s) => {
-                let mut state = zlock!(handler.state);
-                log::trace!("Fetched sample received: push it to merge_queue");
-                state.merge_queue.push(s);
-            }
-            Err(e) => log::debug!("Received error fetching data: {}", e.into()),
-        }))
+        let handler = register_handler(self.state, self.callback);
+        run_fetch(self.fetch, handler)
     }
 }
 
@@ -909,4 +900,35 @@ where
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
     }
+}
+
+fn register_handler(
+    state: Arc<Mutex<InnerState>>,
+    callback: Arc<dyn Fn(Sample) + Send + Sync>,
+) -> RepliesHandler {
+    zlock!(state).pending_fetches += 1;
+    // pending fetches will be decremented in RepliesHandler drop()
+    RepliesHandler { state, callback }
+}
+
+fn run_fetch<
+    Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+    TryIntoSample,
+>(
+    fetch: Fetch,
+    handler: RepliesHandler,
+) -> ZResult<()>
+where
+    TryIntoSample: TryInto<Sample>,
+    <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+{
+    log::debug!("Fetch data for FetchingSubscriber");
+    (fetch)(Box::new(move |s: TryIntoSample| match s.try_into() {
+        Ok(s) => {
+            let mut state = zlock!(handler.state);
+            log::trace!("Fetched sample received: push it to merge_queue");
+            state.merge_queue.push(s);
+        }
+        Err(e) => log::debug!("Received error fetching data: {}", e.into()),
+    }))
 }

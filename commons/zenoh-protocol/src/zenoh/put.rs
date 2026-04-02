@@ -48,6 +48,7 @@ pub struct Put {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_attachment: Option<ext::AttachmentType>,
     #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
@@ -70,6 +71,10 @@ pub mod ext {
     pub type Shm = zextunit!(0x2, true);
     #[cfg(feature = "shared-memory")]
     pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
+
+    /// # User attachment
+    pub type Attachment = zextzbuf!(0x3, false);
+    pub type AttachmentType = crate::zenoh::ext::AttachmentType<{ Attachment::ID }>;
 }
 
 impl Put {
@@ -88,10 +93,11 @@ impl Put {
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
+        let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::SourceInfo::ID) + 1,
+                iext::mid(ext::Attachment::ID) + 1,
                 false,
             ));
         }
@@ -103,6 +109,7 @@ impl Put {
             ext_sinfo,
             #[cfg(feature = "shared-memory")]
             ext_shm,
+            ext_attachment,
             ext_unknown,
             payload,
         }

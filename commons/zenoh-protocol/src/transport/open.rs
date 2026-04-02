@@ -82,6 +82,7 @@ pub struct OpenSyn {
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLinkSyn>,
     pub ext_lowlatency: Option<ext::LowLatency>,
+    pub ext_compression: Option<ext::Compression>,
 }
 
 // Extensions
@@ -111,6 +112,10 @@ pub mod ext {
     /// # LowLatency extension
     /// Used to negotiate the use of lowlatency transport
     pub type LowLatency = zextunit!(0x5, false);
+
+    /// # Compression extension
+    /// Used to negotiate the use of compression on the link
+    pub type Compression = zextunit!(0x6, false);
 }
 
 impl OpenSyn {
@@ -137,6 +142,7 @@ impl OpenSyn {
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             lease,
@@ -147,6 +153,7 @@ impl OpenSyn {
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         }
     }
 }
@@ -160,6 +167,7 @@ pub struct OpenAck {
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLinkAck>,
     pub ext_lowlatency: Option<ext::LowLatency>,
+    pub ext_compression: Option<ext::Compression>,
 }
 
 impl OpenAck {
@@ -182,6 +190,7 @@ impl OpenAck {
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             lease,
@@ -191,6 +200,7 @@ impl OpenAck {
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         }
     }
 }

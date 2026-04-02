@@ -19,18 +19,20 @@ use async_std::fs::remove_file;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use filepath::FilePath;
+use nix::libc;
 use nix::unistd::unlink;
 use rand::Rng;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Arc;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
 
-use unix_named_pipe::{create, open_read, open_write};
+use unix_named_pipe::{create, open_write};
 
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
@@ -161,7 +163,12 @@ impl PipeR {
     }
 
     fn open_unique_pipe_for_read(path: &str) -> ZResult<File> {
-        let read = open_read(path)?;
+        let read = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(path)?;
+
         #[cfg(not(target_os = "macos"))]
         read.try_lock(FileLockMode::Exclusive)?;
         Ok(read)

@@ -25,6 +25,7 @@ use std::{
     collections::HashMap,
     convert::TryFrom,
     hash::Hash,
+    str::FromStr,
 };
 
 /// A selector is the combination of a [Key Expression](crate::prelude::KeyExpr), which defines the
@@ -481,6 +482,12 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
             }
             None => Ok(KeyExpr::try_from(s)?.into()),
         }
+    }
+}
+impl FromStr for Selector<'static> {
+    type Err = zenoh_result::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.to_owned().try_into()
     }
 }
 

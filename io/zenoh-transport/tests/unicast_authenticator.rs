@@ -21,11 +21,12 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    unicast::establishment::ext::auth::Auth, TransportMulticast, TransportMulticastEventHandler,
+    multicast::TransportMulticast, unicast::establishment::ext::auth::Auth,
+    TransportMulticastEventHandler,
 };
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportPeer,
-    TransportPeerEventHandler, TransportUnicast,
+    unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
+    TransportPeer, TransportPeerEventHandler,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -109,9 +110,13 @@ impl TransportEventHandler for SHClientAuthenticator {
 #[cfg(feature = "auth_pubkey")]
 async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
-    use zenoh_transport::test_helpers::make_basic_transport_manager_builder;
-    use zenoh_transport::unicast::establishment::ext::auth::AuthPubKey;
-    use zenoh_transport::TransportManager;
+    use zenoh_transport::{
+        unicast::{
+            establishment::ext::auth::AuthPubKey,
+            test_helpers::make_basic_transport_manager_builder,
+        },
+        TransportManager,
+    };
 
     // Create the transport transport manager for the client 01
     let client01_id = ZenohId::try_from([2]).unwrap();
@@ -411,9 +416,13 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
 #[cfg(feature = "auth_usrpwd")]
 async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
-    use zenoh_transport::test_helpers::make_basic_transport_manager_builder;
-    use zenoh_transport::unicast::establishment::ext::auth::AuthUsrPwd;
-    use zenoh_transport::TransportManager;
+    use zenoh_transport::{
+        unicast::{
+            establishment::ext::auth::AuthUsrPwd,
+            test_helpers::make_basic_transport_manager_builder,
+        },
+        TransportManager,
+    };
 
     /* [CLIENT] */
     let client01_id = ZenohId::try_from([2]).unwrap();

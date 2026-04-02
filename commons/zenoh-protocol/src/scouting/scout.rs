@@ -56,7 +56,7 @@ use crate::core::{whatami::WhatAmIMatcher, ZenohId};
 /// +---------------+
 ///
 /// (#) ZID length. If Flag(I)==1 it indicates how many bytes are used for the ZenohID bytes.
-///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual lenght is computed as:
+///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual length is computed as:
 ///         real_zid_len := 1 + zid_len
 ///
 /// (*) What. It indicates a bitmap of WhatAmI interests.

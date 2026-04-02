@@ -18,9 +18,10 @@ use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    test_helpers::make_transport_manager_builder, DummyTransportPeerEventHandler,
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast,
+    unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);

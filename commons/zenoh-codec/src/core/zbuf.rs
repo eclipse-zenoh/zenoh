@@ -13,9 +13,10 @@
 //
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
+    buffer::Buffer,
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    SplitBuffer, ZBuf,
+    ZBuf,
 };
 
 // ZBuf bounded

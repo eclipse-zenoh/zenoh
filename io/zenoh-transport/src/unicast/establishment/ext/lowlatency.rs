@@ -52,13 +52,13 @@ impl StateOpen {
 }
 
 #[async_trait]
-impl<'a> OpenFsm for LowLatencyFsm<'a> {
+impl<'a> OpenFsm for &'a LowLatencyFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<init::ext::LowLatency>;
     async fn send_init_syn(
-        &self,
+        self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         let output = state.is_lowlatency.then_some(init::ext::LowLatency::new());
@@ -68,7 +68,7 @@ impl<'a> OpenFsm for LowLatencyFsm<'a> {
     type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::LowLatency>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
@@ -79,7 +79,7 @@ impl<'a> OpenFsm for LowLatencyFsm<'a> {
     type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<open::ext::LowLatency>;
     async fn send_open_syn(
-        &self,
+        self,
         _state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         Ok(None)
@@ -88,7 +88,7 @@ impl<'a> OpenFsm for LowLatencyFsm<'a> {
     type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::LowLatency>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &self,
+        self,
         _state: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         Ok(())
@@ -148,13 +148,13 @@ where
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for LowLatencyFsm<'a> {
+impl<'a> AcceptFsm for &'a LowLatencyFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::LowLatency>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
@@ -165,7 +165,7 @@ impl<'a> AcceptFsm for LowLatencyFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::LowLatency>;
     async fn send_init_ack(
-        &self,
+        self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         let output = state.is_lowlatency.then_some(init::ext::LowLatency::new());
@@ -175,7 +175,7 @@ impl<'a> AcceptFsm for LowLatencyFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::LowLatency>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         Ok(())
@@ -184,7 +184,7 @@ impl<'a> AcceptFsm for LowLatencyFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::LowLatency>;
     async fn send_open_ack(
-        &self,
+        self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(None)

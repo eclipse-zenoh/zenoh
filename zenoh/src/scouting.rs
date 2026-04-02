@@ -220,7 +220,8 @@ impl ScoutInner {
     /// # })
     /// ```
     pub fn stop(self) {
-        // drop
+        // This drops the inner `stop_sender` and hence stops the scouting receiver
+        std::mem::drop(self);
     }
 }
 

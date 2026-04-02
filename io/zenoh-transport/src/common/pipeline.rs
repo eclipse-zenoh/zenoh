@@ -1,3 +1,5 @@
+use crate::common::batch::BatchConfig;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -11,8 +13,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::batch::{Encode, WBatch, WError};
-use super::priority::{TransportChannelTx, TransportPriorityTx};
+use super::{
+    batch::{Encode, WBatch},
+    priority::{TransportChannelTx, TransportPriorityTx},
+};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -25,7 +29,7 @@ use zenoh_buffers::{
     writer::HasWriter,
     ZBuf,
 };
-use zenoh_codec::{WCodec, Zenoh080};
+use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::core::Reliability;
@@ -187,11 +191,11 @@ impl StageIn {
             ext_qos: frame::ext::QoSType::new(priority),
         };
 
-        if let WError::NewFrame = e {
+        if let BatchError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, frame)).is_ok() {
+            if batch.encode((&*msg, &frame)).is_ok() {
                 zretok!(batch);
-            };
+            }
         }
 
         if !batch.is_empty() {
@@ -201,9 +205,9 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, frame)).is_ok() {
+        if batch.encode((&*msg, &frame)).is_ok() {
             zretok!(batch);
-        };
+        }
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
@@ -231,7 +235,7 @@ impl StageIn {
             batch = zgetbatch_rets!(true);
 
             // Serialize the message fragmnet
-            match batch.encode((&mut reader, fragment)) {
+            match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();
@@ -378,8 +382,7 @@ struct StageOutIn {
 impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
-        if let Some(mut batch) = self.s_out_r.pull() {
-            batch.write_len();
+        if let Some(batch) = self.s_out_r.pull() {
             self.backoff.stop();
             return Pull::Some(batch);
         }
@@ -397,16 +400,14 @@ impl StageOutIn {
                 // No new bytes have been written on the batch, try to pull
                 if let Ok(mut g) = self.current.try_lock() {
                     // First try to pull from stage OUT
-                    if let Some(mut batch) = self.s_out_r.pull() {
-                        batch.write_len();
+                    if let Some(batch) = self.s_out_r.pull() {
                         self.backoff.stop();
                         return Pull::Some(batch);
                     }
 
                     // An incomplete (non-empty) batch is available in the state IN pipeline.
                     match g.take() {
-                        Some(mut batch) => {
-                            batch.write_len();
+                        Some(batch) => {
                             self.backoff.stop();
                             return Pull::Some(batch);
                         }
@@ -420,8 +421,7 @@ impl StageOutIn {
             }
             std::cmp::Ordering::Less => {
                 // There should be a new batch in Stage OUT
-                if let Some(mut batch) = self.s_out_r.pull() {
-                    batch.write_len();
+                if let Some(batch) = self.s_out_r.pull() {
                     self.backoff.stop();
                     return Pull::Some(batch);
                 }
@@ -469,8 +469,7 @@ impl StageOut {
     fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
-        while let Some(mut batch) = self.s_in.s_out_r.pull() {
-            batch.write_len();
+        while let Some(batch) = self.s_in.s_out_r.pull() {
             batches.push(batch);
         }
         // Take the current batch
@@ -483,8 +482,7 @@ impl StageOut {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
-    pub(crate) is_streamed: bool,
-    pub(crate) batch_size: BatchSize,
+    pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) backoff: Duration,
 }
@@ -492,8 +490,12 @@ pub(crate) struct TransmissionPipelineConf {
 impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
-            is_streamed: false,
-            batch_size: BatchSize::MAX,
+            batch: BatchConfig {
+                mtu: BatchSize::MAX,
+                is_streamed: false,
+                #[cfg(feature = "transport_compression")]
+                is_compression: false,
+            },
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
         }
@@ -530,9 +532,8 @@ impl TransmissionPipeline {
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
-                assert!(s_ref_w
-                    .push(WBatch::new(config.batch_size, config.is_streamed))
-                    .is_none());
+                let batch = WBatch::new(config.batch);
+                assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
@@ -729,8 +730,12 @@ mod tests {
     const TIMEOUT: Duration = Duration::from_secs(60);
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
-        is_streamed: true,
-        batch_size: BatchSize::MAX,
+        batch: BatchConfig {
+            mtu: BatchSize::MAX,
+            is_streamed: true,
+            #[cfg(feature = "transport_compression")]
+            is_compression: true,
+        },
         queue_size: [1; Priority::NUM],
         backoff: Duration::from_micros(1),
     };
@@ -753,6 +758,7 @@ mod tests {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                     payload,
                 }),
@@ -782,7 +788,7 @@ mod tests {
                 batches += 1;
                 bytes += batch.len() as usize;
                 // Create a ZBuf for deserialization starting from the batch
-                let bytes = batch.as_bytes();
+                let bytes = batch.as_slice();
                 // Deserialize the messages
                 let mut reader = bytes.reader();
                 let codec = Zenoh080::new();
@@ -849,7 +855,7 @@ mod tests {
                 });
 
                 let c_ps = *ps;
-                let t_s = task::spawn(async move {
+                let t_s = task::spawn_blocking(move || {
                     schedule(producer, num_msg, c_ps);
                 });
 
@@ -865,7 +871,7 @@ mod tests {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
-            let payload_size = (CONFIG.batch_size / 2) as usize;
+            let payload_size = (CONFIG.batch.mtu / 2) as usize;
 
             // Send reliable messages
             let key = "test".into();
@@ -882,6 +888,7 @@ mod tests {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                     payload,
                 }),
@@ -965,7 +972,7 @@ mod tests {
         let size = Arc::new(AtomicUsize::new(0));
 
         let c_size = size.clone();
-        task::spawn(async move {
+        task::spawn_blocking(move || {
             loop {
                 let payload_sizes: [usize; 16] = [
                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
@@ -993,6 +1000,7 @@ mod tests {
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
+                            ext_attachment: None,
                             ext_unknown: vec![],
                             payload,
                         }),

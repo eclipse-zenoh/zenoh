@@ -91,6 +91,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
@@ -136,6 +137,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
@@ -176,6 +178,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 8]),
         }),
@@ -216,6 +219,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),
@@ -243,6 +247,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),
@@ -281,6 +286,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::from(vec![0u8; 1_000_000]),
         }),

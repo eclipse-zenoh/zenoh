@@ -90,6 +90,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
+use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
 pub use zenoh_result::Error;
@@ -97,6 +98,28 @@ pub use zenoh_result::Error;
 pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+
+pub const FEATURES: &str = concat_enabled_features!(
+    prefix = "zenoh",
+    features = [
+        "auth_pubkey",
+        "auth_usrpwd",
+        "complete_n",
+        "shared-memory",
+        "stats",
+        "transport_multilink",
+        "transport_quic",
+        "transport_serial",
+        "transport_unixpipe",
+        "transport_tcp",
+        "transport_tls",
+        "transport_udp",
+        "transport_unixsock-stream",
+        "transport_ws",
+        "unstable",
+        "default"
+    ]
+);
 
 mod admin;
 #[macro_use]
@@ -308,6 +331,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
 pub struct InitBuilder {

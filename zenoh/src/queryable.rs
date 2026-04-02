@@ -18,6 +18,9 @@ use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::query::ReplyKeyExpr;
+#[zenoh_macros::unstable]
+use crate::sample::Attachment;
+use crate::sample::DataInfo;
 use crate::SessionRef;
 use crate::Undeclarable;
 
@@ -28,10 +31,11 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
 use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
+use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
 use zenoh_protocol::zenoh::{self, ResponseBody};
 use zenoh_result::ZResult;
-use zenoh_transport::Primitives;
+use zenoh_transport::primitives::Primitives;
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.
@@ -44,6 +48,8 @@ pub(crate) struct QueryInner {
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl Drop for QueryInner {
@@ -88,6 +94,11 @@ impl Query {
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.inner.value.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.inner.attachment.as_ref()
     }
 
     /// Sends a reply to this Query.
@@ -149,6 +160,20 @@ pub struct ReplyBuilder<'a> {
     result: Result<Sample, Value>,
 }
 
+impl<'a> ReplyBuilder<'a> {
+    #[allow(clippy::result_large_err)]
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {
+        match &mut self.result {
+            Ok(sample) => {
+                sample.attachment = Some(attachment);
+                Ok(self)
+            }
+            Err(_) => Err((self, attachment)),
+        }
+    }
+}
+
 impl<'a> Resolvable for ReplyBuilder<'a> {
     type To = ZResult<()>;
 }
@@ -162,7 +187,34 @@ impl SyncResolve for ReplyBuilder<'_> {
                 {
                     bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
                 }
-                let (key_expr, payload, data_info) = sample.split();
+                let Sample {
+                    key_expr,
+                    value: Value { payload, encoding },
+                    kind,
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    source_info,
+                    #[cfg(feature = "unstable")]
+                    attachment,
+                } = sample;
+                #[allow(unused_mut)]
+                let mut data_info = DataInfo {
+                    kind,
+                    encoding: Some(encoding),
+                    timestamp,
+                    source_id: None,
+                    source_sn: None,
+                };
+                #[allow(unused_mut)]
+                let mut ext_attachment = None;
+                #[cfg(feature = "unstable")]
+                {
+                    data_info.source_id = source_info.source_id;
+                    data_info.source_sn = source_info.source_sn;
+                    if let Some(attachment) = attachment {
+                        ext_attachment = Some(attachment.into());
+                    }
+                }
                 self.query.inner.primitives.send_response(Response {
                     rid: self.query.inner.qid,
                     wire_expr: WireExpr {
@@ -186,6 +238,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
+                        ext_attachment,
                         ext_unknown: vec![],
                         payload,
                     }),
@@ -198,7 +251,36 @@ impl SyncResolve for ReplyBuilder<'_> {
                 });
                 Ok(())
             }
-            Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
+            Err(payload) => {
+                self.query.inner.primitives.send_response(Response {
+                    rid: self.query.inner.qid,
+                    wire_expr: WireExpr {
+                        scope: 0,
+                        suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
+                        mapping: Mapping::Sender,
+                    },
+                    payload: ResponseBody::Err(zenoh::Err {
+                        timestamp: None,
+                        is_infrastructure: false,
+                        ext_sinfo: None,
+                        ext_unknown: vec![],
+                        ext_body: Some(ValueType {
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            payload: payload.payload,
+                            encoding: payload.encoding,
+                        }),
+                        code: 0, // TODO
+                    }),
+                    ext_qos: response::ext::QoSType::response_default(),
+                    ext_tstamp: None,
+                    ext_respid: Some(response::ext::ResponderIdType {
+                        zid: self.query.inner.zid,
+                        eid: 0, // TODO
+                    }),
+                });
+                Ok(())
+            }
         }
     }
 }
@@ -280,6 +362,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// queryable.undeclare().res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
@@ -325,8 +408,8 @@ impl Drop for CallbackQueryable<'_> {
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,

@@ -70,8 +70,8 @@ pub mod flag {
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
-    pub payload: Vec<NetworkMessage>,
     pub ext_qos: ext::QoSType,
+    pub payload: Vec<NetworkMessage>,
 }
 
 // Extensions

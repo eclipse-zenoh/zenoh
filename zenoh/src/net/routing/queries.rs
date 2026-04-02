@@ -1529,7 +1529,10 @@ pub(super) fn compute_query_routes_(tables: &Tables, res: &Arc<Resource>) -> Que
                 compute_query_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
         }
 
-        routes.peer_query_route = Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+        if !tables.full_net(WhatAmI::Peer) {
+            routes.peer_query_route =
+                Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+        }
     }
     if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
         && tables.full_net(WhatAmI::Peer)
@@ -1595,8 +1598,10 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                     compute_query_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
             }
 
-            res_mut.context_mut().peer_query_route =
-                Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+            if !tables.full_net(WhatAmI::Peer) {
+                res_mut.context_mut().peer_query_route =
+                    Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+            }
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && tables.full_net(WhatAmI::Peer)
@@ -1999,7 +2004,7 @@ macro_rules! inc_req_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     RequestBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
@@ -2031,7 +2036,7 @@ macro_rules! inc_res_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     ResponseBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
@@ -2116,6 +2121,7 @@ pub fn route_query(
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
+                        ext_attachment: None, // @TODO: expose it in the API
                         ext_unknown: vec![],
                         payload,
                     });

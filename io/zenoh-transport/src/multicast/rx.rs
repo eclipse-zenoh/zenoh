@@ -12,18 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
-use crate::common::priority::TransportChannelRx;
-use std::sync::MutexGuard;
-use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_buffers::ZSlice;
-use zenoh_codec::{RCodec, Zenoh080};
-use zenoh_core::{zlock, zread};
-use zenoh_link::LinkMulticast;
-use zenoh_protocol::core::{Priority, Reliability};
-use zenoh_protocol::transport::{
-    BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
+use crate::common::{
+    batch::{Decode, RBatch},
+    priority::TransportChannelRx,
 };
-use zenoh_protocol::{core::Locator, network::NetworkMessage, transport::TransportMessage};
+use std::sync::MutexGuard;
+use zenoh_core::{zlock, zread};
+use zenoh_protocol::{
+    core::{Locator, Priority, Reliability},
+    network::NetworkMessage,
+    transport::{
+        BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportMessage,
+        TransportSn,
+    },
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
@@ -115,7 +117,7 @@ impl TransportMulticastInner {
                 locator,
                 join.zid,
                 join.batch_size,
-                batch_size,
+                batch_size
             );
             return Ok(());
         }
@@ -247,18 +249,15 @@ impl TransportMulticastInner {
 
     pub(super) fn read_messages(
         &self,
-        mut zslice: ZSlice,
-        link: &LinkMulticast,
+        mut batch: RBatch,
+        locator: Locator,
         batch_size: BatchSize,
-        locator: &Locator,
         #[cfg(feature = "stats")] transport: &TransportMulticastInner,
     ) -> ZResult<()> {
-        let codec = Zenoh080::new();
-        let mut reader = zslice.reader();
-        while reader.can_read() {
-            let msg: TransportMessage = codec
-                .read(&mut reader)
-                .map_err(|_| zerror!("{}: decoding error", link))?;
+        while !batch.is_empty() {
+            let msg: TransportMessage = batch
+                .decode()
+                .map_err(|_| zerror!("{}: decoding error", locator))?;
 
             log::trace!("Received: {:?}", msg);
 
@@ -268,7 +267,7 @@ impl TransportMulticastInner {
             }
 
             let r_guard = zread!(self.peers);
-            match r_guard.get(locator) {
+            match r_guard.get(&locator) {
                 Some(peer) => {
                     peer.active();
                     match msg.body {
@@ -280,7 +279,7 @@ impl TransportMulticastInner {
                         TransportBody::KeepAlive(KeepAlive { .. }) => {}
                         TransportBody::Close(Close { reason, .. }) => {
                             drop(r_guard);
-                            self.del_peer(locator, reason)?;
+                            self.del_peer(&locator, reason)?;
                         }
                         _ => {
                             log::debug!(
@@ -294,7 +293,7 @@ impl TransportMulticastInner {
                 None => {
                     drop(r_guard);
                     if let TransportBody::Join(join) = msg.body {
-                        self.handle_join_from_unknown(join, locator, batch_size)?;
+                        self.handle_join_from_unknown(join, &locator, batch_size)?;
                     }
                 }
             }

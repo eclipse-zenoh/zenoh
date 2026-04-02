@@ -31,7 +31,8 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         run: |
@@ -39,35 +40,32 @@ jobs:
           rustup component add rustfmt clippy
 
       - name: Code format check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+        run: cargo fmt --check
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- --deny warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy unstable
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features unstable -- -D warnings
+      - name: Clippy unstable targets
+        run: cargo clippy --all-targets --features unstable -- --deny warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy shared-memory
+      - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features shared-memory --features transport_unixpipe -- -D warnings
+        run: cargo clippy --all-targets --all-features -- --deny warnings
+
+      - name: Install generic no_std target
+        # Generic no_std target architecture is x86_64-unknown-none
+        run: rustup target add x86_64-unknown-none
+
+      - name: Perform no_std checks
+        run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -78,7 +76,8 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
       - name: Install latest Rust toolchain
         run: rustup show
@@ -90,57 +89,42 @@ jobs:
             *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
           esac
 
-      - name: Install nextest
-        run: cargo install cargo-nextest --locked
+      - name: Install latest nextest
+        uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run -F shared-memory -F transport_unixpipe -p zenoh-transport
+        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cargo nextest run -p zenohd --no-default-features
 
       - name: Run doctests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --doc
+        run: cargo test --doc
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
-  nostd:
-    name: Run no_std checks
+  # NOTE: In GitHub repository settings, the "Require status checks to pass
+  # before merging" branch protection rule ensures that commits are only merged
+  # from branches where specific status checks have passed. These checks are
+  # specified manually as a list of workflow job names. Thus we use this extra
+  # job to signal whether all CI checks have passed.
+  ci:
+    name: CI status checks
     runs-on: ubuntu-latest
-    needs: check
-    strategy:
-      fail-fast: false
-
+    needs: [check, test]
+    if: always()
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Install nightly Rust toolchain
-        # Generic no_std target architecture is x86_64-unknown-none
-        run: |
-          rustup override set nightly
-          rustup target add --toolchain nightly x86_64-unknown-none
-
-      - name: Perform no_std checks
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+      - name: Check whether all jobs pass
+        run: echo '${{ toJson(needs) }}' | jq -e 'all(.result == "success")'

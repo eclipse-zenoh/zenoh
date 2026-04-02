@@ -32,28 +32,34 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Ack) -> Self::Output {
+        let Ack {
+            timestamp,
+            ext_sinfo,
+            ext_unknown,
+        } = x;
+
         // Header
         let mut header = id::ACK;
-        if x.timestamp.is_some() {
+        if timestamp.is_some() {
             header |= flag::T;
         }
-        let mut n_exts = ((x.ext_sinfo.is_some()) as u8) + (x.ext_unknown.len() as u8);
+        let mut n_exts = ((ext_sinfo.is_some()) as u8) + (ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(ts) = x.timestamp.as_ref() {
+        if let Some(ts) = timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
         }
 
         // Extensions
-        if let Some(sinfo) = x.ext_sinfo.as_ref() {
+        if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        for u in x.ext_unknown.iter() {
+        for u in ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }

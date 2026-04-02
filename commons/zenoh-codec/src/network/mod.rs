@@ -27,7 +27,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
     core::{Reliability, ZenohId},
-    network::*,
+    network::{ext::EntityIdType, *},
 };
 
 // NetworkMessage
@@ -38,7 +38,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
-        match &x.body {
+        let NetworkMessage { body, .. } = x;
+
+        match body {
             NetworkBody::Push(b) => self.write(&mut *writer, b),
             NetworkBody::Request(b) => self.write(&mut *writer, b),
             NetworkBody::Response(b) => self.write(&mut *writer, b),
@@ -218,7 +220,9 @@ where
 // Extension: EntityId
 impl<const ID: u8> LCodec<&ext::EntityIdType<{ ID }>> for Zenoh080 {
     fn w_len(self, x: &ext::EntityIdType<{ ID }>) -> usize {
-        1 + self.w_len(&x.zid) + self.w_len(x.eid)
+        let EntityIdType { zid, eid } = x;
+
+        1 + self.w_len(zid) + self.w_len(*eid)
     }
 }
 

@@ -276,13 +276,13 @@ where
 /// ZExtUnit
 
 #[async_trait]
-impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
+impl<'a> OpenFsm for &'a AuthUsrPwdFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<ext::InitSyn>;
     async fn send_init_syn(
-        &self,
+        self,
         _input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         let output = zasyncread!(self.inner)
@@ -295,7 +295,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
     type RecvInitAckIn = (&'a mut StateOpen, Option<ext::InitAck>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "UsrPwd extension - Recv InitSyn.";
@@ -316,7 +316,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
     type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<ext::OpenSyn>;
     async fn send_open_syn(
-        &self,
+        self,
         state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "UsrPwd extension - Send OpenSyn.";
@@ -352,7 +352,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
     type RecvOpenAckIn = (&'a mut StateOpen, Option<ext::OpenAck>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &self,
+        self,
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         const S: &str = "UsrPwd extension - Recv OpenAck.";
@@ -370,13 +370,13 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
 /*            ACCEPT                 */
 /*************************************/
 #[async_trait]
-impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
+impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<ext::InitSyn>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "UsrPwd extension - Recv InitSyn.";
@@ -392,7 +392,7 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<ext::InitAck>;
     async fn send_init_ack(
-        &self,
+        self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         Ok(Some(ZExtZ64::new(state.nonce)))
@@ -401,7 +401,7 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<ext::OpenSyn>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "UsrPwd extension - Recv OpenSyn.";
@@ -436,7 +436,7 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<ext::OpenAck>;
     async fn send_open_ack(
-        &self,
+        self,
         _input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(Some(ZExtUnit::new()))

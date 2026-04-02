@@ -11,9 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_examples::CommonArgs;
 
 #[async_std::main]
 async fn main() {
@@ -31,51 +32,16 @@ async fn main() {
     session.close().res().await.unwrap();
 }
 
-fn parse_args() -> (Config, String) {
-    let args = App::new("zenoh delete example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
-        )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(
-            Arg::from_usage(
-                "-k, --key=[KEYEXPR]        'The key expression matching resources to delete.'",
-            )
-            .default_value("demo/example/zenoh-rs-put"),
-        )
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .get_matches();
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "demo/example/zenoh-rs-put")]
+    /// The key expression to write to.
+    key: KeyExpr<'static>,
+    #[command(flatten)]
+    common: CommonArgs,
+}
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Config::from_file(conf_file).unwrap()
-    } else {
-        Config::default()
-    };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
-    }
-    if let Some(values) = args.values_of("connect") {
-        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if let Some(values) = args.values_of("listen") {
-        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if args.is_present("no-multicast-scouting") {
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    }
-
-    let key_expr = args.value_of("key").unwrap().to_string();
-
-    (config, key_expr)
+fn parse_args() -> (Config, KeyExpr<'static>) {
+    let args = Args::parse();
+    (args.common.into(), args.key)
 }

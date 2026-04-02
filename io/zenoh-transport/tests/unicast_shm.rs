@@ -14,6 +14,7 @@
 #[cfg(feature = "shared-memory")]
 mod tests {
     use async_std::{prelude::FutureExt, task};
+    use rand::{Rng, SeedableRng};
     use std::{
         any::Any,
         convert::TryFrom,
@@ -23,8 +24,9 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::SplitBuffer;
+    use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::zasync_executor_init;
+    use zenoh_crypto::PseudoRng;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -34,11 +36,11 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
-    use zenoh_result::ZResult;
+    use zenoh_result::{zerror, ZResult};
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportMulticast,
-        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+        TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -157,10 +159,22 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        // Create the SharedMemoryManager
-        let mut shm01 =
-            SharedMemoryManager::make(format!("peer_shm01_{}", endpoint.protocol()), 2 * MSG_SIZE)
-                .unwrap();
+        let mut tries = 100;
+        let mut prng = PseudoRng::from_entropy();
+        let mut shm01 = loop {
+            // Create the SharedMemoryManager
+            if let Ok(shm01) = SharedMemoryManager::make(
+                format!("peer_shm01_{}_{}", endpoint.protocol(), prng.gen::<usize>()),
+                2 * MSG_SIZE,
+            ) {
+                break Ok(shm01);
+            }
+            tries -= 1;
+            if tries == 0 {
+                break Err(zerror!("Unable to create SharedMemoryManager!"));
+            }
+        }
+        .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
@@ -266,6 +280,7 @@ mod tests {
                     encoding: Encoding::default(),
                     ext_sinfo: None,
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                 }
                 .into(),
@@ -313,6 +328,7 @@ mod tests {
                     encoding: Encoding::default(),
                     ext_sinfo: None,
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                 }
                 .into(),

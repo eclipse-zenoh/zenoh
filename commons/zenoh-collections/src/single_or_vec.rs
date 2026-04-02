@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use alloc::{vec, vec::Vec};
 use core::{
     cmp::PartialEq,
     fmt, iter,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, RangeBounds},
     ptr, slice,
 };
 
@@ -112,6 +113,19 @@ impl<T> SingleOrVec<T> {
         matches!(&self.0, SingleOrVecInner::Vec(v) if v.is_empty())
     }
 
+    fn vectorize(&mut self) -> &mut Vec<T> {
+        if let SingleOrVecInner::Single(v) = &self.0 {
+            unsafe {
+                let v = core::ptr::read(v);
+                core::ptr::write(&mut self.0, SingleOrVecInner::Vec(vec![v]))
+            };
+        }
+        let SingleOrVecInner::Vec(v) = &mut self.0 else {
+            unsafe { core::hint::unreachable_unchecked() }
+        };
+        v
+    }
+
     pub fn get(&self, index: usize) -> Option<&T> {
         match &self.0 {
             SingleOrVecInner::Single(v) => (index == 0).then_some(v),
@@ -137,6 +151,55 @@ impl<T> SingleOrVec<T> {
         match &mut self.0 {
             SingleOrVecInner::Single(v) => Some(v),
             SingleOrVecInner::Vec(v) => v.last_mut(),
+        }
+    }
+    pub fn drain<Range: RangeBounds<usize>>(&mut self, range: Range) -> Drain<T> {
+        match &mut self.0 {
+            this @ SingleOrVecInner::Single(_) if range.contains(&0) => Drain {
+                inner: DrainInner::Single(this),
+            },
+            SingleOrVecInner::Vec(vec) => Drain {
+                inner: DrainInner::Vec(vec.drain(range)),
+            },
+            _ => Drain {
+                inner: DrainInner::Done,
+            },
+        }
+    }
+    pub fn insert(&mut self, at: usize, value: T) {
+        assert!(at <= self.len());
+        self.vectorize().insert(at, value);
+    }
+}
+enum DrainInner<'a, T> {
+    Vec(alloc::vec::Drain<'a, T>),
+    Single(&'a mut SingleOrVecInner<T>),
+    Done,
+}
+pub struct Drain<'a, T> {
+    inner: DrainInner<'a, T>,
+}
+impl<'a, T> Iterator for Drain<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.inner {
+            DrainInner::Vec(drain) => drain.next(),
+            DrainInner::Single(inner) => match unsafe { core::ptr::read(*inner) } {
+                SingleOrVecInner::Single(value) => unsafe {
+                    core::ptr::write(*inner, SingleOrVecInner::Vec(Vec::new()));
+                    Some(value)
+                },
+                SingleOrVecInner::Vec(_) => None,
+            },
+            _ => None,
+        }
+    }
+}
+impl<'a, T> Drop for Drain<'a, T> {
+    fn drop(&mut self) {
+        if let DrainInner::Single(_) = self.inner {
+            self.next();
         }
     }
 }

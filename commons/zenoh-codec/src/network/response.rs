@@ -37,42 +37,51 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Response) -> Self::Output {
+        let Response {
+            rid,
+            wire_expr,
+            payload,
+            ext_qos,
+            ext_tstamp,
+            ext_respid,
+        } = x;
+
         // Header
         let mut header = id::RESPONSE;
-        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8)
-            + (x.ext_respid.is_some() as u8);
+        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
+            + (ext_tstamp.is_some() as u8)
+            + (ext_respid.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.rid)?;
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, rid)?;
+        self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        if let Some(ts) = ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if let Some(ri) = x.ext_respid.as_ref() {
+        if let Some(ri) = ext_respid.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ri, n_exts != 0))?;
         }
 
         // Payload
-        self.write(&mut *writer, &x.payload)?;
+        self.write(&mut *writer, payload)?;
 
         Ok(())
     }
@@ -166,24 +175,30 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ResponseFinal) -> Self::Output {
+        let ResponseFinal {
+            rid,
+            ext_qos,
+            ext_tstamp,
+        } = x;
+
         // Header
         let mut header = id::RESPONSE_FINAL;
         let mut n_exts =
-            ((x.ext_qos != ext::QoSType::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+            ((ext_qos != &ext::QoSType::default()) as u8) + (ext_tstamp.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.rid)?;
+        self.write(&mut *writer, rid)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        if let Some(ts) = ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }

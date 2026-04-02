@@ -33,8 +33,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const MSG_COUNT: usize = 1_000;
@@ -204,6 +204,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
+                ext_attachment: None,
                 ext_unknown: vec![],
             }
             .into(),
@@ -308,6 +309,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
+                ext_attachment: None,
                 ext_unknown: vec![],
             }
             .into(),

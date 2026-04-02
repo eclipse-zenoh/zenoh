@@ -26,11 +26,12 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }

@@ -19,16 +19,20 @@ use zenoh::{Session, SessionRef};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt {
+    type PublicationCacheBuilder<'a, 'b, 'c>
+    where
+        Self: 'a;
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
-    ) -> PublicationCacheBuilder<'a, 'b, 'c>
+    ) -> Self::PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 }
 
 impl SessionExt for Session {
+    type PublicationCacheBuilder<'a, 'b, 'c> = PublicationCacheBuilder<'a, 'b, 'c>;
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
@@ -41,6 +45,20 @@ impl SessionExt for Session {
             SessionRef::Borrow(self),
             pub_key_expr.try_into().map_err(Into::into),
         )
+    }
+}
+
+impl<T: ArcSessionExt + 'static> SessionExt for T {
+    type PublicationCacheBuilder<'a, 'b, 'c> = PublicationCacheBuilder<'static, 'b, 'c>;
+    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+        &'a self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> Self::PublicationCacheBuilder<'a, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        ArcSessionExt::declare_publication_cache(self, pub_key_expr)
     }
 }
 

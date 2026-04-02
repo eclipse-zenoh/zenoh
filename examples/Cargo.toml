@@ -24,6 +24,7 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+publish = false
 
 [features]
 shared-memory = ["zenoh/shared-memory"]
@@ -41,7 +42,7 @@ transport_unixpipe = ["zenoh/transport_unixpipe"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

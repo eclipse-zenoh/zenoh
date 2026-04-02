@@ -33,22 +33,24 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Scout) -> Self::Output {
+        let Scout { version, what, zid } = x;
+
         // Header
         let header = id::SCOUT;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.version)?;
+        self.write(&mut *writer, version)?;
 
         let mut flags: u8 = 0;
-        let what: u8 = x.what.into();
+        let what: u8 = (*what).into();
         flags |= what & 0b111;
-        if let Some(zid) = x.zid.as_ref() {
+        if let Some(zid) = zid.as_ref() {
             flags |= (((zid.size() - 1) as u8) << 4) | flag::I;
         };
         self.write(&mut *writer, flags)?;
 
-        if let Some(zid) = x.zid.as_ref() {
+        if let Some(zid) = zid.as_ref() {
             let lodec = Zenoh080Length::new(zid.size());
             lodec.write(&mut *writer, zid)?;
         }

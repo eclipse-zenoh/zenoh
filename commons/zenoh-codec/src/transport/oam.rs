@@ -32,9 +32,11 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Oam) -> Self::Output {
+        let Oam { id, body, ext_qos } = x;
+
         // Header
         let mut header = id::OAM;
-        match &x.body {
+        match &body {
             ZExtBody::Unit => {
                 header |= iext::ENC_UNIT;
             }
@@ -45,23 +47,23 @@ where
                 header |= iext::ENC_ZBUF;
             }
         }
-        let mut n_exts = (x.ext_qos != ext::QoSType::default()) as u8;
+        let mut n_exts = (ext_qos != &ext::QoSType::default()) as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
 
         // Payload
-        match &x.body {
+        match &body {
             ZExtBody::Unit => {}
             ZExtBody::Z64(u64) => {
                 self.write(&mut *writer, u64)?;

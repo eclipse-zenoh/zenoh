@@ -20,7 +20,9 @@ pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
-use crate::{TransportMulticastEventHandler, TransportPeer};
+use crate::{
+    multicast::link::TransportLinkMulticast, TransportMulticastEventHandler, TransportPeer,
+};
 pub use manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerParamsMulticast,
@@ -31,7 +33,7 @@ use std::{
 };
 use transport::TransportMulticastInner;
 use zenoh_core::{zcondfeat, zread};
-use zenoh_link::{Link, LinkMulticast};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::Bits,
     network::NetworkMessage,
@@ -46,7 +48,7 @@ use zenoh_result::{zerror, ZResult};
 pub(crate) struct TransportConfigMulticast {
     pub(crate) sn_resolution: Bits,
     pub(crate) initial_sns: Box<[PrioritySn]>,
-    pub(crate) link: LinkMulticast,
+    pub(crate) link: TransportLinkMulticast,
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
 }

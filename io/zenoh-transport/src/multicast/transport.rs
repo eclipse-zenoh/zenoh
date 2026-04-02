@@ -12,12 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
-use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
+use super::link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    TransportConfigMulticast, TransportManager, TransportMulticastEventHandler, TransportPeer,
-    TransportPeerEventHandler,
+    multicast::{
+        link::TransportLinkMulticast, TransportConfigMulticast, TransportMulticastEventHandler,
+    },
+    TransportManager, TransportPeer, TransportPeerEventHandler,
 };
 use async_trait::async_trait;
 use std::{
@@ -29,7 +31,7 @@ use std::{
     time::Duration,
 };
 use zenoh_core::{zcondfeat, zread, zwrite};
-use zenoh_link::{Link, LinkMulticast, Locator};
+use zenoh_link::{Link, Locator};
 use zenoh_protocol::core::Resolution;
 use zenoh_protocol::transport::{batch_size, Close, TransportMessage};
 use zenoh_protocol::{
@@ -96,7 +98,7 @@ pub(crate) struct TransportMulticastInner {
     // The multicast locator - Convenience for logging
     pub(super) locator: Locator,
     // The multicast link
-    pub(super) link: Arc<RwLock<Option<TransportLinkMulticast>>>,
+    pub(super) link: Arc<RwLock<Option<TransportLinkMulticastUniversal>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
     // The timer for peer leases
@@ -129,7 +131,7 @@ impl TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
             peers: Arc::new(RwLock::new(HashMap::new())),
-            locator: config.link.get_dst().to_owned(),
+            locator: config.link.link.get_dst().to_owned(),
             link: Arc::new(RwLock::new(None)),
             callback: Arc::new(RwLock::new(None)),
             timer: Arc::new(Timer::new(false)),
@@ -137,7 +139,7 @@ impl TransportMulticastInner {
             stats,
         };
 
-        let link = TransportLinkMulticast::new(ti.clone(), config.link);
+        let link = TransportLinkMulticastUniversal::new(ti.clone(), config.link);
         let mut guard = zwrite!(ti.link);
         *guard = Some(link);
         drop(guard);
@@ -170,7 +172,7 @@ impl TransportMulticastInner {
         zread!(self.callback).clone()
     }
 
-    pub(crate) fn get_link(&self) -> LinkMulticast {
+    pub(crate) fn get_link(&self) -> TransportLinkMulticast {
         zread!(self.link).as_ref().unwrap().link.clone()
     }
 
@@ -244,9 +246,9 @@ impl TransportMulticastInner {
                     .manager
                     .config
                     .batch_size
-                    .min(l.link.get_mtu())
+                    .min(l.link.link.get_mtu())
                     .min(batch_size::MULTICAST);
-                let config = TransportLinkMulticastConfig {
+                let config = TransportLinkMulticastConfigUniversal {
                     version: self.manager.config.version,
                     zid: self.manager.config.zid,
                     whatami: self.manager.config.whatami,
@@ -255,7 +257,7 @@ impl TransportMulticastInner {
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
                     batch_size,
                 };
-                l.start_tx(config, self.priority_tx.clone());
+                l.start_tx(config, self.priority_tx.clone(), &self.manager.tx_executor);
                 Ok(())
             }
             None => {
@@ -295,7 +297,7 @@ impl TransportMulticastInner {
                     .manager
                     .config
                     .batch_size
-                    .min(l.link.get_mtu())
+                    .min(l.link.link.get_mtu())
                     .min(batch_size::MULTICAST);
                 l.start_rx(batch_size);
                 Ok(())

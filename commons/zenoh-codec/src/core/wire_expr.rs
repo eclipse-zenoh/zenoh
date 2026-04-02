@@ -29,12 +29,18 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &WireExpr<'_>) -> Self::Output {
+        let WireExpr {
+            scope,
+            suffix,
+            mapping: _,
+        } = x;
+
         let zodec = Zenoh080Bounded::<ExprId>::new();
-        zodec.write(&mut *writer, x.scope)?;
+        zodec.write(&mut *writer, *scope)?;
 
         if x.has_suffix() {
             let zodec = Zenoh080Bounded::<ExprLen>::new();
-            zodec.write(&mut *writer, x.suffix.as_ref())?;
+            zodec.write(&mut *writer, suffix.as_ref())?;
         }
         Ok(())
     }

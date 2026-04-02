@@ -13,10 +13,14 @@
       ]
     },
     "__path__": {
+      "default": null,
       "type": [
-        "string",
+        "array",
         "null"
-      ]
+      ],
+      "items": {
+        "type": "string"
+      }
     },
     "__required__": {
       "type": [

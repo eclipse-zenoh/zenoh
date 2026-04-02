@@ -25,12 +25,13 @@ use zenoh_protocol::{
 };
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
-use zenoh_transport::{Primitives, TransportMulticast};
+use zenoh_transport::{multicast::TransportMulticast, primitives::Primitives};
 
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
+    pub(super) local: bool,
     #[cfg(feature = "stats")]
     pub(super) stats: Option<Arc<TransportStats>>,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
@@ -47,10 +48,12 @@ pub struct FaceState {
 }
 
 impl FaceState {
-    pub(super) fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
+        local: bool,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
@@ -60,6 +63,7 @@ impl FaceState {
             id,
             zid,
             whatami,
+            local,
             #[cfg(feature = "stats")]
             stats,
             primitives,
@@ -74,6 +78,11 @@ impl FaceState {
             pending_queries: HashMap::new(),
             mcast_group,
         })
+    }
+
+    #[inline]
+    pub fn is_local(&self) -> bool {
+        self.local
     }
 
     #[inline]

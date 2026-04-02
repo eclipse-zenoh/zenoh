@@ -12,11 +12,42 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use core::{marker::PhantomData, mem, num::NonZeroUsize, slice};
+use core::{
+    marker::PhantomData,
+    mem,
+    num::NonZeroUsize,
+    option,
+    slice::{self},
+};
+
+// Buffer
+impl Buffer for &[u8] {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+}
+
+impl Buffer for &mut [u8] {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        <[u8]>::len(self)
+    }
+}
+
+// SplitBuffer
+impl<'b> SplitBuffer for &'b [u8] {
+    type Slices<'a> = option::IntoIter<&'a [u8]> where 'b: 'a;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        Some(*self).into_iter()
+    }
+}
 
 // Writer
 impl HasWriter for &mut [u8] {

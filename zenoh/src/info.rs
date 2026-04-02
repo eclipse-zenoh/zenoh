@@ -31,6 +31,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 /// let zid = session.info().zid().res().await;
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct ZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -67,6 +68,7 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
 /// while let Some(router_zid) = routers_zid.next() {}
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct RoutersZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -112,6 +114,7 @@ impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
 /// while let Some(peer_zid) = peers_zid.next() {}
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PeersZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }

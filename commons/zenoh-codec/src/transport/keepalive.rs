@@ -30,7 +30,9 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, _x: &KeepAlive) -> Self::Output {
+    fn write(self, writer: &mut W, x: &KeepAlive) -> Self::Output {
+        let KeepAlive = x;
+
         // Header
         let header = id::KEEP_ALIVE;
         self.write(&mut *writer, header)?;

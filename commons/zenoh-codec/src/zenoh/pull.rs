@@ -33,16 +33,18 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Pull) -> Self::Output {
+        let Pull { ext_unknown } = x;
+
         // Header
         let mut header = id::PULL;
-        let mut n_exts = x.ext_unknown.len() as u8;
+        let mut n_exts = ext_unknown.len() as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Extensions
-        for u in x.ext_unknown.iter() {
+        for u in ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }

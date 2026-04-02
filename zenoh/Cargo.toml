@@ -39,6 +39,7 @@ shared-memory = [
 ]
 stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
 transport_multilink = ["zenoh-transport/transport_multilink"]
+transport_compression = ["zenoh-transport/transport_compression"]
 transport_quic = ["zenoh-transport/transport_quic"]
 transport_serial = ["zenoh-transport/transport_serial"]
 transport_unixpipe = ["zenoh-transport/transport_unixpipe"]
@@ -52,6 +53,7 @@ default = [
     "auth_pubkey",
     "auth_usrpwd",
     "transport_multilink",
+    "transport_compression",
     "transport_quic",
     "transport_tcp",
     "transport_tls",
@@ -65,6 +67,7 @@ async-global-executor = { workspace = true }
 async-std = { workspace = true, features = ["attributes"] }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+const_format = { workspace = true }
 env_logger = { workspace = true }
 event-listener = { workspace = true }
 flume = { workspace = true }

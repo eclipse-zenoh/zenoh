@@ -1421,7 +1421,10 @@ pub(super) fn compute_data_routes_(tables: &Tables, res: &Arc<Resource>) -> Data
                 compute_data_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
         }
 
-        routes.peer_data_route = Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+        if !tables.full_net(WhatAmI::Peer) {
+            routes.peer_data_route =
+                Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+        }
     }
     if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
         && tables.full_net(WhatAmI::Peer)
@@ -1479,8 +1482,10 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                     compute_data_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
             }
 
-            res_mut.context_mut().peer_data_route =
-                Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+            if !tables.full_net(WhatAmI::Peer) {
+                res_mut.context_mut().peer_data_route =
+                    Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+            }
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && tables.full_net(WhatAmI::Peer)
@@ -1593,75 +1598,75 @@ macro_rules! treat_timestamp {
 }
 
 #[inline]
-fn get_data_route(
+pub(crate) fn get_data_route(
     tables: &Tables,
-    face: &FaceState,
+    whatami: WhatAmI,
+    link_id: usize,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
     routing_context: u64,
 ) -> Arc<Route> {
     match tables.whatami {
-        WhatAmI::Router => match face.whatami {
+        WhatAmI::Router => match whatami {
             WhatAmI::Router => {
                 let routers_net = tables.routers_net.as_ref().unwrap();
-                let local_context = routers_net.get_local_context(routing_context, face.link_id);
+                let local_context = routers_net.get_local_context(routing_context, link_id);
                 res.as_ref()
                     .and_then(|res| res.routers_data_route(local_context))
                     .unwrap_or_else(|| {
-                        compute_data_route(tables, expr, Some(local_context), face.whatami)
+                        compute_data_route(tables, expr, Some(local_context), whatami)
                     })
             }
             WhatAmI::Peer => {
                 if tables.full_net(WhatAmI::Peer) {
                     let peers_net = tables.peers_net.as_ref().unwrap();
-                    let local_context = peers_net.get_local_context(routing_context, face.link_id);
+                    let local_context = peers_net.get_local_context(routing_context, link_id);
                     res.as_ref()
                         .and_then(|res| res.peers_data_route(local_context))
                         .unwrap_or_else(|| {
-                            compute_data_route(tables, expr, Some(local_context), face.whatami)
+                            compute_data_route(tables, expr, Some(local_context), whatami)
                         })
                 } else {
                     res.as_ref()
                         .and_then(|res| res.peer_data_route())
-                        .unwrap_or_else(|| compute_data_route(tables, expr, None, face.whatami))
+                        .unwrap_or_else(|| compute_data_route(tables, expr, None, whatami))
                 }
             }
             _ => res
                 .as_ref()
                 .and_then(|res| res.routers_data_route(0))
-                .unwrap_or_else(|| compute_data_route(tables, expr, None, face.whatami)),
+                .unwrap_or_else(|| compute_data_route(tables, expr, None, whatami)),
         },
         WhatAmI::Peer => {
             if tables.full_net(WhatAmI::Peer) {
-                match face.whatami {
+                match whatami {
                     WhatAmI::Router | WhatAmI::Peer => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context =
-                            peers_net.get_local_context(routing_context, face.link_id);
+                        let local_context = peers_net.get_local_context(routing_context, link_id);
                         res.as_ref()
                             .and_then(|res| res.peers_data_route(local_context))
                             .unwrap_or_else(|| {
-                                compute_data_route(tables, expr, Some(local_context), face.whatami)
+                                compute_data_route(tables, expr, Some(local_context), whatami)
                             })
                     }
                     _ => res
                         .as_ref()
                         .and_then(|res| res.peers_data_route(0))
-                        .unwrap_or_else(|| compute_data_route(tables, expr, None, face.whatami)),
+                        .unwrap_or_else(|| compute_data_route(tables, expr, None, whatami)),
                 }
             } else {
                 res.as_ref()
-                    .and_then(|res| match face.whatami {
+                    .and_then(|res| match whatami {
                         WhatAmI::Client => res.client_data_route(),
                         _ => res.peer_data_route(),
                     })
-                    .unwrap_or_else(|| compute_data_route(tables, expr, None, face.whatami))
+                    .unwrap_or_else(|| compute_data_route(tables, expr, None, whatami))
             }
         }
         _ => res
             .as_ref()
             .and_then(|res| res.client_data_route())
-            .unwrap_or_else(|| compute_data_route(tables, expr, None, face.whatami)),
+            .unwrap_or_else(|| compute_data_route(tables, expr, None, whatami)),
     }
 }
 
@@ -1729,7 +1734,7 @@ macro_rules! inc_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     PushBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
@@ -1779,7 +1784,14 @@ pub fn full_reentrant_route_data(
                     == *tables.elect_router(expr.full_expr(), tables.get_router_links(face.zid))
             {
                 let res = Resource::get_resource(&prefix, expr.suffix);
-                let route = get_data_route(&tables, face, &res, &mut expr, routing_context);
+                let route = get_data_route(
+                    &tables,
+                    face.whatami,
+                    face.link_id,
+                    &res,
+                    &mut expr,
+                    routing_context,
+                );
                 let matching_pulls = get_matching_pulls(&tables, &res, &mut expr);
 
                 if !(route.is_empty() && matching_pulls.is_empty()) {

@@ -256,4 +256,32 @@ pub mod ext {
             }
         }
     }
+
+    /// ```text
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// %   num elems   %
+    /// +-------+-+-+---+
+    /// ~ key: <u8;z16> ~
+    /// +---------------+
+    /// ~ val: <u8;z32> ~
+    /// +---------------+
+    ///       ...         -- N times (key, value) tuples
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct AttachmentType<const ID: u8> {
+        pub buffer: ZBuf,
+    }
+
+    impl<const ID: u8> AttachmentType<{ ID }> {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            Self {
+                buffer: ZBuf::rand(rng.gen_range(3..=1_024)),
+            }
+        }
+    }
 }

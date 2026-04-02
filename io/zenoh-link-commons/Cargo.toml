@@ -24,10 +24,14 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+compression = []
+
 [dependencies]
 async-std = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
+lz4_flex = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 typenum = { workspace = true }
 zenoh-buffers = { workspace = true }

@@ -34,41 +34,49 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Push) -> Self::Output {
+        let Push {
+            wire_expr,
+            ext_qos,
+            ext_tstamp,
+            ext_nodeid,
+            payload,
+        } = x;
+
         // Header
         let mut header = id::PUSH;
-        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8)
-            + ((x.ext_nodeid != ext::NodeIdType::default()) as u8);
+        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
+            + (ext_tstamp.is_some() as u8)
+            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        if let Some(ts) = ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if x.ext_nodeid != ext::NodeIdType::default() {
+        if ext_nodeid != &ext::NodeIdType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_nodeid, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
 
         // Payload
-        self.write(&mut *writer, &x.payload)?;
+        self.write(&mut *writer, payload)?;
 
         Ok(())
     }
