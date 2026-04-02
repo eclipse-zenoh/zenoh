@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
+use crate::common::TestSessions;
 
 use std::{
     sync::{
@@ -21,8 +23,8 @@ use std::{
 };
 
 use tokio::runtime::Handle;
-use zenoh::{config::WhatAmI, key_expr::KeyExpr, qos::CongestionControl, Session};
-use zenoh_config::{EndPoint, ModeDependentValue};
+use zenoh::{key_expr::KeyExpr, qos::CongestionControl, Session};
+use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -31,101 +33,25 @@ const SLEEP: Duration = Duration::from_secs(1);
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
-    // Open the sessions
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:27447".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let test_context = TestSessions::new();
+
+    // Open session 01 (create 1 listener)
+    let s01_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
     println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config)).unwrap();
+    let s01 = ztimeout!(zenoh::open(s01_config)).unwrap();
 
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:27448".parse().unwrap()])
-        .unwrap();
-    config
-        .connect
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:27447".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    // Open session 02 (create 1 listener and connect to session 01)
+    let mut s02_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+    let mut locators = TestSessions::get_locators_from_session(&s01).await;
+    s02_config.connect.endpoints.set(locators.clone()).unwrap();
     println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config)).unwrap();
+    let s02 = ztimeout!(zenoh::open(s02_config)).unwrap();
 
-    let mut config = zenoh_config::Config::default();
-    config
-        .connect
-        .endpoints
-        .set(vec![
-            "tcp/127.0.0.1:27447".parse().unwrap(),
-            "tcp/127.0.0.1:27448".parse().unwrap(),
-        ])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    // Open session 03 (connect to session 01 and session02)
+    locators.extend(TestSessions::get_locators_from_session(&s02).await);
+    let s03_config = test_context.get_connector_config_with_endpoint(locators);
     println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config)).unwrap();
-
-    (s01, s02, s03)
-}
-
-async fn open_router_session() -> Session {
-    // Open the sessions
-    let mut config = zenoh_config::Config::default();
-    config.set_mode(Some(WhatAmI::Router)).unwrap();
-    config
-        .listen
-        .endpoints
-        .set(vec!["tcp/127.0.0.1:30447".parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][00a] Opening router session");
-    ztimeout!(zenoh::open(config)).unwrap()
-}
-
-async fn close_router_session(s: Session) {
-    println!("[  ][01d] Closing router session");
-    ztimeout!(s.close()).unwrap();
-}
-
-async fn open_client_sessions() -> (Session, Session, Session) {
-    // Open the sessions
-    let mut config = zenoh_config::Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
-            .unwrap()]))
-        .unwrap();
-    println!("[  ][01a] Opening s01 session");
-    let s01 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh_config::Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
-            .unwrap()]))
-        .unwrap();
-    println!("[  ][02a] Opening s02 session");
-    let s02 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh_config::Config::default();
-    config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config
-        .connect
-        .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:30447"
-            .parse::<EndPoint>()
-            .unwrap()]))
-        .unwrap();
-    println!("[  ][03a] Opening s03 session");
-    let s03 = ztimeout!(zenoh::open(config)).unwrap();
+    let s03 = ztimeout!(zenoh::open(s03_config)).unwrap();
 
     (s01, s02, s03)
 }
@@ -304,12 +230,23 @@ async fn zenoh_unicity_p2p() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_unicity_brokered() {
     zenoh::init_log_from_env_or("error");
-    let r = open_router_session().await;
+    let mut test_context = TestSessions::new();
 
-    let (s01, s02, s03) = open_client_sessions().await;
+    // Create a router session
+    let mut config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+    config.set_mode(Some(WhatAmI::Router)).unwrap();
+    let _r = test_context.open_listener_with_cfg(config).await;
+
+    // Create 3 client session
+    let mut config = test_context.get_connector_config();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    let s01 = test_context.open_connector_with_cfg(config.clone()).await;
+    let s02 = test_context.open_connector_with_cfg(config.clone()).await;
+    let s03 = test_context.open_connector_with_cfg(config.clone()).await;
+
+    // Test
     test_unicity_pubsub(&s01, &s02, &s03).await;
     test_unicity_qryrep(&s01, &s02, &s03).await;
-    close_sessions(s01, s02, s03).await;
 
-    close_router_session(r).await;
+    test_context.close().await;
 }
