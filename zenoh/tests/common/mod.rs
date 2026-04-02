@@ -109,23 +109,9 @@ impl TestSessions {
         session
     }
 
-    pub async fn open_listener_with_links(&mut self, link_num: usize) -> Session {
-        let config = self.get_listener_config("tcp/127.0.0.1:0", link_num);
-
-        let session = ztimeout!(zenoh::open(config)).unwrap();
-        // Extract the actual tcp endpoint that session1 is listening on
-        let locators = TestSessions::get_locators_from_session(&session).await;
-
-        println!("Listening to {:?}", locators);
-        // Store session and locator
-        self.listener_sessions.push(session.clone());
-        self.locators = locators;
-
-        session
-    }
-
     pub async fn open_listener(&mut self) -> Session {
-        self.open_listener_with_links(1).await
+        let config = self.get_listener_config("tcp/127.0.0.1:0", 1);
+        self.open_listener_with_cfg(config).await
     }
 
     pub async fn open_connector_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
