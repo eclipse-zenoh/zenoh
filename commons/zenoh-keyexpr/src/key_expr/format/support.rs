@@ -55,6 +55,7 @@ impl Spec<'_> {
         &self.spec[..self.id_end as usize]
     }
     pub fn pattern(&self) -> &keyexpr {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe {
             keyexpr::from_str_unchecked(if self.pattern_end != u16::MAX {
                 &self.spec[(self.id_end + 1) as usize..self.pattern_end as usize]
@@ -66,6 +67,7 @@ impl Spec<'_> {
     pub fn default(&self) -> Option<&keyexpr> {
         let pattern_end = self.pattern_end as usize;
         (self.spec.len() > pattern_end)
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             .then(|| unsafe { keyexpr::from_str_unchecked(&self.spec[(pattern_end + 1)..]) })
     }
 }
@@ -98,6 +100,7 @@ impl Segment<'_> {
     pub fn prefix(&self) -> Option<&keyexpr> {
         match self.prefix {
             "" | "/" => None,
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             _ => Some(unsafe {
                 keyexpr::from_str_unchecked(trim_suffix_slash(trim_prefix_slash(self.prefix)))
             }),
@@ -170,6 +173,7 @@ impl<'s, const N: usize> IKeFormatStorage<'s> for [Segment<'s>; N] {
                 this[n] = core::mem::MaybeUninit::new(segment);
                 n += 1;
                 if n == N {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     IterativeConstructor::Complete(this.map(|e| unsafe { e.assume_init() }))
                 } else {
                     IterativeConstructor::Partial((this, n as u16))
@@ -218,9 +222,11 @@ impl<T, const N: usize> PartialSlice<T, N> {
 impl<T, const N: usize> TryFrom<PartialSlice<T, N>> for [T; N] {
     type Error = PartialSlice<T, N>;
     fn try_from(value: PartialSlice<T, N>) -> Result<Self, Self::Error> {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         let buffer = unsafe { core::ptr::read(&value.buffer) };
         if value.n as usize == N {
             core::mem::forget(value);
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             Ok(buffer.map(|v| unsafe { v.assume_init() }))
         } else {
             Err(value)
@@ -230,6 +236,7 @@ impl<T, const N: usize> TryFrom<PartialSlice<T, N>> for [T; N] {
 impl<T, const N: usize> Drop for PartialSlice<T, N> {
     fn drop(&mut self) {
         for i in 0..self.n as usize {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { core::mem::MaybeUninit::assume_init_drop(&mut self.buffer[i]) }
         }
     }
@@ -251,6 +258,7 @@ impl<'s> IKeFormatStorage<'s> for Vec<Segment<'s>> {
         #[allow(irrefutable_let_patterns)]
         let IterativeConstructor::Complete(mut this) = constructor
         else {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { core::hint::unreachable_unchecked() }
         };
         this.push(segment);

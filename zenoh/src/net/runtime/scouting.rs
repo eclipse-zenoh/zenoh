@@ -69,7 +69,7 @@ impl Scouting {
             .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
             .collect();
 
-        let sockets = RwLock::new(ScoutSockets {
+        let sockets: RwLock<ScoutSockets> = RwLock::new(ScoutSockets {
             mcast_socket,
             ucast_sockets,
         });
@@ -346,7 +346,7 @@ impl Scouting {
             addr,
             move |hello| async move {
                 if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
                     self.connect_peer(&hello.zid, &hello.locators).await;
                 }
@@ -354,6 +354,42 @@ impl Scouting {
             },
         )
         .await
+    }
+
+    /// Connect to the first node that matches "what" or timeout.
+    pub async fn connect_first(
+        &self,
+        what: WhatAmIMatcher,
+        timeout: std::time::Duration,
+    ) -> ZResult<()> {
+        let scout = async {
+            let this = &self.state;
+            let sockets = &zasyncread!(this.sockets).ucast_sockets;
+            Self::scout(sockets, what, &this.addr, move |hello| {
+                let runtime = this.runtime.clone();
+                async move {
+                    tracing::info!("Found {:?}", hello);
+                    if !hello.locators.is_empty() {
+                        if runtime.connect(&hello.zid, &hello.locators).await {
+                            return Loop::Break;
+                        }
+                    } else {
+                        tracing::debug!("Received Hello with no locators: {:?}", hello);
+                    }
+                    Loop::Continue
+                }
+            })
+            .await;
+            Ok(())
+        };
+        let timeout = async {
+            tokio::time::sleep(timeout).await;
+            bail!("timeout")
+        };
+        tokio::select! {
+            res = scout => { res },
+            res = timeout => { res }
+        }
     }
 
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[UdpSocket]) {

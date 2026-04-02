@@ -19,7 +19,7 @@ use alloc::{
 };
 use core::{
     convert::{From, TryFrom, TryInto},
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     hash::Hash,
     ops::{Deref, RangeInclusive},
     str::FromStr,
@@ -58,6 +58,9 @@ pub use resolution::*;
 pub mod parameters;
 pub use parameters::Parameters;
 
+pub mod region;
+pub use region::*;
+
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -83,6 +86,32 @@ impl ZenohIdProto {
 
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
+    }
+
+    pub fn short(self) -> ShortZenohIdProto {
+        ShortZenohIdProto(self)
+    }
+}
+
+pub struct ShortZenohIdProto(ZenohIdProto);
+
+impl Display for ShortZenohIdProto {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        type Repr = u32;
+        const L: usize = core::mem::size_of::<Repr>();
+        let bytes = self.0.to_le_bytes();
+        let start = self.0.size().saturating_sub(L);
+        write!(
+            f,
+            "{:x}",
+            Repr::from_le_bytes(bytes[start..start + L].try_into().unwrap())
+        )
+    }
+}
+
+impl Debug for ShortZenohIdProto {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self}")
     }
 }
 
@@ -618,6 +647,11 @@ impl CongestionControl {
     pub(crate) const DEFAULT_DECLARE: Self = Self::Block;
 
     #[cfg(feature = "internal")]
+    pub const DEFAULT_INTEREST: Self = Self::Block;
+    #[cfg(not(feature = "internal"))]
+    pub(crate) const DEFAULT_INTEREST: Self = Self::Block;
+
+    #[cfg(feature = "internal")]
     pub const DEFAULT_OAM: Self = Self::Block;
     #[cfg(not(feature = "internal"))]
     pub(crate) const DEFAULT_OAM: Self = Self::Block;
@@ -627,7 +661,7 @@ impl CongestionControl {
 mod tests {
     use core::str::FromStr;
 
-    use crate::core::{Priority, PriorityRange};
+    use crate::core::{Priority, PriorityRange, RegionName, ZenohIdProto};
 
     #[test]
     fn test_priority_range() {
@@ -647,5 +681,32 @@ mod tests {
 
         assert!(PriorityRange::from_str("1-").is_err());
         assert!(PriorityRange::from_str("-5").is_err());
+    }
+
+    #[test]
+    fn test_region_name_ok() {
+        assert!(RegionName::from_str("1234567812345678").is_ok());
+    }
+
+    #[test]
+    fn test_region_name_err() {
+        assert!(RegionName::from_str(&std::iter::repeat_n("Z", 33).collect::<String>()).is_err());
+        assert!(RegionName::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_short_zid() {
+        assert_eq!(
+            &format!(
+                "{}",
+                "a1b2c3d4e5f6".parse::<ZenohIdProto>().unwrap().short()
+            ),
+            "a1b2c3d4"
+        );
+
+        assert_eq!(
+            &format!("{}", "a1b2".parse::<ZenohIdProto>().unwrap().short()),
+            "a1b2"
+        );
     }
 }

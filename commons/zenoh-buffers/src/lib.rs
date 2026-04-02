@@ -62,6 +62,7 @@ macro_rules! unsafe_slice {
     ($s:expr,$r:expr) => {{
         let slice = &*$s;
         let index = $r;
+        // SAFETY: the index is guaranteed to be valid by the caller of this macro.
         unsafe { slice.get_unchecked(index) }
     }};
 }
@@ -72,6 +73,7 @@ macro_rules! unsafe_slice_mut {
     ($s:expr,$r:expr) => {{
         let slice = &mut *$s;
         let index = $r;
+        // SAFETY: the index is guaranteed to be valid by the caller of this macro.
         unsafe { slice.get_unchecked_mut(index) }
     }};
 }
@@ -107,7 +109,7 @@ pub mod buffer {
                 0 => Cow::Borrowed(b""),
                 1 => {
                     // SAFETY: unwrap here is safe because we have explicitly checked
-                    //         the iterator has 1 element.
+                    // the iterator has 1 element.
                     Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
                 }
                 _ => Cow::Owned(slices.fold(Vec::with_capacity(self.len()), |mut acc, it| {
@@ -148,7 +150,7 @@ pub mod writer {
         /// # Safety
         ///
         /// Caller must ensure that `write` return an integer lesser than or equal to the length of
-        /// the slice passed in argument
+        /// the slice passed in argument.
         unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
@@ -173,11 +175,15 @@ pub mod writer {
         fn can_write(&self) -> bool {
             (**self).can_write()
         }
+        /// # Safety
+        ///
+        /// Caller must ensure that `write` return an integer lesser than or equal to the length of
+        /// the slice passed in argument.
         unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize,
         {
-            // SAFETY: same precondition
+            // SAFETY: same precondition as the trait method.
             unsafe { (**self).with_slot(len, write) }
         }
     }
@@ -208,12 +214,21 @@ pub mod writer {
 }
 
 pub mod reader {
-    use core::num::NonZeroUsize;
+    use core::{fmt::Display, num::NonZeroUsize};
 
     use crate::{ZBuf, ZSlice};
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
+
+    impl Display for DidntRead {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("Didn't read")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for DidntRead {}
 
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;

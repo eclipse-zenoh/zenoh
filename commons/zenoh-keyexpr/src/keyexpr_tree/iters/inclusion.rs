@@ -108,6 +108,7 @@ where
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
                                 let subkey =
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                 if unlikely(subkey == "**") {
                                     if !chunk_is_verbatim {
@@ -117,6 +118,7 @@ where
                                     let post_key = &key[kec_end + 1..];
                                     match post_key.iter().position(|&c| c == b'/') {
                                         Some(sec_end) => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             let post_key = unsafe {
                                                 keyexpr::from_slice_unchecked(&post_key[..sec_end])
                                             };
@@ -125,6 +127,7 @@ where
                                             }
                                         }
                                         None => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             if unsafe { keyexpr::from_slice_unchecked(post_key) }
                                                 .includes(chunk)
                                             {
@@ -137,6 +140,7 @@ where
                                 }
                             }
                             None => {
+                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                 if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
@@ -155,6 +159,7 @@ where
                                 break;
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
@@ -271,6 +276,7 @@ where
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
                                 let subkey =
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                 if unlikely(subkey == "**") {
                                     if !chunk_is_verbatim {
@@ -280,6 +286,7 @@ where
                                     let post_key = &key[kec_end + 1..];
                                     match post_key.iter().position(|&c| c == b'/') {
                                         Some(sec_end) => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             let post_key = unsafe {
                                                 keyexpr::from_slice_unchecked(&post_key[..sec_end])
                                             };
@@ -288,6 +295,7 @@ where
                                             }
                                         }
                                         None => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             if unsafe { keyexpr::from_slice_unchecked(post_key) }
                                                 .includes(chunk)
                                             {
@@ -300,6 +308,7 @@ where
                                 }
                             }
                             None => {
+                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                 if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
@@ -318,6 +327,7 @@ where
                                 break;
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                             .children_mut()
                             .children_mut();

@@ -27,12 +27,12 @@ env:
   # with plans for changes that REQUIRE a minor version bump as defined by the Cargo reference
   # (https://doc.rust-lang.org/cargo/reference/semver.html).
   # However, a minor release could be published without such changes, in which case this variable need not be changed.
-  CARGO_SEMVER_CHECKS_RELEASE_TYPE: minor
+  CARGO_SEMVER_CHECKS_RELEASE_TYPE: patch
   # NOTE(fuzzypixelz): cargo-semver-checks uses the previous released version as a baseline, not the latest released
   # version on crates.io. Thus this needs to be updated after every release.
-  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.7.2
+  CARGO_SEMVER_CHECKS_BASELINE_VERSION: 1.8.0
   # Nightly toolchain identifier used by cargo invocations
-  # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler, 
+  # Normally keep it "nightly" to always use the latest nightly, but in case of a regression in the Rust compiler,
   # it can be useful to fix it to a specific nightly version that is known to work.
   NIGHTLY_TOOLCHAIN: "nightly"
 
@@ -118,10 +118,10 @@ jobs:
 
       - name: Install latest cargo-semver-checks
         uses: taiki-e/install-action@cargo-semver-checks
-        
+
       - name: Install latest taplo
         uses: taiki-e/install-action@taplo
-  
+
       - name: Code format check
         run: rustfmt +${{ env.NIGHTLY_TOOLCHAIN }} --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
 
@@ -173,7 +173,7 @@ jobs:
 
       - name: Check SemVer Compatibility
         run: cargo +stable semver-checks --verbose --default-features --package zenoh --release-type ${{ env.CARGO_SEMVER_CHECKS_RELEASE_TYPE }} --baseline-version ${{ env.CARGO_SEMVER_CHECKS_BASELINE_VERSION }}
-        
+
       - name: Check TOML formatting
         if: ${{ !contains(matrix.os, 'windows') }}
         run: taplo fmt --check --diff
@@ -203,18 +203,18 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
-        run: sudo cargo nextest run -p zenoh
+        run: sudo cargo nextest run -p zenoh -F test
 
       - name: Run tests stable
         if: ${{ matrix.os != 'macos-latest' }}
-        run: cargo nextest run -p zenoh
+        run: cargo nextest run -p zenoh -F test
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
@@ -251,7 +251,7 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -299,7 +299,7 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: bash
         run: |
-            echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
         uses: taiki-e/install-action@nextest
@@ -364,8 +364,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DavidAnson/markdownlint-cli2-action@v18
         with:
-          config: '.markdownlint.yaml'
-          globs: '**/README.md'
+          config: ".markdownlint.yaml"
+          globs: "**/README.md"
 
   doc:
     name: Generate documentation
@@ -468,7 +468,19 @@ jobs:
   ci:
     name: CI status checks
     runs-on: ubuntu-latest
-    needs: [check_rust, check, test, test_unstable, test_shm, valgrind, typos, markdown_lint, doc, coverage]
+    needs:
+      [
+        check_rust,
+        check,
+        test,
+        test_unstable,
+        test_shm,
+        valgrind,
+        typos,
+        markdown_lint,
+        doc,
+        coverage,
+      ]
     if: always()
     steps:
       - name: Check whether all jobs pass

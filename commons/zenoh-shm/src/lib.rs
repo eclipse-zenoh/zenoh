@@ -206,9 +206,15 @@ impl ShmBufInner {
     // PRIVATE:
     fn as_slice(&self) -> &[u8] {
         tracing::trace!("ShmBufInner::as_slice() == len = {:?}", self.info.data_len);
+        // SAFETY: The pointer and length are guaranteed to be valid during the lifetime of `ShmBufInner`.
         unsafe { std::slice::from_raw_parts(self.buf.ptr(), self.info.data_len.get()) }
     }
 
+    /// Decrements buffer's reference count
+    ///
+    /// # Safety
+    /// You should understand what you are doing, as underestimation
+    /// of the reference counter can lead to memory being stalled or double-freed.
     unsafe fn dec_ref_count(&self) {
         self.metadata
             .owned
@@ -229,20 +235,24 @@ impl ShmBufInner {
     /// In short, whilst this operation is marked as unsafe, you are safe if you can
     /// guarantee that your in applications only one process at the time will actually write.
     unsafe fn as_mut_slice_inner(&mut self) -> &mut [u8] {
-        std::slice::from_raw_parts_mut(self.buf.ptr_mut(), self.info.data_len.get())
+        // SAFETY: same precondition as described in the function documentation.
+        // SAFETY: the pointer and length are guaranteed to be valid for the lifetime of `self`.
+        unsafe { std::slice::from_raw_parts_mut(self.buf.ptr_mut(), self.info.data_len.get()) }
     }
 }
 
 impl Drop for ShmBufInner {
     fn drop(&mut self) {
-        // SAFETY: obviously, we need to decrement refcount when dropping ShmBufInner instance
+        // SAFETY: obviously, we need to decrement refcount when dropping ShmBufInner instance.
+        // SAFETY: `self` is guaranteed to be valid.
         unsafe { self.dec_ref_count() };
     }
 }
 
 impl Clone for ShmBufInner {
     fn clone(&self) -> Self {
-        // SAFETY: obviously, we need to increment refcount when cloning ShmBufInner instance
+        // SAFETY: obviously, we need to increment refcount when cloning ShmBufInner instance.
+        // SAFETY: `self` is guaranteed to be valid.
         unsafe { self.inc_ref_count() };
         ShmBufInner {
             metadata: self.metadata.clone(),
@@ -262,6 +272,9 @@ impl AsRef<[u8]> for ShmBufInner {
 
 impl AsMut<[u8]> for ShmBufInner {
     fn as_mut(&mut self) -> &mut [u8] {
+        // SAFETY: we have a mutable reference to `ShmBufInner`, and we follow the precautions
+        // mentioned in `as_mut_slice_inner` documentation.
+        // SAFETY: `self` is guaranteed to focus on a valid buffer and the access is unique.
         unsafe { self.as_mut_slice_inner() }
     }
 }
@@ -293,6 +306,9 @@ impl From<ShmBufInner> for ZShm {
 }
 
 impl ZShmMut {
+    /// # Safety
+    ///
+    /// The caller must ensure that the `ShmBufInner` is valid and can be uniquely accessed.
     pub(crate) unsafe fn new_unchecked(inner: ShmBufInner) -> Self {
         Self { inner }
     }
@@ -303,7 +319,8 @@ impl TryFrom<ShmBufInner> for ZShmMut {
 
     fn try_from(value: ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
-            // SAFETY: we checked above
+            // SAFETY: we checked above that the buffer is unique and valid.
+            // SAFETY: `ShmBufInner` and `ZShmMut` are layout-compatible.
             true => Ok(unsafe { Self::new_unchecked(value) }),
             false => Err(value),
         }
@@ -316,7 +333,9 @@ impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
     fn try_from(value: &mut ShmBufInner) -> Result<Self, Self::Error> {
         match value.is_unique() && value.is_valid() {
             // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-            // to ShmBufInner type, so it is safe to transmute them in any direction
+            // to ShmBufInner type, so it is safe to transmute them in any direction.
+            // We checked above that the buffer is unique and valid.
+            // SAFETY: `ShmBufInner` and `zshmmut` are layout-compatible.
             true => Ok(unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshmmut>(value) }),
             false => Err(()),
         }
@@ -326,7 +345,8 @@ impl TryFrom<&mut ShmBufInner> for &mut zshmmut {
 impl From<&ShmBufInner> for &zshm {
     fn from(value: &ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
+        // SAFETY: `ShmBufInner` and `zshm` are layout-compatible.
         unsafe { core::mem::transmute::<&ShmBufInner, &zshm>(value) }
     }
 }
@@ -334,7 +354,8 @@ impl From<&ShmBufInner> for &zshm {
 impl From<&mut ShmBufInner> for &mut zshm {
     fn from(value: &mut ShmBufInner) -> Self {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
+        // SAFETY: `ShmBufInner` and `zshm` are layout-compatible.
         unsafe { core::mem::transmute::<&mut ShmBufInner, &mut zshm>(value) }
     }
 }
