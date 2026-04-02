@@ -73,7 +73,7 @@ impl Scouting {
             mcast_socket,
             ucast_sockets,
         });
-        let cancellation_token = Mutex::new(CancellationToken::new());
+        let cancellation_token = Mutex::new(runtime.get_cancellation_token().child_token());
 
         let state = Arc::new(ScoutState {
             listen,
@@ -155,10 +155,13 @@ impl Scouting {
             );
         }
 
-        *zasynclock!(self.state.cancellation_token) = CancellationToken::new();
+        if let Some(runtime) = self.state.runtime.upgrade() {
+            *zasynclock!(self.state.cancellation_token) =
+                runtime.get_cancellation_token().child_token();
 
-        self.start().await?;
-        tracing::debug!("Scout routine restarted");
+            self.start().await?;
+            tracing::debug!("Scout routine restarted");
+        };
 
         Ok(())
     }
