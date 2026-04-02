@@ -45,7 +45,7 @@ impl TestSessions {
         }
     }
 
-    fn get_listener_config(&self, endpoint: &str, link_num: usize) -> zenoh_config::Config {
+    pub fn get_listener_config(&self, endpoint: &str, link_num: usize) -> zenoh_config::Config {
         let endpoints: Vec<EndPoint> = (0..link_num).map(|_| endpoint.parse().unwrap()).collect();
 
         let mut config = zenoh_config::Config::default();
@@ -59,7 +59,10 @@ impl TestSessions {
         config
     }
 
-    fn get_connector_config_with_endpoint(&self, locators: Vec<EndPoint>) -> zenoh_config::Config {
+    pub fn get_connector_config_with_endpoint(
+        &self,
+        locators: Vec<EndPoint>,
+    ) -> zenoh_config::Config {
         println!("Connecting to {:?}", locators);
         let mut config = zenoh_config::Config::default();
         // Disable multicast by default
@@ -79,7 +82,7 @@ impl TestSessions {
         config
     }
 
-    fn get_connector_config(&self) -> zenoh_config::Config {
+    pub fn get_connector_config(&self) -> zenoh_config::Config {
         self.get_connector_config_with_endpoint(self.locators.clone())
     }
 
@@ -91,6 +94,19 @@ impl TestSessions {
             .into_iter()
             .map(|l| l.to_endpoint())
             .collect()
+    }
+
+    pub async fn open_listener_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
+        let session = ztimeout!(zenoh::open(config)).unwrap();
+        // Extract the actual tcp endpoint that session is listening on
+        let locators = TestSessions::get_locators_from_session(&session).await;
+
+        println!("Listening to {:?}", locators);
+        // Store session and locator
+        self.listener_sessions.push(session.clone());
+        self.locators = locators;
+
+        session
     }
 
     pub async fn open_listener_with_links(&mut self, link_num: usize) -> Session {
