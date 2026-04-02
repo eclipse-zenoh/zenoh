@@ -542,6 +542,7 @@ impl RuntimeState {
     }
 }
 
+#[derive(Clone)]
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
@@ -734,8 +735,9 @@ impl RuntimeBuilder {
         if endpoint_poll_interval > 0 {
             let poll_interval = Duration::from_millis(endpoint_poll_interval as u64);
             runtime.spawn({
-                let runtime2 = runtime.clone();
-                async move { runtime2.monitor_available_addrs(poll_interval).await }
+                let runtime2 = Runtime::downgrade(&runtime);
+                let token = runtime.get_cancellation_token();
+                async move { Runtime::monitor_available_addrs(runtime2, poll_interval, token).await }
             });
         }
 
@@ -886,14 +888,23 @@ impl Runtime {
         Arc::downgrade(&self.state)
     }
 
-    async fn monitor_available_addrs(&self, poll_interval: Duration) {
-        let token = self.get_cancellation_token();
-        loop {
-            tokio::select! {
-                _ = tokio::time::sleep(poll_interval) => self.update_available_addrs().await,
-                _ = token.cancelled() => return,
-            }
-        }
+    async fn monitor_available_addrs(
+        this: WeakRuntime,
+        poll_interval: Duration,
+        token: CancellationToken,
+    ) {
+        token
+            .run_until_cancelled_owned(async {
+                loop {
+                    tokio::time::sleep(poll_interval).await;
+                    if let Some(runtime) = this.upgrade() {
+                        runtime.update_available_addrs().await;
+                    } else {
+                        return;
+                    }
+                }
+            })
+            .await;
     }
 
     async fn update_available_addrs(&self) {

@@ -9,7 +9,7 @@ use std::{
 
 use futures::{lock::Mutex, FutureExt};
 use itertools::Itertools as _;
-use tokio::{net::UdpSocket, sync::RwLock, task::JoinHandle};
+use tokio::{net::UdpSocket, sync::RwLock};
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
@@ -17,12 +17,12 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    core::{Locator, WhatAmIMatcher, ZenohIdProto},
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::ZResult;
 
-use super::Runtime;
+use super::{Runtime, WeakRuntime};
 use crate::net::{common::AutoConnect, runtime::orchestrator::Loop};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
@@ -43,7 +43,7 @@ struct ScoutState {
     /// Interface constraints, "auto" or a comma-separated IP address list..
     ifaces: String,
     multicast_ttl: u32,
-    runtime: Runtime,
+    runtime: WeakRuntime,
     sockets: RwLock<ScoutSockets>,
     cancellation_token: Mutex<CancellationToken>,
 }
@@ -81,7 +81,7 @@ impl Scouting {
             addr,
             ifaces,
             multicast_ttl,
-            runtime,
+            runtime: Runtime::downgrade(&runtime),
             sockets,
             cancellation_token,
         });
@@ -288,12 +288,18 @@ impl Scouting {
     }
 
     pub async fn start(&self) -> ZResult<()> {
+        let runtime = if let Some(runtime) = self.state.runtime.upgrade() {
+            runtime
+        } else {
+            return Ok(());
+        };
+
         if !zasyncread!(self.state.sockets).ucast_sockets.is_empty() {
             let this = self.clone();
             let token = this.get_cancellation_token().await;
             match (self.state.listen, self.state.autoconnect.is_enabled()) {
                 (true, true) => {
-                    self.spawn_abortable(async move {
+                    runtime.spawn_abortable(async move {
                         let sockets = zasyncread!(this.state.sockets);
                         tokio::select! {
                             _ = this.responder(&sockets.mcast_socket, &sockets.ucast_sockets) => {},
@@ -307,7 +313,7 @@ impl Scouting {
                     });
                 }
                 (true, false) => {
-                    self.spawn_abortable(async move {
+                    runtime.spawn_abortable(async move {
                         let sockets = zasyncread!(this.state.sockets);
                         tokio::select! {
                             _ = this.responder(&sockets.mcast_socket, &sockets.ucast_sockets) => (),
@@ -316,7 +322,7 @@ impl Scouting {
                     });
                 }
                 (false, true) => {
-                    self.spawn_abortable(async move {
+                    runtime.spawn_abortable(async move {
                         let sockets = zasyncread!(this.state.sockets);
                         tokio::select! {
                             _ = this.autoconnect_all(
@@ -370,7 +376,11 @@ impl Scouting {
                 async move {
                     tracing::info!("Found {:?}", hello);
                     if !hello.locators.is_empty() {
-                        if runtime.connect(&hello.zid, &hello.locators).await {
+                        if let Some(runtime) = runtime.upgrade() {
+                            if runtime.connect(&hello.zid, &hello.locators).await {
+                                return Loop::Break;
+                            }
+                        } else {
                             return Loop::Break;
                         }
                     } else {
@@ -411,18 +421,25 @@ impl Scouting {
             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
             if let Ok(msg) = res {
                 tracing::trace!("Received {:?} from {}", msg.body, peer);
+
                 if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
-                    if what.matches(self.whatami()) {
+                    let runtime = if let Some(runtime) = self.state.runtime.upgrade() {
+                        runtime
+                    } else {
+                        return;
+                    };
+
+                    if what.matches(runtime.whatami()) {
                         let mut wbuf = vec![];
                         let mut writer = wbuf.writer();
                         let codec = Zenoh080::new();
 
-                        let zid = self.zid();
+                        let zid = runtime.zid().into();
                         let hello: ScoutingMessage = HelloProto {
                             version: zenoh_protocol::VERSION,
-                            whatami: self.whatami(),
+                            whatami: runtime.whatami(),
                             zid,
-                            locators: self.get_locators(),
+                            locators: runtime.get_locators(),
                         }
                         .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
@@ -451,32 +468,16 @@ impl Scouting {
         }
     }
 
-    fn whatami(&self) -> WhatAmI {
-        self.state.runtime.whatami()
-    }
-
-    fn get_locators(&self) -> Vec<Locator> {
-        self.state.runtime.get_locators()
-    }
-
     async fn get_cancellation_token(&self) -> CancellationToken {
         zasynclock!(self.state.cancellation_token).child_token()
     }
 
-    fn zid(&self) -> ZenohIdProto {
-        self.state.runtime.manager().zid()
-    }
-
     async fn connect_peer(&self, zid: &ZenohIdProto, locators: &[Locator]) -> bool {
-        self.state.runtime.connect_peer(zid, locators).await
-    }
-
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
-    where
-        F: Future<Output = T> + Send + 'static,
-        T: Send + 'static,
-    {
-        self.state.runtime.spawn_abortable(future)
+        if let Some(runtime) = self.state.runtime.upgrade() {
+            runtime.connect_peer(zid, locators).await
+        } else {
+            false
+        }
     }
 }
 
