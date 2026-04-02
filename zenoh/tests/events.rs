@@ -11,49 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod common;
+use crate::common::TestSessions;
 
 use std::time::Duration;
 
-use zenoh::{query::Reply, sample::SampleKind, Session};
+use zenoh::{query::Reply, sample::SampleKind};
 use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
-    let mut config = zenoh_config::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            listen
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config
-        .connect
-        .endpoints
-        .set(
-            connect
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening session");
-    ztimeout!(zenoh::open(config)).unwrap()
-}
-
-async fn close_session(session: Session) {
-    println!("[  ][01d] Closing session");
-    ztimeout!(session.close()).unwrap();
-}
-
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_events() {
-    let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
+    let mut test_context = TestSessions::new();
+
+    let session = test_context.open_listener().await;
     let zid = session.zid();
     let sub1 =
         ztimeout!(session.declare_subscriber(format!("@/{zid}/session/transport/unicast/*")))
@@ -63,7 +35,7 @@ async fn zenoh_events() {
     )
     .unwrap();
 
-    let session2 = open_session(&["tcp/127.0.0.1:18448"], &["tcp/127.0.0.1:18447"]).await;
+    let session2 = test_context.open_connector().await;
     let zid2 = session2.zid();
 
     let sample = ztimeout!(sub1.recv_async());
@@ -98,7 +70,7 @@ async fn zenoh_events() {
     let key_expr = replies[0].result().unwrap().key_expr().as_str();
     assert!(key_expr.starts_with(&format!("@/{zid}/session/transport/unicast/{zid2}/link/")));
 
-    close_session(session2).await;
+    ztimeout!(session2.close()).unwrap();
 
     let sample = ztimeout!(sub1.recv_async());
     assert!(sample.is_ok());
@@ -114,5 +86,5 @@ async fn zenoh_events() {
 
     ztimeout!(sub2.undeclare()).unwrap();
     ztimeout!(sub1.undeclare()).unwrap();
-    close_session(session).await;
+    ztimeout!(session.close()).unwrap();
 }
