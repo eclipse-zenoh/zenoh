@@ -17,6 +17,7 @@ use std::time::Duration;
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::Session;
+use zenoh::Wait;
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
@@ -96,10 +97,33 @@ impl TestSessions {
             .collect()
     }
 
+    pub fn get_locators_from_session_sync(session: &Session) -> Vec<EndPoint> {
+        session
+            .info()
+            .locators()
+            .wait()
+            .into_iter()
+            .map(|l| l.to_endpoint())
+            .collect()
+    }
+
     pub async fn open_listener_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
         let session = ztimeout!(zenoh::open(config)).unwrap();
         // Extract the actual tcp endpoint that session is listening on
         let locators = TestSessions::get_locators_from_session(&session).await;
+
+        println!("Listening to {:?}", locators);
+        // Store session and locator
+        self.listener_sessions.push(session.clone());
+        self.locators = locators;
+
+        session
+    }
+
+    pub fn open_listener_with_cfg_sync(&mut self, config: zenoh_config::Config) -> Session {
+        let session = zenoh::open(config).wait().unwrap();
+        // Extract the actual tcp endpoint that session is listening on
+        let locators = TestSessions::get_locators_from_session_sync(&session);
 
         println!("Listening to {:?}", locators);
         // Store session and locator
@@ -116,6 +140,13 @@ impl TestSessions {
 
     pub async fn open_connector_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
         let session = ztimeout!(zenoh::open(config)).unwrap();
+        self.connector_sessions.push(session.clone());
+
+        session
+    }
+
+    pub fn open_connector_with_cfg_sync(&mut self, config: zenoh_config::Config) -> Session {
+        let session = zenoh::open(config).wait().unwrap();
         self.connector_sessions.push(session.clone());
 
         session
@@ -197,6 +228,20 @@ impl TestSessions {
         for session in self.listener_sessions.drain(..) {
             println!("Closing listener session");
             ztimeout!(session.close()).unwrap();
+        }
+    }
+
+    pub fn close_sync(&mut self) {
+        // Close all the connector sessions
+        for session in self.connector_sessions.drain(..) {
+            println!("Closing connector session");
+            session.close().wait().unwrap();
+        }
+
+        // Close all the listener sessions
+        for session in self.listener_sessions.drain(..) {
+            println!("Closing listener session");
+            session.close().wait().unwrap();
         }
     }
 }
