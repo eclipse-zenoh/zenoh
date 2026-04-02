@@ -14,15 +14,14 @@
 
 #![cfg(feature = "unstable")]
 mod common;
-use crate::common::TestSessions;
-
 use core::time::Duration;
 
 use zenoh::sample::SourceInfo;
 use zenoh_core::ztimeout;
 
-const TIMEOUT: Duration = Duration::from_secs(60);
+use crate::common::TestSessions;
 
+const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_source_info_pub_sub() {

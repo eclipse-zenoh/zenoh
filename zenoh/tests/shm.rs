@@ -13,8 +13,6 @@
 //
 #![cfg(all(feature = "unstable", feature = "shared-memory",))]
 mod common;
-use crate::common::TestSessions;
-
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -34,6 +32,8 @@ use zenoh::{
 use zenoh_buffers::ZBuf;
 use zenoh_core::ztimeout;
 use zenoh_shm::api::buffer::traits::OwnedShmBuf;
+
+use crate::common::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

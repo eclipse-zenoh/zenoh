@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
 mod common;
-use crate::common::TestSessions;
-
 use std::time::Duration;
 
 use zenoh::{query::Reply, sample::SampleKind};
 use zenoh_core::ztimeout;
+
+use crate::common::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
