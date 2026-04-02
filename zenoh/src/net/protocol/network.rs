@@ -717,7 +717,6 @@ impl Network {
                     let node = &mut self.graph[idx];
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
-                        tracing::info!(target: "dbg", x=Option::<u8>::None, ?node.links, ?node.zid, ?ls.links, node.sn, ls.sn);
                         node.sn = ls.sn;
                         // NOTE(regions): only Gossip may send malformed messages with empty
                         // linkstate. These can be safely ignored since they don't occur in "full"
