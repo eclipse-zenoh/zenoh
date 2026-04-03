@@ -441,10 +441,10 @@ impl TransportLinks {
         let mut links =
             Vec::with_capacity(self.inner.len() + if associated_link.is_some() { 2 } else { 1 });
         links.extend_from_slice(&self.inner);
-        links.push(TransportLinkMarker::Link(link.clone()));
+        links.push(TransportLinkMarker::Link(link));
 
         if let Some(l) = associated_link {
-            links.push(TransportLinkMarker::AssociatedLink(l.clone()));
+            links.push(TransportLinkMarker::AssociatedLink(l));
         }
 
         self.inner = links.into_boxed_slice();
