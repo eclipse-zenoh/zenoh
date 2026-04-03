@@ -274,12 +274,12 @@ impl Sample {
         self.timestamp.as_ref()
     }
 
-    /// Gets the congestion control of this Sample.
+    /// Gets the [`CongestionControl`] applied when routing the data.
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Gets the priority of this Sample.
+    /// Gets the [`Priority`] of this Sample.
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
@@ -302,13 +302,13 @@ impl Sample {
         self.source_info.as_ref()
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
+    /// Gets the optional sample attachment as bytes.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
         self.attachment.as_ref()
     }
 
-    /// Gets the sample attachment: a map of key-value pairs, where each key and each value is a byte-slice.
+    /// Gets a mutable reference to the optional sample attachment bytes.
     #[inline]
     pub fn attachment_mut(&mut self) -> Option<&mut ZBytes> {
         self.attachment.as_mut()
@@ -420,18 +420,24 @@ impl From<QoSBuilder> for QoS {
 
 #[zenoh_macros::internal_trait]
 impl QoSBuilderTrait for QoSBuilder {
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let mut inner = self.0.inner;
         inner.set_congestion_control(congestion_control);
         Self(QoS { inner })
     }
 
+    /// Changes the [`Priority`](crate::qos::Priority) to apply when routing the data.
     fn priority(self, priority: Priority) -> Self {
         let mut inner = self.0.inner;
         inner.set_priority(priority.into());
         Self(QoS { inner })
     }
 
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let mut inner = self.0.inner;
         inner.set_is_express(is_express);
@@ -440,7 +446,7 @@ impl QoSBuilderTrait for QoSBuilder {
 }
 
 impl QoS {
-    /// Gets the priority of the message.
+    /// Get the [`Priority`] of the message.
     pub fn priority(&self) -> Priority {
         match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -454,7 +460,7 @@ impl QoS {
         }
     }
 
-    /// Gets the congestion control of the message.
+    /// Get the [`CongestionControl`] applied when routing the data.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }

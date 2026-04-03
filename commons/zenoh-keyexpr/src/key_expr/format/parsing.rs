@@ -116,6 +116,7 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
     pub fn parse(&'s self, target: &'s keyexpr) -> ZResult<Parsed<'s, Storage>> {
         let segments = self.storage.segments();
         if segments.is_empty()
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             && !target.intersects(unsafe { keyexpr::from_str_unchecked(self.suffix) })
         {
             bail!("{target} does not intersect with {self}")
@@ -127,6 +128,7 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
             match self.suffix.as_bytes() {
                 [] => do_parse(Some(target), segments, results_mut),
                 [b'/', suffix @ ..] => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let suffix = unsafe { keyexpr::from_slice_unchecked(suffix) };
                     for (target, candidate) in target.iter_splits_rtl() {
                         if suffix.intersects(candidate)

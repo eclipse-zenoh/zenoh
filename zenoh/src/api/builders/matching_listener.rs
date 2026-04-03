@@ -21,10 +21,9 @@ use std::{
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::{SyncGroup, SyncGroupNotifier};
 use crate::{
     api::{
+        cancellation::{SyncGroup, SyncGroupNotifier},
         handlers::{Callback, DefaultHandler, IntoHandler},
         matching::{MatchingListener, MatchingListenerInner, MatchingStatus, MatchingStatusType},
         sample::Locality,
@@ -46,7 +45,6 @@ pub struct MatchingListenerBuilder<'a, Handler, const BACKGROUND: bool = false> 
     pub(crate) matching_listeners: &'a Arc<Mutex<HashSet<Id>>>,
     pub(crate) matching_status_type: MatchingStatusType,
     pub handler: Handler,
-    #[cfg(feature = "unstable")]
     pub(crate) parent_callback_sync_group_notifier: Option<SyncGroupNotifier>,
 }
 
@@ -144,7 +142,6 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
             matching_listeners: self.matching_listeners,
             matching_status_type: self.matching_status_type,
             handler,
-            #[cfg(feature = "unstable")]
             parent_callback_sync_group_notifier: self.parent_callback_sync_group_notifier,
         }
     }
@@ -185,7 +182,6 @@ impl<'a> MatchingListenerBuilder<'a, Callback<MatchingStatus>> {
             key_expr: self.key_expr,
             matching_status_type: self.matching_status_type,
             handler: self.handler,
-            #[cfg(feature = "unstable")]
             parent_callback_sync_group_notifier: self.parent_callback_sync_group_notifier,
         }
     }
@@ -205,7 +201,6 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[cfg(feature = "unstable")]
         let callback_sync_group = SyncGroup::default();
         let (callback, handler) = self.handler.into_handler();
         let state = self.session.declare_matches_listener_inner(
@@ -213,7 +208,6 @@ where
             self.destination,
             self.matching_status_type,
             callback,
-            #[cfg(feature = "unstable")]
             callback_sync_group.notifier(),
         )?;
         zlock!(self.matching_listeners).insert(state.id);
@@ -225,7 +219,6 @@ where
                 undeclare_on_drop: true,
             },
             handler,
-            #[cfg(feature = "unstable")]
             callback_sync_group,
         })
     }
@@ -255,7 +248,6 @@ impl Wait for MatchingListenerBuilder<'_, Callback<MatchingStatus>, true> {
             self.destination,
             self.matching_status_type,
             self.handler,
-            #[cfg(feature = "unstable")]
             self.parent_callback_sync_group_notifier,
         )?;
         zlock!(self.matching_listeners).insert(state.id);

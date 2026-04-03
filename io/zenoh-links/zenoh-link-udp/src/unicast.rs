@@ -163,7 +163,7 @@ impl LinkUnicastTrait for LinkUnicastUdp {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.close().await,
             LinkUnicastUdpVariant::Unconnected(link) => {
-                link.close(__self.src_addr, __self.dst_addr).await
+                link.close(self.src_addr, self.dst_addr).await
             }
             LinkUnicastUdpVariant::Reliable(link) => {
                 link.close();

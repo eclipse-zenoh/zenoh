@@ -93,7 +93,8 @@ impl<T, Buf> Typed<MaybeUninit<T>, Buf> {
                 1 << (slice.as_ptr() as usize).trailing_zeros()
             );
         }
-        // SAFETY: the layout has been checked, and type is `MaybeUninit`
+        // SAFETY: the layout has been checked, and the type is `MaybeUninit`,
+        // which does not have any further invariants.
         Ok(unsafe { Self::new_unchecked(buf) })
     }
     /// Assumes the underlying data is initialized.
@@ -113,9 +114,9 @@ impl<T, Buf> Typed<MaybeUninit<T>, Buf> {
     where
         Buf: ShmBufMut<[u8]>,
     {
-        // SAFETY: this is safe because we check transmute safety when constructing self
+        // SAFETY: this is safe because we check layout compatibility when constructing `self`.
         unsafe { self.buf.as_mut().as_mut_ptr().cast::<T>().write(value) };
-        // SAFETY: the data has been initialized
+        // SAFETY: the data has just been initialized.
         unsafe { self.assume_init() }
     }
 }
@@ -198,7 +199,8 @@ impl<T: ResideInShm, Buf: ShmBuf<[u8]>> Deref for Typed<T, Buf> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: this is safe because we check transmute safety when constructing self
+        // SAFETY: this is safe because we check layout compatibility and initialization
+        // when constructing `self`.
         unsafe { &*(self.buf.as_ref().as_ptr() as *const T) }
     }
 }
@@ -211,7 +213,8 @@ impl<T: ResideInShm, Buf: ShmBuf<[u8]>> AsRef<T> for Typed<T, Buf> {
 
 impl<T: ResideInShm, Buf: ShmBufMut<[u8]>> DerefMut for Typed<T, Buf> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        // SAFETY: this is safe because we check transmute safety when constructing self
+        // SAFETY: this is safe because we check layout compatibility and initialization
+        // when constructing `self`.
         unsafe { &mut *(self.buf.as_mut().as_mut_ptr() as *mut T) }
     }
 }
@@ -231,8 +234,13 @@ impl<T: ResideInShm, Buf: ShmBuf<[u8]>> ShmBuf<T> for Typed<T, Buf> {
 impl<T: ResideInShm, Buf: ShmBufMut<[u8]>> ShmBufMut<T> for Typed<T, Buf> {}
 
 impl<T: ResideInShm, Buf: ShmBufUnsafeMut<[u8]>> ShmBufUnsafeMut<T> for Typed<T, Buf> {
+    /// # Safety
+    ///
+    /// The caller must ensure that the `ShmBufInner` is valid and can be uniquely accessed.
     unsafe fn as_mut_unchecked(&mut self) -> &mut T {
-        &mut *(self.buf.as_mut_unchecked().as_mut_ptr() as *mut T)
+        // SAFETY: The internal buffer is assumed to be valid and uniquely accessible
+        // as per the safety contract of this function.
+        unsafe { &mut *(self.buf.as_mut_unchecked().as_mut_ptr() as *mut T) }
     }
 }
 

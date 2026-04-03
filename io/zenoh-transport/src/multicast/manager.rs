@@ -155,7 +155,7 @@ impl TransportManager {
     }
 
     pub async fn close_multicast(&self) {
-        tracing::trace!("TransportManagerMulticast::clear())");
+        tracing::trace!("TransportManagerMulticast::clear()");
 
         zasynclock!(self.state.multicast.link_managers).clear();
         let mut guard = zasynclock!(self.state.multicast.transports);

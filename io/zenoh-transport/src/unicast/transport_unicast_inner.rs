@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{Bound, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::TransportSn,
 };
@@ -73,6 +73,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
+    fn region_name(&self) -> Option<RegionName>;
+    fn get_bound(&self) -> Option<Bound>;
     fn get_config(&self) -> &TransportConfigUnicast;
     #[cfg(feature = "stats")]
     fn stats(&self) -> zenoh_stats::TransportStats;

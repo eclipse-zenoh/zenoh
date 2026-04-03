@@ -33,9 +33,9 @@ use crate::pubsub::{
 #[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 pub trait QoSBuilderTrait {
-    /// Change the `congestion_control` to apply when routing the data.
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self;
-    /// Change the priority of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) when routing the data.
     fn priority(self, priority: Priority) -> Self;
     /// Change the `express` policy to apply when routing the data.
     /// When express is set to `true`, then the message will not be batched.
@@ -49,10 +49,12 @@ pub trait TimestampBuilderTrait {
 }
 
 pub trait SampleBuilderTrait {
-    /// Attach source information
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     #[zenoh_macros::unstable]
     fn source_info<T: Into<Option<SourceInfo>>>(self, source_info: T) -> Self;
-    /// Attach user-provided data in key-value format
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
+    /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
 }
 
@@ -184,6 +186,7 @@ impl<T> SampleBuilder<T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for SampleBuilder<T> {
+    /// Sets an optional timestamp to be sent along with the publication.
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             sample: Sample {
@@ -198,6 +201,7 @@ impl<T> TimestampBuilderTrait for SampleBuilder<T> {
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
     fn source_info<S: Into<Option<SourceInfo>>>(self, source_info: S) -> Self {
         Self {
             sample: Sample {
@@ -208,6 +212,8 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         }
     }
 
+    /// Sets an optional attachment to be sent along with the publication.
+    /// The method accepts both `Into<ZBytes>` and `Option<Into<ZBytes>>`.
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -222,6 +228,7 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for SampleBuilder<T> {
+    /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data/publication/sample.
     fn congestion_control(self, congestion_control: CongestionControl) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.congestion_control(congestion_control).into();
@@ -230,6 +237,7 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
             _t: PhantomData::<T>,
         }
     }
+    /// Changes the [`Priority`](crate::qos::Priority) to apply when routing the data.
     fn priority(self, priority: Priority) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.priority(priority).into();
@@ -238,6 +246,10 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
             _t: PhantomData::<T>,
         }
     }
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos: QoSBuilder = self.sample.qos.into();
         let qos = qos.express(is_express).into();
@@ -250,6 +262,7 @@ impl<T> QoSBuilderTrait for SampleBuilder<T> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for SampleBuilder<SampleBuilderPut> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             sample: Sample {
