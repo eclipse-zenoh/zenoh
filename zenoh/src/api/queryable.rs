@@ -29,8 +29,6 @@ use zenoh_result::ZResult;
 #[zenoh_macros::unstable]
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
 #[zenoh_macros::internal]
@@ -39,6 +37,7 @@ use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         bytes::ZBytes,
+        cancellation::SyncGroup,
         encoding::Encoding,
         handlers::CallbackParameter,
         key_expr::KeyExpr,
@@ -161,8 +160,12 @@ impl Drop for QueryInner {
 /// The important detail: the [`Query::key_expr`] is **not** the key expression
 /// which should be used as the parameter of [`reply`](Query::reply), because it may contain globs.
 /// The [`Queryable`]'s key expression is the one that should be used.
-/// For example, the `Query` may contain the key expression `foo/*` and the reply
-/// should be sent with `foo/bar` or `foo/baz`, depending on the concrete querier.
+///
+/// This parameter is not set automatically because [`Queryable`](crate::query::Queryable) itself
+/// may serve glob key expressions and send replies on different concrete key expressions
+/// matching this glob. For example, a `Queryable` serving `foo/*` may receive a `Query`
+/// with key expression `foo/bar` and another one with `foo/baz`, and it should reply
+/// respectively on `foo/bar` and `foo/baz`.
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -425,6 +428,8 @@ impl Query {
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does so.
     ///
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
+    ///
     /// # Examples
     /// ```
     /// # #[tokio::main]
@@ -448,15 +453,15 @@ impl Query {
         self.parameters().contains_key(REPLY_KEY_EXPR_ANY_SEL_PARAM)
     }
 
-    /// Constructs an empty Query without payload or attachment, referencing the same inner query.
+    /// Constructs an empty Query without payload or attachment.
     ///
     /// # Examples
     /// ```
     /// # fn main() {
-    /// let query = unsafe { zenoh::query::Query::empty() };
+    /// let query = zenoh::query::Query::empty();
     /// # }
     #[zenoh_macros::internal]
-    pub unsafe fn empty() -> Self {
+    pub fn empty() -> Self {
         Query {
             inner: Arc::new(QueryInner::empty()),
             eid: 0,
@@ -545,8 +550,7 @@ impl IntoFuture for ReplySample<'_> {
 
 impl Query {
     pub(crate) fn _reply_sample(&self, sample: Sample) -> ZResult<()> {
-        let c = zcondfeat!("unstable", !self._accepts_any_replies(), true);
-        if c && !self.key_expr().intersects(&sample.key_expr) {
+        if !self._accepts_any_replies() && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
         #[cfg(not(feature = "unstable"))]
@@ -629,13 +633,12 @@ pub(crate) struct QueryableInner {
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct QueryableUndeclaration<Handler> {
     queryable: Queryable<Handler>,
-    #[cfg(feature = "unstable")]
     wait_callbacks: bool,
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
-    #[zenoh_macros::unstable]
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;
         self
@@ -649,7 +652,6 @@ impl<Handler> Resolvable for QueryableUndeclaration<Handler> {
 impl<Handler> Wait for QueryableUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
         self.queryable.undeclare_impl()?;
-        #[cfg(feature = "unstable")]
         if self.wait_callbacks {
             self.queryable.callback_sync_group.wait();
         }
@@ -724,7 +726,6 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
-    #[cfg(feature = "unstable")]
     pub(crate) callback_sync_group: SyncGroup,
 }
 
@@ -865,7 +866,6 @@ impl<Handler: Send> UndeclarableSealed<()> for Queryable<Handler> {
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
         QueryableUndeclaration {
             queryable: self,
-            #[cfg(feature = "unstable")]
             wait_callbacks: false,
         }
     }

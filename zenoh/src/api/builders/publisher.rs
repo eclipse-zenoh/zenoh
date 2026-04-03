@@ -19,8 +19,6 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
-#[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
 use crate::{
     api::{
@@ -28,6 +26,7 @@ use crate::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         },
         bytes::{OptionZBytes, ZBytes},
+        cancellation::SyncGroup,
         encoding::Encoding,
         key_expr::KeyExpr,
         publisher::{Priority, Publisher},
@@ -117,7 +116,7 @@ impl<T> QoSBuilderTrait for PublicationBuilder<PublisherBuilder<'_, '_>, T> {
         }
     }
 
-    /// Changes the [`Priority`](crate::qos::Priority) of the written data.
+    /// Changes the [`Priority`](crate::qos::Priority) when routing the data.
     #[inline]
     fn priority(self, priority: Priority) -> Self {
         Self {
@@ -476,7 +475,6 @@ impl Wait for PublisherBuilder<'_, '_> {
             reliability: self.reliability,
             matching_listeners: Default::default(),
             undeclare_on_drop: true,
-            #[cfg(feature = "unstable")]
             sync_group: SyncGroup::default(),
         })
     }

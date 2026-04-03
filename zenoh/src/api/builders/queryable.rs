@@ -16,10 +16,9 @@ use std::future::{IntoFuture, Ready};
 use zenoh_core::{Resolvable, Wait};
 use zenoh_result::ZResult;
 
-#[cfg(feature = "unstable")]
-use crate::api::cancellation::SyncGroup;
 use crate::{
     api::{
+        cancellation::SyncGroup,
         handlers::{locked, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
         queryable::{Query, Queryable, QueryableInner},
@@ -225,7 +224,6 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
-        #[cfg(feature = "unstable")]
         let callback_sync_group = SyncGroup::default();
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
@@ -237,7 +235,6 @@ where
                 self.complete,
                 self.origin,
                 callback,
-                #[cfg(feature = "unstable")]
                 callback_sync_group.notifier(),
             )
             .map(|qable_state| Queryable {
@@ -248,7 +245,6 @@ where
                     key_expr: ke.into_owned(),
                 },
                 handler: receiver,
-                #[cfg(feature = "unstable")]
                 callback_sync_group,
             })
     }
@@ -280,7 +276,6 @@ impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
             self.complete,
             self.origin,
             self.handler,
-            #[cfg(feature = "unstable")]
             None,
         )?;
         Ok(())

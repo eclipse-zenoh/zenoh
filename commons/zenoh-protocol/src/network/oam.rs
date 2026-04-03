@@ -25,6 +25,8 @@ pub mod id {
     use super::OamId;
 
     pub const OAM_LINKSTATE: OamId = 0x0001;
+    pub const OAM_RESERVED_0: OamId = 0x0002;
+    pub const OAM_RESERVED_1: OamId = 0x0003;
 }
 
 /// ```text
@@ -59,10 +61,7 @@ pub struct Oam {
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
