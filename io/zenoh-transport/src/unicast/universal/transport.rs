@@ -425,6 +425,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 ///   separate links) for message scheduling based on QoS.
 #[derive(Default)]
 pub(super) struct TransportLinks {
+    /// Two associated links are contiguous within the array as such:
+    /// \[..., Link, AssociatedLink, ...\].
+    ///
+    /// This order is guaranteed at insertion, and assumed at removal.
     inner: Box<[TransportLinkMarker]>,
 }
 
