@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashMap,
     fmt::DebugStruct,
+    ops::{Deref, Not},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -425,14 +425,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 ///   separate links) for message scheduling based on QoS.
 #[derive(Default)]
 pub(super) struct TransportLinks {
-    inner: Box<[TransportLinkUnicastUniversal]>,
-    // TODO: memory usage of associations can probably be optimized
-    /// associations of links that internally use a shared state (namely mixed-reliability links)
-    associations: HashMap<Link, (Link, TransportLinkUnicastDirection)>,
+    inner: Box<[TransportLinkMarker]>,
 }
 
 impl TransportLinks {
-    pub(super) fn get_links(&self) -> &[TransportLinkUnicastUniversal] {
+    pub(super) fn get_links(&self) -> &[TransportLinkMarker] {
         &self.inner
     }
 
@@ -444,25 +441,10 @@ impl TransportLinks {
         let mut links =
             Vec::with_capacity(self.inner.len() + if associated_link.is_some() { 2 } else { 1 });
         links.extend_from_slice(&self.inner);
-        links.push(link.clone());
+        links.push(TransportLinkMarker::Link(link.clone()));
 
         if let Some(l) = associated_link {
-            links.push(l.clone());
-            // add associations to HashMap
-            let l1 = Link::new_unicast(
-                &link.link.link,
-                link.link.config.priorities.clone(),
-                link.link.config.reliability,
-            );
-            let l2 = Link::new_unicast(
-                &l.link.link,
-                l.link.config.priorities.clone(),
-                l.link.config.reliability,
-            );
-            self.associations
-                .insert(l1.clone(), (l2.clone(), link.link.config.direction));
-            self.associations
-                .insert(l2, (l1, link.link.config.direction));
+            links.push(TransportLinkMarker::AssociatedLink(l.clone()));
         }
 
         self.inner = links.into_boxed_slice();
@@ -486,39 +468,51 @@ impl TransportLinks {
             .eq(link)
         };
         let index = self.inner.iter().position(|tl| link_equality(tl, link))?;
+        let is_asl = matches!(self.inner[index], TransportLinkMarker::AssociatedLink(_));
+
+        let mut links = self.inner.to_vec();
 
         // Remove the link
-        let mut links = self.inner.to_vec();
         let stl = links.remove(index);
 
-        // Remove associated link (if applicable)
-        let asl = if let Some((associated_link, _)) = self.associations.remove(link) {
-            // Remove opposite association
-            self.associations.remove(&associated_link);
-            // Remove associated link from links vec
-            match links
-                .iter()
-                .position(|tl| link_equality(tl, &associated_link))
-            {
-                Some(index) => Some(links.remove(index)),
-                None => {
-                    // this is possible if link equality cannot be guaranteed between now and
-                    // when the link was originally inserted. RX or TX task will fail and remove
-                    // it once its internal connection is closed by the associated link.
-                    tracing::debug!("Associated link not found while removing link {link}");
-                    None
-                }
-            }
+        // Remove associated link if applicable (also minding the array bounds)
+        let asl = if is_asl {
+            // Remove the link at index-1, which should NOT be an AssociatedLink variant
+            index.checked_sub(1).map(|i| {
+                let l = links.remove(i);
+                debug_assert!(
+                    matches!(l, TransportLinkMarker::AssociatedLink(_)).not(),
+                    "should be the main link of the removed associated link"
+                );
+                l
+            })
         } else {
-            None
+            // Remove the link at index+1 (which is now at index after removal of the main link) IF it is an AssociatedLink
+            if let Some(l) = links.get(index) {
+                match l {
+                    TransportLinkMarker::Link(_) => None,
+                    TransportLinkMarker::AssociatedLink(_) => Some(links.remove(index)),
+                }
+            } else {
+                None
+            }
         };
 
         self.inner = links.into_boxed_slice();
-        Some((self.inner.is_empty(), stl, asl))
+        Some((
+            self.inner.is_empty(),
+            stl.into_inner(),
+            asl.map(TransportLinkMarker::into_inner),
+        ))
     }
 
     fn take(&mut self) -> Vec<TransportLinkUnicastUniversal> {
-        let links = self.inner.to_vec();
+        let links = self
+            .inner
+            .to_vec()
+            .into_iter()
+            .map(TransportLinkMarker::into_inner)
+            .collect();
         self.inner = vec![].into_boxed_slice();
         links
     }
@@ -528,18 +522,39 @@ impl TransportLinks {
         direction: TransportLinkUnicastDirection,
         limit: usize,
     ) -> bool {
-        let count = self
-            .inner
+        // Do not count AssociatedLink: pairs of (Link, AssociatedLink) must count as only one for
+        // multilink limit.
+        self.inner
             .iter()
-            .filter(|l| l.link.config.direction == direction)
-            .count();
-        count
-            - self
-                .associations
-                .values()
-                .filter(|(_, link_direction)| *link_direction == direction)
-                .count()
-                / 2
+            .filter(|l| {
+                matches!(l, TransportLinkMarker::Link(_)) && l.link.config.direction == direction
+            })
+            .count()
             >= limit
+    }
+}
+
+#[derive(Clone)]
+pub(super) enum TransportLinkMarker {
+    Link(TransportLinkUnicastUniversal),
+    AssociatedLink(TransportLinkUnicastUniversal),
+}
+
+impl TransportLinkMarker {
+    fn into_inner(self) -> TransportLinkUnicastUniversal {
+        match self {
+            TransportLinkMarker::Link(l) | TransportLinkMarker::AssociatedLink(l) => l,
+        }
+    }
+}
+
+impl Deref for TransportLinkMarker {
+    type Target = TransportLinkUnicastUniversal;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            TransportLinkMarker::Link(l) => &l,
+            TransportLinkMarker::AssociatedLink(l) => &l,
+        }
     }
 }
