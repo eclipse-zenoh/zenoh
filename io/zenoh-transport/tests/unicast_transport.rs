@@ -2361,8 +2361,7 @@ async fn transport_unicast_mixedrel_quic() {
 async fn transport_unicast_mixedrel_udp() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10505?mixed_rel=1");
-    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let endpoint = ["udp/localhost:10505?rel=1;mixed_rel=1".parse().unwrap()];
     let is_mixed_rel = run_mixed_reliability_test(endpoint, endpoint, false).await;
     assert!(is_mixed_rel, "mixed_rel=1 should enable mixed reliability");
 }
@@ -2386,8 +2385,7 @@ async fn transport_unicast_mixedrel_quic_multistream() {
 async fn transport_unicast_mixedrel_udp_multistream() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint_quic = quic_endpoint("quic/localhost:10515?mixed_rel=1");
-    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let endpoint = ["udp/localhost:10515?rel=1;mixed_rel=1".parse().unwrap()];
     let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
     assert!(
         is_multistream,
