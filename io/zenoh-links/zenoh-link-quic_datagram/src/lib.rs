@@ -17,13 +17,13 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{str::FromStr, sync::Arc, time::Duration};
+use std::str::FromStr;
 
 use async_trait::async_trait;
-use zenoh_core::{zconfigurable, zerror};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{Config, Locator, Metadata, Reliability},
+    core::{Locator, Metadata, Reliability},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -82,38 +82,4 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-pub(crate) fn set_mtu_config(
-    config: Config,
-    server_config: &mut quinn::ServerConfig,
-) -> ZResult<()> {
-    if let Some(initial_mtu) = config.get("initial_mtu") {
-        let initial_mtu = initial_mtu.parse::<u16>().map_err(|err| {
-            zerror!(
-                "could not parse QUIC Datagram endpoint's initial_mtu value `{initial_mtu}`: {err}"
-            )
-        })?;
-        Arc::get_mut(&mut server_config.transport)
-            .unwrap()
-            .initial_mtu(initial_mtu);
-    }
-
-    if let Some(mtu_discovery_interval_secs) = config.get("mtu_discovery_interval_secs") {
-        let mtu_discovery_interval = mtu_discovery_interval_secs
-            .parse::<u64>()
-            .map_err(|err| {
-                zerror!(
-                    "could not parse QUIC Datagram endpoint's mtu_discovery_interval_secs value `{mtu_discovery_interval_secs}`: {err}"
-                )
-            })
-            .map(Duration::from_secs)?;
-        let mut mtu_discovery_config = quinn::MtuDiscoveryConfig::default();
-        mtu_discovery_config.interval(mtu_discovery_interval);
-        Arc::get_mut(&mut server_config.transport)
-            .unwrap()
-            .mtu_discovery_config(Some(mtu_discovery_config));
-    }
-
-    Ok(())
 }
