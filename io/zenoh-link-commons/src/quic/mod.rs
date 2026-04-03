@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+mod plaintext;
 mod socket;
 mod utils;
 pub use utils::*;
-
 pub mod unicast;

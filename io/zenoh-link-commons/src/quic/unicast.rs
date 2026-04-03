@@ -12,7 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{cell::UnsafeCell, collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{
+    cell::UnsafeCell,
+    collections::HashMap,
+    future::{Future, IntoFuture},
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+};
 
 use futures::FutureExt;
 use quinn::{
@@ -22,15 +29,17 @@ use quinn::{
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use zenoh_config::{EndPoint, Locator};
-use zenoh_core::{bail, zerror};
+use zenoh_core::zerror;
 use zenoh_protocol::core::{Metadata, Priority};
 use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_quic_addr, get_quic_host, socket::QuicSocketConfig, QuicMtuConfig,
-        QuicTransportConfigurator, TlsClientConfig, TlsServerConfig, PROTOCOL_LEGACY,
-        PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
+        get_quic_addr, get_quic_host,
+        plaintext::{PlainTextClientConfig, PlainTextServerConfig},
+        socket::QuicSocketConfig,
+        QuicMtuConfig, QuicTransportConfigurator, TlsClientConfig, TlsServerConfig,
+        PROTOCOL_LEGACY, PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
     },
     LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -170,6 +179,50 @@ impl RecvStream {
     }
 }
 
+pub struct QuicServerBuilder<'a, F: AcceptorCallback> {
+    endpoint: &'a EndPoint,
+    acceptor_params: QuicAcceptorParams<F>,
+    is_streamed: bool,
+    is_secure: bool,
+}
+
+impl<'a, F: AcceptorCallback> QuicServerBuilder<'a, F> {
+    pub fn new(endpoint: &'a EndPoint, acceptor_params: QuicAcceptorParams<F>) -> Self {
+        Self {
+            endpoint,
+            acceptor_params,
+            is_streamed: true,
+            is_secure: true,
+        }
+    }
+
+    pub fn streamed(mut self, is_streamed: bool) -> Self {
+        self.is_streamed = is_streamed;
+        self
+    }
+
+    #[cfg(feature = "unsecure_quic")]
+    pub fn security(mut self, is_secure: bool) -> Self {
+        self.is_secure = is_secure;
+        self
+    }
+}
+
+impl<'a, F: AcceptorCallback> IntoFuture for QuicServerBuilder<'a, F> {
+    type Output = ZResult<QuicServer<F>>;
+
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(QuicServer::new(
+            self.endpoint,
+            self.acceptor_params,
+            self.is_streamed,
+            self.is_secure,
+        ))
+    }
+}
+
 pub struct QuicServer<F: AcceptorCallback> {
     pub quic_acceptor: QuicAcceptor<F>,
     pub locator: Locator,
@@ -177,23 +230,22 @@ pub struct QuicServer<F: AcceptorCallback> {
 }
 
 impl<F: AcceptorCallback> QuicServer<F> {
-    pub async fn new(endpoint: &EndPoint, acceptor_params: QuicAcceptorParams<F>) -> ZResult<Self> {
+    async fn new(
+        endpoint: &EndPoint,
+        acceptor_params: QuicAcceptorParams<F>,
+        is_streamed: bool,
+        is_secure: bool,
+    ) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let epconf = endpoint.config();
-
-        if epconf.is_empty() {
-            bail!("No QUIC configuration provided");
-        };
-
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
 
         // Server config
-        let mut server_crypto = TlsServerConfig::new(&epconf)
+        let mut server_crypto = TlsServerConfig::new(&epconf, is_secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
-        let is_streamed = acceptor_params.is_streamed;
         let multistream = if is_streamed {
             Some(MultiStreamConfig::new(endpoint.metadata())?)
         } else {
@@ -209,7 +261,13 @@ impl<F: AcceptorCallback> QuicServer<F> {
             .try_into()
             .map_err(|e| zerror!("Can not create a new QUIC listener on {addr}: {e}"))?;
 
-        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_config));
+        let mut server_config = quinn::ServerConfig::with_crypto({
+            if is_secure {
+                Arc::new(quic_config)
+            } else {
+                Arc::new(PlainTextServerConfig::new(quic_config.into()))
+            }
+        });
         {
             let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
             QuicTransportConfigurator(transport_config)
@@ -251,6 +309,7 @@ impl<F: AcceptorCallback> QuicServer<F> {
             quic_acceptor: QuicAcceptor {
                 quic_endpoint,
                 tls_close_link_on_expiration: server_crypto.tls_close_link_on_expiration,
+                is_streamed,
                 inner: acceptor_params,
             },
             locator,
@@ -259,6 +318,46 @@ impl<F: AcceptorCallback> QuicServer<F> {
     }
 }
 
+pub struct QuicClientBuilder<'a> {
+    endpoint: &'a EndPoint,
+    is_streamed: bool,
+    is_secure: bool,
+}
+
+impl<'a> QuicClientBuilder<'a> {
+    pub fn new(endpoint: &'a EndPoint) -> Self {
+        Self {
+            endpoint,
+            is_streamed: true,
+            is_secure: true,
+        }
+    }
+
+    pub fn streamed(mut self, is_streamed: bool) -> Self {
+        self.is_streamed = is_streamed;
+        self
+    }
+
+    #[cfg(feature = "unsecure_quic")]
+    pub fn security(mut self, is_secure: bool) -> Self {
+        self.is_secure = is_secure;
+        self
+    }
+}
+
+impl<'a> IntoFuture for QuicClientBuilder<'a> {
+    type Output = ZResult<QuicClient>;
+
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(QuicClient::new(
+            self.endpoint,
+            self.is_streamed,
+            self.is_secure,
+        ))
+    }
+}
 pub struct QuicClient {
     pub quic_conn: quinn::Connection,
     pub streams: Option<QuicStreams>,
@@ -268,14 +367,14 @@ pub struct QuicClient {
 }
 
 impl QuicClient {
-    pub async fn new(endpoint: &EndPoint, is_streamed: bool) -> ZResult<Self> {
+    async fn new(endpoint: &EndPoint, is_streamed: bool, is_secure: bool) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
 
         // Initialize the QUIC connection
-        let mut client_crypto = TlsClientConfig::new(&epconf)
+        let mut client_crypto = TlsClientConfig::new(&epconf, is_secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
@@ -314,7 +413,13 @@ impl QuicClient {
             .try_into()
             .map_err(|e| zerror!("Can not get QUIC config {host}: {e}"))?;
         quic_endpoint.set_default_client_config({
-            let mut client_config = quinn::ClientConfig::new(Arc::new(quic_config));
+            let mut client_config = quinn::ClientConfig::new({
+                if is_secure {
+                    Arc::new(quic_config)
+                } else {
+                    Arc::new(PlainTextClientConfig::new(quic_config.into()))
+                }
+            });
             let mut transport_config = quinn::TransportConfig::default();
             QuicTransportConfigurator(&mut transport_config)
                 .configure_max_concurrent_streams(multistream.as_ref())
@@ -370,7 +475,6 @@ impl<T: Fn(QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> + Send + Sync
 }
 
 pub struct QuicAcceptorParams<F: AcceptorCallback> {
-    pub is_streamed: bool,
     pub token: CancellationToken,
     pub manager: NewLinkChannelSender,
     pub throttle_time: std::time::Duration,
@@ -380,6 +484,7 @@ pub struct QuicAcceptorParams<F: AcceptorCallback> {
 pub struct QuicAcceptor<F: AcceptorCallback> {
     quic_endpoint: quinn::Endpoint,
     tls_close_link_on_expiration: bool,
+    is_streamed: bool,
     inner: QuicAcceptorParams<F>,
 }
 
@@ -446,7 +551,7 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
         quic_conn: quinn::Connection,
         src_addr: &SocketAddr,
     ) -> ZResult<Arc<dyn LinkUnicastTrait>> {
-        let streams = if self.inner.is_streamed {
+        let streams = if self.is_streamed {
             Some(
                 QuicStreams::accept(&quic_conn)
                     .await

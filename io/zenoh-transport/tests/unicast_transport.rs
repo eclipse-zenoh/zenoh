@@ -674,6 +674,37 @@ async fn transport_unicast_udp_only() {
 
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_reliable() {
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let endpoint: EndPoint = format!("udp/localhost:{}?rel=1", 16105).parse().unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_udp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
 
@@ -2114,7 +2145,7 @@ async fn transport_unicast_multistream_quic_lowlatency() {
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
     );
 
     let endpoint_quic = quic_endpoint("quic/localhost:10479?multistream=0");
@@ -2122,7 +2153,184 @@ async fn transport_unicast_multistream_quic_lowlatency() {
     let is_multistream = run_multistream_test(endpoint, endpoint, true).await;
     assert!(
         !is_multistream,
-        "lowltency should not support priority-based multistream"
+        "lowlatency should not support priority-based multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_enabled() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10480?rel=1;multistream=1".parse().unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
+    assert!(is_multistream, "'?multistream=1' should enable multistream");
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_disabled() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10481?rel=1;multistream=0".parse().unwrap()];
+    let is_mutlistream = run_multistream_test(&endpoint, &endpoint, false).await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=0' should disable multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_auto_explicit() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10482;
+    let is_mutlistream = run_multistream_test(
+        &[format!("udp/localhost:{port}?rel=1;multistream=1")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        is_mutlistream,
+        "'?multistream=1' with auto listener should enable multistream"
+    );
+
+    let port = 10483;
+    let is_mutlistream = run_multistream_test(
+        &[format!("udp/localhost:{port}?rel=1;multistream=0")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=0' with auto listener should disable multistream"
+    );
+
+    let port = 10484;
+    let is_mutlistream = run_multistream_test(
+        &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;multistream=1")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        is_mutlistream,
+        "'?multistream=1' with auto connect should enable multistream"
+    );
+
+    let port = 10485;
+    let is_mutlistream = run_multistream_test(
+        &[format!("udp/localhost:{port}?rel=1").parse().unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;multistream=0")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mutlistream,
+        "'?multistream=0' with auto connect should disable multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_auto() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10486?rel=1;multistream=auto"
+        .parse()
+        .unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
+    assert!(
+        is_multistream,
+        "'?multistream=auto' endpoint should enable multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[test]
+fn transport_unicast_multistream_udp_incompatible() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10487;
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_multistream_test(
+                &[format!("udp/localhost:{port}?rel=1;multistream=1")
+                    .parse()
+                    .unwrap()],
+                &[format!("udp/localhost:{port}?rel=1;multistream=0")
+                    .parse()
+                    .unwrap()],
+                false,
+            ))
+    });
+    assert!(
+        result.is_err(),
+        "incompatible multistream config should fail to connect"
+    );
+
+    let port = 10488;
+    let result = std::panic::catch_unwind(|| {
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(run_multistream_test(
+                &[format!("udp/localhost:{port}?rel=1;multistream=0")
+                    .parse()
+                    .unwrap()],
+                &[format!("udp/localhost:{port}?rel=1;multistream=1")
+                    .parse()
+                    .unwrap()],
+                false,
+            ))
+    });
+    assert!(
+        result.is_err(),
+        "incompatible multistream config should fail to connect"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_lowlatency() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10489?rel=1;multistream=1".parse().unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
+    assert!(
+        !is_multistream,
+        "lowlatency should not support priority-based multistream"
+    );
+
+    let endpoint = ["udp/localhost:10490?rel=1;multistream=0".parse().unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, true).await;
+    assert!(
+        !is_multistream,
+        "lowlatency should not support priority-based multistream"
+    );
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_multistream_udp_default() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10491?rel=1".parse().unwrap()];
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
+    assert!(
+        is_multistream,
+        "default endpoint config (auto) should enable multistream"
     );
 }
 
