@@ -507,14 +507,11 @@ impl TransportLinks {
     }
 
     fn take(&mut self) -> Vec<TransportLinkUnicastUniversal> {
-        let links = self
-            .inner
-            .to_vec()
+        std::mem::take(&mut self.inner)
+            .into_vec()
             .into_iter()
             .map(TransportLinkMarker::into_inner)
-            .collect();
-        self.inner = vec![].into_boxed_slice();
-        links
+            .collect()
     }
 
     fn reached_multilink_limit(
