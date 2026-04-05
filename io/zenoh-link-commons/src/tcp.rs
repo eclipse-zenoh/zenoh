@@ -21,6 +21,7 @@ use crate::set_dscp;
 pub struct TcpSocketConfig<'a> {
     tx_buffer_size: Option<u32>,
     rx_buffer_size: Option<u32>,
+    linger_timeout: Option<u32>,
     iface: Option<&'a str>,
     bind_socket: Option<SocketAddr>,
     dscp: Option<u32>,
@@ -30,6 +31,7 @@ impl<'a> TcpSocketConfig<'a> {
     pub fn new(
         tx_buffer_size: Option<u32>,
         rx_buffer_size: Option<u32>,
+        linger_timeout: Option<u32>,
         iface: Option<&'a str>,
         bind_socket: Option<SocketAddr>,
         dscp: Option<u32>,
@@ -37,6 +39,7 @@ impl<'a> TcpSocketConfig<'a> {
         Self {
             tx_buffer_size,
             rx_buffer_size,
+            linger_timeout,
             iface,
             bind_socket,
             dscp,
@@ -121,6 +124,10 @@ impl<'a> TcpSocketConfig<'a> {
         }
         if let Some(size) = self.rx_buffer_size {
             socket.set_recv_buffer_size(size)?;
+        }
+        if let Some(timeout) = self.linger_timeout {
+            #[allow(deprecated)]
+            socket.set_linger(Some(std::time::Duration::from_secs(timeout as u64)))?;
         }
         if let Some(dscp) = self.dscp {
             set_dscp(&socket, *addr, dscp)?;

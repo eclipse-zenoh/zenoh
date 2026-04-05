@@ -768,6 +768,8 @@ validated_struct::validator! {
                     pub so_sndbuf: Option<u32>,
                     /// Configure TCP read buffer size
                     pub so_rcvbuf: Option<u32>,
+                    /// Configure TCP linger timeout
+                    pub so_linger: Option<u32>,
                     // Skip serializing field because they contain secrets
                     #[serde(skip_serializing)]
                     root_ca_certificate_base64: Option<SecretValue>,
@@ -786,6 +788,8 @@ validated_struct::validator! {
                     pub so_sndbuf: Option<u32>,
                     /// Configure TCP read buffer size
                     pub so_rcvbuf: Option<u32>,
+                    /// Configure TCP linger timeout
+                    pub so_linger: Option<u32>,
                 },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
