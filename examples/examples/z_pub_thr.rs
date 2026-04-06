@@ -17,6 +17,7 @@ use std::convert::TryInto;
 use clap::Parser;
 use zenoh::{
     bytes::ZBytes,
+    key_expr::KeyExpr,
     qos::{CongestionControl, Priority},
     Wait,
 };
@@ -42,7 +43,7 @@ fn main() {
     let session = zenoh::open(args.common).wait().unwrap();
 
     let publisher = session
-        .declare_publisher("test/thr")
+        .declare_publisher(args.key_expr)
         .congestion_control(CongestionControl::Block)
         .priority(prio)
         .express(args.express)
@@ -84,6 +85,10 @@ struct Args {
     number: usize,
     /// Sets the size of the payload to publish
     payload_size: usize,
+    /// The key expression to be used for the throuput test
+    #[arg(short, long, default_value = "test/thr")]
+    key_expr: KeyExpr<'static>,
+    ///Common args for all examples
     #[command(flatten)]
     common: CommonArgs,
 }
