@@ -52,6 +52,10 @@ pub const BIND_SOCKET: &str = "bind";
 pub const BIND_INTERFACE: &str = "iface";
 pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
+// The LINGER option causes the shutdown() call to block until (1) all application data is delivered
+// to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
+// More info on the LINGER option and its dynamics can be found at:
+// https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
 pub const TCP_SO_LINGER: &str = "so_linger";
 pub const DSCP: &str = "dscp";
 
