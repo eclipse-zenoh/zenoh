@@ -6418,7 +6418,6 @@ version = "1.8.0"
 dependencies = [
  "async-trait",
  "libc",
- "quinn",
  "socket2 0.5.10",
  "tokio",
  "tokio-util",
