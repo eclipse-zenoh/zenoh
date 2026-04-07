@@ -128,6 +128,10 @@ impl Writer for BBuf {
         self.capacity() - self.len()
     }
 
+    /// # Safety
+    ///
+    /// The `write` closure must return the number of bytes actually written to the slice,
+    /// which must be less than or equal to `len`.
     unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
@@ -136,8 +140,9 @@ impl Writer for BBuf {
             return Err(DidntWrite);
         }
 
-        // SAFETY: self.remaining() >= len
-        let written = write(unsafe { self.as_writable_slice().get_unchecked_mut(..len) });
+        // SAFETY: `written` <= `len` is guaranteed by the safety contract of this function.
+        // `get_unchecked_mut(..len)` is safe because `self.remaining() >= len`.
+        let written = unsafe { write(self.as_writable_slice().get_unchecked_mut(..len)) };
         self.len += written;
 
         NonZeroUsize::new(written).ok_or(DidntWrite)
@@ -186,7 +191,9 @@ impl<'a> HasReader for &'a BBuf {
 // From impls
 impl From<BBuf> for ZSlice {
     fn from(value: BBuf) -> Self {
-        // SAFETY: buffer length is ensured to be lesser than its capacity
+        // SAFETY: buffer length is ensured to be lesser than its capacity.
+        // unwrap_unchecked() is safe because ZSlice::new only fails if end < start,
+        // which is not the case here (0 and value.len).
         unsafe { ZSlice::new(Arc::new(value.buffer), 0, value.len).unwrap_unchecked() }
     }
 }

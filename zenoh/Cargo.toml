@@ -59,6 +59,7 @@ shared-memory = [
   "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-stats", "zenoh-transport/stats"]
+test = ["zenoh-transport/test"]
 tracing-instrument = [
   "zenoh-runtime/tracing-instrument",
   "zenoh-task/tracing-instrument",
@@ -130,8 +131,13 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
+predicates = { workspace = true }
+regex = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
+tracing-capture = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-tunnel = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 
 [build-dependencies]
@@ -148,7 +154,7 @@ features = ["shared-memory", "unstable"]
 [package.metadata.deb]
 assets = [{ source = "../README.md", dest = "README.md", mode = "644" }]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.7.2), zenoh-plugin-rest (=1.7.2), zenoh-plugin-storage-manager (=1.7.2)"
+depends = "zenohd (=1.8.0), zenoh-plugin-rest (=1.8.0), zenoh-plugin-storage-manager (=1.8.0)"
 license-file = ["../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 maintainer-scripts = ".deb"
@@ -159,3 +165,5 @@ section = "net"
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(nolocal_thread_not_available)',
 ] }
+# This will be enabled by default in Edition 2024
+unsafe_op_in_unsafe_fn = "warn"

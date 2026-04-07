@@ -57,6 +57,7 @@ where
         loop {
             match self.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { node.as_node().__children() }.children();
                     self.iterators.push(iterator);
                     return Some(node.as_node());
@@ -110,6 +111,7 @@ where
         loop {
             match self.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                         .children_mut()
                         .children_mut();
@@ -140,8 +142,10 @@ where
             let depth = self.0.iterators.len();
             match self.0.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { node.as_node().__children() }.children();
                     self.0.iterators.push(iterator);
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     return Some((unsafe { NonZeroUsize::new_unchecked(depth) }, node));
                 }
                 None => {

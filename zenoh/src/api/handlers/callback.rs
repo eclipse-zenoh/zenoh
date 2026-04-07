@@ -48,14 +48,12 @@ impl<T, F: Fn(T) + Send + Sync> CallbackImpl<T> for F {
     }
 }
 
-#[cfg(feature = "unstable")]
 struct Dropper<F>
 where
     F: FnOnce() + Send + Sync,
 {
     drop: Option<F>,
 }
-#[cfg(feature = "unstable")]
 impl<F> Drop for Dropper<F>
 where
     F: FnOnce() + Send + Sync,
@@ -66,16 +64,13 @@ where
         }
     }
 }
-#[cfg(feature = "unstable")]
 trait DropperTrait {}
-#[cfg(feature = "unstable")]
 impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 /// Callback type used by zenoh entities.
 ///
 /// This type stores the callback function passed to zenoh entities.
 pub struct Callback<T> {
     callable: Arc<dyn CallbackImpl<T>>,
-    #[cfg(feature = "unstable")]
     drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
 }
 
@@ -83,7 +78,6 @@ impl<T> Clone for Callback<T> {
     fn clone(&self) -> Self {
         Self {
             callable: self.callable.clone(),
-            #[cfg(feature = "unstable")]
             drop: self.drop.clone(),
         }
     }
@@ -113,7 +107,6 @@ impl<T> Callback<T> {
     }
 
     #[zenoh_macros::pub_visibility_if_internal]
-    #[cfg(feature = "unstable")]
     pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
         self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
     }
@@ -123,7 +116,6 @@ impl<T, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
     fn from(value: F) -> Self {
         Self {
             callable: Arc::new(value),
-            #[cfg(feature = "unstable")]
             drop: None,
         }
     }

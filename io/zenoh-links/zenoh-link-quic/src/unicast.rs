@@ -47,6 +47,8 @@ pub struct LinkUnicastQuic {
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
+unsafe impl Sync for LinkUnicastQuic {}
+
 impl LinkUnicastQuic {
     #[allow(clippy::too_many_arguments)]
     fn new(

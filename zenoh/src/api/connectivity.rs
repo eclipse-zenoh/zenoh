@@ -42,11 +42,8 @@ impl TransportEventHandler for ConnectivityHandler {
         peer: TransportPeer,
         _transport: zenoh_transport::unicast::TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        // Broadcast transport opened event only if session is not closed
-        if !self.session.is_closed() {
-            self.session
-                .broadcast_transport_event(SampleKind::Put, &peer, false);
-        }
+        self.session
+            .broadcast_transport_event(SampleKind::Put, &peer, false);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {
@@ -82,11 +79,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     }
 
     fn new_link(&self, link: zenoh_link::Link) {
-        // Check if session is closed
-        if self.session.is_closed() {
-            return;
-        }
-
         // Broadcast link added event
         self.session.broadcast_link_event(
             SampleKind::Put,
@@ -98,11 +90,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
-        // Check if session is closed
-        if self.session.is_closed() {
-            return;
-        }
-
         // Broadcast link removed event
         self.session.broadcast_link_event(
             SampleKind::Delete,
@@ -114,11 +101,6 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
     }
 
     fn closed(&self) {
-        // Check if session is closed
-        if self.session.is_closed() {
-            return;
-        }
-
         // Broadcast transport closed event
         self.session
             .broadcast_transport_event(SampleKind::Delete, &self.peer, self.is_multicast);
@@ -136,11 +118,8 @@ pub(crate) struct ConnectivityMulticastHandler {
 
 impl TransportMulticastEventHandler for ConnectivityMulticastHandler {
     fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        // Broadcast transport opened event only if session is not closed
-        if !self.session.is_closed() {
-            self.session
-                .broadcast_transport_event(SampleKind::Put, &peer, true);
-        }
+        self.session
+            .broadcast_transport_event(SampleKind::Put, &peer, true);
 
         // Return ConnectivityPeerHandler
         Ok(Arc::new(ConnectivityPeerHandler {

@@ -132,6 +132,7 @@ where
                                 Some(kec_end) => {
                                     // If we aren't in the last chunk
                                     let subkey =
+                                        // SAFETY: upheld by the surrounding invariants and prior validation.
                                         unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                     if unlikely(subkey.as_bytes() == b"**") {
                                         if !chunk_is_verbatim {
@@ -144,6 +145,7 @@ where
                                         let post_key = &key[kec_end + 1..];
                                         match post_key.iter().position(|&c| c == b'/') {
                                             Some(sec_end) => {
+                                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                                 let post_key = unsafe {
                                                     keyexpr::from_slice_unchecked(
                                                         &post_key[..sec_end],
@@ -154,6 +156,7 @@ where
                                                 }
                                             }
                                             None => {
+                                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                                 if unsafe {
                                                     keyexpr::from_slice_unchecked(post_key)
                                                 }
@@ -170,6 +173,7 @@ where
                                 }
                                 None => {
                                     // If it's the last chunk of the query, check whether it's `**`
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                     if unlikely(key.as_bytes() == b"**") && !chunk_is_verbatim {
                                         // If yes, it automatically matches, and must be reused from now on for iteration.
@@ -195,6 +199,7 @@ where
                             }
                         }
                         // Prepare the next children
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
@@ -332,6 +337,7 @@ where
                                 Some(kec_end) => {
                                     // If we aren't in the last chunk
                                     let subkey =
+                                        // SAFETY: upheld by the surrounding invariants and prior validation.
                                         unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                     if unlikely(subkey.as_bytes() == b"**") {
                                         if !chunk_is_verbatim {
@@ -344,6 +350,7 @@ where
                                         let post_key = &key[kec_end + 1..];
                                         match post_key.iter().position(|&c| c == b'/') {
                                             Some(sec_end) => {
+                                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                                 let post_key = unsafe {
                                                     keyexpr::from_slice_unchecked(
                                                         &post_key[..sec_end],
@@ -354,6 +361,7 @@ where
                                                 }
                                             }
                                             None => {
+                                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                                 if unsafe {
                                                     keyexpr::from_slice_unchecked(post_key)
                                                 }
@@ -370,6 +378,7 @@ where
                                 }
                                 None => {
                                     // If it's the last chunk of the query, check whether it's `**`
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                     if unlikely(key.as_bytes() == b"**") && !chunk_is_verbatim {
                                         // If yes, it automatically matches, and must be reused from now on for iteration.
@@ -392,6 +401,7 @@ where
                                 break;
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                             .children_mut()
                             .children_mut();

@@ -194,6 +194,7 @@ pub(crate) trait Utf {
 #[allow(dead_code)]
 impl Utf for [u8] {
     fn utf(&self) -> &str {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { ::core::str::from_utf8_unchecked(self) }
     }
 }

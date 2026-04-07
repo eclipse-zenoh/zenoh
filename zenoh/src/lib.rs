@@ -22,7 +22,7 @@
 //! # Components and concepts
 //!
 //! The main Zenoh components and concepts are described below.
-//!  
+//!
 //! ## Session
 //!
 //! The root element of the Zenoh API is the [session].
@@ -882,6 +882,8 @@ pub mod scouting {
 /// key expression or subscribe to it to be notified when the token appears or disappears on the network
 /// using the corresponding functions [get](liveliness::Liveliness::get) and
 /// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
+/// The [history](liveliness::LivelinessSubscriberBuilder::history) option allows subscribers to
+/// receive updates about already declared tokens.
 ///
 /// # Examples
 /// ### Declaring a token

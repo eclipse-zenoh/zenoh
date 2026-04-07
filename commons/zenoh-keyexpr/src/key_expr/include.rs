@@ -71,9 +71,7 @@ impl LTRIncluder {
     fn non_double_wild_chunk_includes(&self, lchunk: &[u8], rchunk: &[u8]) -> bool {
         if lchunk == rchunk {
             true
-        } else if unsafe {
-            lchunk.has_direct_verbatim_non_empty() || rchunk.has_direct_verbatim_non_empty()
-        } {
+        } else if lchunk.has_direct_verbatim_non_empty() || rchunk.has_direct_verbatim_non_empty() {
             false
         } else if lchunk == b"*" {
             true

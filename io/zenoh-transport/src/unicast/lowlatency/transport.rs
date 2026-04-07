@@ -24,7 +24,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{Bound, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{
         close, Close, TransportBodyLowLatencyRef, TransportMessageLowLatencyRef, TransportSn,
@@ -225,6 +225,14 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.config.is_qos
     }
 
+    fn region_name(&self) -> Option<RegionName> {
+        self.config.region_name.clone()
+    }
+
+    fn get_bound(&self) -> Option<Bound> {
+        self.config.bound
+    }
+
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
     }
@@ -277,7 +285,6 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                 close::reason::GENERIC,
             ));
         }
-        // TODO: support mixed-reliability in lowlatency transport?
         let (link, ack, asl) = link.unpack();
         if asl.is_some() {
             return Err((
@@ -286,12 +293,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                 close::reason::GENERIC,
             ));
         }
+
+        // Use the complete src and dest locators including parameters
+        #[cfg(feature = "stats")]
+        let link_unicast = link.link();
         #[cfg(feature = "stats")]
         self.link_stats
-            .set(
-                self.stats
-                    .link_stats(link.link.get_src(), link.link.get_dst()),
-            )
+            .set(self.stats.link_stats(&link_unicast.src, &link_unicast.dst))
             .unwrap();
         *guard = Some(link);
         drop(guard);
