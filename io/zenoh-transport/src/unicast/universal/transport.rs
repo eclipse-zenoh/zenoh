@@ -562,8 +562,8 @@ impl Deref for TransportLinkMarker {
     #[inline]
     fn deref(&self) -> &Self::Target {
         match self {
-            TransportLinkMarker::Link(l) => &l,
-            TransportLinkMarker::AssociatedLink(l) => &l,
+            TransportLinkMarker::Link(l) => l,
+            TransportLinkMarker::AssociatedLink(l) => l,
         }
     }
 }
