@@ -2362,7 +2362,7 @@ async fn transport_unicast_mixedrel_udp() {
     zenoh_util::init_log_from_env_or("error");
 
     let endpoint = ["udp/localhost:10505?rel=1;mixed_rel=1".parse().unwrap()];
-    let is_mixed_rel = run_mixed_reliability_test(endpoint, endpoint, false).await;
+    let is_mixed_rel = run_mixed_reliability_test(&endpoint, &endpoint, false).await;
     assert!(is_mixed_rel, "mixed_rel=1 should enable mixed reliability");
 }
 
@@ -2386,7 +2386,7 @@ async fn transport_unicast_mixedrel_udp_multistream() {
     zenoh_util::init_log_from_env_or("error");
 
     let endpoint = ["udp/localhost:10515?rel=1;mixed_rel=1".parse().unwrap()];
-    let is_multistream = run_multistream_test(endpoint, endpoint, false).await;
+    let is_multistream = run_multistream_test(&endpoint, &endpoint, false).await;
     assert!(
         is_multistream,
         "mixed_rel should be compatible with multistream"
