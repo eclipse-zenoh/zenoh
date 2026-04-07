@@ -14,10 +14,36 @@
 
 use std::ops::{Index, IndexMut};
 
-use io_uring::opcode;
 use zenoh_result::ZResult;
 
 use super::page_arena::PageArena;
+use crate::{api::types::BufferCount, types::BufferId};
+
+pub(crate) struct Batches {
+    pub addr: *mut u8,
+    pub nbufs: BufferCount,
+    pub start_bid: BufferId,
+}
+
+impl Batches {
+    pub fn split(self, count: BufferCount, batch_size: usize) -> (Self, Option<Self>) {
+        if count >= self.nbufs {
+            (self, None)
+        } else {
+            let remaining = Self {
+                addr: unsafe { self.addr.add(count as usize * batch_size) },
+                nbufs: self.nbufs - count,
+                start_bid: self.start_bid + count,
+            };
+            let allocated = Self {
+                addr: self.addr,
+                nbufs: count,
+                start_bid: self.start_bid,
+            };
+            (allocated, Some(remaining))
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct BatchArena {
@@ -46,16 +72,16 @@ impl IndexMut<usize> for BatchArena {
 impl BatchArena {
     pub(crate) fn new(
         batch_size: usize,
-        batch_count: usize,
-        max_batch_count: usize,
+        batch_count: BufferCount,
+        max_batch_count: BufferCount,
     ) -> ZResult<Self> {
-        let size = batch_size * batch_count;
-        let capacity = batch_size * max_batch_count;
+        let size = batch_size * batch_count as usize;
+        let capacity = batch_size * max_batch_count as usize;
         let arena = PageArena::new(size, capacity)?;
         Ok(Self { arena, batch_size })
     }
 
-    pub(crate) fn allocate_more_batches(&self) -> Option<(io_uring::squeue::Entry, usize)> {
+    pub(crate) fn allocate_more_batches(&self) -> Option<Batches> {
         tracing::debug!("Add batches");
 
         let (addr, size) = self
@@ -71,17 +97,11 @@ impl BatchArena {
         } as usize
             / self.batch_size;
 
-        Some((
-            opcode::ProvideBuffers::new(
-                addr,
-                self.batch_size as i32,
-                additional_batch_count.try_into().unwrap(),
-                0,
-                bid as u16,
-            )
-            .build(),
-            additional_batch_count,
-        ))
+        Some(Batches {
+            addr,
+            nbufs: additional_batch_count as BufferCount,
+            start_bid: bid as BufferId,
+        })
     }
 
     pub(crate) fn batch_count(&self) -> usize {
@@ -92,17 +112,6 @@ impl BatchArena {
         let start = index * self.batch_size;
         let end = start + self.batch_size;
         &mut self.arena.as_slice_mut_unchecked()[start..end]
-    }
-
-    pub(crate) fn provide_root_buffers(&self) -> io_uring::squeue::Entry {
-        opcode::ProvideBuffers::new(
-            self.arena.memory.load(std::sync::atomic::Ordering::Relaxed),
-            self.batch_size as i32,
-            self.batch_count().try_into().unwrap(),
-            0,
-            0,
-        )
-        .build()
     }
 
     pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {

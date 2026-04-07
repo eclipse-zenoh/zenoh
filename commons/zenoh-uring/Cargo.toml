@@ -36,6 +36,7 @@ tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 
 [dev-dependencies]
 test-case = { workspace = true }

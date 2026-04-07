@@ -18,6 +18,7 @@ use io_uring::{cqueue, opcode, types, IoUring};
 use zenoh_result::ZResult;
 
 use crate::{
+    api::types::BufferCount,
     batch_arena::BatchArena,
     writer::{BufferPool, WriterUserData},
 };
@@ -62,7 +63,7 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn new(batch_size: usize, batch_count: usize) -> ZResult<Self> {
+    pub fn new(batch_size: usize, batch_count: BufferCount) -> ZResult<Self> {
         let ring = IoUring::builder()
         .setup_submit_all()
         //.setup_sqpoll(1)

@@ -14,10 +14,11 @@
 
 use std::sync::Arc;
 
-use io_uring::{opcode, squeue::Flags};
-
 use crate::{
-    api::reader::rx_buffer::RxBuffer, batch_arena::BatchArena, reader::submission::SubmissionIface,
+    api::types::BufferCount,
+    batch_arena::{BatchArena, Batches},
+    reader::submission::SubmissionIface,
+    types::BufferId,
 };
 
 pub(crate) struct ReservableArenaInner {
@@ -45,29 +46,54 @@ impl ReservableArenaInner {
         }
     }
 
-    pub fn recycle_batch(&self, buf_id: u16) {
-        assert!(self.recycled_batches.push(buf_id));
+    pub fn arena(&self) -> &BatchArena {
+        &self.arena
     }
 
-    pub fn pop_recycled_batch(&self) -> Option<(io_uring::squeue::Entry, usize)> {
-        match self.recycled_batches.pop() {
-            Some(buf_id) => {
-                let data = unsafe { &mut self.arena.index_mut_unchecked(buf_id as usize)[0..1] };
-                Some((
-                    opcode::ProvideBuffers::new(
-                        data.as_mut_ptr(),
-                        self.arena.batch_size() as i32,
-                        1,
-                        0,
-                        buf_id,
-                    )
-                    .build()
-                    .flags(Flags::SKIP_SUCCESS),
-                    1,
-                ))
+    pub(crate) fn batch_size(&self) -> usize {
+        self.arena.batch_size()
+    }
+
+    pub fn pop_batches(&self, count: BufferCount) -> Vec<Batches> {
+        let mut result = Vec::with_capacity(count as usize);
+
+        // recycle batches from the recycled_batches queue first
+        while let Some(buf_id) = self.recycled_batches.pop() {
+            let data = unsafe { self.arena.index_mut_unchecked(buf_id as usize) };
+            result.push(Batches {
+                addr: data.as_mut_ptr(),
+                nbufs: 1,
+                start_bid: buf_id as BufferId,
+            });
+            if result.len() == count as usize {
+                break;
             }
-            None => self.arena.allocate_more_batches(),
         }
+
+        // allocate more memory if needed
+        let batches_to_allocate = count as usize - result.len();
+        if batches_to_allocate > 0 {
+            if let Some(additional_batches) = self.arena.allocate_more_batches() {
+                let (primary, to_recycle) = additional_batches
+                    .split(batches_to_allocate as BufferCount, self.arena.batch_size());
+
+                // push the primary batch to the result
+                result.push(primary);
+
+                // recycle the leftover batches
+                if let Some(to_recycle) = to_recycle {
+                    for buf_id in to_recycle.start_bid..to_recycle.start_bid + to_recycle.nbufs {
+                        self.recycle_batch(buf_id);
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    pub fn recycle_batch(&self, buf_id: u16) {
+        assert!(self.recycled_batches.push(buf_id));
     }
 }
 
@@ -79,10 +105,5 @@ impl ReservableArena {
     pub fn new(arena: BatchArena, submitter: SubmissionIface) -> Self {
         let inner = Arc::new(ReservableArenaInner::new(arena, submitter));
         Self { inner }
-    }
-
-    pub(crate) unsafe fn buffer(&self, buf_id: u16, buf_len: usize) -> RxBuffer {
-        let data = &mut self.inner.arena.index_mut_unchecked(buf_id as usize)[0..buf_len];
-        RxBuffer::new(data, buf_id, self.inner.clone())
     }
 }

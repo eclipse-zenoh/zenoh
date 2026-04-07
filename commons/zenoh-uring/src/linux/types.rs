@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2025 ZettaScale Technology
+// Copyright (c) 2026 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,16 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! ⚠️ WARNING ⚠️
-//!
-//! This module is intended for Zenoh's internal use.
-//!
-//! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-
-pub(crate) mod batch_arena;
-pub(crate) mod page_arena;
-pub(crate) mod reader;
-pub(crate) mod types;
-pub(crate) mod writer;
-
-pub mod api;
+pub(crate) type BufferGroupId = u16;
+pub(crate) type BufferId = u16;

@@ -24,7 +24,11 @@ use std::{
 };
 
 use flume::Receiver;
-use io_uring::{opcode, types, IoUring, SubmissionQueue};
+use io_uring::{
+    cqueue,
+    opcode::{self, AsyncCancel2},
+    squeue, types, IoUring, SubmissionQueue,
+};
 use nix::sys::eventfd::EfdFlags;
 //use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use zenoh_core::bail;
@@ -32,12 +36,21 @@ use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
 use crate::{
-    api::reader::{fragmented_batch::FragmentedBatch, read_task::ReadTask, rx_buffer::RxBuffer},
+    api::{
+        reader::{fragmented_batch::FragmentedBatch, read_task::ReadTask, rx_buffer::RxBuffer},
+        types::BufferCount,
+    },
     batch_arena::BatchArena,
     reader::{
-        index::IndexGeneration, reactor_cmd::ReactorCmd, reservable_arena::ReservableArena,
-        rx_context::Rx, rx_context_storage::RxContextStorage, submission::SubmissionIface,
-        window::RxWindow, ReaderInner,
+        buffer_group::{BufferGroup, GroupedArena},
+        index::IndexGeneration,
+        reactor_cmd::ReactorCmd,
+        reservable_arena::ReservableArena,
+        rx_context::Rx,
+        rx_context_storage::RxContextStorage,
+        submission::SubmissionIface,
+        window::RxWindow,
+        ReaderInner,
     },
 };
 
@@ -75,7 +88,7 @@ impl Reader {
         ReadTask::new(fd, callback, self.inner.submitter.clone()).await
     }
 
-    pub fn new(batch_size: usize, batch_count: usize) -> ZResult<Self> {
+    pub fn new(batch_size: usize, batch_count: BufferCount) -> ZResult<Self> {
         // create eventfd to wake io_uring on demand by producing read events
         let waker = Arc::new(nix::sys::eventfd::EventFd::from_value_and_flags(
             0,
@@ -101,7 +114,7 @@ impl Reader {
             let mut context_storage = RxContextStorage::new();
 
             // io_uring read
-            let ring = IoUring::builder()
+            let ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::builder()
                 .setup_submit_all()
                 //.setup_sqpoll(1)
                 //.setup_iopoll()
@@ -110,21 +123,9 @@ impl Reader {
                 .setup_defer_taskrun()
                 .setup_single_issuer()
                 .build((4096 /*batch_count*2*/).try_into()?)?;
-            let arena = BatchArena::new(batch_size, batch_count, u16::MAX as usize)?;
-            {
-                let provide_buffers = arena.provide_root_buffers();
-                unsafe { ring.submission_shared().push(&provide_buffers)? };
-                ring.submit_and_wait(1)?;
-
-                let cq: io_uring::cqueue::Entry = unsafe {
-                    ring.completion_shared()
-                        .next()
-                        .expect("completion queue is empty")
-                };
-                assert!(cq.result() == 0);
-            }
-
+            let arena = BatchArena::new(batch_size, batch_count, BufferCount::MAX)?;
             let arena = ReservableArena::new(arena, c_submitter);
+            let arena = GroupedArena::new(arena);
 
             // read for waker
             let waker_read =
@@ -138,10 +139,9 @@ impl Reader {
             fn roll_cmds(
                 receiver: &Receiver<ReactorCmd>,
                 context_storage: &mut RxContextStorage,
-                arena: &ReservableArena,
+                arena: &GroupedArena,
                 sq: &mut SubmissionQueue<'_>,
-                ctr: &mut i32,
-                batch_count: usize,
+                batch_count: BufferCount,
             ) -> ZResult<()> {
                 //tracing::debug!("Reading cmds....");
 
@@ -151,14 +151,15 @@ impl Reader {
 
                     match val {
                         ReactorCmd::StartRx(fd, callback, set_once, error_sender) => {
-                            let rx_context = Rc::new(Rx::new(fd, callback, error_sender));
+                            let buffer_group = BufferGroup::new(arena, batch_count, sq)?;
+                            let group_id = buffer_group.id();
+
+                            let rx_context =
+                                Rc::new(Rx::new(fd, callback, error_sender, buffer_group));
                             let index = context_storage.alloc(rx_context);
                             set_once.set(index)?;
 
-                            *ctr -= (batch_count / 2) as i32;
-                            roll_ring_batches(arena, ctr, sq)?;
-
-                            let recv = opcode::RecvMulti::new(types::Fd(fd), 0)
+                            let recv = opcode::RecvMulti::new(types::Fd(fd), group_id)
                                 .build()
                                 .flags(io_uring::squeue::Flags::ASYNC)
                                 .user_data(index.into());
@@ -168,51 +169,31 @@ impl Reader {
                         ReactorCmd::StopRx(index_generation) => {
                             context_storage.free(index_generation);
 
-                            let event = opcode::AsyncCancel::new(index_generation.into())
+                            let cancel_builder =
+                                types::CancelBuilder::user_data(index_generation.into()).all();
+
+                            let event = AsyncCancel2::new(cancel_builder)
                                 .build()
                                 .user_data(index_generation.into())
                                 .flags(io_uring::squeue::Flags::ASYNC);
 
                             unsafe { sq.push(&event)? }
-
-                            *ctr += (batch_count / 2) as i32;
                         }
                     }
                 }
 
                 Ok(())
             }
-
-            fn roll_ring_batches(
-                arena: &ReservableArena,
-                ctr: &mut i32,
-                sq: &mut SubmissionQueue<'_>,
-            ) -> ZResult<()> {
-                while *ctr < 0 {
-                    match arena.inner.pop_recycled_batch() {
-                        Some((batch, count)) => {
-                            unsafe { sq.push(&batch)? }
-                            *ctr += count as i32;
-                        }
-                        None => break,
-                    }
-                }
-                Ok(())
-            }
-
-            let mut batch_ctr = (batch_count / 2) as i32;
 
             loop {
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     let mut sq = unsafe { ring.submission_shared() };
 
-                    roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
                     roll_cmds(
                         &receiver,
                         &mut context_storage,
                         &arena,
                         &mut sq,
-                        &mut batch_ctr,
                         batch_count,
                     )?;
 
@@ -227,14 +208,7 @@ impl Reader {
                         }
                         index => {
                             let index = unsafe { IndexGeneration::new_unchecked(index) };
-                            if Reader::multi(
-                                &context_storage,
-                                &e,
-                                index,
-                                &arena,
-                                &mut sq,
-                                &mut batch_ctr,
-                            )? {
+                            if Reader::multi(&context_storage, &e, index, &arena, &mut sq)? {
                                 let len = sq.len() as u32;
                                 drop(sq);
                                 //ring.submit()?;
@@ -251,23 +225,16 @@ impl Reader {
                     }
                 }
 
-                let mut sq = unsafe { ring.submission_shared() };
-
-                // reclaim batches
-                roll_ring_batches(&arena, &mut batch_ctr, &mut sq)?;
-
                 // receive external submissions
+                let mut sq = unsafe { ring.submission_shared() };
                 roll_cmds(
                     &receiver,
                     &mut context_storage,
                     &arena,
                     &mut sq,
-                    &mut batch_ctr,
                     batch_count,
                 )?;
-
                 //let len = sq.len();
-
                 drop(sq);
 
                 if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -366,19 +333,18 @@ impl Reader {
         context_storage: &RxContextStorage,
         e: &io_uring::cqueue::Entry,
         index: IndexGeneration,
-        arena: &ReservableArena,
+        arena: &GroupedArena,
         sq: &mut SubmissionQueue<'_>,
-        ctr: &mut i32,
     ) -> ZResult<bool> {
         match context_storage.get(index) {
-            Some(context) => match Reader::read_multi(e, index, context, arena, sq, ctr) {
+            Some(context) => match Reader::read_multi(e, index, context, sq) {
                 Ok(val) => Ok(val),
                 Err(e) => {
                     context.post_error(e);
                     Ok(false)
                 }
             },
-            None => Ok(Self::utilize_multi(e, arena, ctr)),
+            None => Ok(Self::utilize_multi(e, arena)),
         }
     }
 
@@ -386,9 +352,7 @@ impl Reader {
         e: &io_uring::cqueue::Entry,
         index: IndexGeneration,
         context: &Rx,
-        arena: &ReservableArena,
         sq: &mut SubmissionQueue<'_>,
-        ctr: &mut i32,
     ) -> ZResult<bool> {
         let mut need_submit = false;
         if e.result() < 0 {
@@ -399,10 +363,11 @@ impl Reader {
                     // We are out of buffers
                     tracing::debug!("ENOBUFS: Restart multishot receive for task {:?}", index);
 
-                    let recv = opcode::RecvMulti::new(types::Fd(context.fd), 0)
-                        .build()
-                        .flags(io_uring::squeue::Flags::ASYNC)
-                        .user_data(index.into());
+                    let recv =
+                        opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
+                            .build()
+                            .flags(io_uring::squeue::Flags::ASYNC)
+                            .user_data(index.into());
 
                     unsafe { sq.push(&recv)? };
                     need_submit = true;
@@ -422,28 +387,24 @@ impl Reader {
                 Some(buf_id) => {
                     tracing::trace!("Read multishot entry: {:?}", e);
 
-                    *ctr -= 1;
-
                     if !io_uring::cqueue::more(e.flags()) {
                         tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
 
-                        let recv = opcode::RecvMulti::new(types::Fd(context.fd), 0)
-                            .build()
-                            .flags(io_uring::squeue::Flags::ASYNC)
-                            .user_data(index.into());
+                        let recv = opcode::RecvMulti::new(
+                            types::Fd(context.fd),
+                            context.buffer_group().id(),
+                        )
+                        .build()
+                        .flags(io_uring::squeue::Flags::ASYNC)
+                        .user_data(index.into());
 
                         unsafe { sq.push(&recv)? };
                         need_submit = true;
                     }
 
                     let buf_len = e.result() as usize;
-                    if buf_len > 0 {
-                        let rx_buffer = Arc::new(unsafe { arena.buffer(buf_id, buf_len) });
-                        context.run_callback(rx_buffer);
-                    } else {
-                        arena.inner.recycle_batch(buf_id);
-                        tracing::debug!("zero buf len");
-                    }
+                    let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
+                    context.run_callback(buffer);
                 }
                 None => {
                     //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
@@ -453,13 +414,12 @@ impl Reader {
         Ok(need_submit)
     }
 
-    fn utilize_multi(e: &io_uring::cqueue::Entry, arena: &ReservableArena, ctr: &mut i32) -> bool {
+    fn utilize_multi(e: &io_uring::cqueue::Entry, arena: &GroupedArena) -> bool {
         if e.result() >= 0 {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
                     tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
-                    *ctr -= 1;
-                    arena.inner.recycle_batch(buf_id);
+                    arena.recycle_batch(buf_id);
                     return true;
                 }
                 None => {

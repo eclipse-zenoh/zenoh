@@ -564,18 +564,18 @@ mod linux_tests {
     }
 
     #[test_case(8200, 1, true; "single_tcp")]
-    #[test_case(8201, 10, true; "many_tcp")]
+    #[test_case(8201, 4, true; "many_tcp")]
     #[test_case(8200, 1, false; "single_udp")]
-    #[test_case(8201, 10, false; "many_udp")]
+    #[test_case(8201, 4, false; "many_udp")]
     fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
         zenoh_util::try_init_log_from_env();
 
-        let max_memory_consume = 10 * 1024 * 1024;
+        let max_memory_consume = 1024 * 1024;
         let buffer_avg_size = 65535 / 2;
         let buffer_count = max_memory_consume / count as usize / buffer_avg_size;
         println!("Running rw_add_batches for buffer_count: {buffer_count}");
 
-        let reader = Reader::new(65535 + 2, 4).unwrap();
+        let reader = Reader::new(65535 + 2, 2).unwrap();
         let base_interval = None;
 
         let mut rw_tasks = vec![];

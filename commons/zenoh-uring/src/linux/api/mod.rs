@@ -19,4 +19,5 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
 pub mod reader;
+pub mod types;
 pub mod writer;

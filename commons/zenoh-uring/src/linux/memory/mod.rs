@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod buffer_group;
 pub(crate) mod index;
 pub(crate) mod reactor_cmd;
 pub(crate) mod reservable_arena;

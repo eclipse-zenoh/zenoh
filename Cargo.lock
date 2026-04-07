@@ -2094,7 +2094,7 @@ version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdd7bddefd0a8833b88a4b68f90dae22c7450d11b354198baee3874fd811b344"
 dependencies = [
- "bitflags 2.10.0",
+ "bitflags 2.11.0",
  "cfg-if 1.0.4",
  "libc",
 ]
@@ -6646,17 +6646,22 @@ dependencies = [
 
 [[package]]
 name = "zenoh-uring"
-version = "1.7.2"
+version = "1.8.0"
 dependencies = [
  "atomic-queue",
+ "flume",
  "io-uring",
  "libc",
  "nix 0.29.0",
+ "rand 0.8.5",
+ "test-case",
  "thread-priority",
  "tokio",
  "tracing",
  "zenoh-core",
  "zenoh-result",
+ "zenoh-runtime",
+ "zenoh-util",
 ]
 
 [[package]]

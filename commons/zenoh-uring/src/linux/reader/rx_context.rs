@@ -17,7 +17,7 @@ use std::{cell::UnsafeCell, os::fd::RawFd, sync::Arc};
 use tokio::sync::mpsc::UnboundedSender;
 use zenoh_result::ZResult;
 
-use crate::api::reader::rx_buffer::RxBuffer;
+use crate::{api::reader::rx_buffer::RxBuffer, reader::buffer_group::BufferGroup};
 
 type RxCallbackImpl = dyn FnMut(Arc<RxBuffer>) -> ZResult<()> + Send + 'static;
 
@@ -37,6 +37,7 @@ pub(crate) struct Rx {
     cb: RxCallback,
     pub fd: RawFd,
     error_sender: UnboundedSender<zenoh_result::Error>,
+    buffer_group: BufferGroup,
 }
 
 impl Rx {
@@ -44,14 +45,20 @@ impl Rx {
         fd: RawFd,
         cb: RxCallback,
         error_sender: UnboundedSender<zenoh_result::Error>,
+        buffer_group: BufferGroup,
     ) -> Self {
         let rx = Self {
             cb,
             error_sender,
             fd,
+            buffer_group,
         };
         tracing::debug!("RX context created: {:?}", rx);
         rx
+    }
+
+    pub(crate) fn buffer_group(&self) -> &BufferGroup {
+        &self.buffer_group
     }
 
     pub(crate) fn run_callback(&self, buffer: Arc<RxBuffer>) {

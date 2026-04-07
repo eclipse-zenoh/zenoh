@@ -16,7 +16,10 @@ use std::cell::UnsafeCell;
 
 use io_uring::IoUring;
 
-use crate::{api::writer::BorrowedBuffer, batch_arena::BatchArena};
+use crate::{
+    api::{types::BufferCount, writer::BorrowedBuffer},
+    batch_arena::BatchArena,
+};
 
 pub(crate) enum WriterUserData {
     WriteFixed(u64),
@@ -28,7 +31,7 @@ pub(crate) struct BufferPool {
 }
 
 impl BufferPool {
-    pub(crate) fn new(ring: &IoUring, batch_size: usize, batch_count: usize) -> Self {
+    pub(crate) fn new(ring: &IoUring, batch_size: usize, batch_count: BufferCount) -> Self {
         let mut arena =
             UnsafeCell::new(BatchArena::new(batch_size, batch_count, batch_count).unwrap());
         let write_buffers = arena.get_mut().register_buffers();
