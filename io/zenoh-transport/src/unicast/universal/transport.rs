@@ -276,9 +276,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
         // Handle associated link (if mixed-reliability link)
-        let al_with_cosnumer =
+        let al_with_consumer =
             associated_link.map(|l| TransportLinkUnicastUniversal::new(self, l, &self.priority_tx));
-        let associated_link = al_with_cosnumer.as_ref().map(|(l, _)| l.clone());
+        let associated_link = al_with_consumer.as_ref().map(|(l, _)| l.clone());
         // Add the link to the channel
         guard.push_link(link.clone(), associated_link.clone());
 
@@ -294,7 +294,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                 let keep_alive = self.manager.config.unicast.lease
                     / self.manager.config.unicast.keep_alive as u32;
                 link.start_tx(transport.clone(), consumer, keep_alive);
-                if let Some((mut associated_link, al_consumer)) = al_with_cosnumer {
+                if let Some((mut associated_link, al_consumer)) = al_with_consumer {
                     associated_link.start_tx(transport, al_consumer, keep_alive);
                 }
             })
