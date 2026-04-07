@@ -16,8 +16,7 @@ use std::time::Duration;
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
-use zenoh::Session;
-use zenoh::Wait;
+use zenoh::{Session, Wait};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;

@@ -23,8 +23,7 @@ use zenoh::{
     qos::{CongestionControl, Priority},
     Config, Session, Wait,
 };
-use zenoh_config::WhatAmI as ConfigWhatAmI;
-use zenoh_config::ZenohId;
+use zenoh_config::{WhatAmI as ConfigWhatAmI, ZenohId};
 
 use crate::common::TestSessions;
 
