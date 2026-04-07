@@ -211,7 +211,8 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         let mut test_context = TestSessions::new();
-        let session1 = test_context.open_listener_with_links(2).await;
+        let config = test_context.get_listener_config("tcp/127.0.0.1:0", 2);
+        let session1 = test_context.open_listener_with_cfg(config).await;
         let session2 = test_context.open_connector().await;
 
         tokio::time::sleep(SLEEP).await;

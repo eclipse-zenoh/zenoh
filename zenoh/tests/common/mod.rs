@@ -16,7 +16,7 @@ use std::time::Duration;
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
-use zenoh::Session;
+use zenoh::{Session, Wait};
 use zenoh_config::{ModeDependentValue, WhatAmI};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
@@ -45,7 +45,7 @@ impl TestSessions {
         }
     }
 
-    fn get_listener_config(&self, endpoint: &str, link_num: usize) -> zenoh_config::Config {
+    pub fn get_listener_config(&self, endpoint: &str, link_num: usize) -> zenoh_config::Config {
         let endpoints: Vec<EndPoint> = (0..link_num).map(|_| endpoint.parse().unwrap()).collect();
 
         let mut config = zenoh_config::Config::default();
@@ -59,7 +59,10 @@ impl TestSessions {
         config
     }
 
-    fn get_connector_config_with_endpoint(&self, locators: Vec<EndPoint>) -> zenoh_config::Config {
+    pub fn get_connector_config_with_endpoint(
+        &self,
+        locators: Vec<EndPoint>,
+    ) -> zenoh_config::Config {
         println!("Connecting to {:?}", locators);
         let mut config = zenoh_config::Config::default();
         // Disable multicast by default
@@ -79,7 +82,7 @@ impl TestSessions {
         config
     }
 
-    fn get_connector_config(&self) -> zenoh_config::Config {
+    pub fn get_connector_config(&self) -> zenoh_config::Config {
         self.get_connector_config_with_endpoint(self.locators.clone())
     }
 
@@ -93,11 +96,19 @@ impl TestSessions {
             .collect()
     }
 
-    pub async fn open_listener_with_links(&mut self, link_num: usize) -> Session {
-        let config = self.get_listener_config("tcp/127.0.0.1:0", link_num);
+    pub fn get_locators_from_session_sync(session: &Session) -> Vec<EndPoint> {
+        session
+            .info()
+            .locators()
+            .wait()
+            .into_iter()
+            .map(|l| l.to_endpoint())
+            .collect()
+    }
 
+    pub async fn open_listener_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
         let session = ztimeout!(zenoh::open(config)).unwrap();
-        // Extract the actual tcp endpoint that session1 is listening on
+        // Extract the actual tcp endpoint that session is listening on
         let locators = TestSessions::get_locators_from_session(&session).await;
 
         println!("Listening to {:?}", locators);
@@ -108,12 +119,33 @@ impl TestSessions {
         session
     }
 
+    pub fn open_listener_with_cfg_sync(&mut self, config: zenoh_config::Config) -> Session {
+        let session = zenoh::open(config).wait().unwrap();
+        // Extract the actual tcp endpoint that session is listening on
+        let locators = TestSessions::get_locators_from_session_sync(&session);
+
+        println!("Listening to {:?}", locators);
+        // Store session and locator
+        self.listener_sessions.push(session.clone());
+        self.locators = locators;
+
+        session
+    }
+
     pub async fn open_listener(&mut self) -> Session {
-        self.open_listener_with_links(1).await
+        let config = self.get_listener_config("tcp/127.0.0.1:0", 1);
+        self.open_listener_with_cfg(config).await
     }
 
     pub async fn open_connector_with_cfg(&mut self, config: zenoh_config::Config) -> Session {
         let session = ztimeout!(zenoh::open(config)).unwrap();
+        self.connector_sessions.push(session.clone());
+
+        session
+    }
+
+    pub fn open_connector_with_cfg_sync(&mut self, config: zenoh_config::Config) -> Session {
+        let session = zenoh::open(config).wait().unwrap();
         self.connector_sessions.push(session.clone());
 
         session
@@ -195,6 +227,20 @@ impl TestSessions {
         for session in self.listener_sessions.drain(..) {
             println!("Closing listener session");
             ztimeout!(session.close()).unwrap();
+        }
+    }
+
+    pub fn close_sync(&mut self) {
+        // Close all the connector sessions
+        for session in self.connector_sessions.drain(..) {
+            println!("Closing connector session");
+            session.close().wait().unwrap();
+        }
+
+        // Close all the listener sessions
+        for session in self.listener_sessions.drain(..) {
+            println!("Closing listener session");
+            session.close().wait().unwrap();
         }
     }
 }
