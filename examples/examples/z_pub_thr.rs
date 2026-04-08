@@ -85,7 +85,7 @@ struct Args {
     number: usize,
     /// Sets the size of the payload to publish
     payload_size: usize,
-    /// The key expression to be used for the throuput test
+    /// The key expression to be used for the throughput test
     #[arg(short, long, default_value = "test/thr")]
     key_expr: KeyExpr<'static>,
     ///Common args for all examples
