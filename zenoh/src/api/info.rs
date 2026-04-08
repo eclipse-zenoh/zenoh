@@ -254,6 +254,25 @@ impl Transport {
             is_shm: false,
         }
     }
+
+    /// Constructs a Transport from individual fields.
+    #[zenoh_macros::internal]
+    pub fn new_from_fields(
+        zid: ZenohId,
+        whatami: WhatAmI,
+        is_qos: bool,
+        is_multicast: bool,
+        #[cfg(feature = "shared-memory")] is_shm: bool,
+    ) -> Self {
+        Transport {
+            zid,
+            whatami,
+            is_qos,
+            is_multicast,
+            #[cfg(feature = "shared-memory")]
+            is_shm,
+        }
+    }
 }
 
 #[cfg(feature = "unstable")]
