@@ -86,6 +86,10 @@ impl TestSessions {
         self.get_connector_config_with_endpoint(self.locators.clone())
     }
 
+    pub fn locators(&self) -> Vec<EndPoint> {
+        self.locators.clone()
+    }
+
     pub async fn get_locators_from_session(session: &Session) -> Vec<EndPoint> {
         session
             .info()
