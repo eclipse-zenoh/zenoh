@@ -100,7 +100,7 @@ struct Args {
     #[arg(short, long, default_value = "100000")]
     /// Number of messages in each throughput measurements.
     number: usize,
-    /// The key expression to be used for the throuput test
+    /// The key expression to be used for the throughput test
     #[arg(short, long, default_value = "test/thr")]
     key_expr: KeyExpr<'static>,
     ///Common args for all examples
