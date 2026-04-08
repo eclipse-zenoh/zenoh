@@ -242,7 +242,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                     self.config.zid,
                     e
                 );
-                return Err((e, link.fail(), close::reason::GENERIC));
+                let (l, asl) = link.fail();
+                return Err((e, l, asl, close::reason::GENERIC));
             }
         };
 
@@ -266,7 +267,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                     self.config.zid,
                     limit
                 );
-                return Err((e.into(), link.fail(), close::reason::MAX_LINKS));
+                let (l, asl) = link.fail();
+                return Err((e.into(), l, asl, close::reason::MAX_LINKS));
             }
         }
 

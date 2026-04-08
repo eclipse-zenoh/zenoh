@@ -352,8 +352,8 @@ impl LinkUnicastWithOpenAck {
         (self.link, ack, self.associated_link)
     }
 
-    pub(crate) fn fail(self) -> TransportLinkUnicast {
-        self.link
+    pub(crate) fn fail(self) -> (TransportLinkUnicast, Option<TransportLinkUnicast>) {
+        (self.link, self.associated_link)
     }
 }
 
