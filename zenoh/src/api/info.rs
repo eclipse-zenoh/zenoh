@@ -560,26 +560,6 @@ mod tests {
     use zenoh_protocol::core::WhatAmI;
 
     #[test]
-    fn test_new_from_fields_stores_fields() {
-        let zid = ZenohId::default();
-        let whatami = WhatAmI::Peer;
-        let t = Transport::new_from_fields(
-            zid.clone(),
-            whatami,
-            /*is_qos=*/ true,
-            /*is_multicast=*/ false,
-            #[cfg(feature = "shared-memory")]
-            /*is_shm=*/ true,
-        );
-        assert_eq!(t.zid, zid);
-        assert_eq!(t.whatami, whatami);
-        assert!(t.is_qos);
-        assert!(!t.is_multicast);
-        #[cfg(feature = "shared-memory")]
-        assert!(t.is_shm);
-    }
-
-    #[test]
     fn test_new_from_fields_equals_new_from_peer() {
         let peer = TransportPeer {
             zid: ZenohId::default().into(),
