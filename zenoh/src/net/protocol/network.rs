@@ -563,7 +563,7 @@ impl Network {
             .collect::<Vec<_>>()
     }
 
-    fn process_linkstates_peer_to_peer(&mut self, link_states: Vec<LocalLinkState>) -> Changes {
+    fn process_singlehop_gossip_linkstate(&mut self, link_states: Vec<LocalLinkState>) -> Changes {
         let mut changes = Changes::default();
 
         for ls in link_states.into_iter() {
@@ -589,7 +589,14 @@ impl Network {
                         continue;
                     }
                     node.sn = ls.sn;
-                    node.links.clone_from(&ls.links);
+                    // NOTE(regions): only Gossip may send malformed messages with empty
+                    // linkstate. These can be safely ignored since they don't occur in "full"
+                    // linkstate. Note that a Gossip node sends non-empty linkstate for itself
+                    // to its gateway. Also note that Network only considers two nodes to be
+                    // connected if both their linkstates imply the connection.
+                    if !ls.links.is_empty() {
+                        node.links.clone_from(&ls.links);
+                    }
                     changes.updated_nodes.push((idx, node.clone()));
                     if ls.locators.is_none() || node.locators == ls.locators {
                         continue;
@@ -705,7 +712,7 @@ impl Network {
         }
 
         if !self.full_linkstate && !self.gossip_multihop {
-            return self.process_linkstates_peer_to_peer(link_states);
+            return self.process_singlehop_gossip_linkstate(link_states);
         }
 
         let mut new_nodes = vec![];
@@ -718,14 +725,7 @@ impl Network {
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
                         node.sn = ls.sn;
-                        // NOTE(regions): only Gossip may send malformed messages with empty
-                        // linkstate. These can be safely ignored since they don't occur in "full"
-                        // linkstate. Note that a Gossip node sends non-empty linkstate for itself
-                        // to its gateway. Also note that Network only considers two nodes to be
-                        // connected if both their linkstates imply the connection.
-                        if !ls.links.is_empty() {
-                            node.links.clone_from(&ls.links);
-                        }
+                        node.links.clone_from(&ls.links);
                         if ls.locators.is_some() {
                             node.locators = ls.locators;
                         }
