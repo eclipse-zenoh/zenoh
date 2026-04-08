@@ -12,18 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{num::NonZeroU32, rc::Rc};
+use std::num::NonZeroU32;
 
 use crate::reader::{index::IndexGeneration, rx_context::Rx};
 
 #[derive(Debug)]
 pub(crate) struct RxContextCell {
-    context: Option<Rc<Rx>>,
+    context: Option<Rx>,
     generation: NonZeroU32,
 }
 
 impl RxContextCell {
-    fn new(context: Rc<Rx>, generation: NonZeroU32) -> Self {
+    fn new(context: Rx, generation: NonZeroU32) -> Self {
         Self {
             context: Some(context),
             generation,
@@ -32,7 +32,7 @@ impl RxContextCell {
 
     fn get(&self, generation: NonZeroU32) -> Option<&Rx> {
         if self.generation == generation {
-            return self.context.as_deref();
+            return self.context.as_ref();
         }
         None
     }
@@ -41,7 +41,6 @@ impl RxContextCell {
         if self.generation == generation {
             if let Some(context) = self.context.take() {
                 tracing::debug!("Begin RxContext destroy {:?}", context);
-                assert!(Rc::strong_count(&context) == 1);
                 drop(context);
                 tracing::debug!("End RxContext destroy!");
             }
@@ -53,9 +52,9 @@ impl RxContextCell {
         }
     }
 
-    fn try_alloc(&mut self, generation: NonZeroU32, context: &Rc<Rx>) -> bool {
+    fn try_alloc(&mut self, generation: NonZeroU32, context: &mut Option<Rx>) -> bool {
         if self.context.is_none() {
-            self.context = Some(context.clone());
+            self.context = context.take();
             self.generation = generation;
             return true;
         }
@@ -85,19 +84,23 @@ impl RxContextStorage {
         self.data[id.index() as usize].free(id.generation())
     }
 
-    pub(crate) fn alloc(&mut self, context: Rc<Rx>) -> IndexGeneration {
+    pub(crate) fn alloc(&mut self, context: Rx) -> IndexGeneration {
         self.next_generation = self.next_generation.saturating_add(1);
         if self.next_generation == NonZeroU32::MAX {
             self.next_generation = NonZeroU32::MIN;
         }
 
+        let mut ctx_option = Some(context);
         for (index, cell) in self.data.iter_mut().enumerate() {
-            if cell.try_alloc(self.next_generation, &context) {
+            if cell.try_alloc(self.next_generation, &mut ctx_option) {
                 return IndexGeneration::new(index as u32, self.next_generation);
             }
         }
 
-        let new_cell = RxContextCell::new(context, self.next_generation);
+        let new_cell = RxContextCell::new(
+            unsafe { ctx_option.unwrap_unchecked() },
+            self.next_generation,
+        );
         self.data.push(new_cell);
         IndexGeneration::new((self.data.len() - 1) as u32, self.next_generation)
     }

@@ -19,7 +19,6 @@ pub mod rx_buffer;
 use std::{
     ops::Neg,
     os::fd::{AsRawFd, RawFd},
-    rc::Rc,
     sync::{atomic::AtomicBool, Arc},
 };
 
@@ -154,14 +153,13 @@ impl Reader {
                             let buffer_group = BufferGroup::new(arena, batch_count, sq)?;
                             let group_id = buffer_group.id();
 
-                            let rx_context =
-                                Rc::new(Rx::new(fd, callback, error_sender, buffer_group));
+                            let rx_context = Rx::new(fd, callback, error_sender, buffer_group);
                             let index = context_storage.alloc(rx_context);
                             set_once.set(index)?;
 
                             let recv = opcode::RecvMulti::new(types::Fd(fd), group_id)
                                 .build()
-                                .flags(io_uring::squeue::Flags::ASYNC)
+                                //.flags(io_uring::squeue::Flags::ASYNC)
                                 .user_data(index.into());
 
                             unsafe { sq.push(&recv)? }
@@ -363,10 +361,9 @@ impl Reader {
                     // We are out of buffers
                     tracing::debug!("ENOBUFS: Restart multishot receive for task {:?}", index);
 
-                    let recv =
-                        opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
+                    let recv = opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
                             .build()
-                            .flags(io_uring::squeue::Flags::ASYNC)
+                            //.flags(io_uring::squeue::Flags::ASYNC)
                             .user_data(index.into());
 
                     unsafe { sq.push(&recv)? };
@@ -395,7 +392,7 @@ impl Reader {
                             context.buffer_group().id(),
                         )
                         .build()
-                        .flags(io_uring::squeue::Flags::ASYNC)
+                        //.flags(io_uring::squeue::Flags::ASYNC)
                         .user_data(index.into());
 
                         unsafe { sq.push(&recv)? };
