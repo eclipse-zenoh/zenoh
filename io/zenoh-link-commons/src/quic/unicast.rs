@@ -24,7 +24,7 @@ use std::{
 
 use futures::FutureExt;
 use quinn::{
-    crypto::rustls::{HandshakeData, QuicClientConfig, QuicServerConfig},
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
     EndpointConfig,
 };
 use tokio::sync::oneshot;
@@ -36,11 +36,12 @@ use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_quic_addr, get_quic_host, parse_mixed_reliability_config,
+        get_negotiated_alpn, get_quic_addr, get_quic_host,
         plaintext::{PlainTextClientConfig, PlainTextServerConfig},
         socket::QuicSocketConfig,
         QuicMtuConfig, QuicTransportConfigurator, TlsClientConfig, TlsServerConfig,
-        PROTOCOL_LEGACY, PROTOCOL_MULTI_STREAM, PROTOCOL_SINGLE_STREAM,
+        PROTOCOL_LEGACY, PROTOCOL_MIXED_REL, PROTOCOL_MULTI_STREAM,
+        PROTOCOL_MULTI_STREAM_MIXED_REL, PROTOCOL_SINGLE_STREAM,
     },
     LinkUnicast, NewLinkChannelSender,
 };
@@ -94,25 +95,7 @@ impl MultiStreamConfig {
             "auto" => Ok(Self::Auto),
             "0" => Ok(Self::Disabled),
             "1" => Ok(Self::Enabled),
-            s => Err(zerror!("Invalid multistream config:  {s}").into()),
-        }
-    }
-
-    /// Returns the list of protocols supported for QUIC ALPN.
-    ///
-    /// Protocols are ordered by decreasing selection priority.
-    fn alpn_protocols(&self) -> Vec<Vec<u8>> {
-        match self {
-            // Disabled must be compatible with legacy protocol
-            Self::Disabled => vec![PROTOCOL_SINGLE_STREAM.into(), PROTOCOL_LEGACY.into()],
-            // Enabled forces multistream, so it's not compatible with legacy protocol
-            Self::Enabled => vec![PROTOCOL_MULTI_STREAM.into()],
-            // Auto prioritize multistream, but must also be compatible with legacy protocol
-            Self::Auto => vec![
-                PROTOCOL_MULTI_STREAM.into(),
-                PROTOCOL_SINGLE_STREAM.into(),
-                PROTOCOL_LEGACY.into(),
-            ],
+            s => Err(zerror!("Invalid multistream config: {s}").into()),
         }
     }
 
@@ -132,6 +115,67 @@ impl MultiStreamConfig {
         quic_transport_conf.max_concurrent_bidi_streams(1u8.into());
         quic_transport_conf.max_concurrent_uni_streams(self.max_concurrent_uni_streams());
     }
+}
+
+/// Quic endpoint `mixed_rel` config
+pub(crate) enum MixedRelConfig {
+    /// default, or `mixed_rel=false`
+    Disabled,
+    /// `mixed_rel=true`
+    Enabled,
+    /// `mixed_rel=auto`
+    Auto,
+}
+
+impl MixedRelConfig {
+    /// Parse mixed_rel configuration.
+    fn new(metadata: Metadata) -> ZResult<Self> {
+        match metadata.get(Metadata::MIXED_RELIABILITY).unwrap_or("0") {
+            "auto" => Ok(Self::Auto),
+            "0" => Ok(Self::Disabled),
+            "1" => Ok(Self::Enabled),
+            s => Err(zerror!("Invalid mixed-reliability config: {s}").into()),
+        }
+    }
+}
+
+/// Returns the list of protocols supported for QUIC ALPN.
+///
+/// Protocols are ordered by decreasing selection priority.
+fn compute_alpn_protocols(ms_conf: &MultiStreamConfig, mr_conf: &MixedRelConfig) -> Vec<Vec<u8>> {
+    let mut protocols = Vec::new();
+
+    // Multi-stream + mixed-rel
+    if !matches!(ms_conf, MultiStreamConfig::Disabled)
+        && !matches!(mr_conf, MixedRelConfig::Disabled)
+    {
+        protocols.push(PROTOCOL_MULTI_STREAM_MIXED_REL.into());
+    }
+
+    // Multi-stream (non mixed-rel)
+    if matches!(
+        ms_conf,
+        MultiStreamConfig::Enabled | MultiStreamConfig::Auto
+    ) && !matches!(mr_conf, MixedRelConfig::Enabled)
+    {
+        protocols.push(PROTOCOL_MULTI_STREAM.into());
+    }
+
+    // Mixed-rel (non multi-stream)
+    if !matches!(ms_conf, MultiStreamConfig::Enabled)
+        && matches!(mr_conf, MixedRelConfig::Enabled | MixedRelConfig::Auto)
+    {
+        protocols.push(PROTOCOL_MIXED_REL.into());
+    }
+
+    // Base protocol (non multi-stream, non mixed-rel)
+    if !matches!(ms_conf, MultiStreamConfig::Enabled) && !matches!(mr_conf, MixedRelConfig::Enabled)
+    {
+        protocols.push(PROTOCOL_SINGLE_STREAM.into());
+        protocols.push(PROTOCOL_LEGACY.into());
+    }
+
+    protocols
 }
 
 /// Priority-mapped uni streams.
@@ -155,21 +199,17 @@ impl UniStreams {
     /// negotiated protocol is [`PROTOCOL_MULTI_STREAM`], then uni streams are opened.
     /// Otherwise, it returns None.
     fn try_open(connection: &quinn::Connection) -> ZResult<Option<Self>> {
-        let handshake_data = connection
-            .handshake_data()
-            .ok_or_else(|| zerror!("No handshake data"))?;
-        let handshake_data = handshake_data
-            .downcast_ref::<HandshakeData>()
-            .expect("HandshakeData should be only existing implementation");
+        let alpn =
+            get_negotiated_alpn(connection)?.expect("Zenoh ALPN should have been negotiated");
         let open_uni = |_prio| {
             let open = connection.open_uni().now_or_never();
             Ok(open.ok_or_else(|| zerror!("Cannot open uni stream"))??)
         };
-        Ok(match handshake_data.protocol.as_deref() {
-            Some(PROTOCOL_MULTI_STREAM) => Some(Self(
+        Ok(match alpn.as_slice() {
+            PROTOCOL_MULTI_STREAM | PROTOCOL_MULTI_STREAM_MIXED_REL => Some(Self(
                 (1..Priority::NUM).map(open_uni).collect::<ZResult<_>>()?,
             )),
-            Some(PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY) => None,
+            PROTOCOL_MIXED_REL | PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY => None,
             _ => unreachable!(),
         })
     }
@@ -274,23 +314,21 @@ impl<F: AcceptorCallback> QuicServer<F> {
         let addr = get_quic_addr(&epaddr).await?;
         let host = get_quic_host(&epaddr)?;
 
-        let is_mixed_rel = parse_mixed_reliability_config(endpoint.metadata())
-            .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
-
         // Server config
         let mut server_crypto = TlsServerConfig::new(&epconf, is_secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC listener on {addr}: {e}"))?;
 
-        let multistream = if is_streamed {
-            Some(MultiStreamConfig::new(endpoint.metadata())?)
+        let streams_conf = if is_streamed {
+            let ms_conf = MultiStreamConfig::new(endpoint.metadata())?;
+            let mr_conf = MixedRelConfig::new(endpoint.metadata())?;
+            server_crypto.server_config.alpn_protocols = compute_alpn_protocols(&ms_conf, &mr_conf);
+            Some(ms_conf)
         } else {
+            // No streams: QUIC DATAGRAM
+            server_crypto.server_config.alpn_protocols = vec![PROTOCOL_LEGACY.into()];
             None
         };
-        server_crypto.server_config.alpn_protocols = multistream
-            .as_ref()
-            .map(|m| m.alpn_protocols())
-            .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
         let quic_config: QuicServerConfig = server_crypto
             .server_config
@@ -307,7 +345,7 @@ impl<F: AcceptorCallback> QuicServer<F> {
         {
             let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
             QuicTransportConfigurator(transport_config)
-                .configure_max_concurrent_streams(multistream.as_ref())
+                .configure_max_concurrent_streams(streams_conf.as_ref())
                 .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
         }
         // Initialize the Endpoint
@@ -346,7 +384,6 @@ impl<F: AcceptorCallback> QuicServer<F> {
                 quic_endpoint,
                 tls_close_link_on_expiration: server_crypto.tls_close_link_on_expiration,
                 is_streamed,
-                is_mixed_rel,
                 inner: acceptor_params,
             },
             locator,
@@ -411,24 +448,21 @@ impl QuicClient {
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
 
-        let is_mixed_rel = parse_mixed_reliability_config(endpoint.metadata())
-            .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
-
         // Initialize the QUIC connection
         let mut client_crypto = TlsClientConfig::new(&epconf, is_secure)
             .await
             .map_err(|e| zerror!("Cannot create a new QUIC client on {dst_addr}: {e}"))?;
 
         let multistream = if is_streamed {
-            Some(MultiStreamConfig::new(endpoint.metadata())?)
+            let ms_conf = MultiStreamConfig::new(endpoint.metadata())?;
+            let mr_conf = MixedRelConfig::new(endpoint.metadata())?;
+            client_crypto.client_config.alpn_protocols = compute_alpn_protocols(&ms_conf, &mr_conf);
+            Some(ms_conf)
         } else {
+            // No streams: QUIC DATAGRAM
+            client_crypto.client_config.alpn_protocols = vec![PROTOCOL_LEGACY.into()];
             None
         };
-
-        client_crypto.client_config.alpn_protocols = multistream
-            .as_ref()
-            .map(|m| m.alpn_protocols())
-            .unwrap_or(vec![PROTOCOL_LEGACY.into()]);
 
         let mut quic_endpoint = async {
             let socket = QuicSocketConfig::new(&epconf)
@@ -494,6 +528,16 @@ impl QuicClient {
             streams = Some(quic_streams);
         }
 
+        let is_mixed_rel = {
+            let alpn =
+                get_negotiated_alpn(&quic_conn)?.expect("Zenoh ALPN should have been negotiated");
+            match alpn.as_slice() {
+                PROTOCOL_MIXED_REL | PROTOCOL_MULTI_STREAM_MIXED_REL => true,
+                PROTOCOL_MULTI_STREAM | PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY => false,
+                _ => unreachable!(),
+            }
+        };
+
         Ok(Self {
             quic_conn: QuicConnection::new(quic_conn),
             streams,
@@ -527,7 +571,6 @@ pub struct QuicAcceptor<F: AcceptorCallback> {
     quic_endpoint: quinn::Endpoint,
     tls_close_link_on_expiration: bool,
     is_streamed: bool,
-    is_mixed_rel: bool,
     inner: QuicAcceptorParams<F>,
 }
 
@@ -609,13 +652,22 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
         let src_addr = SocketAddr::new(ip, src_addr.port());
         let dst_addr = quic_conn.remote_address();
 
+        let is_mixed_rel = {
+            let alpn =
+                get_negotiated_alpn(&quic_conn)?.expect("Zenoh ALPN should have been negotiated");
+            match alpn.as_slice() {
+                PROTOCOL_MIXED_REL | PROTOCOL_MULTI_STREAM_MIXED_REL => true,
+                PROTOCOL_MULTI_STREAM | PROTOCOL_SINGLE_STREAM | PROTOCOL_LEGACY => false,
+                _ => unreachable!(),
+            }
+        };
         let tls_close_link_on_expiration = self.tls_close_link_on_expiration;
         let link = (self.inner.make_link)(QuicLinkMaterial {
             quic_conn: QuicConnection::new(quic_conn),
             src_addr,
             dst_addr,
             streams,
-            is_mixed_rel: self.is_mixed_rel,
+            is_mixed_rel,
             tls_close_link_on_expiration,
         })?;
 
