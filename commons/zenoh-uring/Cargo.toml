@@ -30,13 +30,13 @@ flume = { workspace = true }
 io-uring = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["event"] }
+rand = { workspace = true, features = ["default"] }
 thread-priority = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
-rand = { workspace = true, features = ["default"] }
 
 [dev-dependencies]
 test-case = { workspace = true }

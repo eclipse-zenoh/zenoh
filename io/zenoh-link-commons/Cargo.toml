@@ -41,8 +41,8 @@ quic = [
   "tls",
 ]
 tls = ["dep:rustls", "dep:rustls-webpki"]
-uring = []
 unsecure_quic = ["quic"]
+uring = []
 
 [dependencies]
 async-trait = { workspace = true }
