@@ -582,7 +582,7 @@ mod tests {
     #[test]
     fn test_new_from_fields_equals_new_from_peer() {
         let peer = TransportPeer {
-            zid: zenoh_protocol::core::ZenohId::default().into(),
+            zid: ZenohId::default().into(),
             whatami: WhatAmI::Router,
             is_qos: true,
             #[cfg(feature = "shared-memory")]
