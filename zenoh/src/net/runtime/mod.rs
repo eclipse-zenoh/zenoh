@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
 pub mod orchestrator;
+mod region;
 
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
@@ -39,15 +40,20 @@ use futures::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
+use zenoh_config::{
+    unwrap_or_default, ExpandedConfig, GenericConfig, IConfig, ModeDependent, ZenohId,
+};
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohIdProto},
+    core::{Locator, Region, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::{
     client_storage::ShmClientStorage,
@@ -68,8 +74,8 @@ use super::{
     primitives::{DeMux, EPrimitives, Primitives},
     routing::{
         self,
+        gateway::Gateway,
         namespace::{ENamespace, Namespace},
-        router::Router,
     },
 };
 #[cfg(feature = "plugins")]
@@ -83,6 +89,10 @@ use crate::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
         info::{Link, Transport},
+    },
+    net::routing::{
+        gateway::GatewayBuilder,
+        hat::{self, HatTrait},
     },
     GIT_VERSION,
 };
@@ -112,8 +122,8 @@ pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
-    router: Arc<Router>,
-    config: Notifier<Config>,
+    router: Arc<Gateway>,
+    config: Notifier<ExpandedConfig>,
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
@@ -126,6 +136,7 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
+    span: tracing::Span,
 }
 
 #[allow(private_interfaces)]
@@ -169,14 +180,16 @@ pub trait IRuntime: Send + Sync {
     fn get_config(&self) -> GenericConfig;
 }
 
-impl IConfig for Notifier<Config> {
+impl IConfig for Notifier<ExpandedConfig> {
     fn get(&self, key: &str) -> ZResult<String> {
-        self.lock().get_json(key)
+        self.lock()
+            .get_json(key)
+            .map_err(|err| zerror!("{err}").into())
     }
 
     fn queries_default_timeout_ms(&self) -> u64 {
         let guard = self.lock();
-        let config = &guard.0;
+        let config = &guard;
         unwrap_or_default!(config.queries_default_timeout())
     }
 
@@ -296,36 +309,47 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let matches = match matching_type {
+        let (broker_hat, other_hats) = tables
+            .hats
+            .partition(&Region::Local)
+            .expect("the local region should always have a corresponding hat");
+        let local_broker = broker_hat
+            .as_any()
+            .downcast_ref::<hat::broker::Hat>()
+            .expect("the local region's hat should always be the broker hat");
+
+        let key_expr = match &ns_key_expr {
+            Some(ns_ke) => ns_ke,
+            None => key_expr,
+        };
+
+        let Some(src_face) = tables.data.faces.get(&face_id) else {
+            tracing::error!(fid = face_id, "Unknown session face");
+            return MatchingStatus { matching: false };
+        };
+
+        let matching = match matching_type {
             crate::api::matching::MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_subscriber_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                 )
             }
             crate::api::matching::MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_queryable_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                     complete,
                 )
             }
         };
 
-        drop(tables);
-        let matching = match destination {
-            crate::sample::Locality::Any => !matches.is_empty(),
-            crate::sample::Locality::Remote => matches.values().any(|dir| dir.id != face_id),
-            crate::sample::Locality::SessionLocal => matches.values().any(|dir| dir.id == face_id),
-        };
         MatchingStatus { matching }
     }
 
@@ -337,11 +361,11 @@ impl IRuntime for RuntimeState {
             Some(ns) => {
                 let face = self
                     .router
-                    .new_primitives(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
+                    .new_session(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
                 (face.state.id, Arc::new(Namespace::new(ns.clone(), face)))
             }
             None => {
-                let face = self.router.new_primitives(e_primitives);
+                let face = self.router.new_session(e_primitives);
                 (face.state.id, face)
             }
         }
@@ -404,11 +428,11 @@ impl RuntimeState {
             .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
-    fn router(&self) -> Arc<Router> {
+    fn router(&self) -> Arc<Gateway> {
         self.router.clone()
     }
 
-    fn config(&self) -> &Notifier<Config> {
+    fn config(&self) -> &Notifier<ExpandedConfig> {
         &self.config
     }
 
@@ -523,21 +547,29 @@ impl WeakRuntime {
 }
 
 pub struct RuntimeBuilder {
-    config: zenoh_config::Config,
+    config: zenoh_config::ExpandedConfig,
     #[cfg(feature = "plugins")]
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(test)]
+    subregions: Option<Vec<Region>>,
+    #[cfg(test)]
+    disable_async_tree_computation: bool,
 }
 
 impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
-            config: config.0,
+            config: config.0.expanded(),
             #[cfg(feature = "plugins")]
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(test)]
+            subregions: None,
+            #[cfg(test)]
+            disable_async_tree_computation: false,
         }
     }
 
@@ -553,6 +585,20 @@ impl RuntimeBuilder {
         self
     }
 
+    #[allow(dead_code)]
+    #[cfg(test)]
+    pub fn subregions(mut self, subregions: Vec<Region>) -> Self {
+        self.subregions.replace(subregions);
+        self
+    }
+
+    #[allow(dead_code)]
+    #[cfg(test)]
+    pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
+        self.disable_async_tree_computation = value;
+        self
+    }
+
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
             config,
@@ -560,13 +606,17 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(test)]
+            subregions,
+            #[cfg(test)]
+            disable_async_tree_computation,
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).unwrap_or_default().into();
+        let zid = ZenohIdProto::from(config.id());
         tracing::info!("Using ZID: {}", zid);
 
-        let whatami = unwrap_or_default!(config.mode());
+        let whatami = config.mode();
 
         #[cfg(feature = "stats")]
         let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
@@ -574,14 +624,27 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            &config,
-            #[cfg(feature = "stats")]
-            stats.clone(),
-        )?);
+        let mut gateway_builder = GatewayBuilder::new(&config);
+
+        if let Some(hlc) = hlc.as_ref().cloned() {
+            gateway_builder = gateway_builder.hlc(hlc.clone());
+        }
+
+        #[cfg(feature = "stats")]
+        let gateway_builder = gateway_builder.stats(stats.clone());
+
+        #[cfg(test)]
+        let gateway_builder = if let Some(subregions) = subregions {
+            gateway_builder.subregions(subregions)
+        } else {
+            gateway_builder
+        };
+
+        #[cfg(test)]
+        let gateway_builder =
+            gateway_builder.disable_async_tree_computation(disable_async_tree_computation);
+
+        let gateway = Arc::new(gateway_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -591,7 +654,10 @@ impl RuntimeBuilder {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid);
+            .bound_callback({
+                let config = config.clone();
+                move |p| region::compute_transient_bound_of(&p, &config)
+            });
 
         #[cfg(feature = "shared-memory")]
         let transport_manager_builder =
@@ -615,14 +681,14 @@ impl RuntimeBuilder {
         let shm_init_mode = *config.transport.shared_memory.mode();
 
         let namespace = config.namespace().clone();
-        let config = Notifier::new(crate::config::Config(config));
-
+        let config = Notifier::new(config);
+        let span = tracing::debug_span!("rt", zid = %zid.short());
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
-                router,
+                router: gateway,
                 config,
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
@@ -636,10 +702,11 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
+                span,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_hats(runtime.clone())?;
 
         // Admin space
         if start_admin_space {
@@ -742,11 +809,11 @@ impl Runtime {
         self.state.spawn_abortable(future)
     }
 
-    pub(crate) fn router(&self) -> Arc<Router> {
+    pub(crate) fn router(&self) -> Arc<Gateway> {
         self.state.router()
     }
 
-    pub fn config(&self) -> &Notifier<Config> {
+    pub fn config(&self) -> &Notifier<ExpandedConfig> {
         self.state.config()
     }
 
@@ -815,6 +882,7 @@ struct RuntimeTransportEventHandler {
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
+    #[tracing::instrument(level = "trace", skip_all)]
     fn new_unicast(
         &self,
         peer: TransportPeer,
@@ -822,6 +890,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
@@ -829,13 +898,82 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
+
+                let config = runtime.config().lock().clone();
+
+                let (region, remote_bound) =
+                    region::compute_region_of(&peer, &config, transport.get_bound()?.as_ref())?;
+
+                fn north_bound_transport_peer_count(
+                    runtime: &Runtime,
+                    new_peer: &TransportPeer,
+                ) -> usize {
+                    ZRuntime::Application.block_in_place(async {
+                        runtime
+                            .manager()
+                            .get_transports_unicast()
+                            .await
+                            .iter()
+                            .filter(|transport| {
+                                let Ok(peer) = transport.get_peer() else {
+                                    tracing::error!(
+                                        "Could not get transport peer \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                let Ok(remote_bound) = transport.get_bound() else {
+                                    tracing::error!(
+                                        "Could not get transport remote bound \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                if &peer == new_peer {
+                                    return false;
+                                }
+
+                                // NOTE(regions): compute bound instead of querying the router as
+                                // the corresponding transport face might not exist yet
+                                let Ok((region, _)) = region::compute_region_of(
+                                    &peer,
+                                    &runtime.config().lock(),
+                                    remote_bound.as_ref(),
+                                ) else {
+                                    tracing::error!(
+                                        zid = %peer.zid.short(),
+                                        wai = %peer.whatami,
+                                        "Could not get transport peer region \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                region.bound().is_north()
+                            })
+                            .count()
+                    })
+                }
+
+                if region.bound().is_north()
+                    && runtime.whatami() == WhatAmI::Client
+                    && north_bound_transport_peer_count(runtime, &peer) > 0
+                {
+                    bail!("Client runtimes only accept one north-bound transport");
+                }
+
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoints: std::sync::RwLock::new(HashSet::new()),
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport)
+                        .new_transport_unicast(transport, region, remote_bound)
                         .unwrap(),
                     slave_handlers,
                 }))
@@ -850,15 +988,19 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
+
+                let region = region::compute_multicast_region(&runtime.config().lock())?;
+
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone())?;
+                    .new_transport_multicast(transport.clone(), region)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -883,6 +1025,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn new_link(&self, link: zenoh_link::Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
@@ -890,6 +1033,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn del_link(&self, link: zenoh_link::Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -898,6 +1042,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn closed(&self) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.closed();
         Runtime::closed_session(self);
         for handler in &self.slave_handlers {
@@ -923,12 +1068,17 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
+
+        let (region, remote_bound) =
+            region::compute_multicast_region_of(&peer, &self.runtime.config().lock())?;
+
         Ok(Arc::new(RuntimeMulticastSession {
-            main_handler: self
-                .runtime
-                .state
-                .router
-                .new_peer_multicast(self.transport.clone(), peer)?,
+            main_handler: self.runtime.state.router.new_peer_multicast(
+                self.transport.clone(),
+                peer,
+                region,
+                remote_bound,
+            )?,
             slave_handlers,
         }))
     }
@@ -984,7 +1134,7 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 impl Closee for Arc<RuntimeState> {
     type CloseArgs = ();
     async fn close_inner(&self, _: ()) {
-        tracing::trace!("Runtime::close())");
+        tracing::trace!("Runtime::close()");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
@@ -997,8 +1147,8 @@ impl Closee for Arc<RuntimeState> {
         // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
+        tables.data.root_res.close();
+        tables.data.faces.clear();
     }
 }
 

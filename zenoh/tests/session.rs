@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#![cfg(feature = "unstable")]
 mod common;
 
 use std::{
@@ -22,20 +22,20 @@ use std::{
     time::Duration,
 };
 
-#[cfg(feature = "internal")]
-use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
-#[cfg(feature = "unstable")]
-use zenoh::qos::Reliability;
 #[cfg(all(feature = "internal", feature = "unstable"))]
 use zenoh::Wait;
 use zenoh::{
-    key_expr::KeyExpr, qos::CongestionControl, query::Querier, sample::SampleKind, Session,
+    key_expr::KeyExpr,
+    qos::{CongestionControl, Reliability},
+    query::Querier,
+    sample::SampleKind,
+    Session,
 };
 use zenoh_core::ztimeout;
-#[cfg(not(feature = "unstable"))]
-use zenoh_protocol::core::Reliability;
 
-use crate::common::{close_session, open_session_multicast, open_session_unicast};
+#[cfg(feature = "internal")]
+use crate::common::close_session;
+use crate::common::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -273,65 +273,28 @@ async fn test_session_qrrep(peer01: &Session, peer02: &Session, reliability: Rel
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_unicast() {
     zenoh::init_log_from_env_or("error");
-    let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = test_context.open_pairs().await;
     test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     test_session_getrep(&peer01, &peer02, Reliability::Reliable).await;
     test_session_qrrep(&peer01, &peer02, Reliability::Reliable).await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_multicast() {
     zenoh::init_log_from_env_or("error");
-    let (peer01, peer02) =
-        open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = test_context.open_pairs_multicast("udp/224.0.0.1:0").await;
     test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
-    close_session(peer01, peer02).await;
-}
-
-#[cfg(feature = "internal")]
-async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
-    zenoh::init_log_from_env_or("error");
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Creating r1 session runtime: {endpoints:?}");
-    let mut r1 = RuntimeBuilder::new(config).build().await.unwrap();
-    r1.start().await.unwrap();
-
-    let mut config = zenoh::Config::default();
-    config
-        .connect
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Creating r2 session runtime: {endpoints:?}");
-    let mut r2 = RuntimeBuilder::new(config).build().await.unwrap();
-    r2.start().await.unwrap();
-
-    (r1, r2)
+    test_context.close().await;
 }
 
 #[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_2sessions_1runtime_init() {
-    let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.0.1:17449"]).await;
+    let mut test_context = TestSessions::new();
+    let (r1, r2) = test_context.open_pairs_runtime().await;
     println!("[RI][02a] Creating peer01 session from runtime 1");
     let peer01 = zenoh::session::init(r1.clone().into()).await.unwrap();
     println!("[RI][02b] Creating peer02 session from runtime 2");
@@ -351,8 +314,9 @@ async fn zenoh_2sessions_1runtime_init() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_session_close() {
     zenoh::init_log_from_env_or("error");
-    let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17457"]).await;
-    close_session(peer01, peer02).await;
+    let mut test_context = TestSessions::new();
+    let (_peer01, _peer02) = test_context.open_pairs().await;
+    test_context.close().await;
 }
 
 #[cfg(all(feature = "internal", feature = "unstable"))]
@@ -360,7 +324,8 @@ async fn zenoh_session_close() {
 async fn zenoh_session_close_in_background_async() {
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17467"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
 
@@ -376,7 +341,8 @@ async fn zenoh_session_close_in_background_async() {
 async fn zenoh_session_close_in_background_sync() {
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17477"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = test_context.open_pairs().await;
     let close_task_1 = peer01.close().in_background().await;
     let close_task_2 = peer02.close().in_background().await;
 
@@ -400,32 +366,34 @@ async fn test_undeclare_subscribers_same_keyexpr() {
 async fn test_session_from_cloned_config() {
     use zenoh::Config;
 
-    let (pub_config, sub_config) = {
+    let (mut pub_config, mut sub_config) = {
         let mut common_config = Config::default();
-        let locator = "tcp/127.0.0.1:38446";
         common_config
             .scouting
             .multicast
             .set_enabled(Some(false))
             .unwrap();
 
-        let mut pub_config = common_config.clone();
-        let mut sub_config = common_config;
-
-        sub_config
-            .listen
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
-        pub_config
-            .connect
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
+        let pub_config = common_config.clone();
+        let sub_config = common_config;
 
         (pub_config, sub_config)
     };
 
+    // Update sub_config (listener)
+    sub_config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
+        .unwrap();
+
+    // Create sub session
+    let sub_session = zenoh::open(sub_config).await.unwrap();
+
+    // Update pub_config (connector)
+    let locator = TestSessions::get_locators_from_session(&sub_session).await;
+    pub_config.connect.endpoints.set(locator).unwrap();
+
+    // Create pub session
     let _pub_session = zenoh::open(pub_config).await.unwrap();
-    let _sub_session = zenoh::open(sub_config).await.unwrap();
 }

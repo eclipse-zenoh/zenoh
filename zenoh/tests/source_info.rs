@@ -13,43 +13,22 @@
 //
 
 #![cfg(feature = "unstable")]
+mod common;
 use core::time::Duration;
 
-use zenoh::{sample::SourceInfo, Session};
-use zenoh_config::{ModeDependentValue, WhatAmI};
+use zenoh::sample::SourceInfo;
 use zenoh_core::ztimeout;
 
+use crate::common::TestSessions;
+
 const TIMEOUT: Duration = Duration::from_secs(60);
-
-async fn create_peer_client_pair(locator: &str) -> (Session, Session) {
-    let config1 = {
-        let mut config = zenoh::Config::default();
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-        config
-            .listen
-            .endpoints
-            .set(vec![locator.parse().unwrap()])
-            .unwrap();
-        config
-    };
-    let mut config2 = zenoh::Config::default();
-    config2.set_mode(Some(WhatAmI::Client)).unwrap();
-    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-    config2
-        .connect
-        .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-        .unwrap();
-
-    let session1 = zenoh::open(config1).await.unwrap();
-    let session2 = zenoh::open(config2).await.unwrap();
-    (session1, session2)
-}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_source_info_pub_sub() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/source_info";
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:51001"));
+    let mut test_context = TestSessions::new();
+    let (session1, session2) = ztimeout!(test_context.open_pairs_client());
     let publisher = ztimeout!(session1.declare_publisher(ke)).unwrap();
     let subscriber = ztimeout!(session2.declare_subscriber(ke)).unwrap();
 
@@ -62,13 +41,16 @@ async fn test_source_info_pub_sub() {
     assert!(sample.source_info().is_some());
     assert_eq!(sample.source_info().unwrap().source_id(), &id);
     assert_eq!(sample.source_info().unwrap().source_sn(), sn);
+
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_source_info_pub_sub_no_source_info() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/no_source_info";
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:51002"));
+    let mut test_context = TestSessions::new();
+    let (session1, session2) = ztimeout!(test_context.open_pairs_client());
     let publisher = ztimeout!(session1.declare_publisher(ke)).unwrap();
     let subscriber = ztimeout!(session2.declare_subscriber(ke)).unwrap();
 
@@ -77,13 +59,16 @@ async fn test_source_info_pub_sub_no_source_info() {
 
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
     assert!(sample.source_info().is_none());
+
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_source_info_query_reply() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/source_info";
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:51003"));
+    let mut test_context = TestSessions::new();
+    let (session1, session2) = ztimeout!(test_context.open_pairs_client());
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -113,13 +98,16 @@ async fn test_source_info_query_reply() {
         reply.result().unwrap().source_info().unwrap().source_sn(),
         sn
     );
+
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_source_info_query_reply_no_source_info() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/no_source_info";
-    let (session1, session2) = ztimeout!(create_peer_client_pair("tcp/127.0.0.1:51004"));
+    let mut test_context = TestSessions::new();
+    let (session1, session2) = ztimeout!(test_context.open_pairs_client());
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
@@ -135,4 +123,6 @@ async fn test_source_info_query_reply_no_source_info() {
     let reply = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply.result().is_ok());
     assert!(reply.result().unwrap().source_info().is_none());
+
+    test_context.close().await;
 }

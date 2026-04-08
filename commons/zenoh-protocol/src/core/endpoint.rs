@@ -195,6 +195,7 @@ pub struct Metadata<'a>(pub(super) &'a str);
 impl<'a> Metadata<'a> {
     pub const RELIABILITY: &'static str = "rel";
     pub const PRIORITIES: &'static str = "prio";
+    pub const MULTISTREAM: &'static str = "multistream";
 
     pub fn as_str(&self) -> &'a str {
         self.0
@@ -330,19 +331,19 @@ impl<'a> Config<'a> {
         self.0
     }
 
-    pub fn is_empty(&'a self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.as_str().is_empty()
     }
 
-    pub fn iter(&'a self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (&'a str, &'a str)> + Clone {
         parameters::iter(self.0)
     }
 
-    pub fn get(&'a self, k: &str) -> Option<&'a str> {
+    pub fn get(&self, k: &str) -> Option<&'a str> {
         parameters::get(self.0, k)
     }
 
-    pub fn values(&'a self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
+    pub fn values(&self, k: &str) -> impl DoubleEndedIterator<Item = &'a str> {
         parameters::values(self.0, k)
     }
 }

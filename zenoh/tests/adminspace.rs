@@ -31,11 +31,8 @@ async fn test_adminspace_wonly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(false).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
     let root = router
@@ -70,10 +67,6 @@ async fn test_adminspace_read() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         c.plugins_loading.set_enabled(true).unwrap();
         let plugin_search_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -128,19 +121,12 @@ async fn test_adminspace_read() {
         .next();
     assert!(metrics.is_some());
     let routers_graph = router
-        .get(format!("@/{zid}/router/linkstate/routers"))
+        .get(format!("@/{zid}/router/linkstate/north"))
         .await
         .unwrap()
         .into_iter()
         .next();
     assert!(routers_graph.is_some());
-    let peers_graph = router
-        .get(format!("@/{zid}/router/linkstate/peers"))
-        .await
-        .unwrap()
-        .into_iter()
-        .next();
-    assert!(peers_graph.is_some());
 
     let subscribers: Vec<String> = router
         .get(format!("@/{zid}/router/subscriber/**"))
@@ -351,11 +337,8 @@ async fn test_adminspace_ronly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
 
@@ -383,11 +366,8 @@ async fn test_adminspace_write() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
 

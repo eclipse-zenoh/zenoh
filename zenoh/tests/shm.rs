@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(all(feature = "unstable", feature = "shared-memory",))]
+mod common;
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -32,96 +33,74 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::ztimeout;
 use zenoh_shm::api::buffer::traits::OwnedShmBuf;
 
+use crate::common::TestSessions;
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_00;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
-async fn open_session_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
-    endpoints: &[&str],
+async fn setup_shm_unicast<const NO_SHM_FOR_SECOND_PEER: bool>(
+    test_context: &mut TestSessions,
 ) -> (Session, Session) {
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
+    let mut config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
     config
         .transport
         .shared_memory
         .transport_optimization
         .set_message_size_threshold(1)
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {endpoints:?}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
+    let peer01 = test_context.open_listener_with_cfg(config).await;
 
-    let mut config = zenoh::Config::default();
+    let mut config = test_context.get_connector_config();
     config
-        .connect
-        .endpoints
-        .set(
-            endpoints
-                .iter()
-                .map(|e| e.parse().unwrap())
-                .collect::<Vec<_>>(),
-        )
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_message_size_threshold(1)
         .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
     config
         .transport
         .shared_memory
         .set_enabled(!NO_SHM_FOR_SECOND_PEER)
         .unwrap();
+    let peer02 = test_context.open_connector_with_cfg(config).await;
+
+    (peer01, peer02)
+}
+
+async fn setup_shm_multicast(test_context: &mut TestSessions) -> (Session, Session) {
+    // Open 1st listener with port 0
+    let mut config = test_context.get_listener_config("udp/224.0.0.1:0", 1);
     config
         .transport
         .shared_memory
         .transport_optimization
         .set_message_size_threshold(1)
         .unwrap();
-    println!("[  ][02a] Opening peer02 session: {endpoints:?}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
+    let peer01 = test_context.open_listener_with_cfg(config).await;
+
+    let locator = peer01
+        .info()
+        .locators()
+        .await
+        .into_iter()
+        .find(|l| l.protocol().as_str() == "udp")
+        .expect("Expected at least one UDP locator")
+        .to_string();
+
+    // Open 2nd listener with port got from 1st listener
+    let mut config = test_context.get_listener_config(&locator, 1);
+    config
+        .transport
+        .shared_memory
+        .transport_optimization
+        .set_message_size_threshold(1)
+        .unwrap();
+    let peer02 = test_context.open_listener_with_cfg(config).await;
 
     (peer01, peer02)
-}
-
-async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
-    // Open the sessions
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint01.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session: {endpoint01}");
-    let peer01 = ztimeout!(zenoh::open(config)).unwrap();
-
-    let mut config = zenoh::Config::default();
-    config
-        .listen
-        .endpoints
-        .set(vec![endpoint02.parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session: {endpoint02}");
-    let peer02 = ztimeout!(zenoh::open(config)).unwrap();
-
-    (peer01, peer02)
-}
-
-async fn close_session(peer01: Session, peer02: Session) {
-    println!("[  ][01d] Closing peer02 session");
-    ztimeout!(peer01.close()).unwrap();
-    println!("[  ][02d] Closing peer02 session");
-    ztimeout!(peer02.close()).unwrap();
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -274,7 +253,8 @@ async fn zenoh_shm_unicast() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19447"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<false>(&mut test_context).await;
     test_session_pubsub::<false>(
         &peer01,
         &peer02,
@@ -282,7 +262,7 @@ async fn zenoh_shm_unicast() {
         ResizeBuffer::NoResize,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -290,7 +270,8 @@ async fn zenoh_shm_unicast_to_non_shm() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19448"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<true>(&mut test_context).await;
     test_session_pubsub::<true>(
         &peer01,
         &peer02,
@@ -298,7 +279,7 @@ async fn zenoh_shm_unicast_to_non_shm() {
         ResizeBuffer::NoResize,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -306,7 +287,8 @@ async fn zenoh_shm_unicast_implicit_optimization() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19453"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<false>(&mut test_context).await;
 
     {
         let key = "warmup";
@@ -336,7 +318,7 @@ async fn zenoh_shm_unicast_implicit_optimization() {
         ResizeBuffer::NonSHM,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -344,7 +326,8 @@ async fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19449"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<false>(&mut test_context).await;
     test_session_pubsub::<false>(
         &peer01,
         &peer02,
@@ -352,7 +335,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_relayout() {
         ResizeBuffer::Relayout,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -360,7 +343,8 @@ async fn zenoh_shm_unicast_with_buffer_shrink_resize() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<false>(&["tcp/127.0.0.1:19450"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<false>(&mut test_context).await;
     test_session_pubsub::<false>(
         &peer01,
         &peer02,
@@ -368,7 +352,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_resize() {
         ResizeBuffer::Resize,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -376,7 +360,8 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19451"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<true>(&mut test_context).await;
     test_session_pubsub::<true>(
         &peer01,
         &peer02,
@@ -384,7 +369,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_relayout() {
         ResizeBuffer::Relayout,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -392,7 +377,8 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) = open_session_unicast::<true>(&["tcp/127.0.0.1:19452"]).await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_unicast::<true>(&mut test_context).await;
     test_session_pubsub::<true>(
         &peer01,
         &peer02,
@@ -400,7 +386,7 @@ async fn zenoh_shm_unicast_with_buffer_shrink_to_non_shm_resize() {
         ResizeBuffer::Resize,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -408,8 +394,8 @@ async fn zenoh_shm_multicast() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) =
-        open_session_multicast("udp/224.0.0.1:19448", "udp/224.0.0.1:19448").await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_multicast(&mut test_context).await;
     test_session_pubsub::<false>(
         &peer01,
         &peer02,
@@ -417,7 +403,7 @@ async fn zenoh_shm_multicast() {
         ResizeBuffer::NoResize,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -425,8 +411,8 @@ async fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (peer01, peer02) =
-        open_session_multicast("udp/224.0.0.1:19449", "udp/224.0.0.1:19449").await;
+    let mut test_context = TestSessions::new();
+    let (peer01, peer02) = setup_shm_multicast(&mut test_context).await;
     test_session_pubsub::<false>(
         &peer01,
         &peer02,
@@ -434,5 +420,5 @@ async fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
         ResizeBuffer::Relayout,
     )
     .await;
-    close_session(peer01, peer02).await;
+    test_context.close().await;
 }

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
@@ -31,8 +32,11 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{WhatAmI, WhatAmIMatcher, ZenohIdProto},
-    network::{oam, oam::id::OAM_LINKSTATE, NetworkBody, NetworkMessage, Oam},
+    core::{Bound, WhatAmI, WhatAmIMatcher, ZenohIdProto},
+    network::{
+        oam::{self, id::OAM_LINKSTATE},
+        NetworkBody, NetworkMessage, Oam,
+    },
 };
 use zenoh_transport::unicast::TransportUnicast;
 
@@ -44,6 +48,8 @@ use crate::net::{
     routing::dispatcher::tables::NodeId,
     runtime::{Runtime, WeakRuntime},
 };
+
+pub(crate) type LinkId = usize;
 
 #[derive(Clone, Default)]
 struct Details {
@@ -59,6 +65,10 @@ pub(crate) struct Node {
     pub(crate) locators: Option<Vec<Locator>>,
     pub(crate) sn: u64,
     pub(crate) links: HashMap<ZenohIdProto, LinkEdgeWeight>,
+    /// Whether this node is a router region gateway.
+    ///
+    /// Multiple nodes within the linkstate network may set this flag to `true`.
+    pub(crate) is_gateway: bool,
 }
 
 impl std::fmt::Debug for Node {
@@ -113,23 +123,24 @@ pub(crate) struct Changes {
     pub(crate) removed_nodes: Vec<(NodeIndex, ZenohIdProto)>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct Tree {
     pub(crate) parent: Option<NodeIndex>,
     pub(crate) children: Vec<NodeIndex>,
+    /// Map from destination [`NodeId`]s to next hop on the path to reach the input [`NodeId`].
     pub(crate) directions: Vec<Option<NodeIndex>>,
 }
 
 pub(crate) struct Network {
     pub(crate) name: String,
     pub(crate) full_linkstate: bool,
-    pub(crate) router_peers_failover_brokering: bool,
     pub(crate) gossip: bool,
     pub(crate) gossip_multihop: bool,
     pub(crate) gossip_target: WhatAmIMatcher,
     pub(crate) autoconnect: AutoConnect,
     pub(crate) idx: NodeIndex,
     pub(crate) links: VecMap<Link>,
+    /// Map from [`NodeId`]s to the spanning tree rooted at the input [`NodeId`].
     pub(crate) trees: Vec<Tree>,
     pub(crate) distances: Vec<f64>,
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
@@ -144,12 +155,12 @@ impl Network {
         zid: ZenohIdProto,
         runtime: Runtime,
         full_linkstate: bool,
-        router_peers_failover_brokering: bool,
         gossip: bool,
         gossip_multihop: bool,
         gossip_target: WhatAmIMatcher,
         autoconnect: AutoConnect,
         link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
+        bound: Bound,
     ) -> Self {
         let mut graph = petgraph::stable_graph::StableGraph::default();
         tracing::debug!("{} Add node (self) {}", name, zid);
@@ -159,12 +170,12 @@ impl Network {
             locators: None,
             sn: 1,
             links: HashMap::new(),
+            is_gateway: bound.is_south(),
         });
 
         Network {
             name,
             full_linkstate,
-            router_peers_failover_brokering,
             gossip,
             gossip_multihop,
             gossip_target,
@@ -205,11 +216,7 @@ impl Network {
             &self.link_weights
         );
 
-        if dests_to_update.is_empty()
-            || !(self.full_linkstate
-                || self.gossip_multihop
-                || self.router_peers_failover_brokering)
-        {
+        if dests_to_update.is_empty() || !(self.full_linkstate || self.gossip_multihop) {
             return false;
         }
 
@@ -247,11 +254,6 @@ impl Network {
 
     pub(crate) fn dot(&self) -> String {
         std::format!("{:?}", petgraph::dot::Dot::new(&self.graph))
-    }
-
-    #[inline]
-    pub(crate) fn get_node(&self, zid: &ZenohIdProto) -> Option<&Node> {
-        self.graph.node_weights().find(|weight| weight.zid == *zid)
     }
 
     #[inline]
@@ -346,6 +348,7 @@ impl Network {
             },
             links,
             link_weights: has_non_default_weight.then_some(weights),
+            is_gateway: self.graph[idx].is_gateway,
         }
     }
 
@@ -493,6 +496,7 @@ impl Network {
                         link_state.sn,
                         link_state.links,
                         link_state.link_weights,
+                        link_state.is_gateway,
                     ))
                 } else {
                     match src_link.get_zid(&link_state.psid) {
@@ -503,6 +507,7 @@ impl Network {
                             link_state.sn,
                             link_state.links,
                             link_state.link_weights,
+                            link_state.is_gateway,
                         )),
                         None => {
                             tracing::error!(
@@ -522,7 +527,7 @@ impl Network {
 
         link_states
             .into_iter()
-            .map(|(zid, whatami, locators, sn, links, weights)| {
+            .map(|(zid, whatami, locators, sn, links, weights, is_gateway)| {
                 let mut edges = HashMap::with_capacity(links.len());
                 for i in 0..links.len() {
                     match src_link.get_zid(&links[i]) {
@@ -552,6 +557,7 @@ impl Network {
                     whatami,
                     locators,
                     links: edges,
+                    is_gateway,
                 }
             })
             .collect::<Vec<_>>()
@@ -569,6 +575,7 @@ impl Network {
                         locators: ls.locators.clone(),
                         sn: ls.sn,
                         links: ls.links,
+                        is_gateway: ls.is_gateway,
                     });
                     changes.updated_nodes.push((idx, self.graph[idx].clone()));
                     if ls.locators.is_none() {
@@ -711,7 +718,14 @@ impl Network {
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
                         node.sn = ls.sn;
-                        node.links.clone_from(&ls.links);
+                        // NOTE(regions): only Gossip may send malformed messages with empty
+                        // linkstate. These can be safely ignored since they don't occur in "full"
+                        // linkstate. Note that a Gossip node sends non-empty linkstate for itself
+                        // to its gateway. Also note that Network only considers two nodes to be
+                        // connected if both their linkstates imply the connection.
+                        if !ls.links.is_empty() {
+                            node.links.clone_from(&ls.links);
+                        }
                         if ls.locators.is_some() {
                             node.locators = ls.locators;
                         }
@@ -720,6 +734,7 @@ impl Network {
                         } else {
                             updated_nodes.insert(idx);
                         }
+                        node.is_gateway = ls.is_gateway;
                         idx
                     } else {
                         // outdated link state - ignore
@@ -733,6 +748,7 @@ impl Network {
                         locators: ls.locators,
                         sn: ls.sn,
                         links: ls.links.clone(),
+                        is_gateway: ls.is_gateway,
                     };
                     tracing::debug!("{} Add node (state) {}", self.name, ls.zid);
                     let idx = self.add_node(node);
@@ -759,6 +775,7 @@ impl Network {
                         locators: None,
                         sn: 0,
                         links: HashMap::new(),
+                        is_gateway: false,
                     };
                     tracing::debug!("{} Add node (reintroduced) {}", self.name, dest.clone());
                     let idx = self.add_node(node);
@@ -810,7 +827,7 @@ impl Network {
         }
     }
 
-    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
+    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> LinkId {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -823,7 +840,7 @@ impl Network {
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
 
-        if self.full_linkstate || self.gossip_multihop || self.router_peers_failover_brokering {
+        if self.full_linkstate || self.gossip_multihop {
             let (idx, new) = match self.get_idx(&zid) {
                 Some(idx) => (idx, false),
                 None => {
@@ -835,6 +852,7 @@ impl Network {
                             locators: None,
                             sn: 0,
                             links: HashMap::new(),
+                            is_gateway: false,
                         }),
                         true,
                     )
@@ -915,20 +933,13 @@ impl Network {
                         || self.graph.node_weight(idx).is_some_and(|node| {
                             self.links.values().any(|link| link.zid == node.zid)
                         })
-                        || (self.router_peers_failover_brokering
-                            && idx == self.idx
-                            && whatami == WhatAmI::Router)
                 })
                 .map(|idx| {
                     (
                         idx,
                         Details {
                             zid: true,
-                            links: self.full_linkstate
-                                || self.gossip_multihop
-                                || (self.router_peers_failover_brokering
-                                    && idx == self.idx
-                                    && whatami == WhatAmI::Router),
+                            links: self.full_linkstate || self.gossip_multihop,
                             ..Default::default()
                         },
                     )
@@ -971,23 +982,7 @@ impl Network {
             if let Some(idx) = self.get_idx(zid) {
                 self.graph.remove_node(idx);
             }
-            if self.router_peers_failover_brokering {
-                self.send_on_links(
-                    vec![(
-                        self.idx,
-                        Details {
-                            zid: false,
-                            links: true,
-                            ..Default::default()
-                        },
-                    )],
-                    |link| {
-                        link.zid != *zid
-                            && link.transport.get_whatami().unwrap_or(WhatAmI::Peer)
-                                == WhatAmI::Router
-                    },
-                );
-            }
+
             vec![]
         }
     }
@@ -1032,6 +1027,7 @@ impl Network {
         });
 
         for tree_root_idx in &indexes {
+            // `paths.predecessors[node]` is the parent of `node` on the path from `root` to `node`
             let paths = petgraph::algo::bellman_ford(&self.graph, *tree_root_idx).unwrap();
 
             if tree_root_idx.index() == 0 {
@@ -1056,6 +1052,7 @@ impl Network {
                 tracing::debug!("Tree {} {:?}", self.graph[*tree_root_idx].zid, ps);
             }
 
+            // parent is parent of `self` on the path from `root` to `self`
             self.trees[tree_root_idx.index()].parent = paths.predecessors[self.idx.index()];
 
             for idx in &indexes {
@@ -1116,14 +1113,6 @@ impl Network {
         }
 
         new_children
-    }
-
-    #[inline]
-    pub(crate) fn get_links(
-        &self,
-        node: ZenohIdProto,
-    ) -> Option<&HashMap<ZenohIdProto, LinkEdgeWeight>> {
-        self.get_node(&node).map(|node| &node.links)
     }
 
     pub(crate) fn links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
@@ -1196,19 +1185,6 @@ impl Network {
             .filter_map(|(src, dst)| self.successor_entry(src, dst))
             .collect()
     }
-}
-
-#[inline]
-pub(crate) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohIdProto> {
-    net1.graph
-        .node_references()
-        .filter_map(|(_, node1)| {
-            net2.graph
-                .node_references()
-                .any(|(_, node2)| node1.zid == node2.zid)
-                .then_some(node1.zid)
-        })
-        .collect()
 }
 
 pub(crate) struct SuccessorEntry {

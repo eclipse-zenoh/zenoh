@@ -12,16 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use rand::Rng;
 use std::{
     collections::HashSet,
     rc::Rc,
     sync::{atomic::AtomicU16, Arc, Mutex},
 };
-use zenoh_result::ZResult;
 
-use io_uring::{SubmissionQueue, opcode, squeue::Flags};
+use io_uring::{opcode, squeue::Flags, SubmissionQueue};
+use rand::Rng;
 use zenoh_core::zlock;
+use zenoh_result::ZResult;
 
 use crate::{
     api::{reader::rx_buffer::RxBuffer, types::BufferCount},
@@ -132,7 +132,7 @@ impl BufferGroup {
     pub(crate) fn id(&self) -> BufferGroupId {
         self.id
     }
-    
+
     pub(crate) fn read_buffer(
         &self,
         buf_id: u16,
