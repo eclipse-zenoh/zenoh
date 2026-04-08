@@ -2356,6 +2356,31 @@ async fn transport_unicast_mixedrel_quic() {
     assert!(is_mixed_rel, "mixed_rel=1 should enable mixed reliability");
 }
 
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_quic_default() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint_quic = quic_endpoint("quic/localhost:10501");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_mixed_rel = run_mixed_reliability_test(endpoint, endpoint, false).await;
+    assert!(!is_mixed_rel, "default should disable mixed reliability");
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_quic_auto() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint_quic = quic_endpoint("quic/localhost:10502?mixed_rel=auto");
+    let endpoint = std::slice::from_ref(&endpoint_quic);
+    let is_mixed_rel = run_mixed_reliability_test(endpoint, endpoint, false).await;
+    assert!(
+        is_mixed_rel,
+        "mixed_rel=auto should enable mixed reliability"
+    );
+}
+
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn transport_unicast_mixedrel_udp() {
@@ -2364,6 +2389,29 @@ async fn transport_unicast_mixedrel_udp() {
     let endpoint = ["udp/localhost:10505?rel=1;mixed_rel=1".parse().unwrap()];
     let is_mixed_rel = run_mixed_reliability_test(&endpoint, &endpoint, false).await;
     assert!(is_mixed_rel, "mixed_rel=1 should enable mixed reliability");
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_udp_default() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10506?rel=1".parse().unwrap()];
+    let is_mixed_rel = run_mixed_reliability_test(&endpoint, &endpoint, false).await;
+    assert!(!is_mixed_rel, "default should disable mixed reliability");
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_udp_auto() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint = ["udp/localhost:10507?rel=1;mixed_rel=auto".parse().unwrap()];
+    let is_mixed_rel = run_mixed_reliability_test(&endpoint, &endpoint, false).await;
+    assert!(
+        is_mixed_rel,
+        "mixed_rel=auto should enable mixed reliability"
+    );
 }
 
 #[cfg(feature = "transport_quic")]
@@ -2541,6 +2589,138 @@ async fn transport_unicast_udp_mixedrel() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_udp_auto_explicit() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10550;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=1")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=auto")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        is_mixedrel,
+        "'?mixed_rel=1' with auto listener should enable mixed reliability"
+    );
+
+    let port = 10551;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=0")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=auto")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mixedrel,
+        "'?mixed_rel=0' with auto listener should disable mixed reliability"
+    );
+
+    let port = 10552;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=auto")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=1")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        is_mixedrel,
+        "'?mixed_rel=1' with auto connect should enable mixed reliability"
+    );
+
+    let port = 10553;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=auto")
+            .parse()
+            .unwrap()],
+        &[format!("udp/localhost:{port}?rel=1;mixed_rel=0")
+            .parse()
+            .unwrap()],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mixedrel,
+        "'?mixed_rel=0' with auto connect should disable mixed reliability"
+    );
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn transport_unicast_mixedrel_quic_auto_explicit() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = 10555;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[quic_endpoint(&format!("quic/localhost:{port}?mixed_rel=1"))],
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?mixed_rel=auto"
+        ))],
+        false,
+    )
+    .await;
+    assert!(
+        is_mixedrel,
+        "'?mixed_rel=1' with auto listener should enable mixed reliability"
+    );
+
+    let port = 10556;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[quic_endpoint(&format!("quic/localhost:{port}?mixed_rel=0"))],
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?mixed_rel=auto"
+        ))],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mixedrel,
+        "'?mixed_rel=0' with auto listener should disable mixed reliability"
+    );
+
+    let port = 10557;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?mixed_rel=auto"
+        ))],
+        &[quic_endpoint(&format!("quic/localhost:{port}?mixed_rel=1"))],
+        false,
+    )
+    .await;
+    assert!(
+        is_mixedrel,
+        "'?mixed_rel=1' with auto connect should enable mixed reliability"
+    );
+
+    let port = 10558;
+    let is_mixedrel = run_mixed_reliability_test(
+        &[quic_endpoint(&format!(
+            "quic/localhost:{port}?mixed_rel=auto"
+        ))],
+        &[quic_endpoint(&format!("quic/localhost:{port}?mixed_rel=0"))],
+        false,
+    )
+    .await;
+    assert!(
+        !is_mixedrel,
+        "'?mixed_rel=0' with auto connect should disable mixed reliability"
+    );
 }
 
 async fn run_multistream_test(
