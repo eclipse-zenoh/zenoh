@@ -13,6 +13,8 @@
 //
 
 #![cfg(unix)]
+#![cfg(feature = "unstable")]
+mod common;
 
 use std::{
     collections::HashMap,
@@ -22,10 +24,11 @@ use std::{
     },
 };
 
+use common::TestSessions;
 use nonempty_collections::nev;
-use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Config, Wait};
+use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Wait};
 use zenoh_config::{
-    DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
+    Config, DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
 };
 
 // Tokio's time granularity on different platforms
@@ -37,47 +40,41 @@ static MINIMAL_SLEEP_INTERVAL_MS: u64 = 2;
 static REPEAT: usize = 3;
 static WARMUP_MS: u64 = 500;
 
-fn build_config(
-    locator: &str,
+fn should_apply_downsampling(flow: InterceptorFlow, is_sender: bool) -> bool {
+    match flow {
+        InterceptorFlow::Egress => is_sender,
+        InterceptorFlow::Ingress => !is_sender,
+    }
+}
+
+fn build_listener_config(
     ds_config: Vec<DownsamplingItemConf>,
     flow: InterceptorFlow,
-) -> (Config, Config) {
-    let mut sender_config = zenoh_config::Config::default();
-    sender_config
-        .scouting
-        .multicast
-        .set_enabled(Some(false))
-        .unwrap();
+    is_sender: bool,
+) -> Config {
+    let mut config = TestSessions::new().get_listener_config("tcp/127.0.0.1:0", 1);
+    if should_apply_downsampling(flow, is_sender) {
+        config.set_downsampling(ds_config).unwrap();
+    }
+    config
+}
 
-    let mut receiver_config = zenoh_config::Config::default();
-    receiver_config
-        .scouting
-        .multicast
-        .set_enabled(Some(false))
-        .unwrap();
-
-    receiver_config
-        .listen
-        .endpoints
-        .set(vec![locator.parse().unwrap()])
-        .unwrap();
-    sender_config
-        .connect
-        .endpoints
-        .set(vec![locator.parse().unwrap()])
-        .unwrap();
-
-    match flow {
-        InterceptorFlow::Egress => sender_config.set_downsampling(ds_config).unwrap(),
-        InterceptorFlow::Ingress => receiver_config.set_downsampling(ds_config).unwrap(),
-    };
-
-    (sender_config.into(), receiver_config.into())
+fn build_connector_config(
+    test_context: &TestSessions,
+    ds_config: Vec<DownsamplingItemConf>,
+    flow: InterceptorFlow,
+    is_sender: bool,
+) -> Config {
+    let mut config = test_context.get_connector_config();
+    if should_apply_downsampling(flow, is_sender) {
+        config.set_downsampling(ds_config).unwrap();
+    }
+    config
 }
 
 fn downsampling_pub_sub_test<F>(
-    pub_config: Config,
-    sub_config: Config,
+    flow: InterceptorFlow,
+    ds_config: Vec<DownsamplingItemConf>,
     ke_prefix: &str,
     ke_of_rates: Vec<KeyExpr<'static>>,
     rate_check: F,
@@ -93,7 +90,12 @@ fn downsampling_pub_sub_test<F>(
             .collect(),
     );
 
-    let sub_session = zenoh::open(sub_config).wait().unwrap();
+    let mut test_context = TestSessions::new();
+    let sub_session = test_context.open_listener_with_cfg_sync(build_listener_config(
+        ds_config.clone(),
+        flow,
+        false,
+    ));
     let _sub = sub_session
         .declare_subscriber(format!("{ke_prefix}/*"))
         .callback({
@@ -109,8 +111,13 @@ fn downsampling_pub_sub_test<F>(
 
     let is_terminated = Arc::new(AtomicBool::new(false));
     let c_is_terminated = is_terminated.clone();
+    let pub_session = test_context.open_connector_with_cfg_sync(build_connector_config(
+        &test_context,
+        ds_config,
+        flow,
+        true,
+    ));
     let handle = std::thread::spawn(move || {
-        let pub_session = zenoh::open(pub_config).wait().unwrap();
         let publishers: Vec<_> = ke_of_rates
             .into_iter()
             .map(|ke| pub_session.declare_publisher(ke).wait().unwrap())
@@ -143,11 +150,11 @@ fn downsampling_pub_sub_test<F>(
     if let Err(err) = handle.join() {
         panic!("Failed to join the handle due to {err:?}");
     }
+    test_context.close_sync();
 }
 
 fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_keyexp";
-    let locator = "tcp/127.0.0.1:31445";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_20hz: KeyExpr = format!("{ke_prefix}/20hz").try_into().unwrap();
@@ -188,9 +195,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
         }
     };
 
-    let (pub_config, sub_config) = build_config(locator, vec![ds_config], flow);
-
-    downsampling_pub_sub_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
+    downsampling_pub_sub_test(flow, vec![ds_config], ke_prefix, ke_of_rates, rate_check);
 }
 
 #[test]
@@ -203,7 +208,6 @@ fn downsampling_by_keyexpr() {
 #[cfg(unix)]
 fn downsampling_by_interface_impl(flow: InterceptorFlow) {
     let ke_prefix = "test/downsamples_by_interface";
-    let locator = "tcp/127.0.0.1:31446";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_no_effect: KeyExpr = format!("{ke_prefix}/no_effect").try_into().unwrap();
@@ -246,9 +250,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
         }
     };
 
-    let (pub_config, sub_config) = build_config(locator, ds_config, flow);
-
-    downsampling_pub_sub_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
+    downsampling_pub_sub_test(flow, ds_config, ke_prefix, ke_of_rates, rate_check);
 }
 
 #[cfg(unix)]
@@ -264,7 +266,6 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
     use zenoh_config::InterceptorLink;
 
     let ke_prefix = "test/downsamples_by_interface";
-    let locator = "tcp/127.0.0.1:31447";
 
     let ke_10hz: KeyExpr = format!("{ke_prefix}/10hz").try_into().unwrap();
     let ke_no_effect: KeyExpr = format!("{ke_prefix}/no_effect").try_into().unwrap();
@@ -307,9 +308,7 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
         }
     };
 
-    let (pub_config, sub_config) = build_config(locator, ds_config, flow);
-
-    downsampling_pub_sub_test(pub_config, sub_config, ke_prefix, ke_of_rates, rate_check);
+    downsampling_pub_sub_test(flow, ds_config, ke_prefix, ke_of_rates, rate_check);
 }
 
 #[test]
@@ -382,14 +381,25 @@ fn downsampling_config_error_repeated_id() {
 }
 
 fn downsampling_query_reply_test(
-    query_config: Config,
-    queryable_config: Config,
+    flow: InterceptorFlow,
+    ds_config: Vec<DownsamplingItemConf>,
     queryable_ke: &str,
     reply_counter: Arc<AtomicUsize>,
     nb_queries: usize,
+    listener_is_sender: bool,
 ) {
-    let query_session = zenoh::open(query_config).wait().unwrap();
-    let queryable_session = zenoh::open(queryable_config).wait().unwrap();
+    let mut test_context = TestSessions::new();
+    let queryable_session = test_context.open_listener_with_cfg_sync(build_listener_config(
+        ds_config.clone(),
+        flow,
+        listener_is_sender,
+    ));
+    let query_session = test_context.open_connector_with_cfg_sync(build_connector_config(
+        &test_context,
+        ds_config,
+        flow,
+        !listener_is_sender,
+    ));
 
     let response_ke = queryable_ke.to_owned();
     queryable_session
@@ -426,13 +436,11 @@ fn downsampling_query_reply_test(
     for handle in handles {
         handle.join().unwrap();
     }
-    query_session.close().wait().unwrap();
-    queryable_session.close().wait().unwrap();
+    test_context.close_sync();
 }
 
 fn downsampling_query_rate_test(flow: InterceptorFlow) {
     let queryable_ke = "test/downsamples_query";
-    let locator = "tcp/127.0.0.1:31448";
 
     let ds_config = DownsamplingItemConf {
         id: None,
@@ -446,21 +454,20 @@ fn downsampling_query_rate_test(flow: InterceptorFlow) {
         }],
     };
 
-    let (query_config, queryable_config) = build_config(locator, vec![ds_config], flow);
     let reply_counter = Arc::new(AtomicUsize::new(0));
     downsampling_query_reply_test(
-        query_config,
-        queryable_config,
+        flow,
+        vec![ds_config],
         queryable_ke,
         reply_counter.clone(),
         2,
+        false,
     );
     assert!(reply_counter.load(Ordering::SeqCst) == 1);
 }
 
 fn downsampling_reply_rate_test(flow: InterceptorFlow) {
     let queryable_ke = "test/downsamples_reply";
-    let locator = "tcp/127.0.0.1:31449";
 
     let ds_config = DownsamplingItemConf {
         id: None,
@@ -474,14 +481,14 @@ fn downsampling_reply_rate_test(flow: InterceptorFlow) {
         }],
     };
 
-    let (queryable_config, query_config) = build_config(locator, vec![ds_config], flow);
     let reply_counter = Arc::new(AtomicUsize::new(0));
     downsampling_query_reply_test(
-        query_config,
-        queryable_config,
+        flow,
+        vec![ds_config],
         queryable_ke,
         reply_counter.clone(),
         2,
+        true,
     );
 
     assert!(reply_counter.load(Ordering::SeqCst) == 1);
