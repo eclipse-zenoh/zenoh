@@ -80,9 +80,9 @@ impl Deref for QuicConnection {
 
 /// Quic endpoint `multistream` config
 pub(crate) enum MultiStreamConfig {
-    /// `multistream=false`
+    /// `multistream=0`
     Disabled,
-    /// `multistream=true`
+    /// `multistream=1`
     Enabled,
     /// default, or `multistream=auto`
     Auto,
@@ -119,9 +119,9 @@ impl MultiStreamConfig {
 
 /// Quic endpoint `mixed_rel` config
 pub(crate) enum MixedRelConfig {
-    /// default, or `mixed_rel=false`
+    /// default, or `mixed_rel=0`
     Disabled,
-    /// `mixed_rel=true`
+    /// `mixed_rel=1`
     Enabled,
     /// `mixed_rel=auto`
     Auto,
