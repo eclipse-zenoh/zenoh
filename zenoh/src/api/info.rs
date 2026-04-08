@@ -574,7 +574,7 @@ mod tests {
 
         let via_new = Transport::new(&peer, /*is_multicast=*/ false);
         let via_fields = Transport::new_from_fields(
-            peer.zid.clone().into(),
+            peer.zid.into(),
             peer.whatami,
             peer.is_qos,
             /*is_multicast=*/ false,
