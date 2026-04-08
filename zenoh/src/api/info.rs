@@ -556,8 +556,9 @@ impl CallbackParameter for LinkEvent {
 
 #[cfg(all(test, feature = "internal"))]
 mod tests {
-    use super::*;
     use zenoh_protocol::core::WhatAmI;
+
+    use super::*;
 
     #[test]
     fn test_new_from_fields_equals_new_from_peer() {
