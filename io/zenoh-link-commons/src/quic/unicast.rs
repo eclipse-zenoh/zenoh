@@ -195,9 +195,9 @@ struct UniStreams(Vec<quinn::SendStream>);
 impl UniStreams {
     /// Opens priority-mapped uni streams if supported.
     ///
-    /// This method leverages on QUIC ALPN (see [`MultiStreamConfig::alpn_protocols`]): if the
-    /// negotiated protocol is [`PROTOCOL_MULTI_STREAM`], then uni streams are opened.
-    /// Otherwise, it returns None.
+    /// This method leverages on QUIC ALPN (see [`compute_alpn_protocols`]): if the
+    /// negotiated protocol is [`PROTOCOL_MULTI_STREAM`] or [`PROTOCOL_MULTI_STREAM_MIXED_REL`],
+    /// then uni streams are opened. Otherwise, it returns None.
     fn try_open(connection: &quinn::Connection) -> ZResult<Option<Self>> {
         let alpn =
             get_negotiated_alpn(connection)?.expect("Zenoh ALPN should have been negotiated");

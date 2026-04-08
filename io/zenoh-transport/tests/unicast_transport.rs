@@ -1877,7 +1877,7 @@ impl TransportEventHandler for MultiRxHandler {
     }
 }
 
-// Transport Callback for multistream tests
+// Transport Callback for multistream and mixed-reliability tests
 #[derive(Default)]
 pub struct MultiRxCallback {
     msg_count: AtomicUsize,
