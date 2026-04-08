@@ -260,11 +260,13 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                 1
             );
 
-            if guard.reached_multilink_limit(TransportLinkUnicastDirection::Inbound, limit) {
+            let count = guard.nb_links_multilink(TransportLinkUnicastDirection::Inbound);
+            if count >= limit {
                 let e = zerror!(
-                    "Can not add Link {} with peer {}: max num of links reached ({})",
+                    "Can not add Link {} with peer {}: max num of links reached ({}/{})",
                     link,
                     self.config.zid,
+                    count,
                     limit
                 );
                 let (l, asl) = link.fail();
@@ -528,11 +530,7 @@ impl TransportLinks {
             .collect()
     }
 
-    fn reached_multilink_limit(
-        &self,
-        direction: TransportLinkUnicastDirection,
-        limit: usize,
-    ) -> bool {
+    fn nb_links_multilink(&self, direction: TransportLinkUnicastDirection) -> usize {
         // Do not count AssociatedLink: pairs of (Link, AssociatedLink) must count as only one for
         // multilink limit.
         self.inner
@@ -541,7 +539,6 @@ impl TransportLinks {
                 matches!(l, TransportLinkMarker::Link(_)) && l.link.config.direction == direction
             })
             .count()
-            >= limit
     }
 }
 
