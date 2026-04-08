@@ -553,3 +553,54 @@ impl CallbackParameter for LinkEvent {
         msg
     }
 }
+
+#[cfg(all(test, feature = "internal"))]
+mod tests {
+    use super::*;
+    use zenoh_protocol::core::WhatAmI;
+
+    #[test]
+    fn test_new_from_fields_stores_fields() {
+        let zid = ZenohId::default();
+        let whatami = WhatAmI::Peer;
+        let t = Transport::new_from_fields(
+            zid.clone(),
+            whatami,
+            /*is_qos=*/ true,
+            /*is_multicast=*/ false,
+            #[cfg(feature = "shared-memory")]
+            /*is_shm=*/ true,
+        );
+        assert_eq!(t.zid, zid);
+        assert_eq!(t.whatami, whatami);
+        assert!(t.is_qos);
+        assert!(!t.is_multicast);
+        #[cfg(feature = "shared-memory")]
+        assert!(t.is_shm);
+    }
+
+    #[test]
+    fn test_new_from_fields_equals_new_from_peer() {
+        let peer = TransportPeer {
+            zid: zenoh_protocol::core::ZenohId::default().into(),
+            whatami: WhatAmI::Router,
+            is_qos: true,
+            #[cfg(feature = "shared-memory")]
+            is_shm: false,
+            links: vec![],
+            region_name: None,
+        };
+
+        let via_new = Transport::new(&peer, /*is_multicast=*/ false);
+        let via_fields = Transport::new_from_fields(
+            peer.zid.clone().into(),
+            peer.whatami,
+            peer.is_qos,
+            /*is_multicast=*/ false,
+            #[cfg(feature = "shared-memory")]
+            peer.is_shm,
+        );
+
+        assert_eq!(via_new, via_fields);
+    }
+}
