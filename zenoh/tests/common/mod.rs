@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![allow(dead_code)] // because every test doesn't use the whole common features
-use std::time::Duration;
+use std::{net::TcpListener, time::Duration};
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
@@ -22,6 +22,25 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Binds to a random TCP port on loopback and returns the assigned port number.
+/// The port is briefly released before Zenoh binds it; races are negligible on localhost.
+pub fn get_free_port() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.local_addr().unwrap().port()
+}
+
+/// Returns the first TCP [`EndPoint`] exposed by `session`.
+///
+/// Combines [`TestSessions::get_locators_from_session`] with a TCP filter so callers
+/// get a ready-to-use connect address after opening a listener with port `0`.
+pub async fn get_tcp_locator(session: &Session) -> EndPoint {
+    TestSessions::get_locators_from_session(session)
+        .await
+        .into_iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from session")
+}
 
 pub async fn close_session(peer01: Session, peer02: Session) {
     println!("[  ][01d] Closing peer01 session");
