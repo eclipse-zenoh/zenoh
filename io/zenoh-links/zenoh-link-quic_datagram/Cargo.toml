@@ -26,7 +26,6 @@ version = { workspace = true }
 
 [dependencies]
 async-trait = { workspace = true }
-quinn = { workspace = true }
 rustls-webpki = { workspace = true }
 time = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }

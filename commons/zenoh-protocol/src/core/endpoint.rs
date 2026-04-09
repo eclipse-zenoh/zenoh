@@ -196,6 +196,7 @@ impl<'a> Metadata<'a> {
     pub const RELIABILITY: &'static str = "rel";
     pub const PRIORITIES: &'static str = "prio";
     pub const MULTISTREAM: &'static str = "multistream";
+    pub const MIXED_RELIABILITY: &'static str = "mixed_rel";
 
     pub fn as_str(&self) -> &'a str {
         self.0

@@ -440,7 +440,7 @@ impl LinkManagerUnicastUdp {
                         }),
                     ));
 
-                    return Ok(LinkUnicast(link));
+                    return Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>));
                 }
                 Err(e) => {
                     errs.push(e);
@@ -522,14 +522,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                 zerror!("Failed to parse reliability config for UDP endpoint '{endpoint}': {e:?}")
             })?;
         if is_reliable {
-            let (quic_link, src_addr, dst_addr) =
-                LinkUnicastQuicUnsecure::connect(&endpoint).await?;
-            let link = LinkUnicastUdp::new(
-                src_addr,
-                dst_addr,
-                LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
-            );
-            Ok(LinkUnicast(Arc::new(link)))
+            LinkUnicastQuicUnsecure::connect(&endpoint).await
         } else {
             self.new_udp_link(endpoint).await
         }
@@ -665,7 +658,10 @@ async fn accept_read_task(
                                         LinkUnicastUdpVariant::Unconnected(unconnected),
                                     ));
                                     // Add the new link to the set of connected peers
-                                    if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                                    if let Err(e) = manager
+                                        .send_async(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
+                                        .await
+                                    {
                                         tracing::error!("{}-{}: {}", file!(), line!(), e)
                                     }
                                 }
