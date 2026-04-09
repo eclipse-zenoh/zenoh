@@ -43,7 +43,16 @@ pub trait ConstructibleLinkManagerUnicast<T>: Sized {
 }
 
 #[derive(Clone)]
-pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
+pub struct LinkUnicast(pub NewLink);
+
+#[derive(Clone)]
+pub enum NewLink {
+    Single(Arc<dyn LinkUnicastTrait>),
+    MixedReliability {
+        reliable: Arc<dyn LinkUnicastTrait>,
+        best_effort: Arc<dyn LinkUnicastTrait>,
+    },
+}
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
@@ -69,7 +78,10 @@ impl Deref for LinkUnicast {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        match &self.0 {
+            NewLink::Single(link) => link,
+            NewLink::MixedReliability { reliable, .. } => reliable,
+        }
     }
 }
 
@@ -108,7 +120,7 @@ impl fmt::Debug for LinkUnicast {
 
 impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
     fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
-        LinkUnicast(link)
+        LinkUnicast(NewLink::Single(link))
     }
 }
 
