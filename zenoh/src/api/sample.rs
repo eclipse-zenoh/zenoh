@@ -310,7 +310,7 @@ impl Sample {
         self.qos.express()
     }
 
-    /// Gets info on the source of this Sample.
+    /// Gets info on the source of this Sample as an optional [`SourceInfo`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> Option<&SourceInfo> {
