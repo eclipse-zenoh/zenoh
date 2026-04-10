@@ -25,9 +25,7 @@ use zenoh::{
     internal::{
         bail,
         runtime::ZRuntime,
-        traits::{
-            EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait,
-        },
+        traits::{EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait},
         TerminatableTask,
     },
     key_expr::{keyexpr, KeyExpr},
