@@ -26,7 +26,7 @@ use zenoh::{
         bail,
         runtime::ZRuntime,
         traits::{
-            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+            EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait,
         },
         TerminatableTask,
     },
@@ -697,23 +697,13 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
     }
 }
 
-#[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
-impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
-    #[zenoh_macros::unstable]
-    /// Sets an optional [`SourceInfo`](zenoh::sample::SourceInfo) to be sent along with the publication.
-    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
-        Self {
-            builder: self.builder.source_info(source_info),
-            ..self
-        }
-    }
-    #[zenoh_macros::unstable]
+impl<P> AdvancedPublicationBuilder<'_, P> {
     /// Sets an optional attachment to be sent along with the publication.
     ///
     /// The argument is converted via [`OptionZBytes`], which supports both `T: Into<ZBytes>`
     /// and `Option<T>` where `T: Into<ZBytes>`.
-    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+    pub fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
             builder: self.builder.attachment(attachment),
