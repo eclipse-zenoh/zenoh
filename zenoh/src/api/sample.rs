@@ -76,7 +76,7 @@ impl From<Locality> for PublisherLocalityConf {
 
 /// Information on the source of a zenoh [`Sample`].
 ///
-/// [`SourceInfo`] is metadata attached to a [`Sample`] or [`Query`]. It contains
+/// [`SourceInfo`] is metadata attached to a [`Sample`] or [`crate::query::Query`]. It contains
 /// the unique identifier of the zenoh entity that published the sample or issued the query,
 /// and a sequence number for the sample or query itself.
 ///
