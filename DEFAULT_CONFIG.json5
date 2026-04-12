@@ -55,7 +55,7 @@
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
 
-    /// exit from application, if timeout exceed
+    /// exit from application, if timeout exceeds
     exit_on_failure: { router: false, peer: false, client: true },
     /// connect establishing retry configuration
     retry: {
@@ -63,7 +63,7 @@
       period_init_ms: 1000,
       /// maximum wait timeout until next connect try
       period_max_ms: 4000,
-      /// increase factor for the next timeout until nexti connect try
+      /// increase factor for the next timeout until next connect try
       period_increase_factor: 2,
     },
   },
@@ -102,7 +102,7 @@
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#exit_on_failure=false;retry_period_max_ms=1000"
 
-    /// exit from application, if timeout exceed
+    /// exit from application, if timeout exceeds
     exit_on_failure: true,
     /// listen retry configuration
     retry: {
@@ -141,7 +141,7 @@
       /// The socket which should be used for multicast scouting
       address: "224.0.0.224:7446",
       /// The network interface which should be used for multicast scouting
-      interface: "auto", // If not set or set to "auto" the interface if picked automatically
+      interface: "auto", // If not set or set to "auto" the interface is picked automatically
       /// The time-to-live on multicast scouting packets
       ttl: 1,
       /// Which type of Zenoh instances to automatically establish sessions with upon discovery on UDP multicast.
@@ -215,9 +215,9 @@
   /// The default timeout to apply to queries in milliseconds.
   queries_default_timeout: 10000,
 
-  /// The routing strategy to use and it's configuration.
+  /// The routing strategy to use and its configuration.
   routing: {
-    /// The routing strategy to use in routers and it's configuration.
+    /// The routing strategy to use in routers and its configuration.
     router: {
       /// Linkstate mode configuration.
       linkstate: {
@@ -251,7 +251,7 @@
   ///
   /// `gateway.south` is either a _preset_ denoted by a string (e.g. `"auto"`), or a _custom_ value.
   ///
-  /// A custom `gateway.south` is a array of arrays of objects. Each element of `gateway.south`
+  /// A custom `gateway.south` is an array of arrays of objects. Each element of `gateway.south`
   /// defines a (south-bound) subregion. Remotes are assigned subregion id `<i>` if
   /// `gateway.south[<i>].filters` matches said remote—the first matching filter is selected. Each
   /// filter in `gateway.south[].filters` array may contain the following optional keys:
@@ -542,7 +542,7 @@
       accept_timeout: 10000,
       /// Maximum number of links in pending state while performing the handshake for accepting it
       accept_pending: 100,
-      /// Maximum number of transports that can be simultaneously alive for a single zenoh sessions
+      /// Maximum number of transports that can be simultaneously alive for a single zenoh session
       max_sessions: 1000,
       /// Maximum number of incoming links that are admitted per transport
       max_links: 1,
@@ -701,7 +701,7 @@
         connect_certificate: null,
         /// Whether or not to verify the matching between hostname/dns and certificate when connecting,
         /// if set to false zenoh will disregard the common names of the certificates when verifying servers.
-        /// This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
+        /// This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you want your
         /// ca to verify that the server at baz.com is actually baz.com, let this be true (default).
         verify_name_on_connect: true,
         /// Whether or not to close links when remote certificates expires.
