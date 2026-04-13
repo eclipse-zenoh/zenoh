@@ -254,6 +254,25 @@ impl Transport {
             is_shm: false,
         }
     }
+
+    /// Constructs a Transport from individual fields.
+    #[zenoh_macros::internal]
+    pub fn new_from_fields(
+        zid: ZenohId,
+        whatami: WhatAmI,
+        is_qos: bool,
+        is_multicast: bool,
+        #[cfg(feature = "shared-memory")] is_shm: bool,
+    ) -> Self {
+        Transport {
+            zid,
+            whatami,
+            is_qos,
+            is_multicast,
+            #[cfg(feature = "shared-memory")]
+            is_shm,
+        }
+    }
 }
 
 #[cfg(feature = "unstable")]
@@ -532,5 +551,37 @@ impl CallbackParameter for LinkEvent {
     type Message<'a> = Self;
     fn from_message(msg: Self::Message<'_>) -> Self {
         msg
+    }
+}
+
+#[cfg(all(test, feature = "internal"))]
+mod tests {
+    use zenoh_protocol::core::WhatAmI;
+
+    use super::*;
+
+    #[test]
+    fn test_new_from_fields_equals_new_from_peer() {
+        let peer = TransportPeer {
+            zid: ZenohId::default().into(),
+            whatami: WhatAmI::Router,
+            is_qos: true,
+            #[cfg(feature = "shared-memory")]
+            is_shm: false,
+            links: vec![],
+            region_name: None,
+        };
+
+        let via_new = Transport::new(&peer, /*is_multicast=*/ false);
+        let via_fields = Transport::new_from_fields(
+            peer.zid.into(),
+            peer.whatami,
+            peer.is_qos,
+            /*is_multicast=*/ false,
+            #[cfg(feature = "shared-memory")]
+            peer.is_shm,
+        );
+
+        assert_eq!(via_new, via_fields);
     }
 }

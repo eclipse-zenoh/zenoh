@@ -22,14 +22,15 @@ use zenoh_link_commons::{
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
         unicast::{
-            QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicLinkMaterial, QuicServer,
-            QuicServerBuilder, QuicStreams,
+            QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicConnection, QuicLinkMaterial,
+            QuicServer, QuicServerBuilder, QuicStreams,
         },
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender,
+    NewLink, NewLinkChannelSender,
 };
+use zenoh_link_quic_datagram::LinkUnicastQuicDatagram;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
     transport::BatchSize,
@@ -41,7 +42,7 @@ use zenoh_result::{zerror, ZResult};
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
 
 pub struct LinkUnicastQuic {
-    connection: quinn::Connection,
+    connection: QuicConnection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
@@ -55,7 +56,7 @@ unsafe impl Sync for LinkUnicastQuic {}
 impl LinkUnicastQuic {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        connection: quinn::Connection,
+        connection: QuicConnection,
         src_addr: SocketAddr,
         dst_locator: Locator,
         streams: QuicStreams,
@@ -75,7 +76,7 @@ impl LinkUnicastQuic {
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
-        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close();
         Ok(())
     }
 }
@@ -201,7 +202,7 @@ impl LinkWithCertExpiration for LinkUnicastQuic {
 
 impl Drop for LinkUnicastQuic {
     fn drop(&mut self) {
-        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close();
     }
 }
 
@@ -249,6 +250,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration,
+            is_mixed_rel,
         } = QuicClientBuilder::new(&endpoint).await?;
 
         let auth_id = get_cert_common_name(&quic_conn)?;
@@ -268,16 +270,31 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                 ))
             }
             LinkUnicastQuic::new(
-                quic_conn,
+                quic_conn.clone(),
                 src_addr,
-                endpoint.into(),
+                endpoint.clone().into(),
                 streams.expect("reliable QUIC streams should have been opened"),
-                auth_id.into(),
+                auth_id.clone().into(),
                 expiration_manager,
             )
         });
 
-        Ok(LinkUnicast(link))
+        if is_mixed_rel {
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+                quic_conn,
+                src_addr,
+                endpoint.into(),
+                auth_id.into(),
+                QUIC_LOCATOR_PREFIX,
+                None, // One link with expiration manager causes both to close
+            ));
+            Ok(LinkUnicast(NewLink::MixedReliability {
+                reliable: link,
+                best_effort,
+            }))
+        } else {
+            Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
+        }
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -327,12 +344,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 }
 
-fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
     let QuicLinkMaterial {
         quic_conn,
         src_addr,
         dst_addr,
         streams,
+        is_mixed_rel,
         tls_close_link_on_expiration,
     } = link_material;
     let streams = streams.expect("Streams should be initialized");
@@ -374,13 +392,29 @@ fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUni
             ));
         }
         LinkUnicastQuic::new(
-            quic_conn,
+            quic_conn.clone(),
             src_addr,
-            dst_locator,
+            dst_locator.clone(),
             streams,
-            auth_id.into(),
+            auth_id.clone().into(),
             expiration_manager,
         )
     });
-    Ok(link)
+
+    if is_mixed_rel {
+        let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+            quic_conn,
+            src_addr,
+            dst_locator,
+            auth_id.into(),
+            QUIC_LOCATOR_PREFIX,
+            None, // One link with expiration manager causes both to close
+        ));
+        Ok(LinkUnicast(NewLink::MixedReliability {
+            reliable: link,
+            best_effort,
+        }))
+    } else {
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
+    }
 }

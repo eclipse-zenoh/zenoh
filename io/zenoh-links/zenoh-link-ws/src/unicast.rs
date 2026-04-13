@@ -339,9 +339,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
             )
         })?;
 
-        let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
+        let link: Arc<dyn LinkUnicastTrait> =
+            Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link))
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
@@ -541,10 +542,11 @@ async fn accept_task(
                 e
             })?;
         // Create the new link object
-        let link = Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
+        let link: Arc<dyn LinkUnicastTrait> =
+            Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
 
         // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
             tracing::error!("{}-{}: {}", file!(), line!(), e)
         }
     }

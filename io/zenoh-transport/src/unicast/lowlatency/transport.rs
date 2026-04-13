@@ -273,19 +273,30 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                     self.config.zid,
                     e
                 );
-                return Err((e, link.fail(), close::reason::GENERIC));
+                let (l, asl) = link.fail();
+                return Err((e, l, asl, close::reason::GENERIC));
             }
         };
 
         let mut guard = zasyncwrite!(self.link);
         if guard.is_some() {
+            let (l, asl) = link.fail();
             return Err((
                 zerror!("Lowlatency transport cannot support more than one link!").into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::GENERIC,
             ));
         }
-        let (link, ack) = link.unpack();
+        let (link, ack, asl) = link.unpack();
+        if asl.is_some() {
+            return Err((
+                zerror!("Lowlatency transport does not support mixed-reliability links").into(),
+                link,
+                asl,
+                close::reason::GENERIC,
+            ));
+        }
 
         // Use the complete src and dest locators including parameters
         #[cfg(feature = "stats")]

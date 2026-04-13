@@ -287,13 +287,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         let remote_path_str = path.as_str();
 
-        let link = Arc::new(LinkUnicastUnixSocketStream::new(
+        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
             local_path_str,
             remote_path_str,
         ));
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link))
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
@@ -524,12 +524,12 @@ async fn accept_task(
                         tracing::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastUnixSocketStream::new(
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUnixSocketStream::new(
                             stream, src_path, &dst_path,
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

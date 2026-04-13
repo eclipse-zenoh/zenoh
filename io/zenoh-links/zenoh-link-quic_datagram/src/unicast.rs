@@ -23,8 +23,8 @@ use zenoh_link_commons::{
     quic::{
         get_cert_chain_expiration, get_cert_common_name, get_quic_addr,
         unicast::{
-            QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicLinkMaterial, QuicServer,
-            QuicServerBuilder,
+            QuicAcceptorParams, QuicClient, QuicClientBuilder, QuicConnection, QuicLinkMaterial,
+            QuicServer, QuicServerBuilder,
         },
     },
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
@@ -44,37 +44,46 @@ use super::{
 };
 
 pub struct LinkUnicastQuicDatagram {
-    connection: quinn::Connection,
+    connection: QuicConnection,
     src_addr: SocketAddr,
     src_locator: Locator,
     dst_locator: Locator,
     auth_identifier: LinkAuthId,
+    mtu: BatchSize,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
 
 impl LinkUnicastQuicDatagram {
-    fn new(
-        connection: quinn::Connection,
+    pub fn new(
+        connection: QuicConnection,
         src_addr: SocketAddr,
         dst_locator: Locator,
         auth_identifier: LinkAuthId,
+        locator_prefix: &str,
         expiration_manager: Option<LinkCertExpirationManager>,
     ) -> LinkUnicastQuicDatagram {
+        // Zenoh Transport assumes calls to `LinkUnicastTrait::get_mtu` always yield the same
+        // value. Therefore cache the initial MTU value (which is used in batch-size negotiation)
+        let mtu = connection
+            .max_datagram_size()
+            .map(|mtu| mtu as BatchSize)
+            .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU);
+
         // Build the Quic object
         LinkUnicastQuicDatagram {
             connection,
             src_addr,
-            src_locator: Locator::new(QUIC_DATAGRAM_LOCATOR_PREFIX, src_addr.to_string(), "rel=0")
-                .unwrap(),
+            src_locator: Locator::new(locator_prefix, src_addr.to_string(), "rel=0").unwrap(),
             dst_locator,
             auth_identifier,
+            mtu,
             expiration_manager,
         }
     }
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing QUIC link: {}", self);
-        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close();
         Ok(())
     }
 }
@@ -140,10 +149,8 @@ impl LinkUnicastTrait for LinkUnicastQuicDatagram {
 
     #[inline(always)]
     fn get_mtu(&self) -> BatchSize {
-        self.connection
-            .max_datagram_size()
-            .map(|mtu| mtu as BatchSize)
-            .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU)
+        // Zenoh Transport assumes `LinkUnicastTrait::get_mtu` always yields the same value
+        self.mtu
     }
 
     #[inline(always)]
@@ -190,7 +197,7 @@ impl LinkWithCertExpiration for LinkUnicastQuicDatagram {
 
 impl Drop for LinkUnicastQuicDatagram {
     fn drop(&mut self) {
-        self.connection.close(quinn::VarInt::from_u32(0), &[0]);
+        self.connection.close();
     }
 }
 
@@ -238,6 +245,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
             src_addr,
             dst_addr,
             tls_close_link_on_expiration,
+            is_mixed_rel: _,
         } = QuicClientBuilder::new(&endpoint).streamed(false).await?;
 
         debug_assert!(streams.is_none(), "Unreliable QUIC should not open streams");
@@ -263,11 +271,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
                 src_addr,
                 endpoint.into(),
                 auth_id.into(),
+                QUIC_DATAGRAM_LOCATOR_PREFIX,
                 expiration_manager,
             )
         });
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -319,13 +328,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuicDatagram {
     }
 }
 
-fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUnicastTrait>> {
+fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
     let QuicLinkMaterial {
         quic_conn,
         src_addr,
         dst_addr,
         streams,
         tls_close_link_on_expiration,
+        is_mixed_rel: _,
     } = link_material;
 
     debug_assert!(streams.is_none(), "Unreliable QUIC should not open streams");
@@ -371,8 +381,9 @@ fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<Arc<dyn LinkUni
             src_addr,
             dst_locator,
             auth_id.into(),
+            QUIC_DATAGRAM_LOCATOR_PREFIX,
             expiration_manager,
         )
     });
-    Ok(link)
+    Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
 }

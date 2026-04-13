@@ -243,7 +243,7 @@ impl HatBaseTrait for Hat {
                         NAME.to_string(),
                         tables.zid,
                         runtime,
-                        true,
+                        false,
                         is_gossip_enabled,
                         is_gossip_multihop_enabled,
                         gossip_target,

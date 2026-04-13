@@ -275,7 +275,7 @@ async fn handle_incoming_connections(
         endpoint.metadata(),
     )?;
 
-    let link = Arc::new(UnicastPipe {
+    let link: Arc<dyn LinkUnicastTrait> = Arc::new(UnicastPipe {
         r: UnsafeCell::new(dedicated_uplink),
         w: UnsafeCell::new(dedicated_downlink),
         local,
@@ -283,7 +283,7 @@ async fn handle_incoming_connections(
     });
 
     // send newly established link to manager
-    manager.send_async(LinkUnicast(link)).await?;
+    manager.send_async(LinkUnicast::from(link)).await?;
 
     ZResult::Ok(())
 }
@@ -581,7 +581,9 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastPipe {
 impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let pipe = UnicastPipeClient::connect_to(endpoint).await?;
-        Ok(LinkUnicast(Arc::new(pipe)))
+        Ok(LinkUnicast::from(
+            Arc::new(pipe) as Arc<dyn LinkUnicastTrait>
+        ))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {

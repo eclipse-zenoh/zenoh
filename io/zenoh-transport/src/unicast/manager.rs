@@ -455,9 +455,11 @@ impl TransportManager {
                 existing_config
             );
             tracing::trace!("{}", e);
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -546,7 +548,8 @@ impl TransportManager {
                 match $s {
                     Ok(output) => output,
                     Err(e) => {
-                        return Err(InitTransportError::Link((e, link.fail(), $reason)));
+                        let (l, asl) = link.fail();
+                        return Err(InitTransportError::Link((e, l, asl, $reason)));
                     }
                 }
             };
@@ -556,9 +559,11 @@ impl TransportManager {
         if config.zid == self.zid() {
             let e = zerror!("{} Attempt to establish transport to itself", self.zid());
             tracing::warn!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::CONNECTION_TO_SELF,
             )));
         }
@@ -571,9 +576,11 @@ impl TransportManager {
                 config.zid
             );
             tracing::trace!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -645,7 +652,7 @@ impl TransportManager {
             match t.add_link(link, other_initial_sn, other_lease).await {
                 Ok(val) => val,
                 Err(e) => {
-                    let _ = t.close(e.2).await;
+                    let _ = t.close(e.3).await;
                     return Err(InitTransportError::Link(e));
                 }
             };
@@ -759,8 +766,11 @@ impl TransportManager {
 
         match init_result {
             Ok(transport) => Ok(TransportUnicast(Arc::downgrade(&transport))),
-            Err(InitTransportError::Link((e, link, reason))) => {
+            Err(InitTransportError::Link((e, link, associated_link, reason))) => {
                 let _ = link.close(Some(reason)).await;
+                if let Some(asl) = associated_link {
+                    let _ = asl.close(Some(reason)).await;
+                }
                 Err(e)
             }
             Err(InitTransportError::Transport((e, transport, reason))) => {

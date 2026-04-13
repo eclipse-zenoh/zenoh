@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use quinn::TransportConfig;
+use quinn::{crypto::rustls::HandshakeData, TransportConfig};
 use rustls::{
     crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
@@ -53,8 +53,12 @@ use crate::{
 pub const PROTOCOL_LEGACY: &[u8] = b"hq-29";
 /// Zenoh single stream
 pub const PROTOCOL_SINGLE_STREAM: &[u8] = b"zenoh";
-/// Zenoh multi stream
+/// Zenoh mixed reliability (single stream)
+pub const PROTOCOL_MIXED_REL: &[u8] = b"zenoh-mr";
+/// Zenoh multi stream (no mixed reliability)
 pub const PROTOCOL_MULTI_STREAM: &[u8] = b"zenoh-ms";
+/// Zenoh multi stream mixed reliability
+pub const PROTOCOL_MULTI_STREAM_MIXED_REL: &[u8] = b"zenoh-ms-mr";
 
 // QUIC MTU config
 pub const QUIC_INITIAL_MTU: &str = "initial_mtu";
@@ -719,4 +723,14 @@ impl QuicTransportConfigurator<'_> {
         mtu_config.apply_to_transport(self.0);
         self
     }
+}
+
+pub(crate) fn get_negotiated_alpn(connection: &quinn::Connection) -> ZResult<Option<Vec<u8>>> {
+    let handshake_data = connection
+        .handshake_data()
+        .ok_or_else(|| zerror!("No handshake data"))?;
+    let handshake_data = handshake_data
+        .downcast_ref::<HandshakeData>()
+        .expect("HandshakeData should be only existing implementation");
+    Ok(handshake_data.protocol.clone())
 }

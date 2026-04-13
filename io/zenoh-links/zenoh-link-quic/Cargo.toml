@@ -29,12 +29,12 @@ uring = []
 
 [dependencies]
 async-trait = { workspace = true }
-quinn = { workspace = true }
 rustls-webpki = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["quic"] }
+zenoh-link-quic_datagram = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 

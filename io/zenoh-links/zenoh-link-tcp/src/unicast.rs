@@ -275,7 +275,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             match socket_config.new_link(&da).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
-                    return Ok(LinkUnicast(link));
+                    return Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>));
                 }
                 Err(e) => {
                     errs.push(e);
@@ -417,10 +417,10 @@ async fn accept_task(
 
                         tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },
