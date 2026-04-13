@@ -36,7 +36,7 @@ async fn test_liveliness_subscriber_clique() {
     tracing::info!("Peer (1) ZID: {}", peer1.zid());
 
     let mut config_peer2 = test_context.get_connector_config();
-    config_peer2.set_mode(Some(WhatAmI::Client)).unwrap();
+    config_peer2.set_mode(Some(WhatAmI::Peer)).unwrap();
     let peer2 = test_context.open_connector_with_cfg(config_peer2).await;
     tracing::info!("Peer (2) ZID: {}", peer2.zid());
 
