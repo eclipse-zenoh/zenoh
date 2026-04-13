@@ -377,16 +377,18 @@ async fn rx_task(
         .await;
     }
 
-    rx_task_non_uring(
-        link,
-        transport.clone(),
-        lease,
-        rx_buffer_size,
-        cancellation_token,
-        #[cfg(feature = "stats")]
-        stats,
-    )
-    .await
+    cancellation_token
+        .run_until_cancelled(rx_task_non_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            cancellation_token.clone(),
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+        .await
+        .unwrap_or(Ok(()))
 }
 
 async fn rx_task_non_uring(
