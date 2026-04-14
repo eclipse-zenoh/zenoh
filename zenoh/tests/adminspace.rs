@@ -11,8 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
+mod common;
+
 use std::time::Duration;
 
+use common::TestSessions;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
@@ -48,19 +52,18 @@ async fn test_adminspace_wonly() {
 #[ignore]
 async fn test_adminspace_read() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31000";
-    const MULTICAST_ENDPOINT: &str = "udp/224.0.0.224:31000";
 
     zenoh_util::init_log_from_env_or("error");
 
+    // Open router with dynamic TCP + UDP ports (port 0 → OS assigns)
     let router = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
             .set(vec![
-                ROUTER_ENDPOINT.parse::<EndPoint>().unwrap(),
-                MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap(),
+                "tcp/127.0.0.1:0".parse::<EndPoint>().unwrap(),
+                "udp/224.0.0.224:0".parse::<EndPoint>().unwrap(),
             ])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -84,24 +87,32 @@ async fn test_adminspace_read() {
         s
     };
     let zid = router.zid();
+
+    // Resolve the actual TCP endpoint assigned by the OS
+    let router_locators = TestSessions::get_locators_from_session(&router).await;
+    let tcp_locator = router_locators
+        .iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router")
+        .clone();
+    let udp_locator = router_locators
+        .iter()
+        .find(|ep| ep.to_string().starts_with("udp/"))
+        .expect("Expected a UDP listener endpoint from router")
+        .clone();
+
     let router2 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        c.connect.endpoints.set(vec![tcp_locator.clone()]).unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid2 = router2.zid();
     let peer = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Peer)).unwrap();
-        c.listen
-            .endpoints
-            .set(vec![MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        c.listen.endpoints.set(vec![udp_locator.clone()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
     };
@@ -318,9 +329,9 @@ async fn test_adminspace_read() {
     let count = router.get("@/*/**").await.unwrap().iter().count();
     assert!(count > 0);
 
-    peer.close().await.unwrap();
-    router2.close().await.unwrap();
-    router.close().await.unwrap();
+    ztimeout!(peer.close()).unwrap();
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router.close()).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -496,18 +507,16 @@ macro_rules! assert_json_field {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_transports_and_links() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31020";
-    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31020?rel=1;prio=1-7";
 
     zenoh_util::init_log_from_env_or("error");
 
-    // Create router1 with adminspace enabled
+    // Create router1 with adminspace enabled, listening on a dynamic port
     let router1 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.adminspace.set_enabled(true).unwrap();
@@ -518,6 +527,17 @@ async fn test_adminspace_transports_and_links() {
         ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid1 = router1.zid();
+
+    // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
+    let router1_tcp_addr = TestSessions::get_locators_from_session(&router1)
+        .await
+        .into_iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router1");
+    // Preserve the original connect-side metadata (?rel=1;prio=1-7)
+    let router_connect_endpoint: EndPoint = format!("{}?rel=1;prio=1-7", router1_tcp_addr)
+        .parse()
+        .unwrap();
 
     // Test 1: Query transports when none exist (except self-connections)
     let transports_unicast: Vec<String> = router1
@@ -560,7 +580,7 @@ async fn test_adminspace_transports_and_links() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_CONNECT_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_connect_endpoint])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         // Enable QoS for priorities and reliability support
@@ -778,26 +798,24 @@ async fn test_adminspace_transports_and_links() {
     link_subscriber.undeclare().await.unwrap();
 
     // Cleanup
-    router2.close().await.unwrap();
-    router1.close().await.unwrap();
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router1.close()).unwrap();
 }
 
 #[cfg(feature = "stats")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_regression_1() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31052";
-    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31052?rel=1;prio=1-7";
 
     zenoh_util::init_log_from_env_or("error");
 
-    // Create router1 with adminspace enabled
+    // Create router1 with adminspace enabled, listening on a dynamic port
     let router1 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.adminspace.set_enabled(true).unwrap();
@@ -809,14 +827,24 @@ async fn test_adminspace_regression_1() {
     };
     let zid1 = router1.zid();
 
+    // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
+    let router1_tcp_addr = TestSessions::get_locators_from_session(&router1)
+        .await
+        .into_iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router1");
+    let router_connect_endpoint: EndPoint = format!("{}?rel=1;prio=1-7", router1_tcp_addr)
+        .parse()
+        .unwrap();
+
     // Create router2 that connects to router1 (creates unicast transport)
-    let _router2 = {
+    let router2 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_CONNECT_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_connect_endpoint])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         // Enable QoS for priorities and reliability support
@@ -876,4 +904,8 @@ async fn test_adminspace_regression_1() {
 
     assert_eq!(rx_t_bytes, rx_l_bytes);
     assert_eq!(tx_t_bytes, tx_l_bytes);
+
+    // Cleanup
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router1.close()).unwrap();
 }
