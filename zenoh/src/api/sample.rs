@@ -75,6 +75,21 @@ impl From<Locality> for PublisherLocalityConf {
 }
 
 /// Information on the source of a zenoh [`Sample`].
+///
+/// [`SourceInfo`] is metadata attached to a [`Sample`] or [`crate::query::Query`]. It contains
+/// the unique identifier of the zenoh entity that published the sample or issued the query,
+/// and a sequence number for the sample or query itself.
+///
+/// It is the sender's responsibility to include [`SourceInfo`] when desired and to
+/// assign the entity identifier and sequence number. The entity
+/// identifier [`EntityGlobalId`] can be obtained by the `id()` method of
+/// each entity (e.g., [`Session::id()`](crate::session::Session::id()),
+/// [`Publisher::id()`](crate::pubsub::Publisher::id()), etc.).
+///
+/// The base zenoh primitives only transmit [`SourceInfo`] without
+/// any additional processing or validation.
+/// The [`Advanced pub/sub`](https://docs.rs/zenoh-ext/latest/zenoh_ext/#advanced-pubsub)
+/// uses it for missing sample detection, reordering, and duplicate detection.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
@@ -295,7 +310,7 @@ impl Sample {
         self.qos.express()
     }
 
-    /// Gets info on the source of this Sample.
+    /// Gets info on the source of this Sample as an optional [`SourceInfo`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> Option<&SourceInfo> {

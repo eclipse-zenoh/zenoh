@@ -337,7 +337,7 @@ impl Query {
         self.attachment.as_mut()
     }
 
-    /// Gets info on the source of this Query.
+    /// Gets info on the source of this Query as an optional [`SourceInfo`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> Option<&SourceInfo> {
