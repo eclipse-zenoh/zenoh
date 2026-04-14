@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#![cfg(feature = "unstable")]
+mod common;
+
 mod test {
     use std::{
         fs,
@@ -25,10 +28,12 @@ mod test {
     use tokio::runtime::Handle;
     use zenoh::{
         config::{WhatAmI, ZenohId},
-        Config, Session,
+        Session,
     };
-    use zenoh_config::{EndPoint, ModeDependentValue};
+    use zenoh_config::{Config, EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
+
+    use crate::common::TestSessions;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -43,10 +48,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_usrpswd(29447).await;
-        test_pub_sub_allow_then_deny_usrpswd(29447).await;
-        test_get_qbl_allow_then_deny_usrpswd(29447).await;
-        test_get_qbl_deny_then_allow_usrpswd(29447).await;
+        test_pub_sub_deny_then_allow_usrpswd().await;
+        test_pub_sub_allow_then_deny_usrpswd().await;
+        test_get_qbl_allow_then_deny_usrpswd().await;
+        test_get_qbl_deny_then_allow_usrpswd().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -55,10 +60,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_tls(29448, false).await;
-        test_pub_sub_allow_then_deny_tls(29449).await;
-        test_get_qbl_allow_then_deny_tls(29450).await;
-        test_get_qbl_deny_then_allow_tls(29451).await;
+        test_pub_sub_deny_then_allow_tls(false).await;
+        test_pub_sub_allow_then_deny_tls().await;
+        test_get_qbl_allow_then_deny_tls().await;
+        test_get_qbl_deny_then_allow_tls().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -67,10 +72,10 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_quic(29452).await;
-        test_pub_sub_allow_then_deny_quic(29453).await;
-        test_get_qbl_deny_then_allow_quic(29454).await;
-        test_get_qbl_allow_then_deny_quic(29455).await;
+        test_pub_sub_deny_then_allow_quic().await;
+        test_pub_sub_allow_then_deny_quic().await;
+        test_get_qbl_deny_then_allow_quic().await;
+        test_get_qbl_allow_then_deny_quic().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -80,7 +85,7 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_pub_sub_deny_then_allow_tls(29456, true).await;
+        test_pub_sub_deny_then_allow_tls(true).await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -89,20 +94,20 @@ mod test {
         create_new_files(TESTFILES_PATH.to_path_buf())
             .await
             .unwrap();
-        test_deny_allow_combination(29457).await;
-        test_allow_deny_combination(29458).await;
+        test_deny_allow_combination().await;
+        test_allow_deny_combination().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_link_protocols() {
         zenoh_util::init_log_from_env_or("error");
-        test_pub_sub_auth_link_protocol(1234).await
+        test_pub_sub_auth_link_protocol().await
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_authentication_zid() {
         zenoh_util::init_log_from_env_or("error");
-        test_pub_sub_auth_zid(29459).await
+        test_pub_sub_auth_zid().await
     }
 
     #[allow(clippy::all)]
@@ -277,14 +282,23 @@ client2name:client2passwd";
         Ok(())
     }
 
-    async fn get_basic_router_config_tls(port: u16, lowlatency: bool) -> Config {
+    fn get_locators_by_protocol(test_context: &TestSessions, protocol: &str) -> Vec<EndPoint> {
+        test_context
+            .locators()
+            .iter()
+            .filter(|endpoint| endpoint.protocol().as_str() == protocol)
+            .cloned()
+            .collect()
+    }
+
+    async fn get_basic_router_config_tls(lowlatency: bool) -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = zenoh_config::Config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
             .endpoints
-            .set(vec![format!("tls/127.0.0.1:{port}").parse().unwrap()])
+            .set(vec!["tls/127.0.0.1:0".parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -328,16 +342,16 @@ client2name:client2passwd";
             .qos
             .set_enabled(!lowlatency)
             .unwrap();
-        config.into()
+        config
     }
-    async fn get_basic_router_config_quic(port: u16) -> Config {
+    async fn get_basic_router_config_quic() -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = zenoh_config::Config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
             .endpoints
-            .set(vec![format!("quic/127.0.0.1:{port}").parse().unwrap()])
+            .set(vec!["quic/127.0.0.1:0".parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -374,16 +388,16 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        config.into()
+        config
     }
 
-    async fn get_basic_router_config_usrpswd(port: u16) -> Config {
+    async fn get_basic_router_config_usrpswd() -> Config {
         let mut config = zenoh_config::Config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
         config
             .listen
             .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
@@ -408,14 +422,9 @@ client2name:client2passwd";
                 TESTFILES_PATH.to_string_lossy()
             )))
             .unwrap();
-        config.into()
+        config
     }
-    async fn close_router_session(s: Session) {
-        println!("Closing router session");
-        ztimeout!(s.close()).unwrap();
-    }
-
-    async fn get_basic_router_config_quic_usrpswd(port: u16) -> Config {
+    async fn get_basic_router_config_quic_usrpswd() -> Config {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         let mut config = zenoh_config::Config::default();
         config.set_mode(Some(WhatAmI::Router)).unwrap();
@@ -423,8 +432,8 @@ client2name:client2passwd";
             .listen
             .endpoints
             .set(vec![
-                format!("quic/127.0.0.1:{port}").parse().unwrap(),
-                format!("tcp/127.0.0.1:{port}").parse().unwrap(),
+                "quic/127.0.0.1:0".parse().unwrap(),
+                "tcp/127.0.0.1:0".parse().unwrap(),
             ])
             .unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -477,22 +486,18 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        config.into()
+        config
     }
 
-    async fn get_client_sessions_tls(port: u16, lowlatency: bool) -> (Session, Session) {
+    async fn get_client_sessions_tls(
+        test_context: &mut TestSessions,
+        lowlatency: bool,
+    ) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh_config::Config::default();
+        let locators = get_locators_by_protocol(test_context, "tls");
+        let mut config = test_context.get_connector_config_with_endpoint(locators.clone());
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tls/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -534,18 +539,10 @@ client2name:client2passwd";
             .qos
             .set_enabled(!lowlatency)
             .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
+        let s01 = test_context.open_connector_with_cfg(config).await;
 
-        let mut config = zenoh_config::Config::default();
+        let mut config = test_context.get_connector_config_with_endpoint(locators);
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tls/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -587,23 +584,16 @@ client2name:client2passwd";
             .qos
             .set_enabled(!lowlatency)
             .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
+        let s02 = test_context.open_connector_with_cfg(config).await;
         (s01, s02)
     }
 
-    async fn get_client_sessions_quic(port: u16) -> (Session, Session) {
+    async fn get_client_sessions_quic(test_context: &mut TestSessions) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh_config::Config::default();
+        let locators = get_locators_by_protocol(test_context, "quic");
+        let mut config = test_context.get_connector_config_with_endpoint(locators.clone());
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -638,17 +628,9 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh_config::Config::default();
+        let s01 = test_context.open_connector_with_cfg(config).await;
+        let mut config = test_context.get_connector_config_with_endpoint(locators);
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -683,22 +665,15 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
+        let s02 = test_context.open_connector_with_cfg(config).await;
         (s01, s02)
     }
 
-    async fn get_client_sessions_usrpswd(port: u16) -> (Session, Session) {
+    async fn get_client_sessions_usrpswd(test_context: &mut TestSessions) -> (Session, Session) {
         println!("Opening client sessions");
-        let mut config = zenoh_config::Config::default();
+        let locators = get_locators_by_protocol(test_context, "tcp");
+        let mut config = test_context.get_connector_config_with_endpoint(locators.clone());
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tcp/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -712,17 +687,9 @@ client2name:client2passwd";
                 }"#,
             )
             .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
-        let mut config = zenoh_config::Config::default();
+        let s01 = test_context.open_connector_with_cfg(config).await;
+        let mut config = test_context.get_connector_config_with_endpoint(locators);
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tcp/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -736,23 +703,18 @@ client2name:client2passwd";
                 }"#,
             )
             .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
+        let s02 = test_context.open_connector_with_cfg(config).await;
         (s01, s02)
     }
 
-    async fn get_client_sessions_quic_usrpswd(port: u16) -> (Session, Session) {
+    async fn get_client_sessions_quic_usrpswd(
+        test_context: &mut TestSessions,
+    ) -> (Session, Session) {
         let cert_path = TESTFILES_PATH.to_string_lossy();
         println!("Opening client sessions");
-        let mut config = zenoh_config::Config::default();
+        let locators = get_locators_by_protocol(test_context, "quic");
+        let mut config = test_context.get_connector_config_with_endpoint(locators.clone());
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -793,18 +755,10 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        let s01 = ztimeout!(zenoh::open(config)).unwrap();
+        let s01 = test_context.open_connector_with_cfg(config).await;
 
-        let mut config = zenoh_config::Config::default();
+        let mut config = test_context.get_connector_config_with_endpoint(locators);
         config.set_mode(Some(WhatAmI::Client)).unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "quic/127.0.0.1:{port}"
-            )
-            .parse::<EndPoint>()
-            .unwrap()]))
-            .unwrap();
         config
             .insert_json5(
                 "transport",
@@ -845,7 +799,7 @@ client2name:client2passwd";
             .tls
             .set_root_ca_certificate(Some(format!("{cert_path}/ca.pem")))
             .unwrap();
-        let s02 = ztimeout!(zenoh::open(config)).unwrap();
+        let s02 = test_context.open_connector_with_cfg(config).await;
         (s01, s02)
     }
 
@@ -855,10 +809,11 @@ client2name:client2passwd";
         ztimeout!(s02.close()).unwrap();
     }
 
-    async fn test_pub_sub_deny_then_allow_tls(port: u16, lowlatency: bool) {
+    async fn test_pub_sub_deny_then_allow_tls(lowlatency: bool) {
         println!("test_pub_sub_deny_then_allow_tls");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_tls(port, lowlatency).await;
+        let mut config_router = get_basic_router_config_tls(lowlatency).await;
 
         config_router
             .insert_json5(
@@ -898,10 +853,9 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (sub_session, pub_session) = get_client_sessions_tls(port, lowlatency).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) =
+            get_client_sessions_tls(&mut test_context, lowlatency).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -921,13 +875,13 @@ client2name:client2passwd";
             assert_eq!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_allow_then_deny_tls(port: u16) {
+    async fn test_pub_sub_allow_then_deny_tls() {
         println!("test_pub_sub_allow_then_deny_tls");
-        let mut config_router = get_basic_router_config_tls(port, false).await;
+        let mut test_context = TestSessions::new();
+        let mut config_router = get_basic_router_config_tls(false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -966,9 +920,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_tls(port, false).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_tls(&mut test_context, false).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -990,14 +943,14 @@ client2name:client2passwd";
             assert_ne!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_get_qbl_deny_then_allow_tls(port: u16) {
+    async fn test_get_qbl_deny_then_allow_tls() {
         println!("test_get_qbl_deny_then_allow_tls");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_tls(port, false).await;
+        let mut config_router = get_basic_router_config_tls(false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1038,10 +991,8 @@ client2name:client2passwd";
             .unwrap();
 
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_tls(&mut test_context, false).await;
         {
             let mut received_value = String::new();
 
@@ -1076,14 +1027,14 @@ client2name:client2passwd";
             assert_eq!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_get_qbl_allow_then_deny_tls(port: u16) {
+    async fn test_get_qbl_allow_then_deny_tls() {
         println!("test_get_qbl_allow_then_deny_tls");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_tls(port, false).await;
+        let mut config_router = get_basic_router_config_tls(false).await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1123,10 +1074,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_tls(port, false).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_tls(&mut test_context, false).await;
         {
             let mut received_value = String::new();
 
@@ -1161,14 +1110,14 @@ client2name:client2passwd";
             assert_ne!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_deny_then_allow_quic(port: u16) {
+    async fn test_pub_sub_deny_then_allow_quic() {
         println!("test_pub_sub_deny_then_allow_quic");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic().await;
 
         config_router
             .insert_json5(
@@ -1208,10 +1157,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(&mut test_context).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1231,15 +1178,15 @@ client2name:client2passwd";
             assert_eq!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
     #[allow(unused)]
-    async fn test_pub_sub_allow_then_deny_quic(port: u16) {
+    async fn test_pub_sub_allow_then_deny_quic() {
         println!("test_pub_sub_allow_then_deny_quic");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1278,9 +1225,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_quic(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_quic(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1302,15 +1248,15 @@ client2name:client2passwd";
             assert_ne!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
     #[allow(unused)]
-    async fn test_get_qbl_deny_then_allow_quic(port: u16) {
+    async fn test_get_qbl_deny_then_allow_quic() {
         println!("test_get_qbl_deny_then_allow_quic");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1351,10 +1297,8 @@ client2name:client2passwd";
             .unwrap();
 
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(&mut test_context).await;
         {
             let mut received_value = String::new();
 
@@ -1389,15 +1333,15 @@ client2name:client2passwd";
             assert_eq!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
     #[allow(unused)]
-    async fn test_get_qbl_allow_then_deny_quic(port: u16) {
+    async fn test_get_qbl_allow_then_deny_quic() {
         println!("test_get_qbl_allow_then_deny_quic");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic(port).await;
+        let mut config_router = get_basic_router_config_quic().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1437,10 +1381,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_quic(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_quic(&mut test_context).await;
         {
             let mut received_value = String::new();
 
@@ -1475,14 +1417,14 @@ client2name:client2passwd";
             assert_ne!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_deny_then_allow_usrpswd(port: u16) {
+    async fn test_pub_sub_deny_then_allow_usrpswd() {
         println!("test_pub_sub_deny_then_allow_usrpswd");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_usrpswd().await;
 
         config_router
             .insert_json5(
@@ -1523,10 +1465,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1546,14 +1486,14 @@ client2name:client2passwd";
             assert_eq!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_allow_then_deny_usrpswd(port: u16) {
+    async fn test_pub_sub_allow_then_deny_usrpswd() {
         println!("test_pub_sub_allow_then_deny_usrpswd");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_usrpswd().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1593,9 +1533,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1617,14 +1556,14 @@ client2name:client2passwd";
             assert_ne!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_sessions(sub_session, pub_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_get_qbl_deny_then_allow_usrpswd(port: u16) {
+    async fn test_get_qbl_deny_then_allow_usrpswd() {
         println!("test_get_qbl_deny_then_allow_usrpswd");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_usrpswd().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1666,10 +1605,8 @@ client2name:client2passwd";
             .unwrap();
 
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let mut received_value = String::new();
 
@@ -1704,14 +1641,14 @@ client2name:client2passwd";
             assert_eq!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_get_qbl_allow_then_deny_usrpswd(port: u16) {
+    async fn test_get_qbl_allow_then_deny_usrpswd() {
         println!("test_get_qbl_allow_then_deny_usrpswd");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_usrpswd().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1752,10 +1689,8 @@ client2name:client2passwd";
             )
             .unwrap();
         println!("Opening router session");
-
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-        let (get_session, qbl_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (get_session, qbl_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let mut received_value = String::new();
 
@@ -1790,14 +1725,14 @@ client2name:client2passwd";
             assert_ne!(received_value, VALUE);
             ztimeout!(qbl.undeclare()).unwrap();
         }
-        close_sessions(get_session, qbl_session).await;
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_deny_allow_combination(port: u16) {
+    async fn test_deny_allow_combination() {
         println!("test_deny_allow_combination");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_quic_usrpswd().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1841,8 +1776,8 @@ client2name:client2passwd";
             .unwrap();
 
         println!("Opening router session");
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1865,7 +1800,7 @@ client2name:client2passwd";
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
-        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
+        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1887,13 +1822,14 @@ client2name:client2passwd";
             assert_eq!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_allow_deny_combination(port: u16) {
+    async fn test_allow_deny_combination() {
         println!("test_allow_deny_combination");
+        let mut test_context = TestSessions::new();
 
-        let mut config_router = get_basic_router_config_quic_usrpswd(port).await;
+        let mut config_router = get_basic_router_config_quic_usrpswd().await;
         config_router
             .insert_json5(
                 "access_control",
@@ -1937,8 +1873,8 @@ client2name:client2passwd";
             .unwrap();
 
         println!("Opening router session");
-        let session = ztimeout!(zenoh::open(config_router)).unwrap();
-        let (sub_session, pub_session) = get_client_sessions_usrpswd(port).await;
+        let _session = test_context.open_listener_with_cfg(config_router).await;
+        let (sub_session, pub_session) = get_client_sessions_usrpswd(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1961,7 +1897,7 @@ client2name:client2passwd";
             ztimeout!(subscriber.undeclare()).unwrap();
         }
         close_sessions(sub_session, pub_session).await;
-        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(port).await;
+        let (sub_session, pub_session) = get_client_sessions_quic_usrpswd(&mut test_context).await;
         {
             let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
             let received_value = Arc::new(Mutex::new(String::new()));
@@ -1983,18 +1919,19 @@ client2name:client2passwd";
             assert_ne!(*zlock!(received_value), VALUE);
             ztimeout!(subscriber.undeclare()).unwrap();
         }
-        close_router_session(session).await;
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_auth_link_protocol(port: u16) {
+    async fn test_pub_sub_auth_link_protocol() {
         let key_expr = "acl_auth_test/pubsub/by_protocols";
+        let mut test_context = TestSessions::new();
 
-        let mut config_listener = zenoh_config::Config::default();
+        let mut config_listener = test_context.get_listener_config("tcp/127.0.0.1:0", 2);
         config_listener
             .listen
             .set_endpoints(ModeDependentValue::Unique(vec![
-                format!("tcp/127.0.0.1:{port}").parse().unwrap(),
-                format!("udp/127.0.0.1:{port}").parse().unwrap(),
+                "tcp/127.0.0.1:0".parse().unwrap(),
+                "udp/127.0.0.1:0".parse().unwrap(),
             ]))
             .unwrap();
         config_listener
@@ -2043,10 +1980,11 @@ client2name:client2passwd";
             )
             .unwrap();
 
-        let listener_session = zenoh::open(config_listener).await.unwrap();
+        let listener_session = test_context.open_listener_with_cfg(config_listener).await;
         tokio::time::sleep(SLEEP).await;
 
-        let mut config_connect = zenoh_config::Config::default();
+        let mut config_connect = test_context
+            .get_connector_config_with_endpoint(get_locators_by_protocol(&test_context, "tcp"));
         config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
         config_connect
             .scouting
@@ -2059,18 +1997,28 @@ client2name:client2passwd";
             .set_enabled(Some(false))
             .unwrap();
         config_connect
-            .connect
-            .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
             .unwrap();
-        let session_denied = zenoh::open(config_connect.clone()).await.unwrap();
+        let session_denied = test_context
+            .open_connector_with_cfg(config_connect.clone())
+            .await;
 
+        let mut config_connect = test_context
+            .get_connector_config_with_endpoint(get_locators_by_protocol(&test_context, "udp"));
+        config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
         config_connect
-            .connect
-            .endpoints
-            .set(vec![format!("udp/127.0.0.1:{port}").parse().unwrap()])
+            .scouting
+            .multicast
+            .set_enabled(Some(false))
             .unwrap();
-        let session_allowed = zenoh::open(config_connect).await.unwrap();
+        config_connect
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
+            .unwrap();
+        let session_allowed = test_context.open_connector_with_cfg(config_connect).await;
 
         let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
 
@@ -2087,24 +2035,15 @@ client2name:client2passwd";
         assert!(payload.eq("ALLOWED"));
 
         sub.undeclare().await.unwrap();
-        session_allowed.close().await.unwrap();
-        session_denied.close().await.unwrap();
-        listener_session.close().await.unwrap();
+        test_context.close().await;
     }
 
-    async fn test_pub_sub_auth_zid(port: u16) {
+    async fn test_pub_sub_auth_zid() {
         let key_expr = "acl_auth_test/pubsub/by_zid";
         let test_zid = "abcdef";
+        let mut test_context = TestSessions::new();
 
-        let mut config_listener = zenoh_config::Config::default();
-        config_listener
-            .listen
-            .set_endpoints(ModeDependentValue::Unique(vec![format!(
-                "tcp/127.0.0.1:{port}"
-            )
-            .parse()
-            .unwrap()]))
-            .unwrap();
+        let mut config_listener = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
         config_listener
             .scouting
             .gossip
@@ -2151,10 +2090,11 @@ client2name:client2passwd";
             )
             .unwrap();
 
-        let listener_session = zenoh::open(config_listener).await.unwrap();
+        let listener_session = test_context.open_listener_with_cfg(config_listener).await;
         tokio::time::sleep(SLEEP).await;
 
-        let mut config_connect = zenoh_config::Config::default();
+        let mut config_connect = test_context
+            .get_connector_config_with_endpoint(get_locators_by_protocol(&test_context, "tcp"));
         config_connect.set_mode(Some(WhatAmI::Client)).unwrap();
         config_connect
             .scouting
@@ -2167,16 +2107,18 @@ client2name:client2passwd";
             .set_enabled(Some(false))
             .unwrap();
         config_connect
-            .connect
-            .endpoints
-            .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+            .scouting
+            .gossip
+            .set_enabled(Some(false))
             .unwrap();
-        let session_allowed = zenoh::open(config_connect.clone()).await.unwrap();
+        let session_allowed = test_context
+            .open_connector_with_cfg(config_connect.clone())
+            .await;
 
         config_connect
             .set_id(Some(ZenohId::from_str(test_zid).unwrap()))
             .unwrap();
-        let session_denied = zenoh::open(config_connect).await.unwrap();
+        let session_denied = test_context.open_connector_with_cfg(config_connect).await;
 
         let sub = listener_session.declare_subscriber(key_expr).await.unwrap();
 
@@ -2193,8 +2135,6 @@ client2name:client2passwd";
         assert!(payload.eq("ALLOWED"));
 
         sub.undeclare().await.unwrap();
-        session_allowed.close().await.unwrap();
-        session_denied.close().await.unwrap();
-        listener_session.close().await.unwrap();
+        test_context.close().await;
     }
 }
