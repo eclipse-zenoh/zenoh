@@ -786,8 +786,8 @@ async fn test_adminspace_transports_and_links() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_regression_1() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31002";
-    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31002?rel=1;prio=1-7";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:31052";
+    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31052?rel=1;prio=1-7";
 
     zenoh_util::init_log_from_env_or("error");
 

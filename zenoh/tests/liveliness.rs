@@ -218,7 +218,7 @@ async fn test_liveliness_query_brokered() {
     use zenoh_link::EndPoint;
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:27451";
+    const ROUTER_ENDPOINT: &str = "tcp/localhost:27551";
     const LIVELINESS_KEYEXPR: &str = "test/liveliness/query/brokered";
 
     zenoh_util::init_log_from_env_or("error");

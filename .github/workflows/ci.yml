@@ -271,8 +271,15 @@ jobs:
           sudo cargo build -p zenoh-plugin-rest --lib
           sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
+      - name: Run tests with unstable (prlimit)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          cargo build -p zenoh-plugin-rest --lib
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+
       - name: Run tests with unstable
-        if: ${{ matrix.os != 'macos-latest' }}
+        if: ${{ matrix.os == 'windows-latest' }}
         run: |
           cargo build -p zenoh-plugin-rest --lib
           cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
