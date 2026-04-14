@@ -621,6 +621,7 @@ pub(crate) async fn open_link(
     endpoint: EndPoint,
     link: LinkUnicast,
     manager: &TransportManager,
+    expected_zid: Option<&ZenohIdProto>,
 ) -> ZResult<TransportUnicast> {
     let direction = TransportLinkUnicastDirection::Outbound;
     let is_streamed = link.is_streamed();
@@ -724,6 +725,19 @@ pub(crate) async fn open_link(
     );
 
     let iack_out = step!(fsm.recv_init_ack((&mut link_unicast, &mut state)).await);
+
+    // Check if the expected_zid matches the peer's ZID
+    if let Some(zid) = expected_zid {
+        if &iack_out.other_zid != zid {
+            let _ = link_unicast.close(Some(close::reason::INVALID)).await;
+            return Err(zerror!(
+                "Expected peer ZID {} but received {}",
+                zid,
+                iack_out.other_zid
+            )
+            .into());
+        }
+    }
 
     // Open handshake
     let osyn_in = SendOpenSynIn {
