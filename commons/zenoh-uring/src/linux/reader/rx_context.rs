@@ -62,8 +62,10 @@ impl Rx {
     }
 
     pub(crate) fn run_callback(&self, buffer: Arc<RxBuffer>) {
+        #[cfg(feature = "uring_trace")]
         tracing::trace!("CB begin....");
         let callback = unsafe { &mut *self.cb.callback.get() };
+        #[cfg(feature = "uring_trace")]
         tracing::trace!("CB end....");
 
         if let Err(e) = (callback)(buffer) {

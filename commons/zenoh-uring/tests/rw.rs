@@ -28,7 +28,7 @@ mod linux_tests {
     //pub const BUF_COUNT: usize = 1 * 1024 * 1024 / BUF_SIZE;
 
     //const BUF_SIZE: usize = 16;
-    pub const BUF_COUNT: BufferCount = 16;
+    pub const BUF_COUNT: BufferCount = 4;
 
     pub fn monotonic_now_ns() -> u128 {
         unsafe {

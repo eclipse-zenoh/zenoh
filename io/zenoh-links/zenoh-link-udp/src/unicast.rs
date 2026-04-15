@@ -275,19 +275,12 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
-        bail!("FD unavailable")
-        // TODO: UDP temporarily disabled because it has some issue in uring support
-        /*
         let fd = match &self.variant {
             LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
                 link_unicast_udp_connected.socket.as_raw_fd()
             }
             LinkUnicastUdpVariant::Unconnected(link_unicast_udp_unconnected) => {
-                link_unicast_udp_unconnected
-                    .socket
-                    .upgrade()
-                    .unwrap()
-                    .as_raw_fd()
+                link_unicast_udp_unconnected.socket.upgrade()?.as_raw_fd()
             }
         };
 
@@ -295,7 +288,6 @@ impl LinkUnicastTrait for LinkUnicastUdp {
             fd if fd < 0 => bail!("FD unavailable"),
             fd => Ok(fd),
         }
-        */
     }
 }
 

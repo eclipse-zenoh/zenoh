@@ -124,7 +124,7 @@ impl BufferGroup {
             buffers_missing: AtomicU16::new(required_buffers_in_ring),
         };
 
-        group.supply_batches(sq)?;
+        group.ensure_batches_to_ring(sq)?;
 
         Ok(group)
     }
@@ -141,7 +141,7 @@ impl BufferGroup {
     ) -> ZResult<RxBuffer> {
         self.buffers_missing
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.supply_batches(sq)?;
+        self.ensure_batches_to_ring(sq)?;
 
         let data = &mut unsafe {
             self.arena
@@ -152,7 +152,7 @@ impl BufferGroup {
         Ok(RxBuffer::new(data, buf_id, self.arena.arena.clone()))
     }
 
-    fn supply_batches(&self, sq: &mut SubmissionQueue<'_>) -> ZResult<()> {
+    fn ensure_batches_to_ring(&self, sq: &mut SubmissionQueue<'_>) -> ZResult<()> {
         // take batches from arena...
         let batches = self.arena.arena.pop_batches(
             self.buffers_missing

@@ -382,6 +382,7 @@ impl Reader {
         } else {
             match io_uring::cqueue::buffer_select(e.flags()) {
                 Some(buf_id) => {
+                    #[cfg(feature = "uring_trace")]
                     tracing::trace!("Read multishot entry: {:?}", e);
 
                     if !io_uring::cqueue::more(e.flags()) {
