@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(all(feature = "uring", target_os = "linux"))]
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     collections::HashMap,
     fmt,
