@@ -280,7 +280,14 @@ impl LinkUnicastTrait for LinkUnicastUdp {
                 link_unicast_udp_connected.socket.as_raw_fd()
             }
             LinkUnicastUdpVariant::Unconnected(link_unicast_udp_unconnected) => {
-                link_unicast_udp_unconnected.socket.upgrade()?.as_raw_fd()
+                link_unicast_udp_unconnected
+                    .socket
+                    .upgrade()
+                    .ok_or_else(|| zerror!("FD unavailable"))?
+                    .as_raw_fd()
+            }
+            LinkUnicastUdpVariant::Reliable(_link_unicast_quic_unsecure) => {
+                bail!("FD unavailable")
             }
         };
 
