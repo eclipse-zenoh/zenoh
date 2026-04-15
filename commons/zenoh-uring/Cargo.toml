@@ -46,3 +46,4 @@ test-case = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-util = { workspace = true }
+tokio = { workspace = true }

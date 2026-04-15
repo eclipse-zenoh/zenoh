@@ -35,6 +35,8 @@ mod linux_tests {
 
     pub const ITERATION_COUNT: usize = 10000;
 
+    type PortNumber = u16;
+
     struct ManagedTask {
         handle: Option<std::thread::JoinHandle<ZResult<()>>>,
         finished: Arc<AtomicBool>,
@@ -193,13 +195,26 @@ mod linux_tests {
 
     type BindSocketType = (Box<dyn AsRawFd>, Option<Box<dyn AsRawFd>>);
 
-    fn bind_socket<A: ToSocketAddrs>(is_tcp: bool, addr: A) -> std::io::Result<BindSocketType> {
+    fn bind_socket(
+        is_tcp: bool,
+        sender: tokio::sync::oneshot::Sender<PortNumber>,
+    ) -> std::io::Result<BindSocketType> {
         if is_tcp {
-            let listener = TcpListener::bind(addr)?;
+            let listener = TcpListener::bind("127.0.0.1:0")?;
+            let port = listener.local_addr()?.port();
+            sender.send(port).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::Other, "Failed to send port")
+            })?;
+
             let (stream, _) = listener.accept()?;
             Ok((Box::new(stream), Some(Box::new(listener))))
         } else {
-            let socket = UdpSocket::bind(addr)?;
+            let socket = UdpSocket::bind("127.0.0.1:0")?;
+            let port = socket.local_addr()?.port();
+            sender.send(port).map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::Other, "Failed to send port")
+            })?;
+
             Ok((Box::new(socket), None))
         }
     }
@@ -209,39 +224,38 @@ mod linux_tests {
     impl ReaderTask {
         pub fn make(
             reader: Reader,
-            port: u16,
             iteration_count: usize,
             is_tcp: bool,
             accumulate_buffers: bool,
-        ) -> ManagedTask {
-            let addr = ("127.0.0.1", port);
-
+        ) -> (ManagedTask, tokio::sync::oneshot::Receiver<PortNumber>) {
             let finished = Arc::new(AtomicBool::new(false));
+
+            let (snd, rcv) = tokio::sync::oneshot::channel();
 
             let c_finished = finished.clone();
             let handle = Some(std::thread::spawn(move || {
                 Self::reader_main(
                     reader,
-                    addr,
                     iteration_count,
                     c_finished,
                     is_tcp,
                     accumulate_buffers,
+                    snd,
                 )
             }));
 
-            ManagedTask::new(handle, finished)
+            (ManagedTask::new(handle, finished), rcv)
         }
 
-        fn reader_main<A: ToSocketAddrs>(
+        fn reader_main(
             reader: Reader,
-            addr: A,
             iteration_count: usize,
             finished: Arc<AtomicBool>,
             is_tcp: bool,
             accumulate_buffers: bool,
+            port_sender: tokio::sync::oneshot::Sender<PortNumber>,
         ) -> ZResult<()> {
-            let (socket, _) = bind_socket(is_tcp, addr)?;
+            let (socket, _) = bind_socket(is_tcp, port_sender)?;
 
             let iteration = Arc::new(AtomicUsize::new(0));
             let c_iteration = iteration.clone();
@@ -296,6 +310,8 @@ mod linux_tests {
             }
             assert!(Arc::strong_count(&iteration) == 1);
 
+            drop(socket);
+
             Ok(())
         }
     }
@@ -305,7 +321,6 @@ mod linux_tests {
     impl RWTask {
         pub fn make(
             reader: Reader,
-            port: u16,
             iteration_count: usize,
             interval: Option<Arc<Duration>>,
             is_tcp: bool,
@@ -317,7 +332,6 @@ mod linux_tests {
             let handle = Some(std::thread::spawn(move || {
                 Self::rw_main(
                     reader,
-                    port,
                     iteration_count,
                     interval,
                     c_finished,
@@ -331,15 +345,18 @@ mod linux_tests {
 
         fn rw_main(
             reader: Reader,
-            port: u16,
             iteration_count: usize,
             interval: Option<Arc<Duration>>,
             finished: Arc<AtomicBool>,
             is_tcp: bool,
             accumulate_buffers: bool,
         ) -> ZResult<()> {
-            let reader =
-                ReaderTask::make(reader, port, iteration_count, is_tcp, accumulate_buffers);
+            let (reader, port_rcv) =
+                ReaderTask::make(reader, iteration_count, is_tcp, accumulate_buffers);
+
+            let port = port_rcv
+                .blocking_recv()
+                .expect("Failed to receive port from reader task");
             let writer = WriterTask::make(port, iteration_count, interval, is_tcp);
 
             while !finished.load(std::sync::atomic::Ordering::Relaxed)
@@ -369,7 +386,6 @@ mod linux_tests {
     impl StartStopTask {
         pub fn make<F: Fn() -> Reader + Send + 'static>(
             reader_fn: F,
-            port: u16,
             iteration_count: usize,
             start_stop_count: usize,
             writer_ends_first: bool,
@@ -383,7 +399,6 @@ mod linux_tests {
                 if writer_ends_first {
                     Self::start_stop_main_writer_ends_first(
                         reader_fn,
-                        port,
                         iteration_count,
                         interval,
                         start_stop_count,
@@ -393,7 +408,6 @@ mod linux_tests {
                 } else {
                     Self::start_stop_main_reader_ends_first(
                         reader_fn,
-                        port,
                         iteration_count,
                         interval,
                         start_stop_count,
@@ -408,7 +422,6 @@ mod linux_tests {
 
         fn start_stop_main_writer_ends_first<F: Fn() -> Reader>(
             reader_fn: F,
-            port: u16,
             iteration_count: usize,
             interval: Option<Arc<Duration>>,
             start_stop_count: usize,
@@ -418,7 +431,6 @@ mod linux_tests {
             for _ in 0..start_stop_count {
                 let rw = RWTask::make(
                     reader_fn(),
-                    port,
                     iteration_count,
                     interval.clone(),
                     is_tcp,
@@ -442,7 +454,6 @@ mod linux_tests {
 
         fn start_stop_main_reader_ends_first<F: Fn() -> Reader>(
             reader_fn: F,
-            port: u16,
             iteration_count: usize,
             interval: Option<Arc<Duration>>,
             start_stop_count: usize,
@@ -450,7 +461,12 @@ mod linux_tests {
             is_tcp: bool,
         ) -> ZResult<()> {
             for _ in 0..start_stop_count {
-                let reader = ReaderTask::make(reader_fn(), port, iteration_count, is_tcp, false);
+                let (reader, port_rcv) =
+                    ReaderTask::make(reader_fn(), iteration_count, is_tcp, false);
+
+                let port = port_rcv
+                    .blocking_recv()
+                    .expect("Failed to receive port from reader task");
                 let writer = WriterTask::make(port, usize::MAX, interval.clone(), is_tcp);
 
                 while !finished.load(std::sync::atomic::Ordering::Relaxed)
@@ -496,9 +512,12 @@ mod linux_tests {
 
         let r = Reader::new(65535 + 2, 16).unwrap();
 
-        let port = 7780;
         let interval = None;
-        let reader = ReaderTask::make(r.clone(), port, 100, is_tcp, false);
+        let (reader, port_rcv) = ReaderTask::make(r.clone(), 100, is_tcp, false);
+
+        let port = port_rcv
+            .blocking_recv()
+            .expect("Failed to receive port from reader task");
         let writer = WriterTask::make(port, 100, interval, is_tcp);
 
         reader.wait_for_complete().unwrap();
@@ -520,9 +539,12 @@ mod linux_tests {
 
         let reader = Reader::new(65535 + 2, 16).unwrap();
 
-        let port = 7781;
         let interval = None;
-        let reader = ReaderTask::make(reader, port, ITERATION_COUNT, is_tcp, false);
+        let (reader, port_rcv) = ReaderTask::make(reader, ITERATION_COUNT, is_tcp, false);
+
+        let port = port_rcv
+            .blocking_recv()
+            .expect("Failed to receive port from reader task");
         let writer = WriterTask::make(port, ITERATION_COUNT, interval, is_tcp);
 
         reader.wait_for_complete().unwrap();
@@ -542,14 +564,12 @@ mod linux_tests {
 
         let reader = Reader::new(65535 + 2, 16).unwrap();
         let count = 64;
-        let base_port = 7782;
         let base_interval = None;
 
         let mut rw_tasks = vec![];
-        for pair in 0..count {
+        for _ in 0..count {
             let rw = RWTask::make(
                 reader.clone(),
-                base_port + pair,
                 ITERATION_COUNT / count as usize,
                 base_interval.clone(),
                 is_tcp,
@@ -563,11 +583,11 @@ mod linux_tests {
         }
     }
 
-    #[test_case(8200, 1, true; "single_tcp")]
-    #[test_case(8201, 4, true; "many_tcp")]
-    #[test_case(8200, 1, false; "single_udp")]
-    #[test_case(8201, 4, false; "many_udp")]
-    fn rw_add_batches(base_port: u16, count: u16, is_tcp: bool) {
+    #[test_case(1, true; "single_tcp")]
+    #[test_case(4, true; "many_tcp")]
+    #[test_case(1, false; "single_udp")]
+    #[test_case(4, false; "many_udp")]
+    fn rw_add_batches(count: u16, is_tcp: bool) {
         zenoh_util::try_init_log_from_env();
 
         let max_memory_consume = 1024 * 1024;
@@ -579,10 +599,9 @@ mod linux_tests {
         let base_interval = None;
 
         let mut rw_tasks = vec![];
-        for pair in 0..count {
+        for _ in 0..count {
             let rw = RWTask::make(
                 reader.clone(),
-                base_port + pair,
                 buffer_count,
                 base_interval.clone(),
                 is_tcp,
@@ -596,32 +615,25 @@ mod linux_tests {
         }
     }
 
-    #[test_case(true,  true,  true, 0;  "tcp_writer_first_shared_reader")]
-    #[test_case(true,  true,  false, 1; "tcp_writer_first_exclusive_reader")]
-    #[test_case(true,  false, true, 2;  "tcp_reader_first_shared_reader")]
-    #[test_case(true,  false, false, 3; "tcp_reader_first_exclusive_reader")]
-    //#[test_case(false, true,  true, 0;  "udp_writer_first_shared_reader")]
-    //#[test_case(false, true,  false, 1; "udp_writer_first_exclusive_reader")]
-    //#[test_case(false, false, true, 2;  "udp_reader_first_shared_reader")]
-    //#[test_case(false, false, false, 3; "udp_reader_first_exclusive_reader")]
-    fn rw_parallel_and_start_stop(
-        is_tcp: bool,
-        writer_ends_first: bool,
-        shared_reader: bool,
-        port_offset: u16,
-    ) {
+    #[test_case(true,  true,  true;  "tcp_writer_first_shared_reader")]
+    #[test_case(true,  true,  false; "tcp_writer_first_exclusive_reader")]
+    #[test_case(true,  false, true;  "tcp_reader_first_shared_reader")]
+    #[test_case(true,  false, false; "tcp_reader_first_exclusive_reader")]
+    #[test_case(false, true,  true;  "udp_writer_first_shared_reader")]
+    #[test_case(false, true,  false; "udp_writer_first_exclusive_reader")]
+    #[test_case(false, false, true;  "udp_reader_first_shared_reader")]
+    #[test_case(false, false, false; "udp_reader_first_exclusive_reader")]
+    fn rw_parallel_and_start_stop(is_tcp: bool, writer_ends_first: bool, shared_reader: bool) {
         zenoh_util::try_init_log_from_env();
 
         let reader = Reader::new(65535 + 2, 16).unwrap();
         let count = 20;
-        let base_port = 13000 + port_offset * (count + 1);
         let base_interval = Some(Arc::new(Duration::from_millis(1)));
 
         let mut rw_background = vec![];
-        for i in 0..count {
+        for _ in 0..count {
             let rw = RWTask::make(
                 reader.clone(),
-                base_port + i,
                 usize::MAX,
                 base_interval.clone(),
                 is_tcp,
@@ -634,7 +646,6 @@ mod linux_tests {
             let c_reader_fn = reader_fn.clone();
             let start_stop_writer_ends_first = StartStopTask::make(
                 move || c_reader_fn(),
-                base_port + count,
                 ITERATION_COUNT / 1000,
                 10,
                 writer_ends_first,
