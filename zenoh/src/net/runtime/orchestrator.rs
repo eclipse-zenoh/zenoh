@@ -422,23 +422,26 @@ impl Runtime {
     }
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
-        match self.manager().open_transport_unicast(peer.clone()).await {
-            Ok(transport) => {
-                if let Ok(Some(orch_transport)) = transport.get_callback() {
-                    if let Some(orch_transport) = orch_transport
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        zwrite!(orch_transport.endpoints).insert(peer);
-                    }
-                }
+        let result = self
+            .manager()
+            .open_transport_unicast(peer.clone())
+            .await
+            .and_then(|transport| -> ZResult<_> {
+                let cb = transport
+                    .get_callback()?
+                    .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                let session = cb
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                    .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                zwrite!(session.endpoints).insert(peer.clone());
                 Ok(())
-            }
-            Err(e) => {
-                tracing::warn!("Unable to connect to {}! {}", peer, e);
-                Err(e)
-            }
+            });
+
+        if let Err(e) = &result {
+            tracing::warn!("Unable to connect to {}! {}", peer, e);
         }
+        result
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
