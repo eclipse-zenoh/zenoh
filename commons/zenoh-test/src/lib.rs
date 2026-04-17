@@ -55,6 +55,12 @@ pub struct TestSessions {
     connector_sessions: Vec<Session>,
 }
 
+impl Default for TestSessions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestSessions {
     pub fn new() -> Self {
         TestSessions {

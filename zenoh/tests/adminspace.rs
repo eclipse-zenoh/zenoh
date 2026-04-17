@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use std::time::Duration;
 
-use common::TestSessions;
+use zenoh_test::TestSessions;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;

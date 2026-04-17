@@ -1,0 +1,17 @@
+[package]
+name = "zenoh-test"
+version = "1.9.0"
+edition = "2021"
+publish = false
+
+[features]
+internal = ["zenoh/internal", "zenoh-config/internal"]
+unstable = ["zenoh/unstable", "zenoh-config/unstable"]
+
+[dependencies]
+zenoh = { workspace = true, features = ["internal", "unstable"] }
+zenoh-config = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-link = { workspace = true }
+zenoh-protocol = { workspace = true }
+tokio = { workspace = true, features = ["rt", "time"] }

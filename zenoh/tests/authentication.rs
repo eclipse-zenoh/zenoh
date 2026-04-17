@@ -13,7 +13,7 @@
 //
 
 #![cfg(feature = "unstable")]
-mod common;
+
 
 mod test {
     use std::{
@@ -33,7 +33,7 @@ mod test {
     use zenoh_config::{Config, EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
-    use crate::common::TestSessions;
+    use zenoh_test::TestSessions;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

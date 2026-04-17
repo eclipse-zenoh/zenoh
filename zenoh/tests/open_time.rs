@@ -14,7 +14,7 @@
 
 #![cfg(feature = "unstable")]
 #![allow(unused)]
-mod common;
+
 
 use std::{
     future::IntoFuture,
@@ -25,7 +25,7 @@ use zenoh_config::Config;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
 
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);

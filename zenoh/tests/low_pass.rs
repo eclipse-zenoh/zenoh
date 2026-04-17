@@ -14,7 +14,7 @@
 
 #![cfg(unix)]
 #![cfg(feature = "unstable")]
-mod common;
+
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -28,7 +28,7 @@ use zenoh_config::{
     Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
 };
 
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";

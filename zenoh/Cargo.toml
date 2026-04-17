@@ -130,6 +130,7 @@ zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]
+zenoh-test = { workspace = true, features = ["internal", "unstable"] }
 libc = { workspace = true }
 predicates = { workspace = true }
 regex = { workspace = true }

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use std::time::Duration;
 
@@ -22,7 +22,7 @@ use zenoh_core::ztimeout;
 use zenoh_keyexpr::{keyexpr, OwnedNonWildKeyExpr};
 use zenoh_macros::{ke, nonwild_ke};
 
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

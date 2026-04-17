@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -26,7 +26,7 @@ use zenoh::{key_expr::KeyExpr, qos::CongestionControl, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

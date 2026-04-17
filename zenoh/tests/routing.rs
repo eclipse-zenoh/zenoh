@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use std::{
     sync::{
@@ -30,7 +30,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_result::bail;
 
-use crate::common::{get_free_port, get_tcp_locator};
+use zenoh_test::{get_free_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;

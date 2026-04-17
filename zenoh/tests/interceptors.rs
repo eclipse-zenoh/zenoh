@@ -14,7 +14,7 @@
 
 #![cfg(unix)]
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use std::{
     collections::HashMap,
@@ -24,7 +24,7 @@ use std::{
     },
 };
 
-use common::TestSessions;
+use zenoh_test::TestSessions;
 use nonempty_collections::nev;
 use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Wait};
 use zenoh_config::{

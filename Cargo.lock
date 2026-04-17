@@ -6106,6 +6106,7 @@ dependencies = [
  "zenoh-stats",
  "zenoh-sync",
  "zenoh-task",
+ "zenoh-test",
  "zenoh-transport",
  "zenoh-util",
 ]
@@ -6232,6 +6233,7 @@ dependencies = [
  "zenoh",
  "zenoh-config",
  "zenoh-macros",
+ "zenoh-test",
  "zenoh-util",
 ]
 
@@ -6702,6 +6704,18 @@ dependencies = [
  "tracing",
  "zenoh-core",
  "zenoh-runtime",
+]
+
+[[package]]
+name = "zenoh-test"
+version = "1.9.0"
+dependencies = [
+ "tokio",
+ "zenoh",
+ "zenoh-config",
+ "zenoh-core",
+ "zenoh-link",
+ "zenoh-protocol",
 ]
 
 [[package]]

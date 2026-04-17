@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use zenoh_core::ztimeout;
 
-use crate::common::{get_tcp_locator, TestSessions};
+use zenoh_test::{get_tcp_locator, TestSessions};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_clique() {

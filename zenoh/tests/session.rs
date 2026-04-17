@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 
 use std::{
     sync::{
@@ -34,8 +34,8 @@ use zenoh::{
 use zenoh_core::ztimeout;
 
 #[cfg(feature = "internal")]
-use crate::common::close_session;
-use crate::common::TestSessions;
+use zenoh_test::close_session;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

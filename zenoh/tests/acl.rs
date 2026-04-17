@@ -14,14 +14,14 @@
 
 #![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
-mod common;
+
 
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     time::Duration,
 };
 
-use common::TestSessions;
+use zenoh_test::TestSessions;
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, sample::SampleKind};
 use zenoh_config::Config;
