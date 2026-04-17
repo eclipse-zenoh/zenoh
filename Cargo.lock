@@ -6771,6 +6771,7 @@ dependencies = [
  "thread-priority",
  "tokio",
  "tracing",
+ "zenoh-buffers",
  "zenoh-core",
  "zenoh-result",
  "zenoh-runtime",
