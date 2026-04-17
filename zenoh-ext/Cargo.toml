@@ -52,9 +52,9 @@ zenoh-macros = { workspace = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]
-zenoh-test = { workspace = true, features = ["internal", "unstable"] }
 rand = { workspace = true }
 zenoh-config = { workspace = true }
+zenoh-test = { workspace = true, features = ["internal", "unstable"] }
 
 [package.metadata.docs.rs]
 features = ["unstable"]

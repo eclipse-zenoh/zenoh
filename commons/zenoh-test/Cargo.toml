@@ -1,19 +1,19 @@
 [package]
-name = "zenoh-test"
-version = "1.9.0"
 edition = "2021"
+name = "zenoh-test"
 publish = false
+version = "1.9.0"
 
 [features]
-internal = ["zenoh/internal", "zenoh-config/internal"]
-unstable = ["zenoh/unstable", "zenoh-config/unstable"]
+internal = ["zenoh-config/internal", "zenoh/internal"]
+unstable = ["zenoh-config/unstable", "zenoh/unstable"]
 
 [dependencies]
+tokio = { workspace = true, features = ["rt", "time"] }
 zenoh = { workspace = true, features = ["internal", "unstable"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link = { workspace = true }
-tokio = { workspace = true, features = ["rt", "time"] }
 
 [package.metadata.cargo-machete]
 ignored = ["tokio"]
