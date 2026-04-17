@@ -246,7 +246,7 @@ impl ShmProviderBackend for PosixShmProviderBackendBinaryHeap {
         let mut guard = zlock!(self.free_list);
         if guard.len() > 1 {
             let mut fbs: Vec<Chunk> = guard.drain().collect();
-            fbs.sort_by(|x, y| x.offset.cmp(&y.offset));
+            fbs.sort_by_key(|x| x.offset);
             let mut current = fbs.remove(0);
             let mut i = 0;
             let n = fbs.len();
