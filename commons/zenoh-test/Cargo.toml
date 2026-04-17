@@ -14,3 +14,6 @@ zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link = { workspace = true }
 tokio = { workspace = true, features = ["rt", "time"] }
+
+[package.metadata.cargo-machete]
+ignored = ["tokio"]
