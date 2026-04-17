@@ -433,7 +433,7 @@ pub struct RBatch<TBuffer: BacktrackableReader + Buffer> {
 impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
     pub fn new(config: BatchConfig, buffer: TBuffer) -> Self {
         Self {
-            buffer: buffer.into(),
+            buffer,
             codec: Zenoh080Batch::new(),
             config,
         }
