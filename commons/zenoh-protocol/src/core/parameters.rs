@@ -56,7 +56,7 @@ where
     I: Iterator<Item = (&'s str, &'s str)>,
 {
     let mut from = iter.collect::<Vec<(&str, &str)>>();
-    from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+    from.sort_unstable_by_key(|(k1, _)| *k1);
     from.into_iter()
 }
 
