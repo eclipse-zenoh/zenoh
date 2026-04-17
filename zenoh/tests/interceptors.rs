@@ -15,7 +15,6 @@
 #![cfg(unix)]
 #![cfg(feature = "unstable")]
 
-
 use std::{
     collections::HashMap,
     sync::{
@@ -24,12 +23,12 @@ use std::{
     },
 };
 
-use zenoh_test::TestSessions;
 use nonempty_collections::nev;
 use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Wait};
 use zenoh_config::{
     Config, DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
 };
+use zenoh_test::TestSessions;
 
 // Tokio's time granularity on different platforms
 #[cfg(target_os = "windows")]

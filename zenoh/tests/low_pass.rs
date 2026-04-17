@@ -27,7 +27,6 @@ use zenoh::{bytes::ZBytes, Wait};
 use zenoh_config::{
     Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
 };
-
 use zenoh_test::{get_locators_from_session_sync, TestSessions};
 
 static SMALL_MSG_STR: &str = "S";

@@ -13,7 +13,6 @@
 //
 #![cfg(feature = "unstable")]
 
-
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -32,7 +31,6 @@ use zenoh::{
     Session,
 };
 use zenoh_core::ztimeout;
-
 #[cfg(feature = "internal")]
 use zenoh_test::close_session;
 use zenoh_test::{get_locators_from_session, TestSessions};

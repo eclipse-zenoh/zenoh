@@ -13,9 +13,7 @@
 //
 #![cfg(feature = "unstable")]
 
-
 use zenoh_core::ztimeout;
-
 use zenoh_test::{get_tcp_locator, TestSessions};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

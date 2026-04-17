@@ -18,7 +18,6 @@ use core::time::Duration;
 
 use zenoh::sample::SourceInfo;
 use zenoh_core::ztimeout;
-
 use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

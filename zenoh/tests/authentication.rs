@@ -14,7 +14,6 @@
 
 #![cfg(feature = "unstable")]
 
-
 mod test {
     use std::{
         fs,
@@ -32,7 +31,6 @@ mod test {
     };
     use zenoh_config::{Config, EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
-
     use zenoh_test::TestSessions;
 
     const TIMEOUT: Duration = Duration::from_secs(60);

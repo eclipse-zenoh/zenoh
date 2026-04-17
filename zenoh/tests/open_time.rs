@@ -15,7 +15,6 @@
 #![cfg(feature = "unstable")]
 #![allow(unused)]
 
-
 use std::{
     future::IntoFuture,
     time::{Duration, Instant},
@@ -24,7 +23,6 @@ use std::{
 use zenoh_config::Config;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
-
 use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);

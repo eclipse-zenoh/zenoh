@@ -25,7 +25,6 @@ use tokio::runtime::Handle;
 use zenoh::{key_expr::KeyExpr, qos::CongestionControl, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
-
 use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT: Duration = Duration::from_secs(60);

@@ -15,17 +15,16 @@
 #![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
 
-
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     time::Duration,
 };
 
-use zenoh_test::TestSessions;
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, sample::SampleKind};
 use zenoh_config::Config;
 use zenoh_core::{zlock, ztimeout};
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

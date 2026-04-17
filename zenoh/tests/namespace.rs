@@ -13,7 +13,6 @@
 //
 #![cfg(feature = "unstable")]
 
-
 use std::time::Duration;
 
 use zenoh::{sample::Locality, Result as ZResult, Session};
@@ -21,7 +20,6 @@ use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_keyexpr::{keyexpr, OwnedNonWildKeyExpr};
 use zenoh_macros::{ke, nonwild_ke};
-
 use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

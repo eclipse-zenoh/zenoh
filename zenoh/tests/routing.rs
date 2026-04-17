@@ -13,7 +13,6 @@
 //
 #![cfg(feature = "unstable")]
 
-
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -29,7 +28,6 @@ use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_result::bail;
-
 use zenoh_test::{get_free_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(10);

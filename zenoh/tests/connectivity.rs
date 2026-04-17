@@ -21,7 +21,6 @@ mod tests {
     };
 
     use zenoh::sample::SampleKind;
-
     use zenoh_test::TestSessions;
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {

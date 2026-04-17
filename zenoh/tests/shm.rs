@@ -32,7 +32,6 @@ use zenoh::{
 use zenoh_buffers::ZBuf;
 use zenoh_core::ztimeout;
 use zenoh_shm::api::buffer::traits::OwnedShmBuf;
-
 use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

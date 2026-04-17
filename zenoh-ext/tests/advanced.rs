@@ -111,32 +111,26 @@ async fn test_advanced_history_inner(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_history() {
-    test_advanced_history_inner(
-        "test/advanced/history",
-        "test/advanced/history",
-        None,
-        None
-    )
-    .await;
+    test_advanced_history_inner("test/advanced/history", "test/advanced/history", None, None).await;
     test_advanced_history_inner(
         "test/advanced/history",
         "ns/test/advanced/history",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_history_inner(
         "ns/test/advanced/history",
         "test/advanced/history",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_history_inner(
         "test/advanced/history",
         "test/advanced/history",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -275,28 +269,28 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         "test/advanced/retransmission",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_inner(
         "test/advanced/retransmission",
         "ns/test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_inner(
         "ns/test/advanced/retransmission",
         "test/advanced/retransmission",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_retransmission_inner(
         "test/advanced/retransmission",
         "test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -428,28 +422,28 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         "test/advanced/retransmission/periodic",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_periodic_inner(
         "test/advanced/retransmission/periodic",
         "ns/test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_periodic_inner(
         "ns/test/advanced/retransmission/periodic",
         "test/advanced/retransmission/periodic",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_retransmission_periodic_inner(
         "test/advanced/retransmission/periodic",
         "test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -577,28 +571,28 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         "test/advanced/sample_miss",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_sample_miss_inner(
         "test/advanced/sample_miss",
         "ns/test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_sample_miss_inner(
         "ns/test/advanced/sample_miss",
         "test/advanced/sample_miss",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_sample_miss_inner(
         "test/advanced/sample_miss",
         "test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -736,28 +730,28 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         "test/advanced/retransmission/sample_miss",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
         "test/advanced/retransmission/sample_miss",
         "ns/test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
         "ns/test/advanced/retransmission/sample_miss",
         "test/advanced/retransmission/sample_miss",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
         "test/advanced/retransmission/sample_miss",
         "test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -873,28 +867,28 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         "test/advanced/late_joiner",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_late_joiner_inner(
         "test/advanced/late_joiner",
         "ns/test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_late_joiner_inner(
         "ns/test/advanced/late_joiner",
         "test/advanced/late_joiner",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_late_joiner_inner(
         "test/advanced/late_joiner",
         "test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }
@@ -1027,28 +1021,28 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         "test/advanced/retransmission/heartbeat",
         None,
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
         "test/advanced/retransmission/heartbeat",
         "ns/test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
-        None
+        None,
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
         "ns/test/advanced/retransmission/heartbeat",
         "test/advanced/retransmission/heartbeat",
         None,
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
         "test/advanced/retransmission/heartbeat",
         "test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
-        Some(nonwild_ke!("ns").into())
+        Some(nonwild_ke!("ns").into()),
     )
     .await;
 }

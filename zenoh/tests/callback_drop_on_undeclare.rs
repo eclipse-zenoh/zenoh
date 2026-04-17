@@ -13,7 +13,6 @@
 //
 #![cfg(any(feature = "unstable", feature = "internal"))]
 
-
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -27,7 +26,6 @@ use zenoh::{
 };
 use zenoh_config::Config;
 use zenoh_core::ztimeout;
-
 use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);

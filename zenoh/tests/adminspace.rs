@@ -13,13 +13,12 @@
 //
 #![cfg(feature = "unstable")]
 
-
 use std::time::Duration;
 
-use zenoh_test::get_locators_from_session;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
+use zenoh_test::get_locators_from_session;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_wonly() {
