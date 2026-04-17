@@ -6715,7 +6715,6 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-link",
- "zenoh-protocol",
 ]
 
 [[package]]
