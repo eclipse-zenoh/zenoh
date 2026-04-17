@@ -17,6 +17,8 @@ use std::{
     sync::Arc,
 };
 
+use zenoh_buffers::ZSliceBuffer;
+
 use crate::reader::reservable_arena::ReservableArenaInner;
 
 #[derive(Debug)]
@@ -57,5 +59,19 @@ impl RxBuffer {
 impl Drop for RxBuffer {
     fn drop(&mut self) {
         self.arena.recycle_batch(self.buf_id);
+    }
+}
+
+impl ZSliceBuffer for RxBuffer {
+    fn as_slice(&self) -> &[u8] {
+        &self
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }

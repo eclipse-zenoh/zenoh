@@ -12,9 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
+
+use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_core::zerror;
+use zenoh_result::ZResult;
 
 use crate::api::reader::rx_buffer::RxBuffer;
+
+pub enum DefragmentationState {
+    Single(ZSlice),
+    Fragmented(ZBuf),
+}
 
 #[derive(Debug)]
 pub struct FragmentedBatch {
@@ -32,50 +41,46 @@ impl FragmentedBatch {
         }
     }
 
+    pub fn defragment(mut self) -> ZResult<DefragmentationState> {
+        if self.buffers.len() == 1 {
+            // SAFETY: buffers is guaranteed to have exactly one element, so pop will return Some
+            let buf = unsafe { self.buffers.pop().unwrap_unchecked() };
+
+            let slice = ZSlice::new(buf, self.data_offset, self.data_offset + self.size)
+                .map_err(|_| zerror!("Error constructing slice...."))?;
+
+            return Ok(DefragmentationState::Single(slice));
+        }
+
+        let mut result = ZBuf::empty();
+        for (i, buf) in self.buffers.iter().cloned().enumerate() {
+            let first = i == 0;
+            let last = i == self.buffers.len() - 1;
+
+            let start = if first { self.data_offset } else { 0 };
+            let end = if last { self.size } else { buf.len() };
+
+            self.size -= end - start;
+
+            let slice = ZSlice::new(buf, start, end)
+                .map_err(|_| zerror!("Error constructing slice...."))?;
+
+            result.push_zslice(slice);
+        }
+        Ok(DefragmentationState::Fragmented(result))
+    }
+}
+
+impl FragmentedBatch {
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &u8> {
         self.buffers
             .iter()
             .flat_map(|inner| inner.iter())
             .skip(self.data_offset)
             .take(self.size)
-    }
-
-    pub fn try_contagious_zerocopy(&self) -> Option<Arc<RxBuffer>> {
-        if self.buffers.len() == 1 {
-            return Some(self.buffers[0].clone());
-        }
-        None
-    }
-
-    // TODO: change to zerocopy approach with multi-slice support for read codec
-    pub fn contagious_copy(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(self.size);
-
-        let mut leftover = self.size;
-
-        for (i, buf) in self.buffers.iter().enumerate() {
-            let first = i == 0;
-            let last = i == self.buffers.len() - 1;
-
-            let mut slice: &[u8] = buf.deref(); // assuming RxBuffer exposes this
-
-            if first {
-                slice = &slice[self.data_offset..];
-            }
-
-            if last {
-                slice = &slice[..leftover];
-            }
-
-            result.extend_from_slice(slice);
-
-            leftover -= slice.len();
-        }
-
-        result
-    }
-
-    pub fn size(&self) -> usize {
-        self.size
     }
 }

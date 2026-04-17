@@ -1,3 +1,5 @@
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::fmt::Debug;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -24,10 +26,12 @@ use std::{
 use futures::{future::select_all, task::AtomicWaker};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-#[cfg(all(feature = "uring", target_os = "linux"))]
 use zenoh_buffers::ZSlice;
 #[cfg(all(feature = "uring", target_os = "linux"))]
-use zenoh_buffers::ZSliceBuffer;
+use zenoh_buffers::{
+    buffer::Buffer,
+    reader::{BacktrackableReader, HasReader},
+};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::Priority,
@@ -39,7 +43,10 @@ use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_task::TaskController;
 #[cfg(all(feature = "uring", target_os = "linux"))]
-use zenoh_uring::api::reader::{fragmented_batch::FragmentedBatch, rx_buffer::RxBuffer};
+use zenoh_uring::api::reader::{
+    fragmented_batch::{DefragmentationState, FragmentedBatch},
+    rx_buffer::RxBuffer,
+};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -461,7 +468,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
         link: &mut TransportLinkUnicastRx,
         priority: Option<Priority>,
         pool: &RecyclingObjectPool<Box<[u8]>, F>,
-    ) -> ZResult<RBatch> {
+    ) -> ZResult<RBatch<ZSlice>> {
         let batch = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()), priority)
             .await?;
@@ -565,25 +572,6 @@ impl Drop for TimeoutTracker {
 }
 
 #[cfg(all(feature = "uring", target_os = "linux"))]
-#[derive(Debug)]
-struct ZRxBuffer(Arc<RxBuffer>);
-
-#[cfg(all(feature = "uring", target_os = "linux"))]
-impl ZSliceBuffer for ZRxBuffer {
-    fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
-#[cfg(all(feature = "uring", target_os = "linux"))]
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
@@ -616,37 +604,40 @@ async fn rx_task_uring(
 
     let r = transport.manager.state.uring.reader.clone();
 
+    fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
+        transport: &TransportUnicastUniversal,
+        link: &Link,
+        batch: RBatch<TBuffer>,
+    ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        {
+            let header_bytes = 2;
+            stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+        }
+        transport.read_messages(
+            batch,
+            link,
+            #[cfg(feature = "stats")]
+            &stats,
+        )
+    }
+
     let mut uring_read_task = {
         match link.link.is_streamed() {
             true => {
-                let ring_cb = move |data: FragmentedBatch| {
-                    let buffer: ZSlice = match data.try_contagious_zerocopy() {
-                        Some(buffer) => ZSlice::new(
-                            std::sync::Arc::new(ZRxBuffer(buffer)),
-                            data.data_offset,
-                            data.data_offset + data.size(),
-                        )
-                        .map_err(|_| zerror!("Error constructing slice...."))?,
-                        None => {
-                            let contagious_data = data.contagious_copy();
-                            std::sync::Arc::new(contagious_data).into()
-                        }
-                    };
-
-                    let mut batch = RBatch::new(batch_config, buffer);
-                    batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        let header_bytes = 2;
-                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                let ring_cb = move |data: FragmentedBatch| match data.defragment()? {
+                    DefragmentationState::Single(slice) => {
+                        let mut batch = RBatch::new(batch_config, slice);
+                        batch
+                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+                        read_batch(&transport, &l, batch)
                     }
-                    transport.read_messages(
-                        batch,
-                        &l,
-                        #[cfg(feature = "stats")]
-                        &stats,
-                    )
+                    DefragmentationState::Fragmented(buf) => {
+                        let mut batch = RBatch::new(batch_config, buf.reader());
+                        batch
+                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+                        read_batch(&transport, &l, batch)
+                    }
                 };
 
                 r.setup_fragmented_read(link.link.get_fd()?, ring_cb)
@@ -654,22 +645,11 @@ async fn rx_task_uring(
             }
             false => {
                 let ring_cb = move |data: Arc<RxBuffer>| {
-                    let buffer: ZSlice = std::sync::Arc::new(ZRxBuffer(data)).into();
+                    let slice: ZSlice = data.into();
+                    let mut batch = RBatch::new(batch_config, slice);
+                    batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
 
-                    let mut batch = RBatch::new(batch_config, buffer);
-                    batch.initialize(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        let header_bytes = 0;
-                        stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
-                    }
-                    transport.read_messages(
-                        batch,
-                        &l,
-                        #[cfg(feature = "stats")]
-                        &stats,
-                    )
+                    read_batch(&transport, &l, batch)
                 };
 
                 r.setup_read(link.link.get_fd()?, ring_cb).await?

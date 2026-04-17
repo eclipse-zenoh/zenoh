@@ -100,8 +100,8 @@ impl RxWindow {
                         let fragment = FragmentedBatch::new(size, 0, vec![]);
 
                         if size == 0 {
-                            on_batch(fragment)?;
                             self.state = RxWindowState::Initial;
+                            on_batch(fragment)?;
                         } else {
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
@@ -127,11 +127,11 @@ impl RxWindow {
 
                     // buffer contains at least one more batch
                     let batch = FragmentedBatch::new(size, pos, buffers);
+                    pos += size;
+                    leftover -= size;
                     #[cfg(feature = "uring_trace")]
                     tracing::trace!("on_batch");
                     on_batch(batch)?;
-                    pos += size;
-                    leftover -= size;
                 }
             }
             RxWindowState::SizeFragmented(size_fragment) => {
@@ -147,8 +147,8 @@ impl RxWindow {
                         let fragment = FragmentedBatch::new(size, 0, vec![]);
 
                         if size == 0 {
-                            on_batch(fragment)?;
                             self.state = RxWindowState::Initial;
+                            on_batch(fragment)?;
                         } else {
                             let accumulator = BatchAccumulator::new(leftover, fragment);
                             self.state = RxWindowState::Accumulating(accumulator);
@@ -174,11 +174,11 @@ impl RxWindow {
 
                     // buffer contains at least one more batch
                     let batch = FragmentedBatch::new(size, pos, buffers);
+                    pos += size;
+                    leftover -= size;
                     #[cfg(feature = "uring_trace")]
                     tracing::trace!("on_batch");
                     on_batch(batch)?;
-                    pos += size;
-                    leftover -= size;
 
                     // buffer ends with some exact number of batches
                     if leftover == 0 {
@@ -247,10 +247,10 @@ impl RxWindow {
                             let fragment = FragmentedBatch::new(size, 0, vec![]);
 
                             if size == 0 {
-                                on_batch(fragment)?;
                                 self.state = RxWindowState::Initial;
                                 #[cfg(feature = "uring_trace")]
                                 tracing::trace!("Accumulating -> Initial");
+                                on_batch(fragment)?;
                             } else {
                                 let accumulator = BatchAccumulator::new(leftover, fragment);
                                 self.state = RxWindowState::Accumulating(accumulator);
@@ -280,11 +280,11 @@ impl RxWindow {
 
                         // buffer contains at least one more batch
                         let batch = FragmentedBatch::new(size, pos, buffers);
+                        pos += size;
+                        leftover -= size;
                         #[cfg(feature = "uring_trace")]
                         tracing::trace!("on_batch");
                         on_batch(batch)?;
-                        pos += size;
-                        leftover -= size;
                     }
                 }
             }

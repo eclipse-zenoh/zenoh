@@ -186,6 +186,16 @@ pub struct ZBufReader<'a> {
     cursor: ZBufPos,
 }
 
+impl Buffer for ZBufReader<'_> {
+    fn len(&self) -> usize {
+        self.remaining()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.cursor.slice >= self.inner.slices.len()
+    }
+}
+
 impl<'a> HasReader for &'a ZBuf {
     type Reader = ZBufReader<'a>;
 

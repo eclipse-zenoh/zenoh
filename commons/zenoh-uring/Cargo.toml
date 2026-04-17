@@ -40,6 +40,7 @@ tracing = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
+zenoh-buffers = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }
