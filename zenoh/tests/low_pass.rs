@@ -28,7 +28,7 @@ use zenoh_config::{
     Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
 };
 
-use zenoh_test::TestSessions;
+use zenoh_test::{get_locators_from_session_sync, TestSessions};
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";
@@ -448,7 +448,7 @@ fn lowpass_pub_sub_query_reply_test(
 
     let reader_session = test_context.open_listener_with_cfg_sync(reader_config);
 
-    let locators = TestSessions::get_locators_from_session_sync(&reader_session);
+    let locators = get_locators_from_session_sync(&reader_session);
     writer_config.connect.endpoints.set(locators).unwrap();
 
     let _sub = reader_session

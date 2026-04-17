@@ -25,7 +25,7 @@ use zenoh_config::Config;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
 
-use zenoh_test::TestSessions;
+use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -89,7 +89,7 @@ async fn time_open(
 
     let start = Instant::now();
     let router = ztimeout_expected!(test_context.open_listener_with_cfg(router_config));
-    let listener_endpoint = TestSessions::get_locators_from_session(&router)
+    let listener_endpoint = get_locators_from_session(&router)
         .await
         .into_iter()
         .find(|endpoint| endpoint.protocol().as_str() == listen_endpoint.protocol().as_str())

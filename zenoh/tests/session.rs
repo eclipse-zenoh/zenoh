@@ -35,7 +35,7 @@ use zenoh_core::ztimeout;
 
 #[cfg(feature = "internal")]
 use zenoh_test::close_session;
-use zenoh_test::TestSessions;
+use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -391,7 +391,7 @@ async fn test_session_from_cloned_config() {
     let sub_session = zenoh::open(sub_config).await.unwrap();
 
     // Update pub_config (connector)
-    let locator = TestSessions::get_locators_from_session(&sub_session).await;
+    let locator = get_locators_from_session(&sub_session).await;
     pub_config.connect.endpoints.set(locator).unwrap();
 
     // Create pub session
