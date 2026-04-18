@@ -33,7 +33,7 @@ use super::ext::shm::AuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 #[cfg(feature = "auth_usrpwd")]
-use crate::unicast::establishment::ext::auth::UsrPwdId;
+use crate::unicast::authentication::TransportUsrPwdPrincipal;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -758,11 +758,12 @@ pub(crate) async fn open_link(
             false => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
-        #[cfg(feature = "auth_usrpwd")]
-        auth_id: UsrPwdId(None),
         patch: state.transport.ext_patch.get(),
         region_name: state.transport.ext_region_name.other_region_name(),
     };
+
+    #[cfg(feature = "auth_usrpwd")]
+    let usrpwd_principal = TransportUsrPwdPrincipal::from_auth_id(super::ext::auth::UsrPwdId(None));
 
     let o_config = TransportLinkUnicastConfig {
         direction,
@@ -810,6 +811,8 @@ pub(crate) async fn open_link(
     let transport = manager
         .init_transport_unicast(
             config,
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd_principal,
             o_link,
             oack_out.other_initial_sn,
             oack_out.other_lease,

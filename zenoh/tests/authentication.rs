@@ -33,7 +33,7 @@ mod test {
     use zenoh_config::{Config, EndPoint, ModeDependentValue};
     use zenoh_core::{zlock, ztimeout};
 
-    use crate::common::TestSessions;
+    use crate::common::{get_free_port, TestSessions};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -52,6 +52,15 @@ mod test {
         test_pub_sub_allow_then_deny_usrpswd().await;
         test_get_qbl_allow_then_deny_usrpswd().await;
         test_get_qbl_deny_then_allow_usrpswd().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_authentication_usrpwd_duplicate_peer_acl_refresh() {
+        zenoh_util::init_log_from_env_or("error");
+        create_new_files(TESTFILES_PATH.to_path_buf())
+            .await
+            .unwrap();
+        test_peer_pub_sub_auth_usrpswd_duplicate_transport_acl_refresh().await;
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -807,6 +816,150 @@ client2name:client2passwd";
         println!("Closing client sessions");
         ztimeout!(s01.close()).unwrap();
         ztimeout!(s02.close()).unwrap();
+    }
+
+    fn get_peer_config_usrpswd(
+        listen_endpoint: &str,
+        connect_endpoints: &[&str],
+        user: &str,
+        password: &str,
+        zid: &str,
+    ) -> Config {
+        let mut config = zenoh_config::Config::default();
+        config.set_mode(Some(WhatAmI::Peer)).unwrap();
+        config
+            .set_id(Some(ZenohId::from_str(zid).unwrap()))
+            .unwrap();
+        config
+            .listen
+            .endpoints
+            .set(vec![listen_endpoint.parse().unwrap()])
+            .unwrap();
+        if !connect_endpoints.is_empty() {
+            config
+                .connect
+                .set_endpoints(ModeDependentValue::Unique(
+                    connect_endpoints
+                        .iter()
+                        .map(|endpoint| endpoint.parse().unwrap())
+                        .collect(),
+                ))
+                .unwrap();
+        }
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config.transport.unicast.set_max_links(2).unwrap();
+        config
+            .insert_json5(
+                "transport",
+                &format!(
+                    r#"{{
+                        "auth": {{
+                            "usrpwd": {{
+                                "user": "{user}",
+                                "password": "{password}",
+                            }},
+                        }},
+                    }}"#
+                ),
+            )
+            .unwrap();
+        config
+            .transport
+            .auth
+            .usrpwd
+            .set_dictionary_file(Some(format!(
+                "{}/credentials.txt",
+                TESTFILES_PATH.to_string_lossy()
+            )))
+            .unwrap();
+        config
+    }
+
+    async fn test_peer_pub_sub_auth_usrpswd_duplicate_transport_acl_refresh() {
+        let key_expr_denied = "acl_auth_test/peer/duplicate_refresh/denied";
+        let mut test_context = TestSessions::new();
+
+        let peer01_zid = "abc001";
+        let peer02_zid = "abc002";
+        let peer01_endpoint = format!("tcp/127.0.0.1:{}", get_free_port());
+        let peer02a_endpoint = format!("tcp/127.0.0.1:{}", get_free_port());
+        let peer02b_endpoint = format!("tcp/127.0.0.1:{}", get_free_port());
+
+        let mut config_peer01 = get_peer_config_usrpswd(
+            &peer01_endpoint,
+            &[&peer02a_endpoint],
+            "client1name",
+            "client1passwd",
+            peer01_zid,
+        );
+        config_peer01
+            .insert_json5(
+                "access_control",
+                r#"{
+                    "enabled": true,
+                    "default_permission": "allow",
+                    "rules": [
+                        {
+                            "id": "deny_client2_put",
+                            "permission": "deny",
+                            "flows": ["ingress"],
+                            "messages": ["put"],
+                            "key_exprs": ["acl_auth_test/peer/duplicate_refresh/denied"],
+                        }
+                    ],
+                    "subjects": [
+                        {
+                            "id": "client2_subject",
+                            "usernames": ["client2name"],
+                        }
+                    ],
+                    "policies": [
+                        {
+                            "rules": ["deny_client2_put"],
+                            "subjects": ["client2_subject"],
+                        }
+                    ]
+                }"#,
+            )
+            .unwrap();
+        let config_peer02a = get_peer_config_usrpswd(
+            &peer02a_endpoint,
+            &[],
+            "client2name",
+            "client2passwd",
+            peer02_zid,
+        );
+        let config_peer02b = get_peer_config_usrpswd(
+            &peer02b_endpoint,
+            &[&peer01_endpoint],
+            "client2name",
+            "client2passwd",
+            peer02_zid,
+        );
+
+        let peer02a = test_context.open_listener_with_cfg(config_peer02a).await;
+        let peer01 = test_context.open_listener_with_cfg(config_peer01).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        let denied_subscriber = peer01.declare_subscriber(key_expr_denied).await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+
+        peer02a.put(key_expr_denied, "BEFORE").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        let sample = denied_subscriber.recv_async().await.unwrap();
+        let payload = sample.payload().try_to_string().unwrap();
+        assert!(payload.eq("BEFORE"));
+
+        let _peer02b = test_context.open_listener_with_cfg(config_peer02b).await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        peer02a.put(key_expr_denied, "AFTER").await.unwrap();
+        tokio::time::sleep(SLEEP).await;
+        assert!(denied_subscriber.try_recv().unwrap().is_none());
+
+        denied_subscriber.undeclare().await.unwrap();
+        test_context.close().await;
     }
 
     async fn test_pub_sub_deny_then_allow_tls(lowlatency: bool) {

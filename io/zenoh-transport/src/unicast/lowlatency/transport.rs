@@ -34,6 +34,8 @@ use zenoh_result::{zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::authentication::{plan_usrpwd_principal_update, TransportUsrPwdPrincipal};
 use crate::{
     unicast::{
         authentication::TransportAuthId,
@@ -64,6 +66,8 @@ pub(crate) struct TransportUnicastLowlatency {
     pub(super) stats: zenoh_stats::TransportStats,
     #[cfg(feature = "stats")]
     pub(super) link_stats: Arc<OnceLock<zenoh_stats::LinkStats>>,
+    #[cfg(feature = "auth_usrpwd")]
+    pub(super) usrpwd_principal: Arc<SyncRwLock<TransportUsrPwdPrincipal>>,
 
     // The handles for TX/RX tasks
     pub(crate) token: CancellationToken,
@@ -77,6 +81,7 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: TransportUsrPwdPrincipal,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> Arc<dyn TransportUnicastTrait> {
@@ -90,6 +95,8 @@ impl TransportUnicastLowlatency {
             stats,
             #[cfg(feature = "stats")]
             link_stats: Arc::new(OnceLock::new()),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd_principal: Arc::new(SyncRwLock::new(usrpwd_principal)),
             token: CancellationToken::new(),
             tracker: TaskTracker::new(),
             #[cfg(feature = "shared-memory")]
@@ -197,6 +204,11 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.config.zid
     }
 
+    #[cfg(feature = "auth_usrpwd")]
+    fn set_usrpwd_principal(&self, principal: TransportUsrPwdPrincipal) {
+        *zwrite!(self.usrpwd_principal) = principal;
+    }
+
     fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
@@ -208,7 +220,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         }
         // Convert usrpwd auth id to AuthId
         #[cfg(feature = "auth_usrpwd")]
-        transport_auth_id.set_username(&self.config.auth_id);
+        transport_auth_id.set_username(&zread!(self.usrpwd_principal));
         transport_auth_id
     }
 
@@ -260,6 +272,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     async fn add_link(
         &self,
         link: LinkUnicastWithOpenAck,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: &TransportUsrPwdPrincipal,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
@@ -277,6 +290,20 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                 return Err((e, l, asl, close::reason::GENERIC));
             }
         };
+
+        #[cfg(feature = "auth_usrpwd")]
+        let principal_update = {
+            let current = zread!(self.usrpwd_principal);
+            match plan_usrpwd_principal_update(&current, usrpwd_principal) {
+                Ok(update) => update,
+                Err(e) => {
+                    let (l, asl) = link.fail();
+                    return Err((e, l, asl, close::reason::INVALID));
+                }
+            }
+        };
+        #[cfg(not(feature = "auth_usrpwd"))]
+        let principal_update = false;
 
         let mut guard = zasyncwrite!(self.link);
         if guard.is_some() {
@@ -321,7 +348,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
             self.internal_start_rx(other_lease);
         });
 
-        Ok((start_tx, start_rx, ack, status_guard))
+        Ok((start_tx, start_rx, ack, status_guard, principal_update))
     }
 
     /*************************************/

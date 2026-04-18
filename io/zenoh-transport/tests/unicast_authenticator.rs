@@ -574,6 +574,149 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     tokio::time::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "auth_usrpwd")]
+async fn auth_usrpwd_peer_duplicate_transport(endpoint01: &EndPoint, endpoint02: &EndPoint) {
+    use zenoh_transport::{
+        unicast::{
+            establishment::ext::auth::AuthUsrPwd,
+            test_helpers::make_basic_transport_manager_builder,
+        },
+        TransportManager,
+    };
+
+    let peer01_id = ZenohIdProto::try_from([11]).unwrap();
+    let peer02_id = ZenohIdProto::try_from([12]).unwrap();
+    let username = "user01".to_string();
+    let password = "password01".to_string();
+
+    let mut usrpwd01 = AuthUsrPwd::new(Some((
+        username.clone().into_bytes(),
+        password.clone().into_bytes(),
+    )));
+    ztimeout!(usrpwd01.add_user(username.clone().into_bytes(), password.clone().into_bytes()))
+        .unwrap();
+    let mut auth01 = Auth::empty();
+    auth01.set_usrpwd(Some(usrpwd01));
+
+    let mut usrpwd02 = AuthUsrPwd::new(Some((
+        username.clone().into_bytes(),
+        password.clone().into_bytes(),
+    )));
+    ztimeout!(usrpwd02.add_user(username.clone().into_bytes(), password.clone().into_bytes()))
+        .unwrap();
+    let mut auth02 = Auth::empty();
+    auth02.set_usrpwd(Some(usrpwd02));
+
+    let peer01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .zid(peer01_id)
+        .unicast(
+            make_basic_transport_manager_builder(false)
+                .authenticator(auth01)
+                .max_links(1),
+        )
+        .build_test(Arc::new(SHClientAuthenticator))
+        .unwrap();
+
+    let peer02_manager = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .zid(peer02_id)
+        .unicast(
+            make_basic_transport_manager_builder(false)
+                .authenticator(auth02)
+                .max_links(1),
+        )
+        .build_test(Arc::new(SHClientAuthenticator))
+        .unwrap();
+
+    let res = ztimeout!(peer01_manager.add_listener(endpoint01.clone()));
+    println!("Transport Authenticator UserPassword Peer Duplicate [1a]: {res:?}");
+    assert!(res.is_ok());
+    let res = ztimeout!(peer02_manager.add_listener(endpoint02.clone()));
+    println!("Transport Authenticator UserPassword Peer Duplicate [1b]: {res:?}");
+    assert!(res.is_ok());
+
+    let res = ztimeout!(peer01_manager.open_transport_unicast(endpoint02.clone()));
+    println!("Transport Authenticator UserPassword Peer Duplicate [2a]: {res:?}");
+    assert!(res.is_ok());
+
+    let peer01_transport = ztimeout!(async {
+        loop {
+            if let Some(transport) = peer01_manager.get_transport_unicast(&peer02_id).await {
+                break transport;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    let peer02_transport = ztimeout!(async {
+        loop {
+            if let Some(transport) = peer02_manager.get_transport_unicast(&peer01_id).await {
+                break transport;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    assert_eq!(peer01_transport.get_auth_ids().unwrap().username(), None);
+    assert_eq!(
+        peer02_transport
+            .get_auth_ids()
+            .unwrap()
+            .username()
+            .map(String::as_str),
+        Some(username.as_str())
+    );
+
+    let res = ztimeout!(peer02_manager.open_transport_unicast(endpoint01.clone()));
+    println!("Transport Authenticator UserPassword Peer Duplicate [2b]: {res:?}");
+    assert!(res.is_ok());
+
+    ztimeout!(async {
+        loop {
+            let current_username = peer01_manager
+                .get_transport_unicast(&peer02_id)
+                .await
+                .unwrap()
+                .get_auth_ids()
+                .unwrap()
+                .username()
+                .cloned();
+            if current_username.as_deref() == Some(username.as_str()) {
+                break;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    assert_eq!(
+        peer01_manager
+            .get_transport_unicast(&peer02_id)
+            .await
+            .unwrap()
+            .get_auth_ids()
+            .unwrap()
+            .username()
+            .map(String::as_str),
+        Some(username.as_str())
+    );
+    assert_eq!(
+        peer02_manager
+            .get_transport_unicast(&peer01_id)
+            .await
+            .unwrap()
+            .get_auth_ids()
+            .unwrap()
+            .username()
+            .map(String::as_str),
+        Some(username.as_str())
+    );
+
+    ztimeout!(peer01_manager.close());
+    ztimeout!(peer02_manager.close());
+
+    tokio::time::sleep(SLEEP).await;
+}
+
 async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
     #[cfg(feature = "auth_pubkey")]
     auth_pubkey(endpoint, lowlatency_transport).await;
@@ -769,6 +912,15 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         .unwrap();
 
     run_with_universal_transport(&endpoint).await;
+}
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tcp_usrpwd_peer_duplicate_transport() {
+    zenoh_util::init_log_from_env_or("error");
+    let endpoint01: EndPoint = format!("tcp/127.0.0.1:{}", 8040).parse().unwrap();
+    let endpoint02: EndPoint = format!("tcp/127.0.0.1:{}", 8041).parse().unwrap();
+    auth_usrpwd_peer_duplicate_transport(&endpoint01, &endpoint02).await;
 }
 
 #[cfg(feature = "transport_quic")]

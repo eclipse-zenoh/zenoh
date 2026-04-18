@@ -13,9 +13,50 @@
 //
 use zenoh_link::LinkAuthId;
 use zenoh_protocol::core::ZenohIdProto;
+#[cfg(feature = "auth_usrpwd")]
+use zenoh_result::{zerror, ZResult};
 
 #[cfg(feature = "auth_usrpwd")]
 use super::establishment::ext::auth::UsrPwdId;
+
+#[cfg(feature = "auth_usrpwd")]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TransportUsrPwdPrincipal {
+    Unknown,
+    Known(Vec<u8>),
+}
+
+#[cfg(feature = "auth_usrpwd")]
+impl TransportUsrPwdPrincipal {
+    pub(crate) fn from_auth_id(auth_id: UsrPwdId) -> Self {
+        if let Some(username) = auth_id.0 {
+            Self::Known(username)
+        } else {
+            Self::Unknown
+        }
+    }
+}
+
+#[cfg(feature = "auth_usrpwd")]
+pub(crate) fn plan_usrpwd_principal_update(
+    existing: &TransportUsrPwdPrincipal,
+    incoming: &TransportUsrPwdPrincipal,
+) -> ZResult<bool> {
+    match (existing, incoming) {
+        (TransportUsrPwdPrincipal::Unknown, TransportUsrPwdPrincipal::Unknown)
+        | (TransportUsrPwdPrincipal::Known(_), TransportUsrPwdPrincipal::Unknown) => Ok(false),
+        (TransportUsrPwdPrincipal::Unknown, TransportUsrPwdPrincipal::Known(_)) => Ok(true),
+        (TransportUsrPwdPrincipal::Known(a), TransportUsrPwdPrincipal::Known(b)) if a == b => {
+            Ok(false)
+        }
+        _ => Err(zerror!(
+            "Invalid authenticated principal: {:?}. Expected: {:?}.",
+            incoming,
+            existing
+        )
+        .into()),
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportAuthId {
@@ -34,8 +75,8 @@ impl TransportAuthId {
     }
 
     #[cfg(feature = "auth_usrpwd")]
-    pub(crate) fn set_username(&mut self, user_pwd_id: &UsrPwdId) {
-        self.username = if let Some(username) = &user_pwd_id.0 {
+    pub(crate) fn set_username(&mut self, principal: &TransportUsrPwdPrincipal) {
+        self.username = if let TransportUsrPwdPrincipal::Known(username) = principal {
             // Convert username from Vec<u8> to String
             match std::str::from_utf8(username) {
                 Ok(name) => Some(name.to_owned()),

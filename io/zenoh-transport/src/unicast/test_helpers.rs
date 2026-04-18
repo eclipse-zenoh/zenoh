@@ -70,6 +70,14 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
         vec![]
     }
 
+    #[cfg(feature = "auth_usrpwd")]
+    fn set_usrpwd_principal(
+        &self,
+        _principal: crate::unicast::authentication::TransportUsrPwdPrincipal,
+    ) {
+        unimplemented!("MockTransportUnicastInner::set_usrpwd_principal")
+    }
+
     fn get_auth_ids(&self) -> TransportAuthId {
         unimplemented!("MockTransportUnicastInner::get_auth_ids")
     }
@@ -103,6 +111,8 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
     async fn add_link(
         &self,
         _link: LinkUnicastWithOpenAck,
+        #[cfg(feature = "auth_usrpwd")]
+        _usrpwd_principal: &crate::unicast::authentication::TransportUsrPwdPrincipal,
         _other_initial_sn: TransportSn,
         _other_lease: Duration,
     ) -> AddLinkResult {

@@ -1041,6 +1041,14 @@ impl TransportPeerEventHandler for RuntimeSession {
         Runtime::closed_link(self, link.dst.to_endpoint());
     }
 
+    fn metadata_changed(&self) {
+        let _span = self.runtime.state.span.enter();
+        self.main_handler.metadata_changed();
+        for handler in &self.slave_handlers {
+            handler.metadata_changed();
+        }
+    }
+
     fn closed(&self) {
         let _span = self.runtime.state.span.enter();
         self.main_handler.closed();
