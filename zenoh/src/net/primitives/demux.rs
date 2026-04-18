@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{any::Any, cell::OnceCell, sync::Arc};
+use std::{
+    any::Any,
+    cell::OnceCell,
+    sync::{atomic::Ordering, Arc},
+};
 
 use arc_swap::ArcSwapOption;
 use zenoh_link::Link;
@@ -227,6 +231,18 @@ impl TransportPeerEventHandler for DeMux {
     fn new_link(&self, _link: Link) {}
 
     fn del_link(&self, _link: Link) {}
+
+    fn metadata_changed(&self) {
+        let tables = self.face.tables.tables.read().unwrap();
+        let version = tables
+            .data
+            .next_interceptor_version
+            .fetch_add(1, Ordering::SeqCst)
+            + 1;
+        self.face
+            .state
+            .set_interceptors_from_factories(&tables.data.interceptors, version);
+    }
 
     fn closed(&self) {
         self.face.send_close();
