@@ -43,8 +43,6 @@ use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::unicast::authentication::TransportAuthId;
-#[cfg(feature = "auth_usrpwd")]
-use crate::unicast::establishment::ext::auth::UsrPwdId;
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
@@ -63,9 +61,26 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "shared-memory")]
     pub(crate) shm: Option<TransportShmConfig>,
     pub(crate) is_lowlatency: bool,
-    #[cfg(feature = "auth_usrpwd")]
-    pub(crate) auth_id: UsrPwdId,
     pub(crate) patch: PatchType,
+}
+
+impl TransportConfigUnicast {
+    pub(crate) fn is_compatible_with(&self, other: &Self) -> bool {
+        self.zid == other.zid
+            && self.whatami == other.whatami
+            && self.region_name == other.region_name
+            && self.bound == other.bound
+            && self.sn_resolution == other.sn_resolution
+            && self.is_qos == other.is_qos
+            && zcondfeat!(
+                "transport_multilink",
+                self.multilink == other.multilink,
+                true
+            )
+            && zcondfeat!("shared-memory", self.shm == other.shm, true)
+            && self.is_lowlatency == other.is_lowlatency
+            && self.patch == other.patch
+    }
 }
 
 /// [`TransportUnicast`] is the transport handler returned

@@ -119,6 +119,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
     fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()>;
     fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
+    fn metadata_changed(&self) {}
     fn closed(&self);
     fn as_any(&self) -> &dyn Any;
 }

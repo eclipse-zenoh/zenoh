@@ -31,6 +31,8 @@ use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::authentication::{plan_usrpwd_principal_update, TransportUsrPwdPrincipal};
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
@@ -67,12 +69,15 @@ pub(crate) struct TransportUnicastUniversal {
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: zenoh_stats::TransportStats,
+    #[cfg(feature = "auth_usrpwd")]
+    pub(super) usrpwd_principal: Arc<RwLock<TransportUsrPwdPrincipal>>,
 }
 
 impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: TransportUsrPwdPrincipal,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
         #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
@@ -109,6 +114,8 @@ impl TransportUnicastUniversal {
             status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
             stats,
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd_principal: Arc::new(RwLock::new(usrpwd_principal)),
             #[cfg(feature = "shared-memory")]
             shm_context,
         });
@@ -230,6 +237,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     async fn add_link(
         &self,
         link: LinkUnicastWithOpenAck,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: &TransportUsrPwdPrincipal,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
@@ -246,6 +254,20 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
                 return Err((e, l, asl, close::reason::GENERIC));
             }
         };
+
+        #[cfg(feature = "auth_usrpwd")]
+        let principal_update = {
+            let current = zread!(self.usrpwd_principal);
+            match plan_usrpwd_principal_update(&current, usrpwd_principal) {
+                Ok(update) => update,
+                Err(e) => {
+                    let (l, asl) = link.fail();
+                    return Err((e, l, asl, close::reason::INVALID));
+                }
+            }
+        };
+        #[cfg(not(feature = "auth_usrpwd"))]
+        let principal_update = false;
 
         let mut guard = zwrite!(self.links);
 
@@ -312,7 +334,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
         });
 
-        Ok((start_tx, start_rx, ack, status_guard))
+        Ok((start_tx, start_rx, ack, status_guard, principal_update))
     }
 
     /*************************************/
@@ -353,6 +375,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
+    }
+
+    #[cfg(feature = "auth_usrpwd")]
+    fn set_usrpwd_principal(&self, principal: TransportUsrPwdPrincipal) {
+        *zwrite!(self.usrpwd_principal) = principal;
     }
 
     fn get_config(&self) -> &TransportConfigUnicast {
@@ -410,7 +437,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
         // Convert usrpwd auth id to AuthId
         #[cfg(feature = "auth_usrpwd")]
-        transport_auth_id.set_username(&self.config.auth_id);
+        transport_auth_id.set_username(&zread!(self.usrpwd_principal));
         transport_auth_id
     }
 

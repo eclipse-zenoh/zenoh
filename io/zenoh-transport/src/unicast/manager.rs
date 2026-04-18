@@ -34,6 +34,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
+#[cfg(feature = "auth_usrpwd")]
+use crate::unicast::authentication::TransportUsrPwdPrincipal;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
@@ -439,6 +441,7 @@ impl TransportManager {
     async fn init_existing_transport_unicast(
         &self,
         config: TransportConfigUnicast,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: TransportUsrPwdPrincipal,
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
@@ -447,7 +450,7 @@ impl TransportManager {
         let existing_config = transport.get_config();
         // Verify that fundamental parameters are correct.
         // Ignore the non fundamental parameters like initial SN.
-        if *existing_config != config {
+        if !existing_config.is_compatible_with(&config) {
             let e = zerror!(
                 "Transport with peer {} already exist. Invalid config: {:?}. Expected: {:?}.",
                 config.zid,
@@ -465,8 +468,14 @@ impl TransportManager {
         }
 
         // Add the link to the transport
-        let (start_tx, start_rx, ack, add_link_guard) = transport
-            .add_link(link, other_initial_sn, other_lease)
+        let (start_tx, start_rx, ack, add_link_guard, principal_update) = transport
+            .add_link(
+                link,
+                #[cfg(feature = "auth_usrpwd")]
+                &usrpwd_principal,
+                other_initial_sn,
+                other_lease,
+            )
             .await
             .map_err(InitTransportError::Link)?;
 
@@ -475,6 +484,16 @@ impl TransportManager {
         ack.send_open_ack().await.map_err(|e| {
             InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
         })?;
+
+        #[cfg(feature = "auth_usrpwd")]
+        if principal_update {
+            transport.set_usrpwd_principal(usrpwd_principal);
+            Self::notify_metadata_changed_unicast(&transport)
+                .await
+                .map_err(|e| {
+                    InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+                })?;
+        }
 
         start_tx();
 
@@ -499,6 +518,19 @@ impl TransportManager {
         if let Some(callback) = transport.get_callback() {
             tokio::task::spawn_blocking(move || {
                 callback.new_link(link);
+            })
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn notify_metadata_changed_unicast(
+        transport: &Arc<dyn TransportUnicastTrait>,
+    ) -> ZResult<()> {
+        if let Some(callback) = transport.get_callback() {
+            tokio::task::spawn_blocking(move || {
+                callback.metadata_changed();
             })
             .await?;
         }
@@ -538,6 +570,7 @@ impl TransportManager {
     pub(super) async fn init_new_transport_unicast(
         &self,
         config: TransportConfigUnicast,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: TransportUsrPwdPrincipal,
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
@@ -627,6 +660,8 @@ impl TransportManager {
             TransportUnicastLowlatency::make(
                 self.clone(),
                 config.clone(),
+                #[cfg(feature = "auth_usrpwd")]
+                usrpwd_principal.clone(),
                 #[cfg(feature = "shared-memory")]
                 shm_context,
                 #[cfg(feature = "stats")]
@@ -638,6 +673,8 @@ impl TransportManager {
                 TransportUnicastUniversal::make(
                     self.clone(),
                     config.clone(),
+                    #[cfg(feature = "auth_usrpwd")]
+                    usrpwd_principal.clone(),
                     #[cfg(feature = "shared-memory")]
                     shm_context,
                     #[cfg(feature = "stats")]
@@ -648,8 +685,16 @@ impl TransportManager {
         };
 
         // Add the link to the transport
-        let (start_tx, start_rx, ack, add_link_guard) =
-            match t.add_link(link, other_initial_sn, other_lease).await {
+        let (start_tx, start_rx, ack, add_link_guard, _) = match t
+            .add_link(
+                link,
+                #[cfg(feature = "auth_usrpwd")]
+                &usrpwd_principal,
+                other_initial_sn,
+                other_lease,
+            )
+            .await
+        {
                 Ok(val) => val,
                 Err(e) => {
                     let _ = t.close(e.3).await;
@@ -731,6 +776,7 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
+        #[cfg(feature = "auth_usrpwd")] usrpwd_principal: TransportUsrPwdPrincipal,
         link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
@@ -744,6 +790,8 @@ impl TransportManager {
                     drop(guard);
                     self.init_existing_transport_unicast(
                         config,
+                        #[cfg(feature = "auth_usrpwd")]
+                        usrpwd_principal,
                         link,
                         other_initial_sn,
                         other_lease,
@@ -754,6 +802,8 @@ impl TransportManager {
                 None => {
                     self.init_new_transport_unicast(
                         config,
+                        #[cfg(feature = "auth_usrpwd")]
+                        usrpwd_principal,
                         link,
                         other_initial_sn,
                         other_lease,

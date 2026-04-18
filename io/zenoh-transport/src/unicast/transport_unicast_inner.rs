@@ -48,6 +48,7 @@ pub(crate) type AddLinkResult<'a> = Result<
         Box<dyn FnOnce() + Send + Sync + 'a>,
         MaybeOpenAck,
         AsyncMutexGuard<'a, TransportStatus>,
+        bool,
     ),
     LinkError,
 >;
@@ -74,6 +75,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
     fn get_links(&self) -> Vec<Link>;
+    #[cfg(feature = "auth_usrpwd")]
+    fn set_usrpwd_principal(&self, principal: super::authentication::TransportUsrPwdPrincipal);
     fn get_auth_ids(&self) -> super::authentication::TransportAuthId;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
@@ -90,6 +93,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     async fn add_link(
         &self,
         link: LinkUnicastWithOpenAck,
+        #[cfg(feature = "auth_usrpwd")]
+        usrpwd_principal: &super::authentication::TransportUsrPwdPrincipal,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult;
