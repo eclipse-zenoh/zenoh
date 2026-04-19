@@ -397,3 +397,107 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     client2.close().await.unwrap();
     client3.close().await.unwrap();
 }
+
+/// Regression test for https://github.com/eclipse-zenoh/zenoh/issues/2523
+///
+/// A liveliness token that exists *before* a `FetchingSubscriber` is created
+/// must be delivered exactly once.  Prior to the fix, the token arrived via
+/// both the `liveliness().get()` fetch path (no timestamp → `untimestamped`
+/// queue) and the concurrent live subscription (synthetic timestamp →
+/// `timestamped` queue), causing the caller to receive two identical Put
+/// samples with no way to distinguish them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[allow(deprecated)]
+async fn test_liveliness_fetching_subscriber_no_duplicates() {
+    use std::{collections::HashMap, time::Duration};
+
+    use zenoh::internal::ztimeout;
+    use zenoh_ext::SubscriberBuilderExt;
+
+    const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_millis(500);
+    const RECV_TIMEOUT: Duration = Duration::from_millis(500);
+    const PEER1_ENDPOINT: &str = "udp/localhost:47453";
+    const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/dedup/1";
+    const LIVELINESS_KEYEXPR_ALL: &str = "test/liveliness/dedup/**";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let peer1 = {
+        let mut c = zenoh::Config::default();
+        c.listen
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    let peer2 = {
+        let mut c = zenoh::Config::default();
+        c.connect
+            .endpoints
+            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    // Declare a liveliness token BEFORE the FetchingSubscriber is created.
+    // This token will be returned by the liveliness().get() fetch AND delivered
+    // again by the live subscription, which is the race that causes duplicates.
+    let _token = ztimeout!(peer2
+        .liveliness()
+        .declare_token(LIVELINESS_KEYEXPR_1))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    // Create a FetchingSubscriber: issues a liveliness().get() for historical
+    // tokens and subscribes to future liveliness events simultaneously.
+    let sub = ztimeout!(peer1
+        .liveliness()
+        .declare_subscriber(LIVELINESS_KEYEXPR_ALL)
+        .fetching(|cb| {
+            peer1
+                .liveliness()
+                .get(LIVELINESS_KEYEXPR_ALL)
+                .callback(cb)
+                .wait()
+        }))
+    .unwrap();
+
+    // Wait for the fetch + merge window to flush.
+    tokio::time::sleep(SLEEP).await;
+
+    // Collect all samples received within a short timeout window.
+    let mut counts: HashMap<(String, SampleKind), usize> = HashMap::new();
+    loop {
+        match tokio::time::timeout(RECV_TIMEOUT, sub.recv_async()).await {
+            Ok(Ok(sample)) => {
+                *counts
+                    .entry((sample.key_expr().to_string(), sample.kind()))
+                    .or_insert(0) += 1;
+            }
+            _ => break,
+        }
+    }
+
+    // The token must have been delivered exactly once — no duplicates.
+    let key = (LIVELINESS_KEYEXPR_1.to_string(), SampleKind::Put);
+    assert_eq!(
+        counts.get(&key).copied().unwrap_or(0),
+        1,
+        "Expected exactly 1 Put for {LIVELINESS_KEYEXPR_1}, got: {counts:?}",
+    );
+    assert_eq!(counts.len(), 1, "Unexpected extra samples: {counts:?}");
+
+    sub.undeclare().await.unwrap();
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
+}
