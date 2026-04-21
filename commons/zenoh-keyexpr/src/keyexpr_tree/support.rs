@@ -73,30 +73,6 @@ where
         }
     }
 }
-pub struct Coerced<Iter: Iterator, Item> {
-    iter: Iter,
-    _item: core::marker::PhantomData<Item>,
-}
-
-impl<Iter: Iterator, Item> Coerced<Iter, Item> {
-    pub fn new(iter: Iter) -> Self {
-        Self {
-            iter,
-            _item: Default::default(),
-        }
-    }
-}
-impl<Iter: Iterator, Item> Iterator for Coerced<Iter, Item>
-where
-    Iter::Item: Coerce<Item>,
-{
-    type Item = Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(Coerce::coerce)
-    }
-}
-
 trait Coerce<Into> {
     fn coerce(self) -> Into;
 }
