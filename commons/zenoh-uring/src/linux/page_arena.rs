@@ -56,7 +56,7 @@ impl DerefMut for PageArena {
 
 impl PageArena {
     pub(crate) fn new(size: usize, capacity: usize) -> ZResult<Self> {
-        // reserve contagious address space without allocating phy pages!
+        // reserve contiguous address space without allocating phy pages!
         let ptr = {
             // TODO: probe to use 2MB huge pages and fallback to this if unsupported
             let ptr = unsafe {

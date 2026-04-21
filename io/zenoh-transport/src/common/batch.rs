@@ -491,8 +491,8 @@ where
         {
             if let Some(header) = h {
                 if header.is_compression() {
-                    let contigious_payload = self.buffer.read_zslice(self.buffer.remaining())?;
-                    let decompressed = self.decompress(&contigious_payload, buff)?;
+                    let contiguous_payload = self.buffer.read_zslice(self.buffer.remaining())?;
+                    let decompressed = self.decompress(&contiguous_payload, buff)?;
                     return Ok(Some(self.apply_decompressed(decompressed)));
                 }
             }
