@@ -253,6 +253,7 @@ pub struct LivelinessToken {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[derive(Debug)]
 pub struct LivelinessTokenUndeclaration(LivelinessToken);
 
 impl Resolvable for LivelinessTokenUndeclaration {

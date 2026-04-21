@@ -18,6 +18,7 @@ use zenoh_result::unlikely;
 
 use crate::keyexpr_tree::*;
 
+#[derive(Debug)]
 pub struct VecSetProvider;
 impl<T: 'static> IChildrenProvider<T> for VecSetProvider {
     type Assoc = Vec<T>;
@@ -35,6 +36,7 @@ impl<'a, 'b, T: HasChunk> IEntry<'a, 'b, T> for Entry<'a, 'b, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum Entry<'a, 'b, T> {
     Vacant(&'a mut Vec<T>, &'b keyexpr),
     Occupied(&'a mut T),

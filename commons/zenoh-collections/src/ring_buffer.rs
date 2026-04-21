@@ -13,6 +13,7 @@
 //
 use std::collections::VecDeque;
 
+#[derive(Debug)]
 pub struct RingBuffer<T> {
     capacity: usize,
     len: usize,

@@ -197,6 +197,7 @@ impl<T: Copy> PolicyValue<T> for T {
     }
 }
 /// A const `bool`.
+#[derive(Debug)]
 pub struct ConstBool<const VALUE: bool>;
 impl<const VALUE: bool> ConstPolicy for ConstBool<VALUE> {
     const NEW: Self = Self;
@@ -207,6 +208,7 @@ impl<const VALUE: bool> PolicyValue<bool> for ConstBool<VALUE> {
     }
 }
 /// A const `usize`.
+#[derive(Debug)]
 pub struct ConstUsize<const VALUE: usize>;
 impl<const VALUE: usize> ConstPolicy for ConstUsize<VALUE> {
     const NEW: Self = Self;
@@ -219,7 +221,7 @@ impl<const VALUE: usize> PolicyValue<usize> for ConstUsize<VALUE> {
 
 /// Just try to allocate
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct JustAlloc;
 impl<Backend> AllocPolicy<Backend> for JustAlloc
 where
@@ -668,6 +670,7 @@ impl<
 }
 
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ShmProviderBuilder;
 impl ShmProviderBuilder {
     /// Set the backend

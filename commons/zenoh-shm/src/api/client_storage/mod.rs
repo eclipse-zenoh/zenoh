@@ -42,6 +42,7 @@ pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
 
 /// Builder to create new client storages
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ShmClientSetBuilder;
 
 impl ShmClientSetBuilder {

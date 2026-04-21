@@ -368,6 +368,7 @@ impl LinkConfigurator {
 /*             UNICAST               */
 /*************************************/
 
+#[derive(Debug)]
 pub struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
@@ -412,6 +413,7 @@ impl LinkManagerBuilderUnicast {
 /*            MULTICAST              */
 /*************************************/
 
+#[derive(Debug)]
 pub struct LinkManagerBuilderMulticast;
 
 impl LinkManagerBuilderMulticast {

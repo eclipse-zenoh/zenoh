@@ -140,6 +140,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct NetworkMessageIter<R> {
     codec: Zenoh080Reliability,
     reader: R,

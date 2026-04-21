@@ -23,7 +23,7 @@ pub type ConditionWaiter = Pin<Box<EventListener>>;
 /// not be race condition on [notify_one](Condition::notify_one) or
 /// [notify_all](Condition::notify_all).
 ///
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Condition {
     event: Event,
 }

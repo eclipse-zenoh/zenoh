@@ -56,7 +56,7 @@ zconfigurable! {
     static ref SERIAL_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SerialLocatorInspector;
 #[async_trait]
 impl LocatorInspector for SerialLocatorInspector {

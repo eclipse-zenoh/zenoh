@@ -133,7 +133,7 @@ pub mod macro_support {
     ///
     /// This is a support structure for [`const_new`], which is only meant to be used through the `zenoh::keformat` macro.
     #[doc(hidden)]
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct SegmentBuilder {
         pub segment_start: usize,
         pub prefix_end: usize,
@@ -553,6 +553,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
 }
 
 /// A [`KeFormat`] that owns its format-string.
+#[derive(Debug)]
 pub struct OwnedKeFormat<Storage: IKeFormatStorage<'static> + 'static = Vec<Segment<'static>>> {
     _owner: Box<str>,
     format: KeFormat<'static, Storage>,

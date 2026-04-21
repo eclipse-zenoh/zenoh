@@ -34,6 +34,7 @@ use zenoh::{
 /// The space of keys to use in a [`FetchingSubscriber`].
 #[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
+#[derive(Debug)]
 pub enum KeySpace {
     User,
     Liveliness,

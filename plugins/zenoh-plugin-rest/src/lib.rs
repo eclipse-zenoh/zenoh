@@ -273,6 +273,7 @@ fn response<'a, S: Into<&'a str> + std::fmt::Debug>(
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
 
+#[derive(Debug)]
 pub struct RestPlugin {}
 
 impl ZenohPlugin for RestPlugin {}

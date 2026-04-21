@@ -178,6 +178,7 @@ lazy_static! {
 }
 
 // A runtime guard used to explicitly drop the static variables that Rust doesn't drop by default
+#[derive(Debug)]
 pub struct ZRuntimePoolGuard;
 
 impl Drop for ZRuntimePoolGuard {

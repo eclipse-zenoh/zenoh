@@ -69,6 +69,7 @@ lazy_static::lazy_static! {
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 
+#[derive(Debug)]
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {

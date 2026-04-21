@@ -31,6 +31,7 @@ impl<T: for<'a> Includer<&'a [u8], &'a [u8]>> Includer<&keyexpr, &keyexpr> for T
     }
 }
 
+#[derive(Debug)]
 pub struct LTRIncluder;
 impl Includer<&[u8], &[u8]> for LTRIncluder {
     fn includes(&self, mut left: &[u8], mut right: &[u8]) -> bool {
