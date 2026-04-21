@@ -626,41 +626,38 @@ async fn rx_task_uring(
     let mut uring_read_task = {
         match link.link.is_streamed() {
             true => {
-                let ring_cb = move |data: FragmentedBatch| {
-                    match data.defragment()? {
-                        DefragmentationState::Single(slice) => {
-                            let mut batch = RBatch::new(batch_config, slice);
-                            batch.initialize_uring(|| {
-                                pool.try_take().unwrap_or_else(|| pool.alloc())
-                            })?;
-                            read_batch(
+                let ring_cb = move |data: FragmentedBatch| match data.defragment()? {
+                    DefragmentationState::Single(slice) => {
+                        let mut batch = RBatch::new(batch_config, slice);
+                        batch
+                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+                        read_batch(
+                            &transport,
+                            &l,
+                            batch,
+                            #[cfg(feature = "stats")]
+                            &stats,
+                        )
+                    }
+                    DefragmentationState::Fragmented(buf) => {
+                        let mut batch = RBatch::new(batch_config, buf.reader());
+                        match batch
+                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?
+                        {
+                            Some(decompressed_batch) => read_batch(
+                                &transport,
+                                &l,
+                                decompressed_batch,
+                                #[cfg(feature = "stats")]
+                                &stats,
+                            ),
+                            None => read_batch(
                                 &transport,
                                 &l,
                                 batch,
                                 #[cfg(feature = "stats")]
                                 &stats,
-                            )
-                        }
-                        DefragmentationState::Fragmented(buf) => {
-                            let mut batch = RBatch::new(batch_config, buf.reader());
-                            match batch.initialize_uring(|| {
-                                pool.try_take().unwrap_or_else(|| pool.alloc())
-                            })? {
-                                Some(decompressed_batch) => read_batch(
-                                    &transport,
-                                    &l,
-                                    decompressed_batch,
-                                    #[cfg(feature = "stats")]
-                                    &stats,
-                                ),
-                                None => read_batch(
-                                    &transport,
-                                    &l,
-                                    batch,
-                                    #[cfg(feature = "stats")]
-                                    &stats,
-                                ),
-                            }
+                            ),
                         }
                     }
                 };
