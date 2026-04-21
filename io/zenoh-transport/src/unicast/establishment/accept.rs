@@ -149,7 +149,7 @@ struct AcceptLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
-    ext_south: Option<RemoteBoundCallback>,
+    ext_remote_bound: Option<RemoteBoundCallback>,
     ext_region_name: ext::region_name::RegionNameFsm,
 }
 
@@ -596,7 +596,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvOpenSynOut {
             other_zid: cookie.zid,
             other_whatami: cookie.whatami,
-            other_bound: match open_syn.ext_south {
+            other_bound: match open_syn.ext_remote_bound {
                 Some(ext) => Some(
                     Bound::try_from(ext.value as u8)
                         .map_err(|e| (e.into(), Some(close::reason::GENERIC)))?,
@@ -681,7 +681,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension South
-        let ext_south = if let Some(callback) = self.ext_south.as_ref() {
+        let ext_remote_bound = if let Some(callback) = self.ext_remote_bound.as_ref() {
             let p = TransportPeer {
                 zid: input.other_zid,
                 whatami: input.other_whatami,
@@ -716,7 +716,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -767,7 +767,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
-        ext_south: manager.config.bound_callback.clone(),
+        ext_remote_bound: manager.config.bound_callback.clone(),
         ext_region_name: ext::region_name::RegionNameFsm::new(manager.config.region_name.clone()),
     };
 
