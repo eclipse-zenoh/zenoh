@@ -64,7 +64,7 @@ impl Drop for RxBuffer {
 
 impl ZSliceBuffer for RxBuffer {
     fn as_slice(&self) -> &[u8] {
-        &self
+        self
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

@@ -463,10 +463,13 @@ impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
 }
 
 #[cfg(all(feature = "uring", target_os = "linux"))]
-impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
+impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer>
+where
+    RBatch<TBuffer>: DecompressUring,
+{
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
-    fn split_uring<'b>(&mut self) -> ZResult<Option<BatchHeader>> {
+    fn split_uring(&mut self) -> ZResult<Option<BatchHeader>> {
         if self.config.has_header() {
             let h = self.buffer.read_u8()?;
             return Ok(Some(BatchHeader::new(h)));
@@ -474,7 +477,10 @@ impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
         Ok(None)
     }
 
-    pub fn initialize_uring<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
+    pub fn initialize_uring<C, T>(
+        &mut self,
+        #[allow(unused_variables)] buff: C,
+    ) -> ZResult<Option<<RBatch<TBuffer> as DecompressUring>::Result>>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
@@ -485,35 +491,36 @@ impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
         {
             if let Some(header) = h {
                 if header.is_compression() {
-                    zenoh_core::bail!("unsupported!");
-
-                    //use zenoh_buffers::{ZBuf, reader::Reader};
-                    //use zenoh_core::bail;
-                    //
-                    //let payload = self.buffer.read_zslice(self.buffer.remaining())?;
-                    //
-                    //let zslice = self.decompress_uring(&payload, buff)?;
-                    //let zbuf : ZBuf = zslice.into();
-                    //self.buffer = zbuf.reader();
-                    //return Ok(());
+                    let contigious_payload = self.buffer.read_zslice(self.buffer.remaining())?;
+                    let decompressed = self.decompress(&contigious_payload, buff)?;
+                    return Ok(Some(self.apply_decompressed(decompressed)));
                 }
             }
         }
 
-        Ok(())
+        Ok(None)
     }
+}
 
-    #[cfg(feature = "transport_compression")]
-    fn decompress_uring<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
-    where
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
-        let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
-            .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::new(Arc::new(into), 0, n)
-            .map_err(|_| zerror!("Invalid decompression buffer length"))?;
-        Ok(zslice)
+pub trait DecompressUring {
+    type Result;
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result;
+}
+
+impl DecompressUring for RBatch<ZSlice> {
+    type Result = ();
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result {
+        self.buffer = slice;
+    }
+}
+
+impl DecompressUring for RBatch<ZBufReader<'_>> {
+    type Result = RBatch<ZSlice>;
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result {
+        RBatch::new(self.config, slice)
     }
 }
 

@@ -202,18 +202,18 @@ mod linux_tests {
         if is_tcp {
             let listener = TcpListener::bind("127.0.0.1:0")?;
             let port = listener.local_addr()?.port();
-            sender.send(port).map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::Other, "Failed to send port")
-            })?;
+            sender
+                .send(port)
+                .map_err(|_| std::io::Error::other("Failed to send port"))?;
 
             let (stream, _) = listener.accept()?;
             Ok((Box::new(stream), Some(Box::new(listener))))
         } else {
             let socket = UdpSocket::bind("127.0.0.1:0")?;
             let port = socket.local_addr()?.port();
-            sender.send(port).map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::Other, "Failed to send port")
-            })?;
+            sender
+                .send(port)
+                .map_err(|_| std::io::Error::other("Failed to send port"))?;
 
             Ok((Box::new(socket), None))
         }
