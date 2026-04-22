@@ -217,6 +217,15 @@ pub struct LinkManagerUnicastQuicDatagram {
     listeners: ListenersUnicastIP,
 }
 
+impl fmt::Debug for LinkManagerUnicastQuicDatagram {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastQuicDatagram")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastQuicDatagram {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

@@ -19,6 +19,7 @@ use std::sync::{
 
 use arc_swap::{ArcSwap, Guard};
 
+#[derive(Debug)]
 pub struct CacheValue<T: Sized> {
     version: usize,
     value: T,
@@ -35,6 +36,14 @@ impl<T> CacheValue<T> {
 pub struct Cache<T> {
     value: ArcSwap<CacheValue<T>>,
     is_updating: AtomicBool,
+}
+
+impl<T> std::fmt::Debug for Cache<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Cache")
+            .field("is_updating", &self.is_updating.load(Ordering::SeqCst))
+            .finish_non_exhaustive()
+    }
 }
 
 pub type CacheValueType<T> = Guard<Arc<CacheValue<T>>>;

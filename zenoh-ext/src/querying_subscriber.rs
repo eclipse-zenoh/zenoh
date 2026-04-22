@@ -14,6 +14,7 @@
 use std::{
     collections::{btree_map, BTreeMap, VecDeque},
     convert::TryInto,
+    fmt,
     future::{IntoFuture, Ready},
     mem::swap,
     sync::{Arc, Mutex},
@@ -85,6 +86,28 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler, const BACKGROUND
     pub(crate) query_accept_replies: ReplyKeyExpr,
     pub(crate) query_timeout: Duration,
     pub(crate) handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+#[allow(deprecated)]
+impl<KeySpace, Handler, const BACKGROUND: bool> fmt::Debug
+    for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QueryingSubscriberBuilder")
+            .field("session", &"..")
+            .field("key_expr", &self.key_expr)
+            .field("key_space", &"..")
+            .field("origin", &self.origin)
+            .field("query_selector", &self.query_selector)
+            .field("query_target", &self.query_target)
+            .field("query_consolidation", &self.query_consolidation)
+            .field("query_accept_replies", &self.query_accept_replies)
+            .field("query_timeout", &self.query_timeout)
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -488,6 +511,32 @@ pub struct FetchingSubscriberBuilder<
 #[zenoh_macros::unstable]
 #[allow(deprecated)]
 impl<
+        KeySpace,
+        Handler,
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+        const BACKGROUND: bool,
+    > fmt::Debug
+    for FetchingSubscriberBuilder<'_, '_, KeySpace, Handler, Fetch, TryIntoSample, BACKGROUND>
+where
+    TryIntoSample: ExtractSample,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FetchingSubscriberBuilder")
+            .field("session", &"..")
+            .field("key_expr", &self.key_expr)
+            .field("key_space", &"..")
+            .field("origin", &self.origin)
+            .field("fetch", &"..")
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
+#[allow(deprecated)]
+impl<
         'a,
         KeySpace,
         Handler,
@@ -803,6 +852,19 @@ pub struct FetchingSubscriber<Handler> {
     callback: Callback<Sample>,
     state: Arc<Mutex<InnerState>>,
     handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+#[allow(deprecated)]
+impl<Handler> fmt::Debug for FetchingSubscriber<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FetchingSubscriber")
+            .field("subscriber", &self.subscriber)
+            .field("callback", &self.callback)
+            .field("state", &"..")
+            .field("handler", &"..")
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

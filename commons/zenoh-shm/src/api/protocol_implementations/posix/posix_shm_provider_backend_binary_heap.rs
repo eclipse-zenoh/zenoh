@@ -70,6 +70,14 @@ pub struct PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     layout: Layout,
 }
 
+impl<Layout> std::fmt::Debug for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBinaryHeapBuilder")
+            .field("layout", &"..")
+            .finish()
+    }
+}
+
 #[zenoh_macros::unstable_doc]
 impl<Layout> Resolvable for PosixShmProviderBackendBinaryHeapBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBinaryHeap>;
@@ -95,6 +103,20 @@ pub struct PosixShmProviderBackendBinaryHeap {
     segment: Arc<PosixShmSegment>,
     free_list: Mutex<BinaryHeap<Chunk>>,
     alignment: AllocAlignment,
+}
+
+impl std::fmt::Debug for PosixShmProviderBackendBinaryHeap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBinaryHeap")
+            .field(
+                "available",
+                &self.available.load(std::sync::atomic::Ordering::Acquire),
+            )
+            .field("segment", &"..")
+            .field("free_list", &"..")
+            .field("alignment", &self.alignment)
+            .finish()
+    }
 }
 
 impl PosixShmProviderBackendBinaryHeap {

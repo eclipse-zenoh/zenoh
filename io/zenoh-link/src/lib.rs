@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use zenoh_config::Config;
 pub use zenoh_link_commons::*;
@@ -242,6 +242,13 @@ pub struct LocatorInspector {
     #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
     vsock_inspector: VsockLocatorInspector,
 }
+
+impl fmt::Debug for LocatorInspector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocatorInspector").finish_non_exhaustive()
+    }
+}
+
 impl LocatorInspector {
     pub fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
         #[allow(unused_imports)]
@@ -313,6 +320,12 @@ pub struct LinkConfigurator {
     tls_inspector: TlsConfigurator,
     #[cfg(feature = "transport_unixpipe")]
     unixpipe_inspector: UnixPipeConfigurator,
+}
+
+impl fmt::Debug for LinkConfigurator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkConfigurator").finish_non_exhaustive()
+    }
 }
 
 impl LinkConfigurator {

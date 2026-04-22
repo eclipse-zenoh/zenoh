@@ -553,6 +553,15 @@ pub struct LinkManagerUnicastPipe {
     listeners: tokio::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastPipe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastPipe")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastPipe {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

@@ -78,6 +78,14 @@ pub struct ShmClientStorageBuilder {
     clients: BTreeMap<ProtocolID, Arc<dyn ShmClient>>,
 }
 
+impl std::fmt::Debug for ShmClientStorageBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmClientStorageBuilder")
+            .field("clients_len", &self.clients.len())
+            .finish()
+    }
+}
+
 impl ShmClientStorageBuilder {
     fn new(clients: BTreeMap<ProtocolID, Arc<dyn ShmClient>>) -> Self {
         Self { clients }

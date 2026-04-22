@@ -138,7 +138,7 @@ impl<T> Zenoh080Bounded<T> {
 }
 
 #[cfg(feature = "shared-memory")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Zenoh080Sliced<T> {
     is_sliced: bool,
     codec: Zenoh080Bounded<T>,

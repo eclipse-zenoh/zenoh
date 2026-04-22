@@ -155,6 +155,16 @@ pub struct WatchdogConfirmator {
     task: PeriodicTask,
 }
 
+impl std::fmt::Debug for WatchdogConfirmator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WatchdogConfirmator")
+            .field("confirmed", &"..")
+            .field("segment_transactions", &"..")
+            .field("task", &self.task)
+            .finish()
+    }
+}
+
 impl WatchdogConfirmator {
     fn new(interval: Duration) -> Self {
         let segment_transactions = Arc::<SegQueue<Arc<ConfirmedSegment>>>::default();

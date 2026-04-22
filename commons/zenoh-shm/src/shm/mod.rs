@@ -52,6 +52,12 @@ pub struct Segment<ID: SegmentID> {
     inner: platform::SegmentImpl<ID>,
 }
 
+impl<ID: SegmentID> std::fmt::Debug for Segment<ID> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Segment").field(&self.inner).finish()
+    }
+}
+
 impl<ID: SegmentID> Segment<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         let inner = platform::SegmentImpl::create(id, len)?;

@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::future::{IntoFuture, Ready};
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+};
 
 use zenoh_config::wrappers::ZenohId;
 use zenoh_core::{Resolvable, Wait};
@@ -34,6 +37,12 @@ use crate::net::runtime::DynamicRuntime;
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct ZenohIdBuilder<'a> {
     runtime: &'a DynamicRuntime,
+}
+
+impl fmt::Debug for ZenohIdBuilder<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ZenohIdBuilder").field(&"..").finish()
+    }
 }
 
 impl<'a> ZenohIdBuilder<'a> {
@@ -80,6 +89,12 @@ pub struct RoutersZenohIdBuilder<'a> {
     runtime: &'a DynamicRuntime,
 }
 
+impl fmt::Debug for RoutersZenohIdBuilder<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("RoutersZenohIdBuilder").field(&"..").finish()
+    }
+}
+
 impl<'a> RoutersZenohIdBuilder<'a> {
     pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
@@ -122,6 +137,12 @@ impl IntoFuture for RoutersZenohIdBuilder<'_> {
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 pub struct PeersZenohIdBuilder<'a> {
     runtime: &'a DynamicRuntime,
+}
+
+impl fmt::Debug for PeersZenohIdBuilder<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("PeersZenohIdBuilder").field(&"..").finish()
+    }
 }
 
 impl<'a> PeersZenohIdBuilder<'a> {

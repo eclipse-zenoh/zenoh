@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    fmt,
     future::{IntoFuture, Ready},
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -48,7 +49,7 @@ use crate::{
 
 pub(crate) static KE_PUB: &keyexpr = ke!("pub");
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 #[zenoh_macros::unstable]
 pub(crate) enum Sequencing {
     None,
@@ -120,6 +121,28 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     liveliness: bool,
     cache: bool,
     history: CacheConfig,
+}
+
+#[zenoh_macros::unstable]
+impl fmt::Debug for AdvancedPublisherBuilder<'_, '_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedPublisherBuilder")
+            .field("session", &"..")
+            .field("pub_key_expr", &self.pub_key_expr)
+            .field("encoding", &self.encoding)
+            .field("destination", &self.destination)
+            .field("reliability", &self.reliability)
+            .field("congestion_control", &self.congestion_control)
+            .field("priority", &self.priority)
+            .field("is_express", &self.is_express)
+            .field("meta_key_expr", &self.meta_key_expr)
+            .field("sequencing", &self.sequencing)
+            .field("miss_config", &self.miss_config)
+            .field("liveliness", &self.liveliness)
+            .field("cache", &self.cache)
+            .field("history", &self.history)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -322,6 +345,25 @@ pub struct AdvancedPublisher<'a> {
     cache: Option<AdvancedCache>,
     _token: Option<LivelinessToken>,
     _state_publisher: Option<TerminatableTask>,
+}
+
+#[zenoh_macros::unstable]
+impl fmt::Debug for AdvancedPublisher<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedPublisher")
+            .field("publisher", &self.publisher)
+            .field(
+                "seqnum",
+                &self
+                    .seqnum
+                    .as_ref()
+                    .map(|seqnum| seqnum.load(Ordering::Relaxed)),
+            )
+            .field("cache", &self.cache.as_ref().map(|_| ".."))
+            .field("token", &self._token.as_ref().map(|_| ".."))
+            .field("state_publisher", &self._state_publisher)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -680,6 +722,16 @@ pub type AdvancedPublisherDeleteBuilder<'a> =
 pub struct AdvancedPublicationBuilder<'a, P> {
     pub(crate) builder: PublicationBuilder<&'a Publisher<'a>, P>,
     pub(crate) cache: Option<&'a AdvancedCache>,
+}
+
+#[zenoh_macros::unstable]
+impl<P> fmt::Debug for AdvancedPublicationBuilder<'_, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedPublicationBuilder")
+            .field("builder", &"..")
+            .field("has_cache", &self.cache.is_some())
+            .finish()
+    }
 }
 
 #[zenoh_macros::internal_trait]

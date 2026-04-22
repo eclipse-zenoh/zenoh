@@ -302,6 +302,7 @@ impl TransportEventHandler for SHRouter {
 }
 
 // Transport Callback for the router
+#[derive(Debug)]
 pub struct SCRouter {
     count: Arc<AtomicUsize>,
 }
@@ -349,7 +350,7 @@ impl TransportEventHandler for SHClient {
 }
 
 // Transport Callback for the client
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
@@ -1878,7 +1879,7 @@ impl TransportEventHandler for MultiRxHandler {
 }
 
 // Transport Callback for multistream and mixed-reliability tests
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MultiRxCallback {
     msg_count: AtomicUsize,
     rx_task_ids: Mutex<HashSet<tokio::task::Id>>,

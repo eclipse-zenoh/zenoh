@@ -14,6 +14,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     convert::TryInto,
+    fmt,
     future::{IntoFuture, Ready},
     time::Duration,
 };
@@ -40,6 +41,23 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c, const BACKGROUND: bool = false> {
     complete: Option<bool>,
     history: usize,
     resources_limit: Option<usize>,
+}
+
+#[zenoh_macros::unstable]
+#[allow(deprecated)]
+impl<const BACKGROUND: bool> fmt::Debug for PublicationCacheBuilder<'_, '_, '_, BACKGROUND> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublicationCacheBuilder")
+            .field("session", &"..")
+            .field("pub_key_expr", &self.pub_key_expr)
+            .field("queryable_suffix", &self.queryable_suffix)
+            .field("queryable_origin", &self.queryable_origin)
+            .field("complete", &self.complete)
+            .field("history", &self.history)
+            .field("resources_limit", &self.resources_limit)
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[allow(deprecated)]
@@ -181,6 +199,18 @@ pub struct PublicationCache {
     local_sub: Subscriber<FifoChannelHandler<Sample>>,
     _queryable: Queryable<FifoChannelHandler<Query>>,
     task: TerminatableTask,
+}
+
+#[zenoh_macros::unstable]
+#[allow(deprecated)]
+impl fmt::Debug for PublicationCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublicationCache")
+            .field("local_sub", &self.local_sub)
+            .field("queryable", &self._queryable)
+            .field("task", &self.task)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt,
     net::{IpAddr, SocketAddr},
     sync::{Arc, RwLock},
 };
@@ -30,6 +31,16 @@ pub struct ListenerUnicastIP {
     endpoint: EndPoint,
     token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
+}
+
+impl fmt::Debug for ListenerUnicastIP {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ListenerUnicastIP")
+            .field("endpoint", &self.endpoint)
+            .field("token", &self.token)
+            .field("handle", &"..")
+            .finish()
+    }
 }
 
 impl ListenerUnicastIP {
@@ -54,6 +65,15 @@ pub struct ListenersUnicastIP {
     // TODO(yuyuan): should we change this to AsyncRwLock?
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastIP>>>,
     pub token: CancellationToken,
+}
+
+impl fmt::Debug for ListenersUnicastIP {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ListenersUnicastIP")
+            .field("listeners", &self.listeners)
+            .field("token", &self.token)
+            .finish()
+    }
 }
 
 impl ListenersUnicastIP {

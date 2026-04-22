@@ -243,7 +243,7 @@ impl ConstPolicy for JustAlloc {
 ///
 /// If `Safe` is set to false, the policy may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct GarbageCollect<InnerPolicy = JustAlloc, AltPolicy = JustAlloc, Safe = ConstBool<true>> {
     inner_policy: InnerPolicy,
     alt_policy: AltPolicy,
@@ -304,7 +304,7 @@ impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy, Safe: ConstPolicy> ConstP
 /// Try to defragment if allocation failed and allocate again
 /// if the largest defragmented chuk is not smaller than the one required
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Defragment<InnerPolicy = JustAlloc, AltPolicy = JustAlloc> {
     inner_policy: InnerPolicy,
     alt_policy: AltPolicy,
@@ -354,7 +354,7 @@ impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
 ///
 /// This policy is unsafe as it may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Deallocate<Limit, InnerPolicy = JustAlloc, AltPolicy = InnerPolicy> {
     limit: Limit,
     inner_policy: InnerPolicy,
@@ -408,7 +408,7 @@ impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> Const
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BlockOn<InnerPolicy = JustAlloc> {
     inner_policy: InnerPolicy,
 }
@@ -473,6 +473,16 @@ pub struct AllocBuilder<'a, Backend, Layout, Policy = JustAlloc> {
     provider: &'a ShmProvider<Backend>,
     layout: Layout,
     policy: Policy,
+}
+
+impl<Backend, Layout, Policy> std::fmt::Debug for AllocBuilder<'_, Backend, Layout, Policy> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AllocBuilder")
+            .field("provider", &"..")
+            .field("layout", &"..")
+            .field("policy", &"..")
+            .finish()
+    }
 }
 
 // Generic impl
@@ -582,6 +592,17 @@ impl<
 pub struct PrecomputedAllocBuilder<'b, 'a: 'b, Backend, Layout, Policy = JustAlloc> {
     layout: &'b PrecomputedLayout<'a, Backend, Layout>,
     policy: Policy,
+}
+
+impl<Backend, Layout, Policy> std::fmt::Debug
+    for PrecomputedAllocBuilder<'_, '_, Backend, Layout, Policy>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrecomputedAllocBuilder")
+            .field("layout", &"..")
+            .field("policy", &"..")
+            .finish()
+    }
 }
 
 // Generic impl
@@ -695,6 +716,17 @@ where
 {
     backend: Backend,
 }
+
+impl<Backend> std::fmt::Debug for ShmProviderBuilderBackend<Backend>
+where
+    Backend: ShmProviderBackend,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmProviderBuilderBackend")
+            .field("backend", &"..")
+            .finish()
+    }
+}
 #[zenoh_macros::unstable_doc]
 impl<Backend> Resolvable for ShmProviderBuilderBackend<Backend>
 where
@@ -717,6 +749,14 @@ where
 #[zenoh_macros::unstable_doc]
 pub struct ShmProviderBuilderWithDefaultBackend<Layout> {
     layout: Layout,
+}
+
+impl<Layout> std::fmt::Debug for ShmProviderBuilderWithDefaultBackend<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmProviderBuilderWithDefaultBackend")
+            .field("layout", &"..")
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable_doc]

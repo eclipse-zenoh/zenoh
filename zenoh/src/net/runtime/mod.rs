@@ -27,6 +27,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
     collections::HashSet,
+    fmt,
     ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -100,6 +101,7 @@ use crate::{
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub enum ShmProviderState {
     Disabled,
     Initializing,
@@ -540,6 +542,14 @@ pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
 
+impl fmt::Debug for WeakRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakRuntime")
+            .field("is_live", &self.state.strong_count().gt(&0))
+            .finish()
+    }
+}
+
 impl WeakRuntime {
     pub fn upgrade(&self) -> Option<Runtime> {
         self.state.upgrade().map(|state| Runtime { state })
@@ -556,6 +566,28 @@ pub struct RuntimeBuilder {
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
     disable_async_tree_computation: bool,
+}
+
+impl fmt::Debug for RuntimeBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("RuntimeBuilder");
+        debug.field("config", &self.config);
+        #[cfg(feature = "plugins")]
+        debug.field(
+            "plugins_manager",
+            &self.plugins_manager.as_ref().map(|_| ".."),
+        );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        #[cfg(test)]
+        debug.field("subregions", &self.subregions);
+        #[cfg(test)]
+        debug.field(
+            "disable_async_tree_computation",
+            &self.disable_async_tree_computation,
+        );
+        debug.finish()
+    }
 }
 
 impl RuntimeBuilder {
@@ -732,8 +764,24 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
+impl fmt::Debug for Runtime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Runtime")
+            .field("zid", &self.state.zid)
+            .field("whatami", &self.state.whatami)
+            .field("namespace", &self.state.namespace)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl fmt::Debug for DynamicRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DynamicRuntime").field(&"..").finish()
+    }
+}
 
 impl Deref for DynamicRuntime {
     type Target = Arc<dyn IRuntime>;

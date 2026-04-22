@@ -61,6 +61,15 @@ pub enum IterOrOption<Iter: Iterator, Item> {
     Opt(Option<Item>),
     Iter(Iter),
 }
+
+impl<Iter: Iterator, Item> core::fmt::Debug for IterOrOption<Iter, Item> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Opt(_) => f.debug_tuple("Opt").field(&"..").finish(),
+            Self::Iter(_) => f.debug_tuple("Iter").field(&"..").finish(),
+        }
+    }
+}
 impl<Iter: Iterator, Item> Iterator for IterOrOption<Iter, Item>
 where
     Iter::Item: Coerce<Item>,

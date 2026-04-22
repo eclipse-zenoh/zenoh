@@ -116,6 +116,7 @@ impl TransportEventHandler for SHClientStable {
 }
 
 // Transport Callback for the client
+#[derive(Debug)]
 pub struct SCClient {
     counter: Arc<AtomicUsize>,
 }

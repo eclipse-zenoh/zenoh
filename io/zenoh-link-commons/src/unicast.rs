@@ -54,6 +54,25 @@ pub enum NewLink {
     },
 }
 
+impl fmt::Debug for NewLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Single(link) => f
+                .debug_tuple("Single")
+                .field(&LinkUnicast::from(link.clone()))
+                .finish(),
+            Self::MixedReliability {
+                reliable,
+                best_effort,
+            } => f
+                .debug_struct("MixedReliability")
+                .field("reliable", &LinkUnicast::from(reliable.clone()))
+                .field("best_effort", &LinkUnicast::from(best_effort.clone()))
+                .finish(),
+        }
+    }
+}
+
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
     fn get_mtu(&self) -> BatchSize;

@@ -293,6 +293,15 @@ pub struct LinkManagerUnicastUdp {
     pub(crate) listeners: ListenersUnicastIP,
 }
 
+impl fmt::Debug for LinkManagerUnicastUdp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastUdp")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastUdp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

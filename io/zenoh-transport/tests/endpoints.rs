@@ -53,7 +53,7 @@ impl TransportEventHandler for SH {
 }
 
 // Transport Callback for the router
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SC;
 
 impl TransportPeerEventHandler for SC {

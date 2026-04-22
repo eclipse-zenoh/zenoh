@@ -81,7 +81,7 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 /*               ZSLICE              */
 /*************************************/
 #[cfg(feature = "shared-memory")]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ZSliceKind {
     Raw = 0,
