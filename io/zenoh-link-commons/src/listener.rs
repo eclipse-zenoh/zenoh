@@ -69,10 +69,16 @@ pub struct ListenersUnicastIP {
 
 impl fmt::Debug for ListenersUnicastIP {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ListenersUnicastIP")
-            .field("listeners", &self.listeners)
-            .field("token", &self.token)
-            .finish()
+        let mut debug = f.debug_struct("ListenersUnicastIP");
+        match self.listeners.try_read() {
+            Ok(listeners) => {
+                debug.field("listeners_len", &listeners.len());
+            }
+            Err(_) => {
+                debug.field("listeners_len", &"<locked>");
+            }
+        }
+        debug.field("token", &self.token).finish()
     }
 }
 

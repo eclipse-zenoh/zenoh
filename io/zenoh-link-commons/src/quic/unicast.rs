@@ -758,6 +758,7 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
 }
 
 /// Material for building a link after accepting a new connection on a QUIC listener
+#[derive(Debug)]
 pub struct QuicLinkMaterial {
     pub quic_conn: QuicConnection,
     pub src_addr: SocketAddr,
@@ -765,22 +766,6 @@ pub struct QuicLinkMaterial {
     pub streams: Option<QuicStreams>,
     pub is_mixed_rel: bool,
     pub tls_close_link_on_expiration: bool,
-}
-
-impl fmt::Debug for QuicLinkMaterial {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("QuicLinkMaterial")
-            .field("quic_conn", &self.quic_conn)
-            .field("src_addr", &self.src_addr)
-            .field("dst_addr", &self.dst_addr)
-            .field("streams", &self.streams)
-            .field("is_mixed_rel", &self.is_mixed_rel)
-            .field(
-                "tls_close_link_on_expiration",
-                &self.tls_close_link_on_expiration,
-            )
-            .finish()
-    }
 }
 
 pub struct QuicStreams {

@@ -49,6 +49,13 @@ pub struct OwnedWatchdog {
 impl std::fmt::Debug for OwnedWatchdog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OwnedWatchdog")
+            .field("watchdog_atomic", &self.watchdog_atomic.as_ptr())
+            .field(
+                "watchdog_value",
+                &self
+                    .watchdog_atomic
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            )
             .field("watchdog_mask", &self.watchdog_mask)
             .finish_non_exhaustive()
     }

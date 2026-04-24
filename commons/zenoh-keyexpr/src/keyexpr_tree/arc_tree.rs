@@ -630,6 +630,7 @@ pub struct KeArcTreeNode<
 impl<Weight, Parent, Wildness, Children, Token> core::fmt::Debug
     for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
 where
+    Weight: Debug,
     Parent: IArcProvider,
     Wildness: IWildness,
     Children: IChildrenProvider<
@@ -642,7 +643,7 @@ where
             .field("has_parent", &self.parent.is_some())
             .field("chunk", &self.chunk)
             .field("children", &"..")
-            .field("has_weight", &self.weight.is_some())
+            .field("weight", &self.weight)
             .finish()
     }
 }
