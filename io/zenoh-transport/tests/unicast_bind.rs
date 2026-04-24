@@ -17,6 +17,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{Address, WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
+use zenoh_test::{get_free_tcp_port, get_free_udp_port};
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -330,16 +331,20 @@ async fn openclose_tcp_only_connect_with_bind_and_interface() {
 
     zenoh_util::init_log_from_env_or("error");
 
-    let bind_addr_str = format!("{}:{}", addrs[0], 13002);
+    let listen_port = get_free_tcp_port();
+    let bind_port = get_free_tcp_port();
+    let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
-    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13001).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], listen_port).parse().unwrap();
 
     // declaring `bind` and `iface` simultaneously should be unsupported, and there for fail
-    let connect_endpoint: EndPoint =
-        format!("tcp/{}:{}#iface=lo;bind={}", addrs[0], 13001, bind_addr)
-            .parse()
-            .unwrap();
+    let connect_endpoint: EndPoint = format!(
+        "tcp/{}:{}#iface=lo;bind={}",
+        addrs[0], listen_port, bind_addr
+    )
+    .parse()
+    .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
@@ -352,16 +357,19 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13003).parse().unwrap();
-    let bind_addr_str = format!("{}:{}", addrs[0], 13004);
+    let listen_port = get_free_tcp_port();
+    let bind_port = get_free_tcp_port();
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], listen_port).parse().unwrap();
+    let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     // Bind to different port on same IP address
     // Expect this test to succeed -
     // When running the test multiple times locally a TcpStream does not get cleaned up
-    let connect_endpoint: EndPoint = format!("tcp/{}:{}#bind={}", addrs[0], 13003, bind_addr_str)
-        .parse()
-        .unwrap();
+    let connect_endpoint: EndPoint =
+        format!("tcp/{}:{}#bind={}", addrs[0], listen_port, bind_addr_str)
+            .parse()
+            .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
@@ -380,16 +388,18 @@ async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
         return;
     }
 
-    let bind_addr_str = format!("{}:{}", addrs_v6[0], 13006);
+    let listen_port = get_free_tcp_port();
+    let bind_addr_str = format!("{}:{}", addrs_v6[0], get_free_tcp_port());
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13005).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], listen_port).parse().unwrap();
 
     // Connecting to an IPv4 endpoint while binding to an IPv6 address should fail.
-    let connect_endpoint: EndPoint = format!("tcp/{}:{}#bind={}", addrs[0], 13005, bind_addr_str)
-        .parse()
-        .unwrap();
+    let connect_endpoint: EndPoint =
+        format!("tcp/{}:{}#bind={}", addrs[0], listen_port, bind_addr_str)
+            .parse()
+            .unwrap();
 
     openclose_transport_expect_failure(&listen_endpoint, &connect_endpoint, false).await;
 }
@@ -407,16 +417,18 @@ async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
         return;
     }
 
-    let bind_addr_str = format!("{}:{}", addrs_v6[0], 13006);
+    let listen_port = get_free_udp_port();
+    let bind_addr_str = format!("{}:{}", addrs_v6[0], get_free_udp_port());
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13005).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], listen_port).parse().unwrap();
 
     // Connecting to an IPv4 endpoint while binding to an IPv6 address should fail.
-    let connect_endpoint: EndPoint = format!("udp/{}:{}#bind={}", addrs[0], 13005, bind_addr_str)
-        .parse()
-        .unwrap();
+    let connect_endpoint: EndPoint =
+        format!("udp/{}:{}#bind={}", addrs[0], listen_port, bind_addr_str)
+            .parse()
+            .unwrap();
 
     openclose_transport_expect_failure(&listen_endpoint, &connect_endpoint, false).await;
 }
@@ -426,17 +438,21 @@ async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_and_interface() {
     let addrs = get_ipv4_ipaddrs(None);
-    let bind_addr_str = format!("{}:{}", addrs[0], 13008);
+    let listen_port = get_free_udp_port();
+    let bind_port = get_free_udp_port();
+    let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13007).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], listen_port).parse().unwrap();
 
-    let connect_endpoint: EndPoint =
-        format!("udp/{}:{}#iface=lo;bind={}", addrs[0], 13007, bind_addr_str)
-            .parse()
-            .unwrap();
+    let connect_endpoint: EndPoint = format!(
+        "udp/{}:{}#iface=lo;bind={}",
+        addrs[0], listen_port, bind_addr_str
+    )
+    .parse()
+    .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
@@ -446,16 +462,19 @@ async fn openclose_udp_only_connect_with_bind_and_interface() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
-    let bind_addr_str = format!("{}:{}", addrs[0], 13010);
+    let listen_port = get_free_udp_port();
+    let bind_port = get_free_udp_port();
+    let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13009).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], listen_port).parse().unwrap();
 
-    let connect_endpoint: EndPoint = format!("udp/{}:{}#bind={}", addrs[0], 13009, bind_addr_str)
-        .parse()
-        .unwrap();
+    let connect_endpoint: EndPoint =
+        format!("udp/{}:{}#bind={}", addrs[0], listen_port, bind_addr_str)
+            .parse()
+            .unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, &bind_addr, false).await;
@@ -467,13 +486,14 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let bind_addr_str = format!("localhost:{}", 13012);
+    let connect_port = get_free_udp_port();
+    let bind_addr_str = format!("localhost:{}", get_free_udp_port());
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     let client_auth = "true";
     // Define the client
     let mut connect_endpoint: EndPoint =
-        (format!("quic/localhost:{}#bind={}", 13011, bind_addr_str))
+        (format!("quic/localhost:{}#bind={}", connect_port, bind_addr_str))
             .parse()
             .unwrap();
     connect_endpoint
@@ -491,7 +511,9 @@ async fn openclose_quic_only_connect_with_bind_restriction() {
         .unwrap();
 
     // Define the server
-    let mut listen_endpoint: EndPoint = (format!("quic/localhost:{}", 13011)).parse().unwrap();
+    let mut listen_endpoint: EndPoint = (format!("quic/localhost:{}", connect_port))
+        .parse()
+        .unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
@@ -516,13 +538,14 @@ async fn openclose_tls_only_connect_with_bind_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let bind_addr_str = format!("localhost:{}", 13014);
+    let connect_port = get_free_tcp_port();
+    let bind_addr_str = format!("localhost:{}", get_free_tcp_port());
     let bind_addr = Address::from(bind_addr_str.as_str());
 
     let client_auth = "true";
     // Define the client
     let mut connect_endpoint: EndPoint =
-        (format!("tls/localhost:{}#bind={}", 13013, bind_addr_str))
+        (format!("tls/localhost:{}#bind={}", connect_port, bind_addr_str))
             .parse()
             .unwrap();
     connect_endpoint
@@ -540,7 +563,8 @@ async fn openclose_tls_only_connect_with_bind_restriction() {
         .unwrap();
 
     // Define the server
-    let mut listen_endpoint: EndPoint = (format!("tls/localhost:{}", 13013)).parse().unwrap();
+    let mut listen_endpoint: EndPoint =
+        (format!("tls/localhost:{}", connect_port)).parse().unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
