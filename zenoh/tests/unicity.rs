@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
+
 use std::{
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -25,8 +25,7 @@ use tokio::runtime::Handle;
 use zenoh::{key_expr::KeyExpr, qos::CongestionControl, Session};
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
-
-use crate::common::TestSessions;
+use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
@@ -43,13 +42,13 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
 
     // Open session 02 (create 1 listener and connect to session 01)
     let mut s02_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
-    let mut locators = TestSessions::get_locators_from_session(&s01).await;
+    let mut locators = get_locators_from_session(&s01).await;
     s02_config.connect.endpoints.set(locators.clone()).unwrap();
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(s02_config)).unwrap();
 
     // Open session 03 (connect to session 01 and session02)
-    locators.extend(TestSessions::get_locators_from_session(&s02).await);
+    locators.extend(get_locators_from_session(&s02).await);
     let s03_config = test_context.get_connector_config_with_endpoint(locators);
     println!("[  ][03a] Opening s03 session");
     let s03 = ztimeout!(zenoh::open(s03_config)).unwrap();

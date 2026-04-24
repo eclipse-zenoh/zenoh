@@ -19,6 +19,7 @@ mod tests {
     use zenoh_link::EndPoint;
     use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
     use zenoh_result::ZResult;
+    use zenoh_test::{get_free_tcp_port, get_free_udp_port};
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
         TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
@@ -480,7 +481,9 @@ mod tests {
     async fn multilink_tcp_only() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         multilink_transport(&endpoint).await;
     }
 
@@ -489,7 +492,9 @@ mod tests {
     async fn multilink_udp_only() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
+        let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap();
         multilink_transport(&endpoint).await;
     }
 
@@ -499,7 +504,9 @@ mod tests {
     async fn multilink_ws_only() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         multilink_transport(&endpoint).await;
     }
 
@@ -609,7 +616,9 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-        let mut endpoint: EndPoint = format!("tls/localhost:{}", 18030).parse().unwrap();
+        let mut endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         endpoint
             .config_mut()
             .extend_from_iter(
@@ -707,7 +716,9 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
         // Define the locator
-        let mut endpoint: EndPoint = format!("quic/localhost:{}", 18040).parse().unwrap();
+        let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+            .parse()
+            .unwrap();
         endpoint
             .config_mut()
             .extend_from_iter(

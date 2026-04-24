@@ -29,6 +29,7 @@ members = [
   "commons/zenoh-stats",
   "commons/zenoh-sync",
   "commons/zenoh-task",
+  "commons/zenoh-test",
   "commons/zenoh-util",
   "examples",
   "io/zenoh-link",
@@ -244,6 +245,7 @@ zenoh-shm = { version = "=1.9.0", path = "commons/zenoh-shm" }
 zenoh-stats = { version = "=1.9.0", path = "commons/zenoh-stats" }
 zenoh-sync = { version = "=1.9.0", path = "commons/zenoh-sync" }
 zenoh-task = { version = "=1.9.0", path = "commons/zenoh-task" }
+zenoh-test = { version = "=1.9.0", path = "commons/zenoh-test" }
 zenoh-transport = { version = "=1.9.0", path = "io/zenoh-transport", default-features = false }
 zenoh-util = { version = "=1.9.0", path = "commons/zenoh-util" }
 zenoh_backend_traits = { version = "=1.9.0", path = "plugins/zenoh-backend-traits", default-features = false }

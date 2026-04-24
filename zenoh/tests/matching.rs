@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
 
 use std::time::Duration;
 
@@ -24,8 +23,7 @@ use zenoh::{
 };
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
-
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);

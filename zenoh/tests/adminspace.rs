@@ -12,14 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
 
 use std::time::Duration;
 
-use common::TestSessions;
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
+use zenoh_test::get_locators_from_session;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_wonly() {
@@ -88,7 +87,7 @@ async fn test_adminspace_read() {
     let zid = router.zid();
 
     // Resolve the actual TCP endpoint assigned by the OS
-    let router_locators = TestSessions::get_locators_from_session(&router).await;
+    let router_locators = get_locators_from_session(&router).await;
     let tcp_locator = router_locators
         .iter()
         .find(|ep| ep.to_string().starts_with("tcp/"))
@@ -528,7 +527,7 @@ async fn test_adminspace_transports_and_links() {
     let zid1 = router1.zid();
 
     // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
-    let router1_tcp_addr = TestSessions::get_locators_from_session(&router1)
+    let router1_tcp_addr = get_locators_from_session(&router1)
         .await
         .into_iter()
         .find(|ep| ep.to_string().starts_with("tcp/"))
@@ -827,7 +826,7 @@ async fn test_adminspace_regression_1() {
     let zid1 = router1.zid();
 
     // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
-    let router1_tcp_addr = TestSessions::get_locators_from_session(&router1)
+    let router1_tcp_addr = get_locators_from_session(&router1)
         .await
         .into_iter()
         .find(|ep| ep.to_string().starts_with("tcp/"))

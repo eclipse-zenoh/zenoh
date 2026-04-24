@@ -36,25 +36,21 @@ async fn test_advanced_history_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let mut test_sessions = zenoh_test::TestSessions::new();
     const SLEEP: Duration = Duration::from_secs(1);
 
     zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        let mut c = test_sessions.get_listener_config("tcp/127.0.0.1:0", 1);
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.timestamping
             .set_enabled(Some(ModeDependentValue::Unique(true)))
             .unwrap();
         c.namespace = pub_namespace;
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_listener_with_cfg(c).await;
         tracing::info!("Peer (1) ZID: {}", s.zid());
         s
     };
@@ -71,15 +67,11 @@ async fn test_advanced_history_inner(
     tokio::time::sleep(SLEEP).await;
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        let mut c = test_sessions.get_connector_config();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Peer (2) ZID: {}", s.zid());
         s
     };
@@ -114,26 +106,17 @@ async fn test_advanced_history_inner(
     publ.undeclare().await.unwrap();
     // sub.undeclare().await.unwrap();
 
-    peer1.close().await.unwrap();
-    peer2.close().await.unwrap();
+    test_sessions.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_advanced_history() {
-    test_advanced_history_inner(
-        "test/advanced/history",
-        "test/advanced/history",
-        None,
-        None,
-        "tcp/localhost:27050",
-    )
-    .await;
+    test_advanced_history_inner("test/advanced/history", "test/advanced/history", None, None).await;
     test_advanced_history_inner(
         "test/advanced/history",
         "ns/test/advanced/history",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27051",
     )
     .await;
     test_advanced_history_inner(
@@ -141,7 +124,6 @@ async fn test_advanced_history() {
         "test/advanced/history",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27052",
     )
     .await;
     test_advanced_history_inner(
@@ -149,7 +131,6 @@ async fn test_advanced_history() {
         "test/advanced/history",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27053",
     )
     .await;
 }
@@ -159,8 +140,8 @@ async fn test_advanced_retransmission_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -289,7 +270,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         None,
         None,
-        "tcp/localhost:27054",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -297,7 +277,6 @@ async fn test_advanced_retransmission() {
         "ns/test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27055",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -305,7 +284,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27056",
     )
     .await;
     test_advanced_retransmission_inner(
@@ -313,7 +291,6 @@ async fn test_advanced_retransmission() {
         "test/advanced/retransmission",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27057",
     )
     .await;
 }
@@ -323,8 +300,8 @@ async fn test_advanced_retransmission_periodic_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
 
@@ -446,7 +423,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         None,
         None,
-        "tcp/localhost:27058",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -454,7 +430,6 @@ async fn test_advanced_retransmission_periodic() {
         "ns/test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27059",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -462,7 +437,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27060",
     )
     .await;
     test_advanced_retransmission_periodic_inner(
@@ -470,7 +444,6 @@ async fn test_advanced_retransmission_periodic() {
         "test/advanced/retransmission/periodic",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27061",
     )
     .await;
 }
@@ -480,8 +453,8 @@ async fn test_advanced_sample_miss_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -599,7 +572,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         None,
         None,
-        "tcp/localhost:27062",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -607,7 +579,6 @@ async fn test_advanced_sample_miss() {
         "ns/test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27063",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -615,7 +586,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27064",
     )
     .await;
     test_advanced_sample_miss_inner(
@@ -623,7 +593,6 @@ async fn test_advanced_sample_miss() {
         "test/advanced/sample_miss",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27065",
     )
     .await;
 }
@@ -633,8 +602,8 @@ async fn test_advanced_retransmission_sample_miss_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -762,7 +731,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         None,
         None,
-        "tcp/localhost:27066",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -770,7 +738,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "ns/test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27067",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -778,7 +745,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27068",
     )
     .await;
     test_advanced_retransmission_sample_miss_inner(
@@ -786,7 +752,6 @@ async fn test_advanced_retransmission_sample_miss() {
         "test/advanced/retransmission/sample_miss",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27069",
     )
     .await;
 }
@@ -796,8 +761,8 @@ async fn test_advanced_late_joiner_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
 
@@ -903,7 +868,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         None,
         None,
-        "tcp/localhost:27070",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -911,7 +875,6 @@ async fn test_advanced_late_joiner() {
         "ns/test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27071",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -919,7 +882,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27072",
     )
     .await;
     test_advanced_late_joiner_inner(
@@ -927,7 +889,6 @@ async fn test_advanced_late_joiner() {
         "test/advanced/late_joiner",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27073",
     )
     .await;
 }
@@ -937,8 +898,8 @@ async fn test_advanced_retransmission_heartbeat_inner(
     sub_ke: &str,
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
-    endpoint: &str,
 ) {
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
     const HEARTBEAT_PERIOD: Duration = Duration::from_secs(4);
@@ -1061,7 +1022,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         None,
         None,
-        "tcp/localhost:27074",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1069,7 +1029,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "ns/test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
         None,
-        "tcp/localhost:27075",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1077,7 +1036,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         None,
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27076",
     )
     .await;
     test_advanced_retransmission_heartbeat_inner(
@@ -1085,7 +1043,6 @@ async fn test_advanced_retransmission_heartbeat() {
         "test/advanced/retransmission/heartbeat",
         Some(nonwild_ke!("ns").into()),
         Some(nonwild_ke!("ns").into()),
-        "tcp/localhost:27077",
     )
     .await;
 }
@@ -1113,7 +1070,9 @@ async fn advanced_subscriber_does_not_prevent_session_to_be_closed_when_dropped(
     assert!(ztimeout!(subscriber.recv_async()).is_err());
 }
 
-async fn create_peer_pair(locator: &str) -> (Session, Session) {
+async fn create_peer_pair() -> (Session, Session) {
+    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
+    let locator = locator.as_str();
     let peer1 = {
         let mut c = zenoh::Config::default();
         c.listen
@@ -1207,7 +1166,7 @@ fn create_callback<T>() -> (impl Fn(T) + Send + Sync + 'static, Arc<AtomicUsize>
 async fn test_callback_drop_on_undeclare_advanced_subscriber() {
     zenoh::init_log_from_env_or("error");
     let ke = "test/undeclare/advanced_subscriber_callback_drop";
-    let (session1, session2) = ztimeout!(create_peer_pair("tcp/127.0.0.1:27100"));
+    let (session1, session2) = ztimeout!(create_peer_pair());
     let (cb, n) = create_callback::<Sample>();
     let subscriber = ztimeout!(session1.declare_subscriber(ke).advanced().callback(cb)).unwrap();
 
@@ -1280,7 +1239,8 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber_local() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_advanced_sample_miss_listener() {
     let ke = "test/undeclare/advanced_subscriber_sample_miss_listener_callback_drop";
-    let locator = "tcp/127.0.0.1:27101";
+    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
+    let locator = locator.as_str();
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 

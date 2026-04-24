@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(any(feature = "unstable", feature = "internal"))]
-#[path = "common/mod.rs"]
-mod common;
+
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -27,8 +26,7 @@ use zenoh::{
 };
 use zenoh_config::Config;
 use zenoh_core::ztimeout;
-
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 

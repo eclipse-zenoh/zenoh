@@ -33,6 +33,7 @@ mod tests {
         network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
     };
     use zenoh_result::ZResult;
+    use zenoh_test::{get_free_tcp_port, get_free_udp_port};
     use zenoh_transport::{
         multicast::TransportMulticast,
         unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -384,8 +385,12 @@ mod tests {
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![
-            format!("tcp/127.0.0.1:{}", 19000).parse().unwrap(),
-            format!("tcp/[::1]:{}", 19001).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+                .parse()
+                .unwrap(),
+            format!("tcp/[::1]:{}", get_free_tcp_port())
+                .parse()
+                .unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -408,7 +413,9 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Define the locators
-        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 19100).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {
@@ -431,8 +438,12 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            format!("udp/127.0.0.1:{}", 19010).parse().unwrap(),
-            format!("udp/[::1]:{}", 19011).parse().unwrap(),
+            format!("udp/127.0.0.1:{}", get_free_udp_port())
+                .parse()
+                .unwrap(),
+            format!("udp/[::1]:{}", get_free_udp_port())
+                .parse()
+                .unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -455,7 +466,9 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Define the locator
-        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 19110).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {

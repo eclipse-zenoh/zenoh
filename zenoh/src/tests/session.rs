@@ -16,6 +16,7 @@ mod runtime_state_weak_tests {
     use test_case::test_matrix;
     use zenoh_config::{ModeDependentValue, WhatAmI, WhatAmIMatcher};
     use zenoh_link::EndPoint;
+    use zenoh_test::get_free_tcp_port;
 
     use crate::{
         api::{config::Config, session::open},
@@ -142,8 +143,7 @@ mod runtime_state_weak_tests {
 
     // Helper to create a client and a peer that are connected.
     async fn create_clique(num: usize, mode: WhatAmI, gossip: bool) -> Vec<Session> {
-        let port_offset = calc_offset(mode, gossip);
-        let port = 12450 + port_offset;
+        let port = get_free_tcp_port();
         let peer_endpoint = format!("tcp/127.0.0.1:{}", port);
         let main = create_session(mode, vec![peer_endpoint.parse().unwrap()], vec![], gossip).await;
 
@@ -156,21 +156,6 @@ mod runtime_state_weak_tests {
         }
 
         result
-    }
-
-    fn calc_offset(mode: WhatAmI, gossip: bool) -> u16 {
-        let mode = match mode {
-            WhatAmI::Router => 0,
-            WhatAmI::Peer => 1,
-            WhatAmI::Client => 2,
-        };
-
-        let gossip = match gossip {
-            true => 0,
-            false => 1,
-        };
-
-        mode + gossip * 3
     }
 
     #[test_matrix(

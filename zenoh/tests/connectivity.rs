@@ -13,10 +13,6 @@
 //
 
 #[cfg(feature = "unstable")]
-#[path = "common/mod.rs"]
-mod common;
-
-#[cfg(feature = "unstable")]
 mod tests {
     use std::{
         fmt::Debug,
@@ -25,8 +21,7 @@ mod tests {
     };
 
     use zenoh::sample::SampleKind;
-
-    use crate::common::TestSessions;
+    use zenoh_test::TestSessions;
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
         let mut collected = Vec::new();
