@@ -54,6 +54,12 @@ pub struct SessionInfo {
     pub(crate) session: WeakSession,
 }
 
+impl std::fmt::Debug for SessionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SessionInfo").field(&"..").finish()
+    }
+}
+
 impl SessionInfo {
     /// Return the [`ZenohId`](crate::session::ZenohId) of the current zenoh [`Session`](crate::Session).
     ///

@@ -45,7 +45,7 @@ pub const TCP_LOCATOR_PREFIX: &str = "tcp";
 
 const IS_RELIABLE: bool = true;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct TcpLocatorInspector;
 #[async_trait]
 impl LocatorInspector for TcpLocatorInspector {

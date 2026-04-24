@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt,
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
@@ -51,6 +52,7 @@ use crate::{
 /*************************************/
 /*         TRANSPORT CONFIG          */
 /*************************************/
+#[derive(Debug)]
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
     pub keep_alive: usize,
@@ -112,9 +114,33 @@ pub struct TransportManagerStateUnicast {
     pub(super) authenticator: Arc<Auth>,
 }
 
+impl fmt::Debug for TransportManagerStateUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerStateUnicast");
+        debug
+            .field("incoming", &self.incoming)
+            .field("link_managers", &"..")
+            .field("transports", &"..");
+        #[cfg(feature = "transport_multilink")]
+        debug.field("multilink", &"..");
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.finish()
+    }
+}
+
 pub struct TransportManagerParamsUnicast {
     pub config: TransportManagerConfigUnicast,
     pub state: TransportManagerStateUnicast,
+}
+
+impl fmt::Debug for TransportManagerParamsUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParamsUnicast")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 pub struct TransportManagerBuilderUnicast {
@@ -137,6 +163,28 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_lowlatency: bool,
     #[cfg(feature = "transport_compression")]
     pub(super) is_compression: bool,
+}
+
+impl fmt::Debug for TransportManagerBuilderUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilderUnicast");
+        debug
+            .field("lease", &self.lease)
+            .field("keep_alive", &self.keep_alive)
+            .field("open_timeout", &self.open_timeout)
+            .field("accept_timeout", &self.accept_timeout)
+            .field("accept_pending", &self.accept_pending)
+            .field("max_sessions", &self.max_sessions)
+            .field("is_qos", &self.is_qos);
+        #[cfg(feature = "transport_multilink")]
+        debug.field("max_links", &self.max_links);
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.field("is_lowlatency", &self.is_lowlatency);
+        #[cfg(feature = "transport_compression")]
+        debug.field("is_compression", &self.is_compression);
+        debug.finish()
+    }
 }
 
 impl TransportManagerBuilderUnicast {

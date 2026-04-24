@@ -36,6 +36,20 @@ where
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for Includer<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Includer")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     Includer<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -200,6 +214,20 @@ pub struct IncluderMut<
     key: &'a keyexpr,
     ke_indices: Vec<usize>,
     iterators: Vec<StackFrameMut<'a, Children, Node, Weight>>,
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for IncluderMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IncluderMut")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>

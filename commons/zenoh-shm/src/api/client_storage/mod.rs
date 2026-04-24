@@ -42,6 +42,7 @@ pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
 
 /// Builder to create new client storages
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ShmClientSetBuilder;
 
 impl ShmClientSetBuilder {
@@ -75,6 +76,14 @@ impl ShmClientSetBuilder {
 #[zenoh_macros::unstable_doc]
 pub struct ShmClientStorageBuilder {
     clients: BTreeMap<ProtocolID, Arc<dyn ShmClient>>,
+}
+
+impl std::fmt::Debug for ShmClientStorageBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmClientStorageBuilder")
+            .field("clients_len", &self.clients.len())
+            .finish()
+    }
 }
 
 impl ShmClientStorageBuilder {

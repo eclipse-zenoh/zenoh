@@ -40,6 +40,7 @@ impl ChunkDescriptor {
 
 /// A recently-allocated chunk.
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct AllocatedChunk {
     pub descriptor: ChunkDescriptor,
     pub data: PtrInSegment,

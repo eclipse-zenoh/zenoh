@@ -153,11 +153,20 @@ pub(crate) struct MatchingListenerInner {
 /// }
 /// # }
 /// ```
-#[derive(Debug)]
 pub struct MatchingListener<Handler> {
     pub(crate) inner: MatchingListenerInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+impl<Handler> fmt::Debug for MatchingListener<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MatchingListener")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 impl<Handler> MatchingListener<Handler> {
@@ -250,6 +259,15 @@ impl<Handler> std::ops::DerefMut for MatchingListener<Handler> {
 pub struct MatchingListenerUndeclaration<Handler> {
     listener: MatchingListener<Handler>,
     wait_callbacks: bool,
+}
+
+impl<Handler> fmt::Debug for MatchingListenerUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MatchingListenerUndeclaration")
+            .field("listener", &self.listener)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
 }
 
 impl<Handler> MatchingListenerUndeclaration<Handler> {

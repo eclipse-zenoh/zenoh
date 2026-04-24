@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, fmt, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
@@ -146,6 +146,27 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) liveliness: bool,
     pub(crate) meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     pub(crate) handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> fmt::Debug
+    for AdvancedSubscriberBuilder<'_, '_, '_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedSubscriberBuilder")
+            .field("session", &"..")
+            .field("key_expr", &self.key_expr)
+            .field("origin", &self.origin)
+            .field("retransmission", &self.retransmission)
+            .field("query_target", &self.query_target)
+            .field("query_timeout", &self.query_timeout)
+            .field("history", &self.history)
+            .field("liveliness", &self.liveliness)
+            .field("meta_key_expr", &self.meta_key_expr)
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -527,6 +548,19 @@ pub struct AdvancedSubscriber<Receiver> {
     receiver: Receiver,
     liveliness_subscriber: Option<Subscriber<()>>,
     heartbeat_subscriber: Option<Subscriber<()>>,
+}
+
+#[zenoh_macros::unstable]
+impl<Receiver> fmt::Debug for AdvancedSubscriber<Receiver> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedSubscriber")
+            .field("statesref", &"..")
+            .field("subscriber", &self.subscriber)
+            .field("receiver", &"..")
+            .field("liveliness_subscriber", &self.liveliness_subscriber)
+            .field("heartbeat_subscriber", &self.heartbeat_subscriber)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -1552,6 +1586,18 @@ pub struct SampleMissListener<Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<Handler> fmt::Debug for SampleMissListener<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SampleMissListener")
+            .field("id", &self.id)
+            .field("statesref", &"..")
+            .field("handler", &"..")
+            .field("undeclare_on_drop", &self.undeclare_on_drop)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> SampleMissListener<Handler> {
     #[inline]
     pub fn undeclare(self) -> SampleMissHandlerUndeclaration<Handler>
@@ -1615,6 +1661,15 @@ pub struct SampleMissHandlerUndeclaration<Handler> {
     listener: SampleMissListener<Handler>,
 }
 
+#[zenoh_macros::unstable]
+impl<Handler> fmt::Debug for SampleMissHandlerUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SampleMissHandlerUndeclaration")
+            .field(&self.listener)
+            .finish()
+    }
+}
+
 impl<Handler> SampleMissHandlerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
     pub fn wait_callbacks(self) -> Self {
@@ -1651,6 +1706,19 @@ impl<Handler> IntoFuture for SampleMissHandlerUndeclaration<Handler> {
 pub struct SampleMissListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     statesref: &'a Arc<Mutex<State>>,
     handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> fmt::Debug
+    for SampleMissListenerBuilder<'_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SampleMissListenerBuilder")
+            .field("statesref", &"..")
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

@@ -23,6 +23,7 @@ mod vec_set_impl;
 
 /// The advised way of storing children in KeTrees, based on benchmarks.
 pub type DefaultChildrenProvider = KeyedSetProvider;
+#[derive(Debug)]
 pub struct FilterMap<I, F> {
     iter: I,
     filter: F,
@@ -49,6 +50,7 @@ impl<I: Iterator, F: IFilter<<I as Iterator>::Item>> Iterator for FilterMap<I, F
         None
     }
 }
+#[derive(Debug)]
 pub struct Intersection<'a>(pub &'a keyexpr);
 impl<K: core::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Intersection<'_> {
     type O = V;
@@ -71,6 +73,7 @@ impl<'a, T: super::HasChunk> IFilter<&'a mut T> for Intersection<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct Inclusion<'a>(pub &'a keyexpr);
 impl<K: core::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Inclusion<'_> {
     type O = V;

@@ -14,6 +14,7 @@
 
 use std::{
     convert::TryInto,
+    fmt,
     future::{IntoFuture, Ready},
 };
 
@@ -89,6 +90,12 @@ use crate::api::{
 /// ```
 pub struct Liveliness<'a> {
     pub(crate) session: &'a Session,
+}
+
+impl fmt::Debug for Liveliness<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Liveliness").field(&"..").finish()
+    }
 }
 
 impl<'a> Liveliness<'a> {
@@ -253,6 +260,7 @@ pub struct LivelinessToken {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[derive(Debug)]
 pub struct LivelinessTokenUndeclaration(LivelinessToken);
 
 impl Resolvable for LivelinessTokenUndeclaration {

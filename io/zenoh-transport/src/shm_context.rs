@@ -66,6 +66,16 @@ pub struct ShmContext {
     pub(super) auth: AuthUnicast,
 }
 
+impl std::fmt::Debug for ShmContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmContext")
+            .field("shm_reader", &self.shm_reader)
+            .field("shm_provider", &self.shm_provider)
+            .field("auth", &"..")
+            .finish()
+    }
+}
+
 impl ShmContext {
     pub fn new(
         cfg: zenoh_config::ShmConf,

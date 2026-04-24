@@ -237,6 +237,15 @@ pub struct LinkManagerUnicastVsock {
     listeners: Arc<AsyncRwLock<HashMap<VsockAddr, ListenerUnicastVsock>>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastVsock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastVsock")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastVsock {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

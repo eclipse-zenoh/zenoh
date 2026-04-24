@@ -15,6 +15,7 @@
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
+    fmt,
     future::{Future, IntoFuture},
     net::SocketAddr,
     ops::Deref,
@@ -50,6 +51,15 @@ use crate::{
 pub struct QuicConnection {
     conn: quinn::Connection,
     closed: Arc<AtomicBool>,
+}
+
+impl fmt::Debug for QuicConnection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicConnection")
+            .field("conn", &self.conn)
+            .field("closed", &self.closed)
+            .finish()
+    }
 }
 
 impl QuicConnection {
@@ -259,6 +269,17 @@ pub struct QuicServerBuilder<'a, F: AcceptorCallback> {
     is_secure: bool,
 }
 
+impl<F: AcceptorCallback> fmt::Debug for QuicServerBuilder<'_, F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicServerBuilder")
+            .field("endpoint", &self.endpoint)
+            .field("acceptor_params", &self.acceptor_params)
+            .field("is_streamed", &self.is_streamed)
+            .field("is_secure", &self.is_secure)
+            .finish()
+    }
+}
+
 impl<'a, F: AcceptorCallback> QuicServerBuilder<'a, F> {
     pub fn new(endpoint: &'a EndPoint, acceptor_params: QuicAcceptorParams<F>) -> Self {
         Self {
@@ -300,6 +321,16 @@ pub struct QuicServer<F: AcceptorCallback> {
     pub quic_acceptor: QuicAcceptor<F>,
     pub locator: Locator,
     pub local_addr: SocketAddr,
+}
+
+impl<F: AcceptorCallback> fmt::Debug for QuicServer<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicServer")
+            .field("quic_acceptor", &self.quic_acceptor)
+            .field("locator", &self.locator)
+            .field("local_addr", &self.local_addr)
+            .finish()
+    }
 }
 
 impl<F: AcceptorCallback> QuicServer<F> {
@@ -398,6 +429,16 @@ pub struct QuicClientBuilder<'a> {
     is_secure: bool,
 }
 
+impl fmt::Debug for QuicClientBuilder<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicClientBuilder")
+            .field("endpoint", &self.endpoint)
+            .field("is_streamed", &self.is_streamed)
+            .field("is_secure", &self.is_secure)
+            .finish()
+    }
+}
+
 impl<'a> QuicClientBuilder<'a> {
     pub fn new(endpoint: &'a EndPoint) -> Self {
         Self {
@@ -439,6 +480,22 @@ pub struct QuicClient {
     pub dst_addr: SocketAddr,
     pub is_mixed_rel: bool,
     pub tls_close_link_on_expiration: bool,
+}
+
+impl fmt::Debug for QuicClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicClient")
+            .field("quic_conn", &self.quic_conn)
+            .field("streams", &self.streams)
+            .field("src_addr", &self.src_addr)
+            .field("dst_addr", &self.dst_addr)
+            .field("is_mixed_rel", &self.is_mixed_rel)
+            .field(
+                "tls_close_link_on_expiration",
+                &self.tls_close_link_on_expiration,
+            )
+            .finish()
+    }
 }
 
 impl QuicClient {
@@ -567,11 +624,36 @@ pub struct QuicAcceptorParams<F: AcceptorCallback> {
     pub make_link: F,
 }
 
+impl<F: AcceptorCallback> fmt::Debug for QuicAcceptorParams<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicAcceptorParams")
+            .field("token", &self.token)
+            .field("manager", &self.manager)
+            .field("throttle_time", &self.throttle_time)
+            .field("make_link", &"..")
+            .finish()
+    }
+}
+
 pub struct QuicAcceptor<F: AcceptorCallback> {
     quic_endpoint: quinn::Endpoint,
     tls_close_link_on_expiration: bool,
     is_streamed: bool,
     inner: QuicAcceptorParams<F>,
+}
+
+impl<F: AcceptorCallback> fmt::Debug for QuicAcceptor<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuicAcceptor")
+            .field("quic_endpoint", &self.quic_endpoint)
+            .field(
+                "tls_close_link_on_expiration",
+                &self.tls_close_link_on_expiration,
+            )
+            .field("is_streamed", &self.is_streamed)
+            .field("inner", &self.inner)
+            .finish()
+    }
 }
 
 impl<F: AcceptorCallback> QuicAcceptor<F> {
@@ -676,6 +758,7 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
 }
 
 /// Material for building a link after accepting a new connection on a QUIC listener
+#[derive(Debug)]
 pub struct QuicLinkMaterial {
     pub quic_conn: QuicConnection,
     pub src_addr: SocketAddr,
@@ -692,6 +775,26 @@ pub struct QuicStreams {
 }
 
 unsafe impl Sync for QuicStreams {}
+
+impl fmt::Debug for QuicStreams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let active_send_streams = self
+            .send
+            .iter()
+            .filter(|stream| unsafe { &*stream.get() }.is_some())
+            .count();
+        let active_recv_streams = self
+            .recv
+            .iter()
+            .filter(|stream| unsafe { &*stream.get() }.is_some())
+            .count();
+        f.debug_struct("QuicStreams")
+            .field("active_send_streams", &active_send_streams)
+            .field("active_recv_streams", &active_recv_streams)
+            .field("is_multistream", &self.is_multistream)
+            .finish()
+    }
+}
 
 impl QuicStreams {
     async fn open(connection: &quinn::Connection) -> ZResult<Self> {

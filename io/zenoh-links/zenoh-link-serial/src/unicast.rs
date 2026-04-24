@@ -269,6 +269,15 @@ pub struct LinkManagerUnicastSerial {
     listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnicastSerial>>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastSerial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastSerial")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastSerial {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

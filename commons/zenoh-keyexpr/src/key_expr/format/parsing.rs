@@ -22,6 +22,15 @@ pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
     results: Storage::ValuesStorage<Option<&'s keyexpr>>,
 }
 
+impl<'s, Storage: IKeFormatStorage<'s>> core::fmt::Debug for Parsed<'s, Storage> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Parsed")
+            .field("format", &self.format)
+            .field("results_len", &self.results.as_ref().len())
+            .finish()
+    }
+}
+
 impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
     /// Access the `id` element.
     ///
@@ -66,6 +75,16 @@ pub struct Iter<'s, Storage: IKeFormatStorage<'s>> {
     parsed: &'s Parsed<'s, Storage>,
     start: usize,
     end: usize,
+}
+
+impl<'s, Storage: IKeFormatStorage<'s>> core::fmt::Debug for Iter<'s, Storage> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Iter")
+            .field("parsed", &"..")
+            .field("start", &self.start)
+            .field("end", &self.end)
+            .finish()
+    }
 }
 impl<'s, Storage: IKeFormatStorage<'s>> Iterator for Iter<'s, Storage> {
     type Item = (&'s str, Option<&'s keyexpr>);

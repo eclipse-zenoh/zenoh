@@ -423,6 +423,15 @@ pub struct PublisherUndeclaration<'a> {
     wait_callbacks: bool,
 }
 
+impl fmt::Debug for PublisherUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublisherUndeclaration")
+            .field("publisher", &self.publisher)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
 impl<'a> PublisherUndeclaration<'a> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.

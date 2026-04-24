@@ -44,7 +44,7 @@ pub trait IntoHandler<T> {
 /// separate type was created to make it possible to change the default handler implementation
 /// without breaking API changes.
 #[repr(transparent)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DefaultHandler(FifoChannel);
 
 impl<T: Send + 'static> IntoHandler<T> for DefaultHandler {
