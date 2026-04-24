@@ -121,7 +121,7 @@ use std::time::Duration;
 
 use zenoh_config::ZenohId;
 use zenoh_core::ztimeout;
-use zenoh_test::get_free_port;
+use zenoh_test::get_free_tcp_port;
 
 use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 
@@ -251,9 +251,9 @@ async fn create_net(
     let mut router_ports = HashMap::new();
 
     for (id, _) in &net {
-        let mut port = get_free_port();
+        let mut port = get_free_tcp_port();
         while router_ports.values().any(|p| *p == port) {
-            port = get_free_port();
+            port = get_free_tcp_port();
         }
         router_ports.insert(*id, port);
     }

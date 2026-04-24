@@ -28,7 +28,8 @@ own copy of helpers.  This caused:
 
 | Function | Description |
 |---|---|
-| `get_free_port()` | Binds to a random TCP port and returns the port number.  ⚠️ Susceptible to TOCTOU races; prefer port `0` listeners when possible. |
+| `get_free_tcp_port()` | Binds to a random TCP port and returns the port number.  ⚠️ Susceptible to TOCTOU races; prefer port `0` listeners when possible. |
+| `get_free_udp_port()` | Binds to a random UDP port and returns the port number.  ⚠️ Susceptible to TOCTOU races; prefer port `0` listeners when possible. |
 | `get_tcp_locator(&session)` | Returns the first `tcp/` endpoint from a session's locators. |
 | `get_locators_from_session(&session)` | Returns all locators from a session (async). |
 | `get_locators_from_session_sync(&session)` | Returns all locators from a session (blocking). |
@@ -120,14 +121,14 @@ c2.connect.endpoints.set(vec![router_endpoint]).unwrap();
 ### 5. (Not Recommended) Pre-allocating Free Ports
 
 In rare cases where you must know the endpoint *before* creating the session,
-use `get_free_port()`.
+use `get_free_tcp_port()`.
 *Reference: `router_linkstate` in `routing.rs`*
 
 > **Warning**: This is susceptible to TOCTOU race conditions.  Another process
 > could bind to the "free" port before Zenoh does.
 
 ```rust
-let locator = format!("tcp/127.0.0.1:{}", get_free_port());
+let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
 let node = Node {
     listen: vec![locator.clone()],

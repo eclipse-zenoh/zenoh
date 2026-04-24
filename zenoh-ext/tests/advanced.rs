@@ -141,7 +141,7 @@ async fn test_advanced_retransmission_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -301,7 +301,7 @@ async fn test_advanced_retransmission_periodic_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
 
@@ -454,7 +454,7 @@ async fn test_advanced_sample_miss_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -603,7 +603,7 @@ async fn test_advanced_retransmission_sample_miss_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
 
@@ -762,7 +762,7 @@ async fn test_advanced_late_joiner_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(8);
 
@@ -899,7 +899,7 @@ async fn test_advanced_retransmission_heartbeat_inner(
     pub_namespace: Option<OwnedNonWildKeyExpr>,
     sub_namespace: Option<OwnedNonWildKeyExpr>,
 ) {
-    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let endpoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);
     const HEARTBEAT_PERIOD: Duration = Duration::from_secs(4);
@@ -1071,7 +1071,7 @@ async fn advanced_subscriber_does_not_prevent_session_to_be_closed_when_dropped(
 }
 
 async fn create_peer_pair() -> (Session, Session) {
-    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     let locator = locator.as_str();
     let peer1 = {
         let mut c = zenoh::Config::default();
@@ -1239,7 +1239,7 @@ async fn test_callback_drop_on_undeclare_advanced_subscriber_local() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_callback_drop_on_undeclare_advanced_sample_miss_listener() {
     let ke = "test/undeclare/advanced_subscriber_sample_miss_listener_callback_drop";
-    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_port());
+    let locator = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port());
     let locator = locator.as_str();
     const SLEEP: Duration = Duration::from_secs(1);
     const RECONNECT_SLEEP: Duration = Duration::from_secs(5);

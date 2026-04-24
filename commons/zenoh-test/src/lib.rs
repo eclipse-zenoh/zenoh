@@ -33,7 +33,10 @@
 //! test_sessions.close().await;
 //! ```
 
-use std::{net::TcpListener, time::Duration};
+use std::{
+    net::{TcpListener, UdpSocket},
+    time::Duration,
+};
 
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
@@ -50,9 +53,19 @@ pub const TIMEOUT: Duration = Duration::from_secs(60);
 /// The socket is dropped (and the port released) before the caller can use it,
 /// so there is a tiny theoretical race.  In practice this is negligible on
 /// localhost because tests bind immediately after calling this function.
-pub fn get_free_port() -> u16 {
+pub fn get_free_tcp_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap().port()
+}
+
+/// Binds to a random UDP port on loopback and returns the assigned port number.
+///
+/// The socket is dropped (and the port released) before the caller can use it,
+/// so there is a tiny theoretical race. In practice this is negligible on
+/// localhost because tests bind immediately after calling this function.
+pub fn get_free_udp_port() -> u16 {
+    let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+    socket.local_addr().unwrap().port()
 }
 
 /// Returns the first TCP [`EndPoint`] exposed by `session`.
