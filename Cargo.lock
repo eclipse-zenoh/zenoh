@@ -6749,6 +6749,7 @@ dependencies = [
  "zenoh-stats",
  "zenoh-sync",
  "zenoh-task",
+ "zenoh-test",
  "zenoh-util",
 ]
 
