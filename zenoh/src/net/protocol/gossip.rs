@@ -409,11 +409,13 @@ impl Gossip {
             }
         }
         if (!self.wait_declares) || src_whatami != WhatAmI::Peer {
-            zenoh_runtime::ZRuntime::Net.block_in_place(
-                strong_runtime
+            let runtime = strong_runtime.clone();
+            strong_runtime.spawn(async move {
+                runtime
                     .start_conditions()
-                    .terminate_peer_connector_zid(src),
-            );
+                    .terminate_peer_connector_zid(src)
+                    .await;
+            });
         }
     }
 
