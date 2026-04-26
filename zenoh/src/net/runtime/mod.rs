@@ -20,6 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 mod region;
+mod scouting;
 
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
@@ -32,11 +33,13 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
+    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
 use futures::Future;
+pub use scouting::Scouting;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
@@ -68,6 +71,8 @@ use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+#[cfg(unix)]
+use zenoh_util::net::update_iface_cache;
 
 use self::orchestrator::StartConditions;
 use super::{
@@ -133,6 +138,7 @@ pub(crate) struct RuntimeState {
     plugins_manager: Mutex<PluginsManager>,
     start_conditions: Arc<StartConditions>,
     pending_connections: tokio::sync::Mutex<HashSet<ZenohIdProto>>,
+    scouting: tokio::sync::Mutex<Option<Scouting>>,
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
@@ -536,6 +542,7 @@ impl RuntimeState {
     }
 }
 
+#[derive(Clone)]
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
@@ -679,6 +686,7 @@ impl RuntimeBuilder {
         // SHM lazy init flag
         #[cfg(feature = "shared-memory")]
         let shm_init_mode = *config.transport.shared_memory.mode();
+        let endpoint_poll_interval = config.listen.endpoint_poll_interval_ms().unwrap_or(10_000);
 
         let namespace = config.namespace().clone();
         let config = Notifier::new(config);
@@ -699,6 +707,7 @@ impl RuntimeBuilder {
                 plugins_manager: Mutex::new(plugins_manager),
                 start_conditions: Arc::new(StartConditions::default()),
                 pending_connections: tokio::sync::Mutex::new(HashSet::new()),
+                scouting: tokio::sync::Mutex::new(None),
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
@@ -722,6 +731,15 @@ impl RuntimeBuilder {
             zenoh_config::ShmInitMode::Init => zenoh_shm::init::init(),
             zenoh_config::ShmInitMode::Lazy => {}
         };
+
+        if endpoint_poll_interval > 0 {
+            let poll_interval = Duration::from_millis(endpoint_poll_interval as u64);
+            runtime.spawn({
+                let runtime2 = Runtime::downgrade(&runtime);
+                let token = runtime.get_cancellation_token();
+                async move { Runtime::monitor_available_addrs(runtime2, poll_interval, token).await }
+            });
+        }
 
         Ok(runtime)
     }
@@ -868,6 +886,45 @@ impl Runtime {
     #[allow(dead_code)]
     pub(crate) fn state_weak(&self) -> Weak<RuntimeState> {
         Arc::downgrade(&self.state)
+    }
+
+    async fn monitor_available_addrs(
+        this: WeakRuntime,
+        poll_interval: Duration,
+        token: CancellationToken,
+    ) {
+        token
+            .run_until_cancelled_owned(async {
+                loop {
+                    tokio::time::sleep(poll_interval).await;
+                    if let Some(runtime) = this.upgrade() {
+                        runtime.update_available_addrs().await;
+                    } else {
+                        return;
+                    }
+                }
+            })
+            .await;
+    }
+
+    async fn update_available_addrs(&self) {
+        #[cfg(unix)]
+        update_iface_cache();
+
+        if self.update_locators() {
+            let tables_lock = &self.state.router.tables;
+            let _ctrl_lock = zlock!(tables_lock.ctrl_lock);
+            let mut tables = zwrite!(tables_lock.tables);
+            tables
+                .hats
+                .iter_mut()
+                .for_each(|(_region, hat)| hat.update_self_locators());
+        }
+
+        let scouting = self.state.scouting.lock().await;
+        if let Some(scouting) = scouting.as_ref() {
+            scouting.update_addrs_if_needed().await;
+        }
     }
 }
 
@@ -1141,6 +1198,7 @@ impl Closee for Arc<RuntimeState> {
         self.manager.close().await;
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
+        zasynclock!(self.scouting).take();
         // TODO: the call below is needed to prevent intermittent leak
         // due to not freed resource Arc, that apparently happens because
         // the task responsible for resource clean up was aborted earlier than expected.
