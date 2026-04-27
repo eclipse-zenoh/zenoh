@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
+use std::{fmt::Debug, sync::MutexGuard};
 
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::{buffer::Buffer, reader::BacktrackableReader};
 use zenoh_codec::transport::frame::FrameReader;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;
@@ -81,9 +81,9 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame(
+    fn handle_frame<R: BacktrackableReader>(
         &self,
-        frame: FrameReader<ZSlice>,
+        frame: FrameReader<R>,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
@@ -234,9 +234,9 @@ impl TransportUnicastUniversal {
         Ok(true)
     }
 
-    pub(super) fn read_messages(
+    pub(super) fn read_messages<TBuffer: BacktrackableReader + Buffer + Debug>(
         &self,
-        mut batch: RBatch,
+        mut batch: RBatch<TBuffer>,
         link: &Link,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {

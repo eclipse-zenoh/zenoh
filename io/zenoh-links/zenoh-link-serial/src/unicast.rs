@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
@@ -136,6 +138,12 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         }
 
         Ok(())
+    }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        //TODO: expose FD for ZSerial
+        bail!("Not supported");
     }
 
     async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {

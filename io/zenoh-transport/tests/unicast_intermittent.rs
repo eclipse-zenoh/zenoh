@@ -466,6 +466,6 @@ async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_vsock_intermittent() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17010".parse().unwrap();
     universal_transport_intermittent(&endpoint).await;
 }

@@ -190,7 +190,7 @@ pub(crate) struct TransportLinkMulticastRx {
 }
 
 impl TransportLinkMulticastRx {
-    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch, Locator)>
+    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch<ZSlice>, Locator)>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
@@ -532,7 +532,7 @@ async fn rx_task(
     async fn read<T, F>(
         link: &mut TransportLinkMulticastRx,
         pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<(RBatch, Locator)>
+    ) -> ZResult<(RBatch<ZSlice>, Locator)>
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,

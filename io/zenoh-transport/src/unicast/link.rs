@@ -212,7 +212,11 @@ pub(crate) struct TransportLinkUnicastRx {
 }
 
 impl TransportLinkUnicastRx {
-    pub async fn recv_batch<C, T>(&mut self, buff: C, priority: Option<Priority>) -> ZResult<RBatch>
+    pub async fn recv_batch<C, T>(
+        &mut self,
+        buff: C,
+        priority: Option<Priority>,
+    ) -> ZResult<RBatch<ZSlice>>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,

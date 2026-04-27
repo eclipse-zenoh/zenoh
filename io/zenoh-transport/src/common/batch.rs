@@ -15,7 +15,7 @@ use std::num::NonZeroUsize;
 
 use zenoh_buffers::{
     buffer::Buffer,
-    reader::{DidntRead, HasReader},
+    reader::{BacktrackableReader, DidntRead},
     writer::{DidntWrite, HasWriter, Writer},
     BBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
@@ -39,8 +39,8 @@ const H_LEN: usize = BatchHeader::SIZE;
 
 // Split the inner buffer into (length, header, payload) immutable slices
 macro_rules! zsplit {
-    ($slice:expr, $config:expr) => {{
-        match ($config.is_streamed, $config.has_header()) {
+    ($slice:expr, $is_streamed:expr, $has_header:expr) => {{
+        match ($is_streamed, $has_header) {
             (true, true) => {
                 let (l, s) = $slice.split_at(L_LEN);
                 let (h, p) = s.split_at(H_LEN);
@@ -282,7 +282,7 @@ impl WBatch {
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
     fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
-        zsplit!(buffer, config)
+        zsplit!(buffer, config.is_streamed, config.has_header())
     }
 
     // Split (length, header, payload) internal buffer slice
@@ -421,22 +421,19 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
 
 // Read batch
 #[derive(Debug)]
-pub struct RBatch {
+pub struct RBatch<TBuffer: BacktrackableReader + Buffer> {
     // The buffer to perform deserializationn from
-    buffer: ZSlice,
+    buffer: TBuffer,
     // The batch codec
     codec: Zenoh080Batch,
     // The batch config
     config: BatchConfig,
 }
 
-impl RBatch {
-    pub fn new<T>(config: BatchConfig, buffer: T) -> Self
-    where
-        T: Into<ZSlice>,
-    {
+impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer> {
+    pub fn new(config: BatchConfig, buffer: TBuffer) -> Self {
         Self {
-            buffer: buffer.into(),
+            buffer,
             codec: Zenoh080Batch::new(),
             config,
         }
@@ -447,14 +444,91 @@ impl RBatch {
     }
 
     #[inline(always)]
-    pub const fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
+    #[cfg(feature = "transport_compression")]
+    fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
+    where
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
+    {
+        let mut into = (buff)();
+        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
+            .map_err(|_| zerror!("Decompression error"))?;
+        let zslice = ZSlice::new(Arc::new(into), 0, n)
+            .map_err(|_| zerror!("Invalid decompression buffer length"))?;
+        Ok(zslice)
+    }
+}
+
+#[cfg(all(feature = "uring", target_os = "linux"))]
+impl<TBuffer: BacktrackableReader + Buffer> RBatch<TBuffer>
+where
+    RBatch<TBuffer>: DecompressUring,
+{
+    // Split (length, header, payload) internal buffer slice
+    #[inline(always)]
+    fn split_uring(&mut self) -> ZResult<Option<BatchHeader>> {
+        if self.config.has_header() {
+            let h = self.buffer.read_u8()?;
+            return Ok(Some(BatchHeader::new(h)));
+        }
+        Ok(None)
+    }
+
+    pub fn initialize_uring<C, T>(
+        &mut self,
+        #[allow(unused_variables)] buff: C,
+    ) -> ZResult<Option<<RBatch<TBuffer> as DecompressUring>::Result>>
+    where
+        C: Fn() -> T + Copy,
+        T: AsMut<[u8]> + ZSliceBuffer + 'static,
+    {
+        let h = self.split_uring()?;
+
+        #[cfg(feature = "transport_compression")]
+        {
+            if let Some(header) = h {
+                if header.is_compression() {
+                    let contiguous_payload = self.buffer.read_zslice(self.buffer.remaining())?;
+                    let decompressed = self.decompress(&contiguous_payload, buff)?;
+                    return Ok(Some(self.apply_decompressed(decompressed)));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+pub trait DecompressUring {
+    type Result;
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result;
+}
+
+impl DecompressUring for RBatch<ZSlice> {
+    type Result = ();
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result {
+        self.buffer = slice;
+    }
+}
+
+impl DecompressUring for RBatch<ZBufReader<'_>> {
+    type Result = RBatch<ZSlice>;
+
+    fn apply_decompressed(&mut self, slice: ZSlice) -> Self::Result {
+        RBatch::new(self.config, slice)
+    }
+}
+
+impl RBatch<ZSlice> {
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
     fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
-        zsplit!(buffer, config)
+        zsplit!(buffer, config.is_streamed, config.has_header())
     }
 
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
@@ -488,19 +562,6 @@ impl RBatch {
 
         Ok(())
     }
-
-    #[cfg(feature = "transport_compression")]
-    fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
-    where
-        T: AsMut<[u8]> + ZSliceBuffer + 'static,
-    {
-        let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(payload, into.as_mut())
-            .map_err(|_| zerror!("Decompression error"))?;
-        let zslice = ZSlice::new(Arc::new(into), 0, n)
-            .map_err(|_| zerror!("Invalid decompression buffer length"))?;
-        Ok(zslice)
-    }
 }
 
 pub trait Decode<Message> {
@@ -509,31 +570,33 @@ pub trait Decode<Message> {
     fn decode(self) -> Result<Message, Self::Error>;
 }
 
-impl Decode<TransportMessage> for &mut RBatch {
+impl<TBuffer: BacktrackableReader + Buffer> Decode<TransportMessage> for &mut RBatch<TBuffer> {
     type Error = DidntRead;
 
     fn decode(self) -> Result<TransportMessage, Self::Error> {
-        let mut reader = self.buffer.reader();
-        self.codec.read(&mut reader)
+        self.codec.read(&mut self.buffer)
     }
 }
 
-impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
+impl<TBuffer: BacktrackableReader + Buffer> Decode<(TransportMessage, BatchSize)>
+    for &mut RBatch<TBuffer>
+{
     type Error = DidntRead;
 
     fn decode(self) -> Result<(TransportMessage, BatchSize), Self::Error> {
         let len = self.buffer.len() as BatchSize;
-        let mut reader = self.buffer.reader();
-        let msg = self.codec.read(&mut reader)?;
+        let msg = self.codec.read(&mut self.buffer)?;
         let end = self.buffer.len() as BatchSize;
         Ok((msg, len - end))
     }
 }
 
-impl<'a> Decode<FrameReader<'a, ZSlice>> for &'a mut RBatch {
+impl<'a, TBuffer: BacktrackableReader + Buffer> Decode<FrameReader<'a, TBuffer>>
+    for &'a mut RBatch<TBuffer>
+{
     type Error = DidntRead;
 
-    fn decode(self) -> Result<FrameReader<'a, ZSlice>, Self::Error> {
+    fn decode(self) -> Result<FrameReader<'a, TBuffer>, Self::Error> {
         self.codec.read(&mut self.buffer)
     }
 }
@@ -591,7 +654,7 @@ mod tests {
                 };
                 println!("Finalized WBatch: {bytes:02x?}");
 
-                let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice());
+                let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice().into());
                 println!("Decoded RBatch: {rbatch:?}");
                 rbatch
                     .initialize(|| {
