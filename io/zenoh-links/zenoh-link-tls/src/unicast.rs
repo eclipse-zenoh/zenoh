@@ -13,7 +13,6 @@
 //
 use std::{
     cell::UnsafeCell,
-    convert::TryInto,
     fmt::{self, Debug},
     net::SocketAddr,
     sync::Arc,
@@ -45,7 +44,7 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
-    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LOCATOR_PREFIX,
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
@@ -91,19 +90,6 @@ impl LinkUnicastTls {
         if let Err(err) = tcp_stream.set_nodelay(true) {
             tracing::warn!(
                 "Unable to set NODEALY option on TLS link {} => {}: {}",
-                src_addr,
-                dst_addr,
-                err
-            );
-        }
-
-        // Set the TLS linger option
-        #[allow(deprecated)]
-        if let Err(err) = tcp_stream.set_linger(Some(Duration::from_secs(
-            (*TLS_LINGER_TIMEOUT).try_into().unwrap(),
-        ))) {
-            tracing::warn!(
-                "Unable to set LINGER option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
