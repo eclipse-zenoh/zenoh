@@ -140,6 +140,7 @@ tracing-capture = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-tunnel = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
+zenoh-test = { workspace = true, features = ["internal", "unstable"] }
 
 [build-dependencies]
 rustc_version = { workspace = true }

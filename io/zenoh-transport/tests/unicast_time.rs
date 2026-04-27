@@ -21,6 +21,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
+use zenoh_test::{get_free_tcp_port, get_free_udp_port};
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -228,7 +229,9 @@ async fn time_lowlatency_transport(endpoint: &EndPoint) {
 #[ignore]
 async fn time_tcp_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     time_universal_transport(&endpoint).await;
 }
 
@@ -237,7 +240,9 @@ async fn time_tcp_only() {
 #[ignore]
 async fn time_tcp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
 
@@ -246,7 +251,9 @@ async fn time_tcp_only_with_lowlatency_transport() {
 #[ignore]
 async fn time_udp_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     time_universal_transport(&endpoint).await;
 }
 
@@ -255,7 +262,9 @@ async fn time_udp_only() {
 #[ignore]
 async fn time_udp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
 
@@ -264,7 +273,9 @@ async fn time_udp_only_with_lowlatency_transport() {
 #[ignore]
 async fn time_ws_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     time_universal_transport(&endpoint).await;
 }
 
@@ -273,7 +284,9 @@ async fn time_ws_only() {
 #[ignore]
 async fn time_ws_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     time_lowlatency_transport(&endpoint).await;
 }
 
@@ -391,7 +404,9 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -490,7 +505,9 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(

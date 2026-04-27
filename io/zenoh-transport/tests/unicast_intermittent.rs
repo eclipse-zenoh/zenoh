@@ -32,6 +32,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -403,7 +404,9 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
@@ -411,7 +414,9 @@ async fn transport_tcp_intermittent() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent_for_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 
@@ -420,7 +425,9 @@ async fn transport_tcp_intermittent_for_lowlatency_transport() {
 #[ignore]
 async fn transport_ws_intermittent() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
@@ -429,7 +436,9 @@ async fn transport_ws_intermittent() {
 #[ignore]
 async fn transport_ws_intermittent_for_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 

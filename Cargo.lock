@@ -6123,6 +6123,7 @@ dependencies = [
  "zenoh-stats",
  "zenoh-sync",
  "zenoh-task",
+ "zenoh-test",
  "zenoh-transport",
  "zenoh-util",
 ]
@@ -6249,6 +6250,7 @@ dependencies = [
  "zenoh",
  "zenoh-config",
  "zenoh-macros",
+ "zenoh-test",
  "zenoh-util",
 ]
 
@@ -6722,6 +6724,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-test"
+version = "1.9.0"
+dependencies = [
+ "tokio",
+ "zenoh",
+ "zenoh-config",
+ "zenoh-core",
+ "zenoh-link",
+]
+
+[[package]]
 name = "zenoh-transport"
 version = "1.9.0"
 dependencies = [
@@ -6753,6 +6766,7 @@ dependencies = [
  "zenoh-stats",
  "zenoh-sync",
  "zenoh-task",
+ "zenoh-test",
  "zenoh-uring",
  "zenoh-util",
 ]

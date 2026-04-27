@@ -14,11 +14,7 @@
 #![cfg(feature = "unstable")]
 use std::collections::HashSet;
 
-use zenoh::{
-    config::{EndPoint, WhatAmI},
-    sample::SampleKind,
-    Wait,
-};
+use zenoh::{config::WhatAmI, sample::SampleKind, Wait};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
@@ -31,7 +27,7 @@ async fn test_liveliness_querying_subscriber_clique() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "udp/localhost:47447";
+    let mut test_sessions = zenoh_test::TestSessions::new();
 
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
@@ -40,27 +36,17 @@ async fn test_liveliness_querying_subscriber_clique() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_listener_config("udp/127.0.0.1:0", 1);
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_listener_with_cfg(c).await;
         tracing::info!("Peer (1) ZID: {}", s.zid());
         s
     };
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Peer (2) ZID: {}", s.zid());
         s
     };
@@ -110,8 +96,7 @@ async fn test_liveliness_querying_subscriber_clique() {
     token2.undeclare().await.unwrap();
     sub.undeclare().await.unwrap();
 
-    peer1.close().await.unwrap();
-    peer2.close().await.unwrap();
+    test_sessions.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -124,7 +109,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:27449";
+    let mut test_sessions = zenoh_test::TestSessions::new();
 
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
@@ -132,54 +117,34 @@ async fn test_liveliness_querying_subscriber_brokered() {
 
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let _router = {
+        let mut c = test_sessions.get_listener_config("tcp/127.0.0.1:0", 1);
         let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_listener_with_cfg(c).await;
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
 
     let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (1) ZID: {}", s.zid());
         s
     };
 
     let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (2) ZID: {}", s.zid());
         s
     };
 
     let client3 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (3) ZID: {}", s.zid());
         s
     };
@@ -215,10 +180,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
     token2.undeclare().await.unwrap();
     sub.undeclare().await.unwrap();
 
-    router.close().await.unwrap();
-    client1.close().await.unwrap();
-    client2.close().await.unwrap();
-    client3.close().await.unwrap();
+    test_sessions.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -232,7 +194,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const PEER1_ENDPOINT: &str = "udp/localhost:47449";
+    let mut test_sessions = zenoh_test::TestSessions::new();
 
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
@@ -241,27 +203,17 @@ async fn test_liveliness_fetching_subscriber_clique() {
     zenoh_util::init_log_from_env_or("error");
 
     let peer1 = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_listener_config("udp/127.0.0.1:0", 1);
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_listener_with_cfg(c).await;
         tracing::info!("Peer (1) ZID: {}", s.zid());
         s
     };
 
     let peer2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER1_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Peer));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Peer (2) ZID: {}", s.zid());
         s
     };
@@ -301,8 +253,7 @@ async fn test_liveliness_fetching_subscriber_clique() {
     token2.undeclare().await.unwrap();
     sub.undeclare().await.unwrap();
 
-    peer1.close().await.unwrap();
-    peer2.close().await.unwrap();
+    test_sessions.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -315,7 +266,7 @@ async fn test_liveliness_fetching_subscriber_brokered() {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:47450";
+    let mut test_sessions = zenoh_test::TestSessions::new();
 
     const LIVELINESS_KEYEXPR_1: &str = "test/liveliness/querying-subscriber/brokered/1";
     const LIVELINESS_KEYEXPR_2: &str = "test/liveliness/querying-subscriber/brokered/2";
@@ -323,54 +274,34 @@ async fn test_liveliness_fetching_subscriber_brokered() {
 
     zenoh_util::init_log_from_env_or("error");
 
-    let router = {
-        let mut c = zenoh::Config::default();
-        c.listen
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let _router = {
+        let mut c = test_sessions.get_listener_config("tcp/127.0.0.1:0", 1);
         let _ = c.set_mode(Some(WhatAmI::Router));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_listener_with_cfg(c).await;
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
 
     let client1 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (1) ZID: {}", s.zid());
         s
     };
 
     let client2 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (2) ZID: {}", s.zid());
         s
     };
 
     let client3 = {
-        let mut c = zenoh::Config::default();
-        c.connect
-            .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
-        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let mut c = test_sessions.get_connector_config();
         let _ = c.set_mode(Some(WhatAmI::Client));
-        let s = ztimeout!(zenoh::open(c)).unwrap();
+        let s = test_sessions.open_connector_with_cfg(c).await;
         tracing::info!("Client (3) ZID: {}", s.zid());
         s
     };
@@ -410,8 +341,5 @@ async fn test_liveliness_fetching_subscriber_brokered() {
     token2.undeclare().await.unwrap();
     sub.undeclare().await.unwrap();
 
-    router.close().await.unwrap();
-    client1.close().await.unwrap();
-    client2.close().await.unwrap();
-    client3.close().await.unwrap();
+    test_sessions.close().await;
 }
