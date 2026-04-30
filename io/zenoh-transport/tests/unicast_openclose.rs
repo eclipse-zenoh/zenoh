@@ -771,7 +771,7 @@ async fn openclose_udp_only_listen_with_interface_restriction() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_vsock() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17030".parse().unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
 

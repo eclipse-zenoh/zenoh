@@ -282,7 +282,7 @@ impl TransportMulticastInner {
 
     pub(super) fn read_messages(
         &self,
-        mut batch: RBatch,
+        mut batch: RBatch<ZSlice>,
         locator: Locator,
         batch_size: BatchSize,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,

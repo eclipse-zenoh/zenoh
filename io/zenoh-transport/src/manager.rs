@@ -38,6 +38,8 @@ use super::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use crate::uring::Uring;
 use crate::{
     multicast::manager::{
         TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
@@ -173,6 +175,8 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    pub uring: Uring,
 }
 
 impl fmt::Debug for TransportManagerState {
@@ -499,6 +503,8 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(all(feature = "uring", target_os = "linux"))]
+            uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)?,
         };
 
         let params = TransportManagerParams { config, state };

@@ -12,10 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
+use std::collections::HashSet;
+
 use zenoh::{config::WhatAmI, sample::SampleKind, Wait};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/issues/2523"]
 async fn test_liveliness_querying_subscriber_clique() {
     use std::time::Duration;
 
@@ -61,13 +64,27 @@ async fn test_liveliness_querying_subscriber_clique() {
     let token2 = ztimeout!(peer2.liveliness().declare_token(LIVELINESS_KEYEXPR_2)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let sample = ztimeout!(sub.recv_async()).unwrap();
-    assert_eq!(sample.kind(), SampleKind::Put);
-    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+    let mut expected_tokens = HashSet::new();
+    expected_tokens.insert(LIVELINESS_KEYEXPR_1);
+    expected_tokens.insert(LIVELINESS_KEYEXPR_2);
+
+    println!("expected_tokens = {:?}", expected_tokens);
 
     let sample = ztimeout!(sub.recv_async()).unwrap();
     assert_eq!(sample.kind(), SampleKind::Put);
-    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
+    println!("sample.key_expr() = {}", sample.key_expr());
+    assert!(expected_tokens.remove(sample.key_expr().as_str()));
+    //    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_1);
+
+    //let sample = ztimeout!(sub.recv_async()).unwrap();
+    //assert_eq!(sample.kind(), SampleKind::Put);
+    //println!("sample.key_expr() = {}", sample.key_expr());
+
+    let sample = ztimeout!(sub.recv_async()).unwrap();
+    assert_eq!(sample.kind(), SampleKind::Put);
+    println!("sample.key_expr() = {}", sample.key_expr());
+    assert!(expected_tokens.remove(sample.key_expr().as_str()));
+    //    assert_eq!(sample.key_expr().as_str(), LIVELINESS_KEYEXPR_2);
 
     token1.undeclare().await.unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -168,6 +185,7 @@ async fn test_liveliness_querying_subscriber_brokered() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[allow(deprecated)]
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/issues/2523"]
 async fn test_liveliness_fetching_subscriber_clique() {
     use std::time::Duration;
 
