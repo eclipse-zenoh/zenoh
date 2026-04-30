@@ -17,6 +17,7 @@ use zenoh_core::zasynclock;
 
 use crate::Condition;
 
+#[derive(Debug)]
 pub struct FifoQueue<T> {
     not_empty: Condition,
     not_full: Condition,

@@ -102,6 +102,7 @@ impl TransportEventHandler for SHRouter {
 }
 
 // Transport Callback for the router
+#[derive(Debug)]
 pub struct SCRouter {
     priority: Arc<AtomicUsize>,
     count: Arc<AtomicUsize>,
@@ -164,6 +165,7 @@ impl TransportEventHandler for SHClient {
 }
 
 // Transport Callback for the client
+#[derive(Debug)]
 pub struct SCClient;
 
 impl Default for SCClient {

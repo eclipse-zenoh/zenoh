@@ -16,6 +16,7 @@
 use std::{
     collections::HashMap,
     convert::TryInto,
+    fmt,
     ops::Add,
     sync::Arc,
     time::{Duration, Instant},
@@ -173,6 +174,15 @@ struct GroupState {
 pub struct Group {
     state: Arc<GroupState>,
     task_controller: TaskController,
+}
+
+impl fmt::Debug for Group {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Group")
+            .field("state", &"..")
+            .field("task_controller", &self.task_controller)
+            .finish()
+    }
 }
 
 impl Drop for Group {

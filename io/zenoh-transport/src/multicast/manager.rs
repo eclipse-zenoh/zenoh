@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use tokio::sync::Mutex;
 #[cfg(feature = "transport_compression")]
@@ -30,6 +30,7 @@ use crate::{
     TransportManager,
 };
 
+#[derive(Debug)]
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,
     pub keep_alive: usize,
@@ -50,6 +51,21 @@ pub struct TransportManagerBuilderMulticast {
     is_compression: bool,
 }
 
+impl fmt::Debug for TransportManagerBuilderMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilderMulticast");
+        debug
+            .field("lease", &self.lease)
+            .field("keep_alive", &self.keep_alive)
+            .field("join_interval", &self.join_interval)
+            .field("max_sessions", &self.max_sessions)
+            .field("is_qos", &self.is_qos);
+        #[cfg(feature = "transport_compression")]
+        debug.field("is_compression", &self.is_compression);
+        debug.finish()
+    }
+}
+
 pub struct TransportManagerStateMulticast {
     // Established listeners
     pub(crate) link_managers: Arc<Mutex<HashMap<LinkKind, LinkManagerMulticast>>>,
@@ -57,9 +73,27 @@ pub struct TransportManagerStateMulticast {
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
 }
 
+impl fmt::Debug for TransportManagerStateMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerStateMulticast")
+            .field("link_managers", &"..")
+            .field("transports", &"..")
+            .finish()
+    }
+}
+
 pub struct TransportManagerParamsMulticast {
     pub config: TransportManagerConfigMulticast,
     pub state: TransportManagerStateMulticast,
+}
+
+impl fmt::Debug for TransportManagerParamsMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParamsMulticast")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 impl TransportManagerBuilderMulticast {

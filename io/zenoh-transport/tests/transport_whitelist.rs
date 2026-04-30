@@ -50,6 +50,7 @@ impl TransportEventHandler for SHRouter {
     }
 }
 
+#[derive(Debug)]
 pub struct SCRouter;
 
 impl TransportPeerEventHandler for SCRouter {

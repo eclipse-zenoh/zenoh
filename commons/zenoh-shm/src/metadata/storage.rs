@@ -34,6 +34,14 @@ pub struct MetadataStorage {
     available: Mutex<VecDeque<OwnedMetadataDescriptor>>,
 }
 
+impl std::fmt::Debug for MetadataStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MetadataStorage")
+            .field("available", &"..")
+            .finish()
+    }
+}
+
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
         // See ordering implementation for OwnedMetadataDescriptor

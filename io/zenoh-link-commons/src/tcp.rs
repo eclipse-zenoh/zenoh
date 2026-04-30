@@ -18,6 +18,7 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::set_dscp;
 
+#[derive(Debug)]
 pub struct TcpSocketConfig<'a> {
     tx_buffer_size: Option<u32>,
     rx_buffer_size: Option<u32>,

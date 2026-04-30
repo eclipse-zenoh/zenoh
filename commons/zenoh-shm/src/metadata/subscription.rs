@@ -32,6 +32,21 @@ pub struct Subscription {
     linked_table: RwLock<BTreeMap<MetadataSegmentID, Arc<MetadataSegment>>>,
 }
 
+impl std::fmt::Debug for Subscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut debug = f.debug_struct("Subscription");
+        match self.linked_table.try_read() {
+            Ok(linked_table) => {
+                debug.field("linked_table_len", &linked_table.len());
+            }
+            Err(_) => {
+                debug.field("linked_table_len", &"<locked>");
+            }
+        }
+        debug.finish()
+    }
+}
+
 impl Subscription {
     fn new() -> Self {
         Self {

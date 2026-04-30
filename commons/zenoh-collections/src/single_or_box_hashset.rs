@@ -259,6 +259,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub enum Iter<'a, T> {
     Empty,
     Single(&'a T),
@@ -316,6 +317,7 @@ impl<T> Drop for Drain<'_, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum IntoIter<T> {
     Empty,
     Single(T),

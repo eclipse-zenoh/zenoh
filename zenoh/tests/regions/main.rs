@@ -49,7 +49,7 @@ use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Node {
     c: zenoh::Config,
 }
@@ -192,6 +192,7 @@ pub fn unbounded_sink() -> UnboundedSinkHandler {
     UnboundedSinkHandler
 }
 
+#[derive(Debug)]
 pub struct UnboundedSinkHandler;
 
 impl<T> IntoHandler<T> for UnboundedSinkHandler
@@ -214,6 +215,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct UnboundedSink<T>(Arc<RwLock<Vec<T>>>);
 
 impl<T> UnboundedSink<T> {

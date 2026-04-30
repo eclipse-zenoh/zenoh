@@ -106,6 +106,7 @@ impl Writer for &mut [u8] {
     }
 }
 
+#[derive(Debug)]
 pub struct SliceMark<'s> {
     ptr: *const u8,
     len: usize,

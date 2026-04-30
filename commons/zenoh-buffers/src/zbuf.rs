@@ -428,6 +428,7 @@ impl io::Seek for ZBufReader<'_> {
 }
 
 // ZSlice iterator
+#[derive(Debug)]
 pub struct ZBufSliceIterator<'a, 'b> {
     reader: &'a mut ZBufReader<'b>,
     remaining: usize,

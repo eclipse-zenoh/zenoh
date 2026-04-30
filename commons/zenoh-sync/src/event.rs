@@ -170,6 +170,12 @@ pub fn new() -> (Notifier, Waiter) {
 #[repr(transparent)]
 pub struct Notifier(Arc<EventInner>);
 
+impl std::fmt::Debug for Notifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Notifier").field(&"..").finish()
+    }
+}
+
 impl Notifier {
     /// Notifies one pending listener
     #[inline]
@@ -207,6 +213,12 @@ impl Drop for Notifier {
 
 #[repr(transparent)]
 pub struct Waiter(Arc<EventInner>);
+
+impl std::fmt::Debug for Waiter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Waiter").field(&"..").finish()
+    }
+}
 
 impl Waiter {
     /// Waits for the condition to be notified

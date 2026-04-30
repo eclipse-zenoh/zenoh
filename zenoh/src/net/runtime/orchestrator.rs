@@ -50,6 +50,7 @@ const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 
+#[derive(Debug)]
 pub enum Loop {
     Continue,
     Break,
