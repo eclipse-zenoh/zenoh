@@ -18,6 +18,7 @@ use zenoh_result::ZResult;
 
 use crate::{
     api::{
+        cancellation::SyncGroup,
         handlers::{locked, DefaultHandler, IntoHandler},
         key_expr::KeyExpr,
         queryable::{Query, Queryable, QueryableInner},
@@ -223,13 +224,19 @@ where
     Handler::Handler: Send,
 {
     fn wait(self) -> <Self as Resolvable>::To {
+        let callback_sync_group = SyncGroup::default();
         let session = self.session;
         let (callback, receiver) = self.handler.into_handler();
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
         session
-            .0
-            .declare_queryable_inner(&ke, self.complete, self.origin, callback)
+            .declare_queryable_inner(
+                &ke,
+                self.complete,
+                self.origin,
+                callback,
+                callback_sync_group.notifier(),
+            )
             .map(|qable_state| Queryable {
                 inner: QueryableInner {
                     session: self.session.downgrade(),
@@ -238,6 +245,7 @@ where
                     key_expr: ke.into_owned(),
                 },
                 handler: receiver,
+                callback_sync_group,
             })
     }
 }
@@ -263,9 +271,13 @@ impl Wait for QueryableBuilder<'_, '_, Callback<Query>, true> {
     fn wait(self) -> <Self as Resolvable>::To {
         let mut ke = self.key_expr?;
         ke = self.session.declare_nonwild_prefix(ke)?;
-        self.session
-            .0
-            .declare_queryable_inner(&ke, self.complete, self.origin, self.handler)?;
+        self.session.declare_queryable_inner(
+            &ke,
+            self.complete,
+            self.origin,
+            self.handler,
+            None,
+        )?;
         Ok(())
     }
 }

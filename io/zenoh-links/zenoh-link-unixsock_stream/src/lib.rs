@@ -55,7 +55,7 @@ zconfigurable! {
     static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct UnixSockStreamLocatorInspector;
 #[async_trait]
 impl LocatorInspector for UnixSockStreamLocatorInspector {

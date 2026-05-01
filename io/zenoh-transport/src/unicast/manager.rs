@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt,
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
@@ -51,6 +52,7 @@ use crate::{
 /*************************************/
 /*         TRANSPORT CONFIG          */
 /*************************************/
+#[derive(Debug)]
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
     pub keep_alive: usize,
@@ -112,9 +114,33 @@ pub struct TransportManagerStateUnicast {
     pub(super) authenticator: Arc<Auth>,
 }
 
+impl fmt::Debug for TransportManagerStateUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerStateUnicast");
+        debug
+            .field("incoming", &self.incoming)
+            .field("link_managers", &"..")
+            .field("transports", &"..");
+        #[cfg(feature = "transport_multilink")]
+        debug.field("multilink", &"..");
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.finish()
+    }
+}
+
 pub struct TransportManagerParamsUnicast {
     pub config: TransportManagerConfigUnicast,
     pub state: TransportManagerStateUnicast,
+}
+
+impl fmt::Debug for TransportManagerParamsUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParamsUnicast")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 pub struct TransportManagerBuilderUnicast {
@@ -137,6 +163,28 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_lowlatency: bool,
     #[cfg(feature = "transport_compression")]
     pub(super) is_compression: bool,
+}
+
+impl fmt::Debug for TransportManagerBuilderUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilderUnicast");
+        debug
+            .field("lease", &self.lease)
+            .field("keep_alive", &self.keep_alive)
+            .field("open_timeout", &self.open_timeout)
+            .field("accept_timeout", &self.accept_timeout)
+            .field("accept_pending", &self.accept_pending)
+            .field("max_sessions", &self.max_sessions)
+            .field("is_qos", &self.is_qos);
+        #[cfg(feature = "transport_multilink")]
+        debug.field("max_links", &self.max_links);
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.field("is_lowlatency", &self.is_lowlatency);
+        #[cfg(feature = "transport_compression")]
+        debug.field("is_compression", &self.is_compression);
+        debug.finish()
+    }
 }
 
 impl TransportManagerBuilderUnicast {
@@ -305,7 +353,7 @@ impl TransportManager {
     }
 
     pub async fn close_unicast(&self) {
-        tracing::trace!("TransportManagerUnicast::clear())");
+        tracing::trace!("TransportManagerUnicast::clear()");
 
         let mut pl_guard = zasynclock!(self.state.unicast.link_managers)
             .drain()
@@ -455,9 +503,11 @@ impl TransportManager {
                 existing_config
             );
             tracing::trace!("{}", e);
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -470,15 +520,18 @@ impl TransportManager {
 
         // complete establish procedure
         let c_link = ack.link();
-        let c_t = transport.clone();
-        ack.send_open_ack()
-            .await
-            .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
+        ack.send_open_ack().await.map_err(|e| {
+            InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+        })?;
 
         start_tx();
 
         // notify transport's callback interface that there is a new link
-        Self::notify_new_link_unicast(&transport, c_link);
+        Self::notify_new_link_unicast(&transport, c_link)
+            .await
+            .map_err(|e| {
+                InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+            })?;
 
         start_rx();
 
@@ -487,10 +540,18 @@ impl TransportManager {
         Ok(transport)
     }
 
-    fn notify_new_link_unicast(transport: &Arc<dyn TransportUnicastTrait>, link: Link) {
-        if let Some(callback) = &transport.get_callback() {
-            callback.new_link(link);
+    async fn notify_new_link_unicast(
+        transport: &Arc<dyn TransportUnicastTrait>,
+        link: Link,
+    ) -> ZResult<()> {
+        if let Some(callback) = transport.get_callback() {
+            tokio::task::spawn_blocking(move || {
+                callback.new_link(link);
+            })
+            .await?;
         }
+
+        Ok(())
     }
 
     fn notify_new_transport_unicast(
@@ -505,6 +566,7 @@ impl TransportManager {
             is_qos: transport.get_config().is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
+            region_name: transport.region_name(),
         };
         // Notify the transport handler that there is a new transport and get back a callback
         // NOTE: the read loop of the link the open message was sent on remains blocked
@@ -534,7 +596,8 @@ impl TransportManager {
                 match $s {
                     Ok(output) => output,
                     Err(e) => {
-                        return Err(InitTransportError::Link((e, link.fail(), $reason)));
+                        let (l, asl) = link.fail();
+                        return Err(InitTransportError::Link((e, l, asl, $reason)));
                     }
                 }
             };
@@ -544,9 +607,11 @@ impl TransportManager {
         if config.zid == self.zid() {
             let e = zerror!("{} Attempt to establish transport to itself", self.zid());
             tracing::warn!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::CONNECTION_TO_SELF,
             )));
         }
@@ -559,9 +624,11 @@ impl TransportManager {
                 config.zid
             );
             tracing::trace!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -633,7 +700,7 @@ impl TransportManager {
             match t.add_link(link, other_initial_sn, other_lease).await {
                 Ok(val) => val,
                 Err(e) => {
-                    let _ = t.close(e.2).await;
+                    let _ = t.close(e.3).await;
                     return Err(InitTransportError::Link(e));
                 }
             };
@@ -666,7 +733,10 @@ impl TransportManager {
         );
 
         // Notify transport's callback interface that there is a new link
-        Self::notify_new_link_unicast(&t, c_link);
+        transport_error!(
+            Self::notify_new_link_unicast(&t, c_link).await,
+            close::reason::GENERIC
+        );
 
         start_rx();
 
@@ -744,8 +814,11 @@ impl TransportManager {
 
         match init_result {
             Ok(transport) => Ok(TransportUnicast(Arc::downgrade(&transport))),
-            Err(InitTransportError::Link((e, link, reason))) => {
+            Err(InitTransportError::Link((e, link, associated_link, reason))) => {
                 let _ = link.close(Some(reason)).await;
+                if let Some(asl) = associated_link {
+                    let _ = asl.close(Some(reason)).await;
+                }
                 Err(e)
             }
             Err(InitTransportError::Transport((e, transport, reason))) => {
@@ -808,6 +881,16 @@ impl TransportManager {
 
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
+            .values()
+            .map(|t| TransportUnicast(Arc::downgrade(t)))
+            .collect()
+    }
+
+    pub fn get_transports_unicast_blocking(&self) -> Vec<TransportUnicast> {
+        self.state
+            .unicast
+            .transports
+            .blocking_lock()
             .values()
             .map(|t| TransportUnicast(Arc::downgrade(t)))
             .collect()

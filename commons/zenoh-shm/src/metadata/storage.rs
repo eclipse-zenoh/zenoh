@@ -34,6 +34,14 @@ pub struct MetadataStorage {
     available: Mutex<VecDeque<OwnedMetadataDescriptor>>,
 }
 
+impl std::fmt::Debug for MetadataStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MetadataStorage")
+            .field("available", &"..")
+            .finish()
+    }
+}
+
 impl MetadataStorage {
     fn new() -> ZResult<Self> {
         // See ordering implementation for OwnedMetadataDescriptor
@@ -54,6 +62,7 @@ impl MetadataStorage {
 
         for index in 0..segment.data.count() {
             let (header, watchdog) =
+                // SAFETY: index is guaranteed to be within segment boundaries.
                 unsafe { segment.data.fast_elem_compute(index as MetadataIndex) };
             let descriptor = OwnedMetadataDescriptor::new(segment.clone(), header, watchdog);
 

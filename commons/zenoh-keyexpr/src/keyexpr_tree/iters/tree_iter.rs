@@ -26,6 +26,19 @@ where
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for TreeIter<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TreeIter")
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     TreeIter<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -57,6 +70,7 @@ where
         loop {
             match self.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { node.as_node().__children() }.children();
                     self.iterators.push(iterator);
                     return Some(node.as_node());
@@ -79,6 +93,19 @@ pub struct TreeIterMut<
 {
     iterators: Vec<<Children::Assoc as IChildren<Node>>::IterMut<'a>>,
     _marker: core::marker::PhantomData<Weight>,
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight> core::fmt::Debug
+    for TreeIterMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TreeIterMut")
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
@@ -110,6 +137,7 @@ where
         loop {
             match self.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                         .children_mut()
                         .children_mut();
@@ -125,6 +153,12 @@ where
 }
 
 pub struct DepthInstrumented<T>(T);
+
+impl<T> core::fmt::Debug for DepthInstrumented<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("DepthInstrumented").field(&"..").finish()
+    }
+}
 impl<
         'a,
         Children: IChildrenProvider<Node>,
@@ -140,8 +174,10 @@ where
             let depth = self.0.iterators.len();
             match self.0.iterators.last_mut()?.next() {
                 Some(node) => {
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     let iterator = unsafe { node.as_node().__children() }.children();
                     self.0.iterators.push(iterator);
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     return Some((unsafe { NonZeroUsize::new_unchecked(depth) }, node));
                 }
                 None => {

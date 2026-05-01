@@ -11,21 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::BTreeMap, future::IntoFuture, str::FromStr};
+use std::{collections::BTreeMap, fmt, future::IntoFuture, str::FromStr};
 
 use zenoh::{
     config::ZenohId,
-    handlers::{Callback, CallbackParameter, IntoHandler},
+    handlers::{Callback, CallbackDrop, CallbackParameter, IntoHandler},
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
-    pubsub::SubscriberBuilder,
+    pubsub::{SubscriberBuilder, SubscriberUndeclaration},
     query::{
         ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
     },
     sample::{Locality, Sample, SampleKind},
-    session::{EntityGlobalId, EntityId},
-    Resolvable, Resolve, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR,
-    KE_SUB,
+    session::{EntityGlobalId, EntityId, WeakSession},
+    Resolvable, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR, KE_SUB,
 };
 use zenoh_util::{Timed, TimedEvent, Timer};
 #[zenoh_macros::unstable]
@@ -147,6 +146,27 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) liveliness: bool,
     pub(crate) meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
     pub(crate) handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> fmt::Debug
+    for AdvancedSubscriberBuilder<'_, '_, '_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedSubscriberBuilder")
+            .field("session", &"..")
+            .field("key_expr", &self.key_expr)
+            .field("origin", &self.origin)
+            .field("retransmission", &self.retransmission)
+            .field("query_target", &self.query_target)
+            .field("query_timeout", &self.query_timeout)
+            .field("history", &self.history)
+            .field("liveliness", &self.liveliness)
+            .field("meta_key_expr", &self.meta_key_expr)
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -400,14 +420,17 @@ struct State {
     global_pending_queries: u64,
     sequenced_states: HashMap<EntityGlobalId, SourceState<WrappingSn>>,
     timestamped_states: HashMap<ID, SourceState<Timestamp>>,
-    session: Session,
+    session: WeakSession,
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
     history_depth: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
-    callback: Callback<Sample>,
+    // Callback must be dropped when the underlying subscriber is undeclared
+    // (for example when session is closed), in order to "close" the advanced
+    // subscriber receiver, hence the `Option`.
+    callback: Option<Callback<Sample>>,
     miss_handlers: HashMap<usize, Callback<Miss>>,
     token: Option<LivelinessToken>,
 }
@@ -528,6 +551,19 @@ pub struct AdvancedSubscriber<Receiver> {
 }
 
 #[zenoh_macros::unstable]
+impl<Receiver> fmt::Debug for AdvancedSubscriber<Receiver> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AdvancedSubscriber")
+            .field("statesref", &"..")
+            .field("subscriber", &self.subscriber)
+            .field("receiver", &"..")
+            .field("liveliness_subscriber", &self.liveliness_subscriber)
+            .field("heartbeat_subscriber", &self.heartbeat_subscriber)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Receiver> std::ops::Deref for AdvancedSubscriber<Receiver> {
     type Target = Receiver;
     fn deref(&self) -> &Self::Target {
@@ -544,6 +580,9 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 #[zenoh_macros::unstable]
 fn handle_sample(states: &mut State, sample: Sample) -> bool {
+    let Some(callback) = states.callback.as_ref() else {
+        return false;
+    };
     if let Some(source_info) = sample.source_info().cloned() {
         #[inline]
         fn deliver_and_flush(
@@ -573,14 +612,14 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
             // Avoid going through the Map if history_depth == 1
             if states.history_depth == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());
-                states.callback.call(sample);
+                callback.call(sample);
             } else {
                 state
                     .pending_samples
                     .insert(source_info.source_sn().into(), sample);
                 if state.pending_samples.len() >= states.history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
-                        deliver_and_flush(sample, sn, &states.callback, state);
+                        deliver_and_flush(sample, sn, callback, state);
                     }
                 }
             }
@@ -604,12 +643,12 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                             nb: source_info.source_sn() - state.last_delivered.unwrap() - 1,
                         });
                     }
-                    states.callback.call(sample);
+                    callback.call(sample);
                     state.last_delivered = Some(source_info.source_sn().into());
                 }
             }
         } else {
-            deliver_and_flush(sample, source_info.source_sn(), &states.callback, state);
+            deliver_and_flush(sample, source_info.source_sn(), callback, state);
         }
         new
     } else if let Some(timestamp) = sample.timestamp() {
@@ -624,17 +663,17 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 || states.history_depth == 1
             {
                 state.last_delivered = Some(*timestamp);
-                states.callback.call(sample);
+                callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
                 if state.pending_samples.len() >= states.history_depth {
-                    flush_timestamped_source(state, &states.callback);
+                    flush_timestamped_source(state, Some(callback));
                 }
             }
         }
         false
     } else {
-        states.callback.call(sample);
+        callback.call(sample);
         false
     }
 }
@@ -731,13 +770,12 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let retransmission = conf.retransmission;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
-        let session = conf.session.clone();
         let statesref = Arc::new(Mutex::new(State {
             next_id: 0,
             sequenced_states: HashMap::new(),
             timestamped_states: HashMap::new(),
             global_pending_queries: if conf.history.is_some() { 1 } else { 0 },
-            session,
+            session: conf.session.downgrade(),
             period: retransmission.as_ref().and_then(|r| {
                 let _rt = ZRuntime::Application.enter();
                 r.periodic_queries.map(|p| Period {
@@ -754,14 +792,14 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 .unwrap_or_default(),
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
-            callback: callback.clone(),
+            callback: Some(callback),
             miss_handlers: HashMap::new(),
             token: None,
         }));
 
         let sub_callback = {
             let statesref = statesref.clone();
-            let session = conf.session.clone();
+            let session = conf.session.downgrade();
             let key_expr = key_expr.clone().into_owned();
 
             move |s: Sample| {
@@ -824,10 +862,24 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }
         };
 
+        // When the underlying subscriber is undeclared (for example when the session is closed)
+        // the advanced subscriber callback must be dropped to "close" the receiver.
+        let drop_callback = {
+            let statesref = statesref.clone();
+            move || {
+                let mut states = statesref.lock().unwrap();
+                states.callback.take();
+                states.miss_handlers.clear();
+            }
+        };
+
         let subscriber = conf
             .session
             .declare_subscriber(&key_expr)
-            .callback(sub_callback)
+            .with(CallbackDrop {
+                callback: sub_callback,
+                drop: drop_callback,
+            })
             .allowed_origin(conf.origin)
             .wait()?;
 
@@ -886,7 +938,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let liveliness_subscriber = if let Some(historyconf) = conf.history.as_ref() {
             if historyconf.liveliness {
                 let live_callback = {
-                    let session = conf.session.clone();
+                    let session = conf.session.downgrade();
                     let statesref = statesref.clone();
                     let key_expr = key_expr.clone().into_owned();
                     let historyconf = historyconf.clone();
@@ -935,7 +987,6 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         let handler = TimestampedRepliesHandler {
                                             id: ID::from(zid),
                                             statesref: statesref.clone(),
-                                            callback: callback.clone(),
                                         };
                                         let _ = session
                                             .get(Selector::from((s.key_expr(), params)))
@@ -1312,7 +1363,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
     /// Undeclares this AdvancedSubscriber
     #[inline]
     #[zenoh_macros::unstable]
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> {
+    pub fn undeclare(self) -> SubscriberUndeclaration<()> {
         tracing::debug!(
             "AdvancedSubscriber{{key_expr: {}}}: Undeclare",
             self.key_expr()
@@ -1340,10 +1391,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
 #[inline]
 fn flush_sequenced_source(
     state: &mut SourceState<WrappingSn>,
-    callback: &Callback<Sample>,
+    callback: Option<&Callback<Sample>>,
     source_id: &EntityGlobalId,
     miss_handlers: &HashMap<usize, Callback<Miss>>,
 ) {
+    let Some(callback) = callback else {
+        return;
+    };
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
@@ -1382,7 +1436,13 @@ fn flush_sequenced_source(
 
 #[zenoh_macros::unstable]
 #[inline]
-fn flush_timestamped_source(state: &mut SourceState<Timestamp>, callback: &Callback<Sample>) {
+fn flush_timestamped_source(
+    state: &mut SourceState<Timestamp>,
+    callback: Option<&Callback<Sample>>,
+) {
+    let Some(callback) = callback else {
+        return;
+    };
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
         let mut pending_samples = BTreeMap::new();
         std::mem::swap(&mut state.pending_samples, &mut pending_samples);
@@ -1417,11 +1477,16 @@ impl Drop for InitialRepliesHandler {
 
         if states.global_pending_queries == 0 {
             for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(state, &states.callback, source_id, &states.miss_handlers);
+                flush_sequenced_source(
+                    state,
+                    states.callback.as_ref(),
+                    source_id,
+                    &states.miss_handlers,
+                );
                 spawn_periodic_queries!(states, *source_id, self.statesref.clone());
             }
             for state in states.timestamped_states.values_mut() {
-                flush_timestamped_source(state, &states.callback);
+                flush_timestamped_source(state, states.callback.as_ref());
             }
         }
     }
@@ -1447,7 +1512,7 @@ impl Drop for SequencedRepliesHandler {
                 );
                 flush_sequenced_source(
                     state,
-                    &states.callback,
+                    states.callback.as_ref(),
                     &self.source_id,
                     &states.miss_handlers,
                 )
@@ -1461,7 +1526,6 @@ impl Drop for SequencedRepliesHandler {
 struct TimestampedRepliesHandler {
     id: ID,
     statesref: Arc<Mutex<State>>,
-    callback: Callback<Sample>,
 }
 
 #[zenoh_macros::unstable]
@@ -1475,7 +1539,7 @@ impl Drop for TimestampedRepliesHandler {
                     "AdvancedSubscriber{{key_expr: {}}}: Flush timestamped samples",
                     states.key_expr
                 );
-                flush_timestamped_source(state, &self.callback);
+                flush_timestamped_source(state, states.callback.as_ref());
             }
         }
     }
@@ -1522,14 +1586,25 @@ pub struct SampleMissListener<Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<Handler> fmt::Debug for SampleMissListener<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SampleMissListener")
+            .field("id", &self.id)
+            .field("statesref", &"..")
+            .field("handler", &"..")
+            .field("undeclare_on_drop", &self.undeclare_on_drop)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> SampleMissListener<Handler> {
     #[inline]
     pub fn undeclare(self) -> SampleMissHandlerUndeclaration<Handler>
     where
         Handler: Send,
     {
-        // self.undeclare_inner(())
-        SampleMissHandlerUndeclaration(self)
+        SampleMissHandlerUndeclaration { listener: self }
     }
 
     fn undeclare_impl(&mut self) -> ZResult<()> {
@@ -1582,7 +1657,27 @@ impl<Handler> std::ops::DerefMut for SampleMissListener<Handler> {
 
 /// A [`Resolvable`] returned by [`SampleMissListener::undeclare`]
 #[zenoh_macros::unstable]
-pub struct SampleMissHandlerUndeclaration<Handler>(SampleMissListener<Handler>);
+pub struct SampleMissHandlerUndeclaration<Handler> {
+    listener: SampleMissListener<Handler>,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> fmt::Debug for SampleMissHandlerUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("SampleMissHandlerUndeclaration")
+            .field(&self.listener)
+            .finish()
+    }
+}
+
+impl<Handler> SampleMissHandlerUndeclaration<Handler> {
+    /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
+    pub fn wait_callbacks(self) -> Self {
+        // Note: no particular synchronization is required as of now since miss listener callbacks are always executed
+        // under state lock
+        self
+    }
+}
 
 #[zenoh_macros::unstable]
 impl<Handler> Resolvable for SampleMissHandlerUndeclaration<Handler> {
@@ -1592,7 +1687,7 @@ impl<Handler> Resolvable for SampleMissHandlerUndeclaration<Handler> {
 #[zenoh_macros::unstable]
 impl<Handler> Wait for SampleMissHandlerUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.listener.undeclare_impl()
     }
 }
 
@@ -1611,6 +1706,19 @@ impl<Handler> IntoFuture for SampleMissHandlerUndeclaration<Handler> {
 pub struct SampleMissListenerBuilder<'a, Handler, const BACKGROUND: bool = false> {
     statesref: &'a Arc<Mutex<State>>,
     handler: Handler,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> fmt::Debug
+    for SampleMissListenerBuilder<'_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SampleMissListenerBuilder")
+            .field("statesref", &"..")
+            .field("handler", &"..")
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

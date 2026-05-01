@@ -13,6 +13,7 @@
 //
 
 use std::{
+    fmt,
     future::{Future, IntoFuture},
     pin::Pin,
     time::Duration,
@@ -34,6 +35,17 @@ use zenoh_runtime::ZRuntime;
 pub struct CloseBuilder<TCloseable: Closeable> {
     closee: TCloseable::TClosee,
     timeout: Duration,
+    close_args: <TCloseable::TClosee as Closee>::CloseArgs,
+}
+
+impl<TCloseable: Closeable> fmt::Debug for CloseBuilder<TCloseable> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CloseBuilder")
+            .field("closee", &"..")
+            .field("timeout", &self.timeout)
+            .field("close_args", &"..")
+            .finish()
+    }
 }
 
 // NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
@@ -44,6 +56,7 @@ impl<TCloseable: Closeable> CloseBuilder<TCloseable> {
         Self {
             closee: closeable.get_closee(),
             timeout: Duration::from_secs(10),
+            close_args: <TCloseable::TClosee as Closee>::CloseArgs::default(),
         }
     }
 
@@ -115,7 +128,7 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(
             async move {
-                if tokio::time::timeout(self.timeout, self.closee.close_inner())
+                if tokio::time::timeout(self.timeout, self.closee.close_inner(self.close_args))
                     .await
                     .is_err()
                 {
@@ -133,6 +146,15 @@ impl<TCloseable: Closeable> IntoFuture for CloseBuilder<TCloseable> {
 #[doc(hidden)]
 pub struct BackgroundCloseBuilder<TOutput: Send + 'static> {
     inner: Pin<Box<dyn Future<Output = TOutput> + Send>>,
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> fmt::Debug for BackgroundCloseBuilder<TOutput> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("BackgroundCloseBuilder")
+            .field(&"..")
+            .finish()
+    }
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
@@ -183,6 +205,13 @@ pub struct NolocalJoinHandle<TOutput: Send + 'static> {
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> fmt::Debug for NolocalJoinHandle<TOutput> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NolocalJoinHandle").field(&"..").finish()
+    }
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
 impl<TOutput: Send + 'static> NolocalJoinHandle<TOutput> {
     fn new(rx: Receiver<TOutput>) -> Self {
         Self { rx }
@@ -220,10 +249,20 @@ impl<TOutput: Send + 'static> IntoFuture for NolocalJoinHandle<TOutput> {
 
 #[async_trait]
 pub(crate) trait Closee: Send + Sync + 'static {
-    async fn close_inner(&self);
+    type CloseArgs: Default + Send + Sync;
+    async fn close_inner(&self, close_arg: Self::CloseArgs);
 }
 
 pub(crate) trait Closeable {
     type TClosee: Closee;
     fn get_closee(&self) -> Self::TClosee;
+}
+
+impl CloseBuilder<crate::Session> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running zenoh entities' callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.close_args.wait_callbacks = true;
+        self
+    }
 }

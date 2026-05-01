@@ -29,7 +29,7 @@ use crate::api::session::API_DATA_RECEPTION_CHANNEL_SIZE;
 /// while granting you access to the handler through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
 ///
 /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
-pub trait IntoHandler<T: CallbackParameter> {
+pub trait IntoHandler<T> {
     type Handler;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler);
@@ -44,10 +44,10 @@ pub trait IntoHandler<T: CallbackParameter> {
 /// separate type was created to make it possible to change the default handler implementation
 /// without breaking API changes.
 #[repr(transparent)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DefaultHandler(FifoChannel);
 
-impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for DefaultHandler {
+impl<T: Send + 'static> IntoHandler<T> for DefaultHandler {
     type Handler = <FifoChannel as IntoHandler<T>>::Handler;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {

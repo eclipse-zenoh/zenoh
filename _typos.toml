@@ -2,13 +2,15 @@
 extend-exclude = [
   # Ignore files containing hexa.
   "io/zenoh-transport/tests/*.rs",
+  "zenoh/src/net/tests/regions",
   "zenoh/tests/authentication.rs",
   "zenoh/tests/open_time.rs",
 ]
 
 
 [default.extend-words]
-Closee = "Closee" # Closee
-closee = "closee" # closee
-mis = "mis"       # mismatch
-thr = "thr"       # throughput
+Closee = "Closee"         # Closee
+closee = "closee"         # closee
+controllen = "controllen" # From libc
+mis = "mis"               # mismatch
+thr = "thr"               # throughput

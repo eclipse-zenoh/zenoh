@@ -96,6 +96,7 @@ where
     type Target = Elem;
 
     fn deref(&self) -> &Self::Target {
+        // SAFETY: the pointer is guaranteed to be valid and uniquely accessible for the lifetime of `self`.
         unsafe { &*(self.inner.as_ptr() as *const Elem) }
     }
 }
@@ -107,6 +108,7 @@ where
     ID: shm::SegmentID,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: the pointer is guaranteed to be valid and uniquely accessible for the lifetime of `self`.
         unsafe { &mut *(self.inner.as_ptr() as *mut Elem) }
     }
 }

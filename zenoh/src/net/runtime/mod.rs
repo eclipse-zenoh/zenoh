@@ -19,12 +19,15 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
 pub mod orchestrator;
+mod region;
 
+#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
     collections::HashSet,
+    fmt,
     ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -38,15 +41,20 @@ use futures::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uhlc::{HLCBuilder, HLC};
-use zenoh_config::{unwrap_or_default, GenericConfig, IConfig, ModeDependent, ZenohId};
+use zenoh_config::{
+    unwrap_or_default, ExpandedConfig, GenericConfig, IConfig, ModeDependent, ZenohId,
+};
+#[allow(unused_imports)]
+use zenoh_core::polyfill::*;
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
-use zenoh_link::{EndPoint, Link};
+use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::{
-    core::{Locator, WhatAmI, ZenohIdProto},
+    core::{Locator, Region, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_runtime::ZRuntime;
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::api::{
     client_storage::ShmClientStorage,
@@ -67,8 +75,8 @@ use super::{
     primitives::{DeMux, EPrimitives, Primitives},
     routing::{
         self,
+        gateway::Gateway,
         namespace::{ENamespace, Namespace},
-        router::Router,
     },
 };
 #[cfg(feature = "plugins")]
@@ -81,6 +89,11 @@ use crate::{
     api::{
         builders::close::{Closeable, Closee},
         config::{Config, Notifier},
+        info::{Link, Transport},
+    },
+    net::routing::{
+        gateway::GatewayBuilder,
+        hat::{self, HatTrait},
     },
     GIT_VERSION,
 };
@@ -88,6 +101,7 @@ use crate::{
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub enum ShmProviderState {
     Disabled,
     Initializing,
@@ -110,8 +124,8 @@ pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
     next_id: AtomicU32,
-    router: Arc<Router>,
-    config: Notifier<Config>,
+    router: Arc<Gateway>,
+    config: Notifier<ExpandedConfig>,
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
@@ -124,6 +138,7 @@ pub(crate) struct RuntimeState {
     namespace: Option<OwnedNonWildKeyExpr>,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::StatsRegistry,
+    span: tracing::Span,
 }
 
 #[allow(private_interfaces)]
@@ -142,8 +157,14 @@ pub trait IRuntime: Send + Sync {
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState;
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer>;
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>>;
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync>;
+
+    fn get_transports_blocking(&self) -> Vec<Transport>;
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync>;
 
     fn new_primitives(
         &self,
@@ -161,14 +182,16 @@ pub trait IRuntime: Send + Sync {
     fn get_config(&self) -> GenericConfig;
 }
 
-impl IConfig for Notifier<Config> {
+impl IConfig for Notifier<ExpandedConfig> {
     fn get(&self, key: &str) -> ZResult<String> {
-        self.lock().get_json(key)
+        self.lock()
+            .get_json(key)
+            .map_err(|err| zerror!("{err}").into())
     }
 
     fn queries_default_timeout_ms(&self) -> u64 {
         let guard = self.lock();
-        let config = &guard.0;
+        let config = &guard;
         unwrap_or_default!(config.queries_default_timeout())
     }
 
@@ -228,20 +251,47 @@ impl IRuntime for RuntimeState {
         zwrite!(self.transport_handlers).push(handler);
     }
 
-    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
-        zenoh_runtime::ZRuntime::Net
+    fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
+        let unicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_unicast())
             .into_iter()
             .filter_map(|t| t.get_peer().ok())
-            .collect::<Vec<_>>()
-    }
+            .map(|ref peer| Transport::new(peer, false));
 
-    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
-        zenoh_runtime::ZRuntime::Net
+        let multicast_transports = zenoh_runtime::ZRuntime::Net
             .block_in_place(self.manager.get_transports_multicast())
             .into_iter()
-            .filter_map(|t| t.get_peers().ok())
-            .collect::<Vec<_>>()
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .map(|ref peer| Transport::new(peer, true));
+
+        Box::new(unicast_transports.chain(multicast_transports))
+    }
+
+    fn get_transports_blocking(&self) -> Vec<Transport> {
+        self.manager
+            .get_transports_unicast_blocking()
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .map(|peer| Transport::new(&peer, false))
+            .chain(
+                self.manager
+                    .get_transports_multicast_blocking()
+                    .into_iter()
+                    .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+                    .map(|peer| Transport::new(&peer, true)),
+            )
+            .collect()
+    }
+
+    fn get_links(
+        &self,
+        transport: Option<&Transport>,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        match transport {
+            None => self.get_links_all(),
+            Some(t) if t.is_multicast => self.get_links_transport_multicast(&t.zid),
+            Some(t) => self.get_links_transport_unicast(&t.zid),
+        }
     }
 
     fn matching_status_remote(
@@ -261,36 +311,47 @@ impl IRuntime for RuntimeState {
         let router = self.router();
         let tables = zread!(router.tables.tables);
 
-        let matches = match matching_type {
+        let (broker_hat, other_hats) = tables
+            .hats
+            .partition(&Region::Local)
+            .expect("the local region should always have a corresponding hat");
+        let local_broker = broker_hat
+            .as_any()
+            .downcast_ref::<hat::broker::Hat>()
+            .expect("the local region's hat should always be the broker hat");
+
+        let key_expr = match &ns_key_expr {
+            Some(ns_ke) => ns_ke,
+            None => key_expr,
+        };
+
+        let Some(src_face) = tables.data.faces.get(&face_id) else {
+            tracing::error!(fid = face_id, "Unknown session face");
+            return MatchingStatus { matching: false };
+        };
+
+        let matching = match matching_type {
             crate::api::matching::MatchingStatusType::Subscribers => {
-                crate::net::routing::dispatcher::pubsub::get_matching_subscriptions(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_subscriber_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                 )
             }
             crate::api::matching::MatchingStatusType::Queryables(complete) => {
-                crate::net::routing::dispatcher::queries::get_matching_queryables(
-                    router.tables.hat_code.as_ref(),
-                    &tables,
-                    match &ns_key_expr {
-                        Some(ns_ke) => ns_ke,
-                        None => key_expr,
-                    },
+                local_broker.remote_queryable_matching_status(
+                    &tables.data,
+                    src_face,
+                    other_hats.map(|hat| &**hat as &dyn HatTrait), // FIXME(regions)
+                    destination,
+                    key_expr,
                     complete,
                 )
             }
         };
 
-        drop(tables);
-        let matching = match destination {
-            crate::sample::Locality::Any => !matches.is_empty(),
-            crate::sample::Locality::Remote => matches.values().any(|dir| dir.id != face_id),
-            crate::sample::Locality::SessionLocal => matches.values().any(|dir| dir.id == face_id),
-        };
         MatchingStatus { matching }
     }
 
@@ -302,11 +363,11 @@ impl IRuntime for RuntimeState {
             Some(ns) => {
                 let face = self
                     .router
-                    .new_primitives(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
+                    .new_session(Arc::new(ENamespace::new(ns.clone(), e_primitives)));
                 (face.state.id, Arc::new(Namespace::new(ns.clone(), face)))
             }
             None => {
-                let face = self.router.new_primitives(e_primitives);
+                let face = self.router.new_session(e_primitives);
                 (face.state.id, face)
             }
         }
@@ -349,7 +410,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -360,7 +421,7 @@ impl RuntimeState {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -369,11 +430,11 @@ impl RuntimeState {
             .spawn_abortable_with_rt(zenoh_runtime::ZRuntime::Net, future)
     }
 
-    fn router(&self) -> Arc<Router> {
+    fn router(&self) -> Arc<Gateway> {
         self.router.clone()
     }
 
-    fn config(&self) -> &Notifier<Config> {
+    fn config(&self) -> &Notifier<ExpandedConfig> {
         &self.config
     }
 
@@ -392,10 +453,101 @@ impl RuntimeState {
     async fn remove_pending_connection(&self, zid: &ZenohIdProto) -> bool {
         self.pending_connections.lock().await.remove(zid)
     }
+
+    fn get_transports_unicast_peers(&self) -> Vec<TransportPeer> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_unicast())
+            .into_iter()
+            .filter_map(|t| t.get_peer().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_transports_multicast_peers(&self) -> Vec<Vec<TransportPeer>> {
+        zenoh_runtime::ZRuntime::Net
+            .block_in_place(self.manager.get_transports_multicast())
+            .into_iter()
+            .filter_map(|t| t.get_peers().ok())
+            .collect::<Vec<_>>()
+    }
+
+    fn get_links_all(&self) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let peer_to_links = |peer: TransportPeer| -> Vec<Link> {
+            let zid: ZenohId = peer.zid.into();
+            let is_qos = peer.is_qos;
+            peer.links
+                .into_iter()
+                .map(|ref link| Link::new(zid, link, is_qos))
+                .collect()
+        };
+
+        let unicast_links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .flat_map(peer_to_links);
+
+        let multicast_links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .flat_map(peer_to_links);
+
+        Box::new(unicast_links.chain(multicast_links))
+    }
+
+    fn get_links_transport_unicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_unicast_peers()
+            .into_iter()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
+    }
+
+    fn get_links_transport_multicast(
+        &self,
+        zid: &ZenohId,
+    ) -> Box<dyn Iterator<Item = Link> + Send + Sync> {
+        let links = self
+            .get_transports_multicast_peers()
+            .into_iter()
+            .flatten()
+            .find(|peer| &ZenohId::from(peer.zid) == zid)
+            .map(|peer| {
+                let zid: ZenohId = peer.zid.into();
+                let is_qos = peer.is_qos;
+                peer.links
+                    .into_iter()
+                    .map(move |ref link| Link::new(zid, link, is_qos))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        Box::new(links.into_iter())
+    }
 }
 
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
+}
+
+impl fmt::Debug for WeakRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakRuntime")
+            .field("is_live", &self.state.strong_count().gt(&0))
+            .finish()
+    }
 }
 
 impl WeakRuntime {
@@ -405,21 +557,51 @@ impl WeakRuntime {
 }
 
 pub struct RuntimeBuilder {
-    config: zenoh_config::Config,
+    config: zenoh_config::ExpandedConfig,
     #[cfg(feature = "plugins")]
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(test)]
+    subregions: Option<Vec<Region>>,
+    #[cfg(test)]
+    disable_async_tree_computation: bool,
+}
+
+impl fmt::Debug for RuntimeBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("RuntimeBuilder");
+        debug.field("config", &self.config);
+        #[cfg(feature = "plugins")]
+        debug.field(
+            "plugins_manager",
+            &self.plugins_manager.as_ref().map(|_| ".."),
+        );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        #[cfg(test)]
+        debug.field("subregions", &self.subregions);
+        #[cfg(test)]
+        debug.field(
+            "disable_async_tree_computation",
+            &self.disable_async_tree_computation,
+        );
+        debug.finish()
+    }
 }
 
 impl RuntimeBuilder {
     pub fn new(config: Config) -> Self {
         Self {
-            config: config.0,
+            config: config.0.expanded(),
             #[cfg(feature = "plugins")]
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(test)]
+            subregions: None,
+            #[cfg(test)]
+            disable_async_tree_computation: false,
         }
     }
 
@@ -435,6 +617,20 @@ impl RuntimeBuilder {
         self
     }
 
+    #[allow(dead_code)]
+    #[cfg(test)]
+    pub fn subregions(mut self, subregions: Vec<Region>) -> Self {
+        self.subregions.replace(subregions);
+        self
+    }
+
+    #[allow(dead_code)]
+    #[cfg(test)]
+    pub fn disable_async_tree_computation(mut self, value: bool) -> Self {
+        self.disable_async_tree_computation = value;
+        self
+    }
+
     pub async fn build(self) -> ZResult<Runtime> {
         let RuntimeBuilder {
             config,
@@ -442,13 +638,17 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(test)]
+            subregions,
+            #[cfg(test)]
+            disable_async_tree_computation,
         } = self;
 
         tracing::debug!("Zenoh Rust API {}", GIT_VERSION);
-        let zid = (*config.id()).unwrap_or_default().into();
+        let zid = ZenohIdProto::from(config.id());
         tracing::info!("Using ZID: {}", zid);
 
-        let whatami = unwrap_or_default!(config.mode());
+        let whatami = config.mode();
 
         #[cfg(feature = "stats")]
         let stats = zenoh_stats::StatsRegistry::new(zid, whatami, &*crate::LONG_VERSION);
@@ -456,14 +656,27 @@ impl RuntimeBuilder {
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
 
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            &config,
-            #[cfg(feature = "stats")]
-            stats.clone(),
-        )?);
+        let mut gateway_builder = GatewayBuilder::new(&config);
+
+        if let Some(hlc) = hlc.as_ref().cloned() {
+            gateway_builder = gateway_builder.hlc(hlc.clone());
+        }
+
+        #[cfg(feature = "stats")]
+        let gateway_builder = gateway_builder.stats(stats.clone());
+
+        #[cfg(test)]
+        let gateway_builder = if let Some(subregions) = subregions {
+            gateway_builder.subregions(subregions)
+        } else {
+            gateway_builder
+        };
+
+        #[cfg(test)]
+        let gateway_builder =
+            gateway_builder.disable_async_tree_computation(disable_async_tree_computation);
+
+        let gateway = Arc::new(gateway_builder.build()?);
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
@@ -473,7 +686,10 @@ impl RuntimeBuilder {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid);
+            .bound_callback({
+                let config = config.clone();
+                move |p| region::compute_transient_bound_of(&p, &config)
+            });
 
         #[cfg(feature = "shared-memory")]
         let transport_manager_builder =
@@ -497,14 +713,14 @@ impl RuntimeBuilder {
         let shm_init_mode = *config.transport.shared_memory.mode();
 
         let namespace = config.namespace().clone();
-        let config = Notifier::new(crate::config::Config(config));
-
+        let config = Notifier::new(config);
+        let span = tracing::debug_span!("rt", zid = %zid.short());
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
                 zid: zid.into(),
                 whatami,
                 next_id: AtomicU32::new(1), // 0 is reserved for routing core
-                router,
+                router: gateway,
                 config,
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
@@ -518,10 +734,11 @@ impl RuntimeBuilder {
                 namespace,
                 #[cfg(feature = "stats")]
                 stats,
+                span,
             }),
         };
         *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone())?;
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_hats(runtime.clone())?;
 
         // Admin space
         if start_admin_space {
@@ -547,8 +764,24 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
+impl fmt::Debug for Runtime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Runtime")
+            .field("zid", &self.state.zid)
+            .field("whatami", &self.state.whatami)
+            .field("namespace", &self.state.namespace)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl fmt::Debug for DynamicRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DynamicRuntime").field(&"..").finish()
+    }
+}
 
 impl Deref for DynamicRuntime {
     type Target = Arc<dyn IRuntime>;
@@ -606,7 +839,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon close runtime will block until this task completes
-    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn<F, T>(&self, future: F) -> JoinHandle<T>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -616,7 +849,7 @@ impl Runtime {
 
     /// Spawns a task within runtime.
     /// Upon runtime close the task will be automatically aborted.
-    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<()>
+    pub(crate) fn spawn_abortable<F, T>(&self, future: F) -> JoinHandle<Option<T>>
     where
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
@@ -624,11 +857,11 @@ impl Runtime {
         self.state.spawn_abortable(future)
     }
 
-    pub(crate) fn router(&self) -> Arc<Router> {
+    pub(crate) fn router(&self) -> Arc<Gateway> {
         self.state.router()
     }
 
-    pub fn config(&self) -> &Notifier<Config> {
+    pub fn config(&self) -> &Notifier<ExpandedConfig> {
         self.state.config()
     }
 
@@ -678,6 +911,12 @@ impl Runtime {
     pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
         &self.state.stats
     }
+
+    #[cfg(feature = "test")]
+    #[allow(dead_code)]
+    pub(crate) fn state_weak(&self) -> Weak<RuntimeState> {
+        Arc::downgrade(&self.state)
+    }
 }
 
 impl From<Runtime> for DynamicRuntime {
@@ -691,6 +930,7 @@ struct RuntimeTransportEventHandler {
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
+    #[tracing::instrument(level = "trace", skip_all)]
     fn new_unicast(
         &self,
         peer: TransportPeer,
@@ -698,6 +938,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
@@ -705,13 +946,82 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
+
+                let config = runtime.config().lock().clone();
+
+                let (region, remote_bound) =
+                    region::compute_region_of(&peer, &config, transport.get_bound()?.as_ref())?;
+
+                fn north_bound_transport_peer_count(
+                    runtime: &Runtime,
+                    new_peer: &TransportPeer,
+                ) -> usize {
+                    ZRuntime::Application.block_in_place(async {
+                        runtime
+                            .manager()
+                            .get_transports_unicast()
+                            .await
+                            .iter()
+                            .filter(|transport| {
+                                let Ok(peer) = transport.get_peer() else {
+                                    tracing::error!(
+                                        "Could not get transport peer \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                let Ok(remote_bound) = transport.get_bound() else {
+                                    tracing::error!(
+                                        "Could not get transport remote bound \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                if &peer == new_peer {
+                                    return false;
+                                }
+
+                                // NOTE(regions): compute bound instead of querying the router as
+                                // the corresponding transport face might not exist yet
+                                let Ok((region, _)) = region::compute_region_of(
+                                    &peer,
+                                    &runtime.config().lock(),
+                                    remote_bound.as_ref(),
+                                ) else {
+                                    tracing::error!(
+                                        zid = %peer.zid.short(),
+                                        wai = %peer.whatami,
+                                        "Could not get transport peer region \
+                                        while computing north-bound transport count. \
+                                        Will ignore this transport"
+                                    );
+                                    return false;
+                                };
+
+                                region.bound().is_north()
+                            })
+                            .count()
+                    })
+                }
+
+                if region.bound().is_north()
+                    && runtime.whatami() == WhatAmI::Client
+                    && north_bound_transport_peer_count(runtime, &peer) > 0
+                {
+                    bail!("Client runtimes only accept one north-bound transport");
+                }
+
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoints: std::sync::RwLock::new(HashSet::new()),
                     main_handler: runtime
                         .state
                         .router
-                        .new_transport_unicast(transport)
+                        .new_transport_unicast(transport, region, remote_bound)
                         .unwrap(),
                     slave_handlers,
                 }))
@@ -726,15 +1036,19 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
         match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
+                let _span = runtime.state.span.enter();
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
+
+                let region = region::compute_multicast_region(&runtime.config().lock())?;
+
                 runtime
                     .state
                     .router
-                    .new_transport_multicast(transport.clone())?;
+                    .new_transport_multicast(transport.clone(), region)?;
                 Ok(Arc::new(RuntimeMulticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -758,14 +1072,16 @@ impl TransportPeerEventHandler for RuntimeSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -774,6 +1090,7 @@ impl TransportPeerEventHandler for RuntimeSession {
     }
 
     fn closed(&self) {
+        let _span = self.runtime.state.span.enter();
         self.main_handler.closed();
         Runtime::closed_session(self);
         for handler in &self.slave_handlers {
@@ -799,12 +1116,17 @@ impl TransportMulticastEventHandler for RuntimeMulticastGroup {
             .iter()
             .filter_map(|handler| handler.new_peer(peer.clone()).ok())
             .collect();
+
+        let (region, remote_bound) =
+            region::compute_multicast_region_of(&peer, &self.runtime.config().lock())?;
+
         Ok(Arc::new(RuntimeMulticastSession {
-            main_handler: self
-                .runtime
-                .state
-                .router
-                .new_peer_multicast(self.transport.clone(), peer)?,
+            main_handler: self.runtime.state.router.new_peer_multicast(
+                self.transport.clone(),
+                peer,
+                region,
+                remote_bound,
+            )?,
             slave_handlers,
         }))
     }
@@ -830,14 +1152,14 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         self.main_handler.handle_message(msg)
     }
 
-    fn new_link(&self, link: Link) {
+    fn new_link(&self, link: zenoh_link::Link) {
         self.main_handler.new_link(link.clone());
         for handler in &self.slave_handlers {
             handler.new_link(link.clone());
         }
     }
 
-    fn del_link(&self, link: Link) {
+    fn del_link(&self, link: zenoh_link::Link) {
         self.main_handler.del_link(link.clone());
         for handler in &self.slave_handlers {
             handler.del_link(link.clone());
@@ -858,8 +1180,9 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
 
 #[async_trait]
 impl Closee for Arc<RuntimeState> {
-    async fn close_inner(&self) {
-        tracing::trace!("Runtime::close())");
+    type CloseArgs = ();
+    async fn close_inner(&self, _: ()) {
+        tracing::trace!("Runtime::close()");
         // TODO: Plugins should be stopped
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
@@ -872,8 +1195,8 @@ impl Closee for Arc<RuntimeState> {
         // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.root_res.close();
-        tables.faces.clear();
+        tables.data.root_res.close();
+        tables.data.faces.clear();
     }
 }
 

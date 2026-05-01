@@ -19,7 +19,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg},
+    common::{iext, imsg, ZExtUnknown},
     core::Encoding,
     zenoh::{
         id,
@@ -39,6 +39,7 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: &Put) -> Self::Output {
         let Put {
             timestamp,
@@ -134,6 +135,7 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<Put, Self::Error> {
         if imsg::mid(self.header) != id::PUT {
             return Err(DidntRead);
@@ -142,12 +144,22 @@ where
         // Body
         let mut timestamp: Option<uhlc::Timestamp> = None;
         if imsg::has_flag(self.header, flag::T) {
-            timestamp = Some(self.codec.read(&mut *reader)?);
+            #[cold]
+            fn read_timestampt<R: Reader>(reader: &mut R) -> Result<uhlc::Timestamp, DidntRead> {
+                let codec = Zenoh080::new();
+                codec.read(&mut *reader)
+            }
+            timestamp = Some(read_timestampt(reader)?);
         }
 
         let mut encoding = Encoding::empty();
         if imsg::has_flag(self.header, flag::E) {
-            encoding = self.codec.read(&mut *reader)?;
+            #[cold]
+            fn read_encoding<R: Reader>(reader: &mut R) -> Result<Encoding, DidntRead> {
+                let codec = Zenoh080::new();
+                codec.read(&mut *reader)
+            }
+            encoding = read_encoding(reader)?;
         }
 
         // Extensions
@@ -159,31 +171,49 @@ where
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
-            let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                ext::SourceInfo::ID => {
-                    let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
-                    ext_sinfo = Some(s);
-                    has_ext = ext;
-                }
-                #[cfg(feature = "shared-memory")]
-                ext::Shm::ID => {
-                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
-                    ext_shm = Some(s);
-                    has_ext = ext;
-                }
-                ext::Attachment::ID => {
-                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
-                    ext_attachment = Some(a);
-                    has_ext = ext;
-                }
-                _ => {
-                    let (u, ext) = extension::read(reader, "Put", ext)?;
-                    ext_unknown.push(u);
-                    has_ext = ext;
-                }
+            #[cold]
+            fn read_exts<R: Reader>(
+                reader: &mut R,
+                ext_sinfo: &mut Option<ext::SourceInfoType>,
+                #[cfg(feature = "shared-memory")] ext_shm: &mut Option<ext::ShmType>,
+                ext_attachment: &mut Option<ext::AttachmentType>,
+                ext_unknown: &mut Vec<ZExtUnknown>,
+            ) -> Result<bool, DidntRead> {
+                let codec = Zenoh080::new();
+                let ext: u8 = codec.read(&mut *reader)?;
+                let eodec = Zenoh080Header::new(ext);
+                Ok(match iext::eid(ext) {
+                    ext::SourceInfo::ID => {
+                        let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
+                        *ext_sinfo = Some(s);
+                        ext
+                    }
+                    #[cfg(feature = "shared-memory")]
+                    ext::Shm::ID => {
+                        let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                        *ext_shm = Some(s);
+                        ext
+                    }
+                    ext::Attachment::ID => {
+                        let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                        *ext_attachment = Some(a);
+                        ext
+                    }
+                    _ => {
+                        let (u, ext) = extension::read(reader, "Put", ext)?;
+                        ext_unknown.push(u);
+                        ext
+                    }
+                })
             }
+            has_ext = read_exts(
+                reader,
+                &mut ext_sinfo,
+                #[cfg(feature = "shared-memory")]
+                &mut ext_shm,
+                &mut ext_attachment,
+                &mut ext_unknown,
+            )?;
         }
 
         // Payload

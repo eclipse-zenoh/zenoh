@@ -46,6 +46,7 @@ serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-keyexpr = { workspace = true }
+zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0

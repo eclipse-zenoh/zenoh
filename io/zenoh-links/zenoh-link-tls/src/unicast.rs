@@ -38,7 +38,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -188,7 +188,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
@@ -196,7 +196,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
@@ -204,7 +204,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             tracing::trace!("Read error on TLS link {}: {}", self, e);
@@ -212,7 +212,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         let _ = self
             .get_mut_socket()
@@ -306,6 +306,15 @@ pub struct LinkManagerUnicastTls {
     listeners: ListenersUnicastIP,
 }
 
+impl fmt::Debug for LinkManagerUnicastTls {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastTls")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
@@ -393,7 +402,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             )
         });
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -505,12 +514,25 @@ async fn accept_task(
                                 continue;
                             }
                         };
-                        let auth_identifier = get_client_cert_common_name(tls_conn)?;
+                        let auth_identifier = match get_client_cert_common_name(tls_conn) {
+                            Ok(auth_id) => auth_id,
+                            Err(e) => {
+                                tracing::warn!("Error getting client cert common name: {e}");
+                                continue;
+                            }
+                        };
 
                         // Get certificate chain expiration
                         let mut maybe_expiration_time = None;
                         if tls_close_link_on_expiration {
-                            match get_cert_chain_expiration(&tls_conn.peer_certificates())? {
+                            let exp = match get_cert_chain_expiration(&tls_conn.peer_certificates()) {
+                                Ok(exp) => exp,
+                                Err(e) => {
+                                    tracing::warn!("Error getting client cert expiration: {e}");
+                                    continue;
+                                }
+                            };
+                            match exp {
                                 exp @ Some(_) => maybe_expiration_time = exp,
                                 None => tracing::warn!(
                                     "Cannot monitor expiration for TLS link {:?} => {:?}: client does not have certificates",
@@ -544,7 +566,10 @@ async fn accept_task(
                         });
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager
+                            .send_async(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
+                            .await
+                        {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }
@@ -567,17 +592,16 @@ async fn accept_task(
 }
 
 fn get_client_cert_common_name(tls_conn: &rustls::CommonState) -> ZResult<TlsAuthId> {
-    if let Some(serv_certs) = tls_conn.peer_certificates() {
-        let (_, cert) = X509Certificate::from_der(serv_certs[0].as_ref())?;
+    if let Some(client_certs) = tls_conn.peer_certificates() {
+        let (_, cert) = X509Certificate::from_der(client_certs[0].as_ref())?;
         let subject_name = &cert
             .subject
             .iter_common_name()
             .next()
-            .and_then(|cn| cn.as_str().ok())
-            .unwrap();
+            .and_then(|cn| cn.as_str().ok());
 
         Ok(TlsAuthId {
-            auth_value: Some(subject_name.to_string()),
+            auth_value: subject_name.map(|cn| cn.to_string()),
         })
     } else {
         Ok(TlsAuthId { auth_value: None })
@@ -595,11 +619,10 @@ fn get_server_cert_common_name(tls_conn: &rustls::ClientConnection) -> ZResult<T
             .subject
             .iter_common_name()
             .next()
-            .and_then(|cn| cn.as_str().ok())
-            .unwrap();
+            .and_then(|cn| cn.as_str().ok());
 
         auth_id = TlsAuthId {
-            auth_value: Some(subject_name.to_string()),
+            auth_value: subject_name.map(|cn| cn.to_string()),
         };
         return Ok(auth_id);
     }

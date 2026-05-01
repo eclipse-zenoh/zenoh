@@ -285,6 +285,15 @@ pub struct ZReadIter<'a, 'b, T: Deserialize> {
     _phantom: PhantomData<T>,
 }
 
+impl<T: Deserialize> fmt::Debug for ZReadIter<'_, '_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ZReadIter")
+            .field("deserializer", &"..")
+            .field("len", &self.len)
+            .finish()
+    }
+}
+
 impl<T: Deserialize> Iterator for ZReadIter<'_, '_, T> {
     type Item = Result<T, ZDeserializeError>;
     fn next(&mut self) -> Option<Self::Item> {

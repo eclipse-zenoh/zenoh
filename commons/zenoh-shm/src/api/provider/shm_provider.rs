@@ -74,6 +74,9 @@ where
         self.try_into().map_err(Into::into)
     }
 
+    /// # Safety
+    ///
+    /// The buffer must have the layout returned by `memory_layout`
     unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
         buffer
     }
@@ -86,6 +89,9 @@ impl<T> AllocLayout for TypedLayout<T> {
         Ok(MemoryLayout::for_type::<T>())
     }
 
+    /// # Safety
+    ///
+    /// The buffer must have the layout returned by `memory_layout`
     unsafe fn wrap_buffer(buffer: ZShmMut) -> Self::Buffer {
         // SAFETY: same precondition
         unsafe { Typed::new_unchecked(buffer) }
@@ -191,6 +197,7 @@ impl<T: Copy> PolicyValue<T> for T {
     }
 }
 /// A const `bool`.
+#[derive(Debug)]
 pub struct ConstBool<const VALUE: bool>;
 impl<const VALUE: bool> ConstPolicy for ConstBool<VALUE> {
     const NEW: Self = Self;
@@ -201,6 +208,7 @@ impl<const VALUE: bool> PolicyValue<bool> for ConstBool<VALUE> {
     }
 }
 /// A const `usize`.
+#[derive(Debug)]
 pub struct ConstUsize<const VALUE: usize>;
 impl<const VALUE: usize> ConstPolicy for ConstUsize<VALUE> {
     const NEW: Self = Self;
@@ -213,7 +221,7 @@ impl<const VALUE: usize> PolicyValue<usize> for ConstUsize<VALUE> {
 
 /// Just try to allocate
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct JustAlloc;
 impl<Backend> AllocPolicy<Backend> for JustAlloc
 where
@@ -235,7 +243,7 @@ impl ConstPolicy for JustAlloc {
 ///
 /// If `Safe` is set to false, the policy may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct GarbageCollect<InnerPolicy = JustAlloc, AltPolicy = JustAlloc, Safe = ConstBool<true>> {
     inner_policy: InnerPolicy,
     alt_policy: AltPolicy,
@@ -296,7 +304,7 @@ impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy, Safe: ConstPolicy> ConstP
 /// Try to defragment if allocation failed and allocate again
 /// if the largest defragmented chuk is not smaller than the one required
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Defragment<InnerPolicy = JustAlloc, AltPolicy = JustAlloc> {
     inner_policy: InnerPolicy,
     alt_policy: AltPolicy,
@@ -346,7 +354,7 @@ impl<InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> ConstPolicy
 ///
 /// This policy is unsafe as it may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Deallocate<Limit, InnerPolicy = JustAlloc, AltPolicy = InnerPolicy> {
     limit: Limit,
     inner_policy: InnerPolicy,
@@ -400,7 +408,7 @@ impl<Limit: ConstPolicy, InnerPolicy: ConstPolicy, AltPolicy: ConstPolicy> Const
 /// This policy will block until the allocation succeeds.
 /// Both sync and async modes available.
 #[zenoh_macros::unstable_doc]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct BlockOn<InnerPolicy = JustAlloc> {
     inner_policy: InnerPolicy,
 }
@@ -465,6 +473,16 @@ pub struct AllocBuilder<'a, Backend, Layout, Policy = JustAlloc> {
     provider: &'a ShmProvider<Backend>,
     layout: Layout,
     policy: Policy,
+}
+
+impl<Backend, Layout, Policy> std::fmt::Debug for AllocBuilder<'_, Backend, Layout, Policy> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AllocBuilder")
+            .field("provider", &"..")
+            .field("layout", &"..")
+            .field("policy", &"..")
+            .finish()
+    }
 }
 
 // Generic impl
@@ -576,6 +594,17 @@ pub struct PrecomputedAllocBuilder<'b, 'a: 'b, Backend, Layout, Policy = JustAll
     policy: Policy,
 }
 
+impl<Backend, Layout, Policy> std::fmt::Debug
+    for PrecomputedAllocBuilder<'_, '_, Backend, Layout, Policy>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrecomputedAllocBuilder")
+            .field("layout", &"..")
+            .field("policy", &"..")
+            .finish()
+    }
+}
+
 // Generic impl
 impl<'b, 'a: 'b, Backend, Layout, Policy> PrecomputedAllocBuilder<'b, 'a, Backend, Layout, Policy> {
     /// Set the allocation policy
@@ -662,6 +691,7 @@ impl<
 }
 
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ShmProviderBuilder;
 impl ShmProviderBuilder {
     /// Set the backend
@@ -686,6 +716,17 @@ where
 {
     backend: Backend,
 }
+
+impl<Backend> std::fmt::Debug for ShmProviderBuilderBackend<Backend>
+where
+    Backend: ShmProviderBackend,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmProviderBuilderBackend")
+            .field("backend", &"..")
+            .finish()
+    }
+}
 #[zenoh_macros::unstable_doc]
 impl<Backend> Resolvable for ShmProviderBuilderBackend<Backend>
 where
@@ -708,6 +749,14 @@ where
 #[zenoh_macros::unstable_doc]
 pub struct ShmProviderBuilderWithDefaultBackend<Layout> {
     layout: Layout,
+}
+
+impl<Layout> std::fmt::Debug for ShmProviderBuilderWithDefaultBackend<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmProviderBuilderWithDefaultBackend")
+            .field("layout", &"..")
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable_doc]
@@ -802,6 +851,7 @@ where
 
         // wrap everything to ShmBufInner
         let wrapped = self.wrap(chunk, len, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents a mapped chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
@@ -900,6 +950,7 @@ where
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents an allocated chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 
@@ -988,6 +1039,7 @@ where
 
         // wrap allocated chunk to ShmBufInner
         let wrapped = self.wrap(chunk, size, allocated_metadata, confirmed_metadata);
+        // SAFETY: `wrapped` is guaranteed to be valid as it represents an allocated chunk.
         Ok(unsafe { ZShmMut::new_unchecked(wrapped) })
     }
 }

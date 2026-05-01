@@ -22,7 +22,7 @@
 //! # Components and concepts
 //!
 //! The main Zenoh components and concepts are described below.
-//!  
+//!
 //! ## Session
 //!
 //! The root element of the Zenoh API is the [session].
@@ -388,6 +388,20 @@ pub mod session {
 
     #[zenoh_macros::internal]
     pub use crate::api::builders::session::{init, InitBuilder};
+    #[zenoh_macros::internal]
+    pub use crate::api::session::WeakSession;
+    #[zenoh_macros::unstable]
+    pub use crate::api::{
+        builders::info_links::{
+            LinkEventsListener, LinkEventsListenerBuilder, LinkEventsListenerUndeclaration,
+            LinksBuilder,
+        },
+        builders::info_transport::{
+            TransportEventsListener, TransportEventsListenerBuilder,
+            TransportEventsListenerUndeclaration, TransportsBuilder,
+        },
+        info::{Link, LinkEvent, Transport, TransportEvent},
+    };
     pub use crate::api::{
         builders::{
             close::CloseBuilder,
@@ -635,6 +649,8 @@ pub mod query {
 
     #[zenoh_macros::internal]
     pub use crate::api::queryable::ReplySample;
+    #[zenoh_macros::unstable]
+    pub use crate::api::selector::ZenohParameters;
     pub use crate::api::{
         builders::{
             querier::{QuerierBuilder, QuerierGetBuilder},
@@ -642,12 +658,12 @@ pub mod query {
             reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
         },
         querier::{Querier, QuerierUndeclaration},
-        query::{ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError},
+        query::{
+            ConsolidationMode, QueryConsolidation, QueryTarget, Reply, ReplyError, ReplyKeyExpr,
+        },
         queryable::{Query, Queryable, QueryableUndeclaration},
         selector::Selector,
     };
-    #[zenoh_macros::unstable]
-    pub use crate::api::{query::ReplyKeyExpr, selector::ZenohParameters};
 }
 
 /// # Matching primitives
@@ -866,6 +882,8 @@ pub mod scouting {
 /// key expression or subscribe to it to be notified when the token appears or disappears on the network
 /// using the corresponding functions [get](liveliness::Liveliness::get) and
 /// [declare_subscriber](liveliness::Liveliness::declare_subscriber).
+/// The [history](liveliness::LivelinessSubscriberBuilder::history) option allows subscribers to
+/// receive updates about already declared tokens.
 ///
 /// # Examples
 /// ### Declaring a token
@@ -1110,7 +1128,7 @@ pub mod shm {
 pub mod cancellation {
     pub use crate::api::cancellation::CancellationToken;
     #[cfg(feature = "internal")]
-    pub use crate::api::cancellation::SyncGroupNotifier;
+    pub use crate::api::cancellation::{SyncGroup, SyncGroupNotifier};
 }
 #[cfg(test)]
 mod tests;

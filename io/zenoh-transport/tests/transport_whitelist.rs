@@ -20,6 +20,7 @@ use zenoh_protocol::{
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -49,6 +50,7 @@ impl TransportEventHandler for SHRouter {
     }
 }
 
+#[derive(Debug)]
 pub struct SCRouter;
 
 impl TransportPeerEventHandler for SCRouter {
@@ -134,8 +136,12 @@ async fn transport_whitelist_tcp() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 17000).parse().unwrap(),
-        format!("tcp/[::1]:{}", 17001).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
     ];
     // Run
     run(&endpoints).await;

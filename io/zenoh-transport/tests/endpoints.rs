@@ -20,6 +20,7 @@ use zenoh_protocol::{
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
+use zenoh_test::{get_free_tcp_port, get_free_udp_port};
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -53,7 +54,7 @@ impl TransportEventHandler for SH {
 }
 
 // Transport Callback for the router
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SC;
 
 impl TransportPeerEventHandler for SC {
@@ -102,9 +103,15 @@ async fn endpoint_tcp() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 7000).parse().unwrap(),
-        format!("tcp/[::1]:{}", 7001).parse().unwrap(),
-        format!("tcp/localhost:{}", 7002).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/localhost:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
     ];
     run(&endpoints).await;
 }
@@ -115,9 +122,15 @@ async fn endpoint_udp() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("udp/127.0.0.1:{}", 7010).parse().unwrap(),
-        format!("udp/[::1]:{}", 7011).parse().unwrap(),
-        format!("udp/localhost:{}", 7012).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/[::1]:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/localhost:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
     ];
     run(&endpoints).await;
 }
@@ -149,9 +162,13 @@ async fn endpoint_ws() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("ws/127.0.0.1:{}", 7020).parse().unwrap(),
-        format!("ws/[::1]:{}", 7021).parse().unwrap(),
-        format!("ws/localhost:{}", 7022).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("ws/[::1]:{}", get_free_tcp_port()).parse().unwrap(),
+        format!("ws/localhost:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
     ];
     run(&endpoints).await;
 }
@@ -176,10 +193,18 @@ async fn endpoint_tcp_udp() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 7030).parse().unwrap(),
-        format!("udp/127.0.0.1:{}", 7031).parse().unwrap(),
-        format!("tcp/[::1]:{}", 7032).parse().unwrap(),
-        format!("udp/[::1]:{}", 7033).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/[::1]:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
     ];
     run(&endpoints).await;
 }
@@ -198,10 +223,18 @@ async fn endpoint_tcp_udp_unix() {
     let _ = std::fs::remove_file(f1);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 7040).parse().unwrap(),
-        format!("udp/127.0.0.1:{}", 7041).parse().unwrap(),
-        format!("tcp/[::1]:{}", 7042).parse().unwrap(),
-        format!("udp/[::1]:{}", 7043).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/[::1]:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     run(&endpoints).await;
@@ -222,8 +255,12 @@ async fn endpoint_tcp_unix() {
     let _ = std::fs::remove_file(f1);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 7050).parse().unwrap(),
-        format!("tcp/[::1]:{}", 7051).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     run(&endpoints).await;
@@ -243,8 +280,12 @@ async fn endpoint_udp_unix() {
     let f1 = "zenoh-test-unix-socket-4.sock";
     let _ = std::fs::remove_file(f1); // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("udp/127.0.0.1:{}", 7060).parse().unwrap(),
-        format!("udp/[::1]:{}", 7061).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
+        format!("udp/[::1]:{}", get_free_udp_port())
+            .parse()
+            .unwrap(),
         format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     run(&endpoints).await;
@@ -314,7 +355,9 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 7070).parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -393,7 +436,9 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 7080).parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(

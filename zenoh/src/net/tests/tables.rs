@@ -11,20 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    convert::{TryFrom, TryInto},
-    sync::{Arc, Weak},
-};
+use std::sync::Arc;
 
-use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::{
-    core::{
-        key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
+    core::{key_expr::keyexpr, ExprId, Region, Reliability, WhatAmI, WireExpr, EMPTY_EXPR_ID},
+    network::{
+        declare::queryable::ext::QueryableInfoType,
+        ext::{self, NodeIdType},
+        request::ext::QueryTarget,
+        Declare, DeclareBody, DeclareKeyExpr, Mapping, Push, Request, Response, UndeclareKeyExpr,
     },
-    network::{ext, Declare, DeclareBody, DeclareKeyExpr, Push},
-    zenoh::Put,
+    zenoh::{PushBody, Put, RequestBody, ResponseBody},
 };
 
 use crate::{
@@ -35,26 +34,22 @@ use crate::{
             dispatcher::{
                 face::{Face, FaceState},
                 pubsub::SubscriberInfo,
-                tables::Tables,
+                queries::route_send_response,
+                tables::TablesData,
             },
-            router::*,
+            gateway::*,
             RoutingContext,
         },
     },
 };
 
-fn new_router() -> Router {
-    let zid = ZenohIdProto::try_from([1]).unwrap();
-    let whatami = WhatAmI::Client;
-    Router::new(
-        zid,
-        whatami,
-        Some(Arc::new(HLC::default())),
-        &Config::default(),
-        #[cfg(feature = "stats")]
-        zenoh_stats::StatsRegistry::new(zid, whatami, "test"),
-    )
-    .unwrap()
+fn new_router() -> Gateway {
+    let mut config = Config::default().expanded();
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
+    GatewayBuilder::new(&config)
+        .subregions(vec![Region::Local])
+        .build()
+        .unwrap()
 }
 
 #[test]
@@ -63,26 +58,19 @@ fn base_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives).state);
+    let face = router.new_session(primitives);
+    register_expr(&tables, &mut face.state.clone(), 1, &"one/two/three".into());
+
     register_expr(
         &tables,
-        &mut face.upgrade().unwrap(),
-        1,
-        &"one/two/three".into(),
-    );
-    register_expr(
-        &tables,
-        &mut face.upgrade().unwrap(),
+        &mut face.state.clone(),
         2,
         &"one/deux/trois".into(),
     );
 
     let sub_info = SubscriberInfo;
 
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face.upgrade().unwrap(),
+    face.declare_subscriber(
         0,
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
@@ -94,7 +82,7 @@ fn base_test() {
         },
     );
 
-    Tables::print(&zread!(tables.tables));
+    TablesData::print(&zread!(tables.tables).data);
 }
 
 #[test]
@@ -158,7 +146,7 @@ fn match_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = Arc::downgrade(&router.new_primitives(primitives).state);
+    let face = Arc::downgrade(&router.new_session(primitives).state);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
@@ -169,8 +157,7 @@ fn match_test() {
     }
 
     for key_expr1 in key_exprs.iter() {
-        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
-        dbg!(res_matches.len());
+        let res_matches = Resource::get_matches(&zread!(tables.tables).data, key_expr1);
         for key_expr2 in key_exprs.iter() {
             if res_matches
                 .iter()
@@ -190,14 +177,11 @@ fn multisub_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = &router.new_primitives(primitives);
+    let face0 = &router.new_session(primitives);
 
     // --------------
     let sub_info = SubscriberInfo;
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         0,
         &"sub".into(),
         &sub_info,
@@ -208,16 +192,13 @@ fn multisub_test() {
             })
         },
     );
-    let optres = Resource::get_resource(zread!(tables.tables)._get_root(), "sub")
+    let optres = Resource::get_resource(zread!(tables.tables).data._get_root(), "sub")
         .map(|res| Arc::downgrade(&res));
     assert!(optres.is_some());
     let res = optres.unwrap();
     assert!(res.upgrade().is_some());
 
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         1,
         &"sub".into(),
         &sub_info,
@@ -230,34 +211,18 @@ fn multisub_test() {
     );
     assert!(res.upgrade().is_some());
 
-    undeclare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
-        0,
-        &WireExpr::empty(),
-        NodeId::default(),
-        &mut |p, m| {
-            m.with_mut(|m| {
-                p.send_declare(m);
-            })
-        },
-    );
+    face0.undeclare_subscriber(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    });
     assert!(res.upgrade().is_some());
 
-    undeclare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
-        1,
-        &WireExpr::empty(),
-        NodeId::default(),
-        &mut |p, m| {
-            m.with_mut(|m| {
-                p.send_declare(m);
-            })
-        },
-    );
+    face0.undeclare_subscriber(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    });
     assert!(res.upgrade().is_none());
 
     face0.send_close();
@@ -269,11 +234,11 @@ async fn clean_test() {
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face0 = &router.new_primitives(primitives);
+    let face0 = &router.new_session(primitives);
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
@@ -285,14 +250,15 @@ async fn clean_test() {
         2,
         &"todrop1/todrop11".into(),
     );
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
-        .map(|res| Arc::downgrade(&res));
+    let optres2 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop11")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
     register_expr(&tables, &mut face0.state.clone(), 3, &"**".into());
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
+    let optres3 = Resource::get_resource(zread!(tables.tables).data._get_root(), "**")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
@@ -315,7 +281,7 @@ async fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
@@ -323,10 +289,7 @@ async fn clean_test() {
 
     let sub_info = SubscriberInfo;
 
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         0,
         &"todrop1/todrop11".into(),
         &sub_info,
@@ -337,16 +300,14 @@ async fn clean_test() {
             })
         },
     );
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
-        .map(|res| Arc::downgrade(&res));
+    let optres2 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop11")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         1,
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
@@ -357,26 +318,19 @@ async fn clean_test() {
             })
         },
     );
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
-        .map(|res| Arc::downgrade(&res));
+    let optres3 =
+        Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop1/todrop12")
+            .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     println!("COUNT: {}", res3.strong_count());
     assert!(res3.upgrade().is_some());
 
-    undeclare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
-        1,
-        &WireExpr::empty(),
-        NodeId::default(),
-        &mut |p, m| {
-            m.with_mut(|m| {
-                p.send_declare(m);
-            })
-        },
-    );
+    face0.undeclare_subscriber(1, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    });
 
     println!("COUNT2: {}", res3.strong_count());
 
@@ -384,19 +338,11 @@ async fn clean_test() {
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_none());
 
-    undeclare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
-        0,
-        &WireExpr::empty(),
-        NodeId::default(),
-        &mut |p, m| {
-            m.with_mut(|m| {
-                p.send_declare(m);
-            })
-        },
-    );
+    face0.undeclare_subscriber(0, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    });
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
@@ -408,10 +354,7 @@ async fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.state.clone(), 2, &"todrop3".into());
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         2,
         &"todrop3".into(),
         &sub_info,
@@ -422,25 +365,17 @@ async fn clean_test() {
             })
         },
     );
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    undeclare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
-        2,
-        &WireExpr::empty(),
-        NodeId::default(),
-        &mut |p, m| {
-            m.with_mut(|m| {
-                p.send_declare(m);
-            })
-        },
-    );
+    face0.undeclare_subscriber(2, &WireExpr::empty(), NodeId::default(), &mut |p, m| {
+        m.with_mut(|m| {
+            p.send_declare(m);
+        })
+    });
     assert!(res1.upgrade().is_some());
 
     unregister_expr(&tables, &mut face0.state.clone(), 2);
@@ -450,10 +385,7 @@ async fn clean_test() {
     register_expr(&tables, &mut face0.state.clone(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.state.clone(), 4, &"todrop5".into());
     register_expr(&tables, &mut face0.state.clone(), 5, &"todrop6".into());
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         3,
         &WireExpr::from(4),
         &sub_info,
@@ -464,10 +396,7 @@ async fn clean_test() {
             })
         },
     );
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_subscriber(
         4,
         &"todrop7".into(),
         &sub_info,
@@ -478,10 +407,7 @@ async fn clean_test() {
             })
         },
     );
-    declare_token(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_token(
         5,
         &WireExpr::from(4),
         NodeId::default(),
@@ -492,10 +418,7 @@ async fn clean_test() {
             })
         },
     );
-    declare_token(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.state.clone(),
+    face0.declare_token(
         4,
         &"todrop8".into(),
         NodeId::default(),
@@ -507,23 +430,23 @@ async fn clean_test() {
         },
     );
 
-    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
+    let optres1 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop4")
         .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
-    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop5")
+    let optres2 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop5")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop6")
+    let optres3 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop6")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
-    let optres4 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop7")
+    let optres4 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop7")
         .map(|res| Arc::downgrade(&res));
     assert!(optres4.is_some());
     let res4 = optres4.unwrap();
-    let optres5 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop8")
+    let optres5 = Resource::get_resource(zread!(tables.tables).data._get_root(), "todrop8")
         .map(|res| Arc::downgrade(&res));
     assert!(optres5.is_some());
     let res5 = optres5.unwrap();
@@ -609,13 +532,22 @@ impl Primitives for ClientPrimitives {
         }
     }
 
-    fn send_push(&self, msg: &mut zenoh_protocol::network::Push, _reliability: Reliability) {
+    fn send_push_consume(
+        &self,
+        msg: &mut zenoh_protocol::network::Push,
+        _reliability: Reliability,
+        _consume: bool,
+    ) {
         *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn send_request(&self, _msg: &mut zenoh_protocol::network::Request) {}
+    fn send_request(&self, msg: &mut zenoh_protocol::network::Request) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
-    fn send_response(&self, _msg: &mut zenoh_protocol::network::Response) {}
+    fn send_response(&self, msg: &mut zenoh_protocol::network::Response) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned())
+    }
 
     fn send_response_final(&self, _msg: &mut zenoh_protocol::network::ResponseFinal) {}
 
@@ -674,6 +606,161 @@ impl EPrimitives for ClientPrimitives {
 }
 
 #[test]
+fn test_response_wireexpr() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let primitives0 = Arc::new(ClientPrimitives::new());
+    let face0 = &router.new_session(primitives0.clone());
+
+    let primitives1 = Arc::new(ClientPrimitives::new());
+    let face1 = &router.new_session(primitives1.clone());
+
+    let qinfo = QueryableInfoType {
+        complete: true,
+        distance: 1,
+    };
+    register_expr(
+        &tables,
+        &mut face0.state.clone(),
+        11,
+        &"test/queryable/reply".into(),
+    );
+
+    Primitives::send_declare(
+        primitives0.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/queryable/reply".into(),
+            }),
+        },
+    );
+
+    register_expr(
+        &tables,
+        &mut face1.state.clone(),
+        12,
+        &"test/queryable".into(),
+    );
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 12,
+                wire_expr: "test/queryable".into(),
+            }),
+        },
+    );
+
+    face0.declare_queryable(
+        0,
+        &WireExpr::from(11).with_suffix("/**"),
+        &qinfo,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    face1.route_query(&mut Request {
+        id: 1,
+        wire_expr: "test/queryable/reply/*".into(),
+        payload: RequestBody::Query(zenoh_protocol::zenoh::query::Query::default()),
+        ext_qos: zenoh_protocol::network::request::ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::DEFAULT,
+        ext_target: QueryTarget::All,
+        ext_budget: None,
+        ext_timeout: None,
+    });
+
+    route_send_response(
+        &tables,
+        &mut face0.state.clone(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    // TODO: replace asserts with the ones commented below once optimization of reply wireexpr in route_send_response is enabled
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
+    /*assert_eq!(we.suffix, "/reply/1");
+    assert_eq!(we.scope, 12);
+    assert_eq!(we.mapping, Mapping::Receiver);*/
+
+    // unregister receiver mapping and validate that we is still correct
+    unregister_expr(&tables, &mut face1.state.clone(), 12);
+
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        &mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: 12 }),
+        },
+    );
+
+    route_send_response(
+        &tables,
+        &mut face0.state.clone(),
+        &mut Response {
+            rid: 1,
+            wire_expr: WireExpr {
+                scope: 11,
+                suffix: "/1".into(),
+                mapping: Mapping::Sender,
+            },
+            payload: ResponseBody::Reply(zenoh_protocol::zenoh::reply::Reply {
+                consolidation: zenoh_protocol::zenoh::ConsolidationMode::None,
+                ext_unknown: Vec::default(),
+                payload: PushBody::Put(zenoh_protocol::zenoh::put::Put::default()),
+            }),
+            ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_respid: None,
+        },
+    );
+    assert_eq!(
+        primitives1.get_last_name().unwrap(),
+        "test/queryable/reply/1"
+    );
+    let we = primitives1.get_last_key().unwrap();
+    assert_eq!(we.suffix, "test/queryable/reply/1");
+    assert_eq!(we.scope, 0);
+}
+
+#[test]
 fn client_test() {
     let router = new_router();
     let tables = router.tables.clone();
@@ -681,13 +768,8 @@ fn client_test() {
     let sub_info = SubscriberInfo;
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        11,
-        &"test/client".into(),
-    );
+    let face0 = router.new_session(primitives0.clone());
+    register_expr(&tables, &mut face0.state.clone(), 11, &"test/client".into());
     Primitives::send_declare(
         primitives0.as_ref(),
         &mut Declare {
@@ -701,10 +783,7 @@ fn client_test() {
             }),
         },
     );
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face0.upgrade().unwrap(),
+    face0.declare_subscriber(
         0,
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
@@ -717,7 +796,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face0.upgrade().unwrap(),
+        &mut face0.state.clone(),
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
@@ -736,13 +815,8 @@ fn client_test() {
     );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
-    register_expr(
-        &tables,
-        &mut face1.upgrade().unwrap(),
-        21,
-        &"test/client".into(),
-    );
+    let face1 = router.new_session(primitives1.clone());
+    register_expr(&tables, &mut face1.state.clone(), 21, &"test/client".into());
     Primitives::send_declare(
         primitives1.as_ref(),
         &mut Declare {
@@ -756,10 +830,7 @@ fn client_test() {
             }),
         },
     );
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face1.upgrade().unwrap(),
+    face1.declare_subscriber(
         0,
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
@@ -772,7 +843,7 @@ fn client_test() {
     );
     register_expr(
         &tables,
-        &mut face1.upgrade().unwrap(),
+        &mut face1.state.clone(),
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
@@ -791,13 +862,8 @@ fn client_test() {
     );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = Arc::downgrade(&router.new_primitives(primitives2.clone()).state);
-    register_expr(
-        &tables,
-        &mut face2.upgrade().unwrap(),
-        31,
-        &"test/client".into(),
-    );
+    let face2 = router.new_session(primitives2.clone());
+    register_expr(&tables, &mut face2.state.clone(), 31, &"test/client".into());
     Primitives::send_declare(
         primitives2.as_ref(),
         &mut Declare {
@@ -811,10 +877,7 @@ fn client_test() {
             }),
         },
     );
-    declare_subscription(
-        tables.hat_code.as_ref(),
-        &tables,
-        &mut face2.upgrade().unwrap(),
+    face2.declare_subscriber(
         0,
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
@@ -830,19 +893,20 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
 
-    let route_dummy_data = |face: &Weak<FaceState>, wire_expr| {
+    let route_dummy_data = |face: &Arc<FaceState>, wire_expr| {
         route_data(
             &tables,
-            &face.upgrade().unwrap(),
+            face,
             &mut Push {
                 wire_expr,
                 ..Put::default().into()
             },
             Reliability::Reliable,
+            true,
         );
     };
 
-    route_dummy_data(&face0, "test/client/z1_wr1".into());
+    route_dummy_data(&face0.state, "test/client/z1_wr1".into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -859,7 +923,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_dummy_data(&face0, WireExpr::from(11).with_suffix("/z1_wr2"));
+    route_dummy_data(&face0.state, WireExpr::from(11).with_suffix("/z1_wr2"));
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -876,7 +940,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_dummy_data(&face1, "test/client/**".into());
+    route_dummy_data(&face1.state, "test/client/**".into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
@@ -893,7 +957,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_dummy_data(&face0, 12.into());
+    route_dummy_data(&face0.state, 12.into());
 
     // functional check
     assert!(primitives1.get_last_name().is_some());
@@ -910,7 +974,7 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
-    route_dummy_data(&face1, 22.into());
+    route_dummy_data(&face1.state, 22.into());
 
     // functional check
     assert!(primitives0.get_last_name().is_some());
@@ -930,11 +994,11 @@ fn get_best_key_test() {
     let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face1 = router.new_primitives(primitives.clone());
-    let face2 = router.new_primitives(primitives.clone());
-    let face3 = router.new_primitives(primitives);
+    let face1 = router.new_session(primitives.clone());
+    let face2 = router.new_session(primitives.clone());
+    let face3 = router.new_session(primitives);
 
-    let root = zread!(router.tables.tables)._get_root().clone();
+    let root = zread!(router.tables.tables).data._get_root().clone();
     let register_expr = |face: &Face, id: ExprId, expr: &str| {
         register_expr(&router.tables, &mut face.state.clone(), id, &expr.into());
     };
@@ -976,14 +1040,14 @@ fn big_key_expr() {
     let router = new_router();
 
     let primitives = Arc::new(DummyPrimitives {});
-    let face = router.new_primitives(primitives.clone());
+    let face = router.new_session(primitives.clone());
 
-    let root = zread!(router.tables.tables)._get_root().clone();
+    let root = zread!(router.tables.tables).data._get_root().clone();
     let key_expr = KeyExpr::new(vec!["a/"; 10000].concat() + "a").unwrap();
     let wire_expr = WireExpr::from(&**key_expr);
     register_expr(&router.tables, &mut face.state.clone(), 1, &wire_expr);
     let res = Resource::get_resource(&root, &key_expr).unwrap();
     root.get_best_key(&key_expr, face.state.id);
     res.get_best_key("/a", face.state.id + 1);
-    Resource::get_matches(&face.tables.tables.read().unwrap(), &key_expr);
+    Resource::get_matches(&face.tables.tables.read().unwrap().data, &key_expr);
 }

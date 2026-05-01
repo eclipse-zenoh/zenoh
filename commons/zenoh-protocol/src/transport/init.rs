@@ -132,14 +132,12 @@ pub struct InitSyn {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    pub ext_region_name: Option<ext::RegionName>,
 }
 
 // Extensions
 pub mod ext {
-    use crate::{
-        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
-        zextunit, zextz64, zextzbuf,
-    };
+    use crate::{zextunit, zextz64, zextzbuf};
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
@@ -173,6 +171,11 @@ pub mod ext {
     /// if >= 1, then fragmentation first/drop markers
     pub type Patch = zextz64!(0x7, false);
     pub type PatchType = crate::transport::ext::PatchType<{ Patch::ID }>;
+
+    /// # RegionName extension
+    ///
+    /// See [`crate::core::RegionName`].
+    pub type RegionName = zextzbuf!(0x8, false);
 }
 
 impl InitSyn {
@@ -199,6 +202,7 @@ impl InitSyn {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        let ext_region_name = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -215,6 +219,7 @@ impl InitSyn {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name,
         }
     }
 }
@@ -246,6 +251,7 @@ pub struct InitAck {
     pub ext_lowlatency: Option<ext::LowLatency>,
     pub ext_compression: Option<ext::Compression>,
     pub ext_patch: ext::PatchType,
+    pub ext_region_name: Option<ext::RegionName>,
 }
 
 impl InitAck {
@@ -277,6 +283,7 @@ impl InitAck {
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_patch = ext::PatchType::rand();
+        let ext_region_name = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -294,6 +301,7 @@ impl InitAck {
             ext_lowlatency,
             ext_compression,
             ext_patch,
+            ext_region_name,
         }
     }
 }

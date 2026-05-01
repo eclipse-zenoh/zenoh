@@ -11,12 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
+
 use std::time::Duration;
 
 use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
-use zenoh_protocol::core::EndPoints;
+use zenoh_test::get_locators_from_session;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_wonly() {
@@ -32,11 +34,8 @@ async fn test_adminspace_wonly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(false).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
     let root = router
@@ -51,29 +50,24 @@ async fn test_adminspace_wonly() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_read() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31000";
-    const MULTICAST_ENDPOINT: &str = "udp/224.0.0.224:31000";
 
     zenoh_util::init_log_from_env_or("error");
 
+    // Open router with dynamic TCP + UDP ports (port 0 → OS assigns)
     let router = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
             .set(vec![
-                ROUTER_ENDPOINT.parse::<EndPoint>().unwrap(),
-                MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap(),
+                "tcp/127.0.0.1:0".parse::<EndPoint>().unwrap(),
+                "udp/224.0.0.224:0".parse::<EndPoint>().unwrap(),
             ])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
         c.plugins_loading.set_enabled(true).unwrap();
         let plugin_search_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -91,13 +85,27 @@ async fn test_adminspace_read() {
         s
     };
     let zid = router.zid();
+
+    // Resolve the actual TCP endpoint assigned by the OS
+    let router_locators = get_locators_from_session(&router).await;
+    let tcp_locator = router_locators
+        .iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router")
+        .clone();
+    let udp_locator = router_locators
+        .iter()
+        .find(|ep| ep.to_string().starts_with("udp/"))
+        .expect("Expected a UDP listener endpoint from router")
+        .clone();
+
     let router2 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoints>().unwrap()])
+            .set(vec![tcp_locator.clone().into()])
             .unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
     };
@@ -105,10 +113,7 @@ async fn test_adminspace_read() {
     let peer = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Peer)).unwrap();
-        c.listen
-            .endpoints
-            .set(vec![MULTICAST_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        c.listen.endpoints.set(vec![udp_locator.clone()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
     };
@@ -128,19 +133,12 @@ async fn test_adminspace_read() {
         .next();
     assert!(metrics.is_some());
     let routers_graph = router
-        .get(format!("@/{zid}/router/linkstate/routers"))
+        .get(format!("@/{zid}/router/linkstate/north"))
         .await
         .unwrap()
         .into_iter()
         .next();
     assert!(routers_graph.is_some());
-    let peers_graph = router
-        .get(format!("@/{zid}/router/linkstate/peers"))
-        .await
-        .unwrap()
-        .into_iter()
-        .next();
-    assert!(peers_graph.is_some());
 
     let subscribers: Vec<String> = router
         .get(format!("@/{zid}/router/subscriber/**"))
@@ -332,9 +330,9 @@ async fn test_adminspace_read() {
     let count = router.get("@/*/**").await.unwrap().iter().count();
     assert!(count > 0);
 
-    peer.close().await.unwrap();
-    router2.close().await.unwrap();
-    router.close().await.unwrap();
+    ztimeout!(peer.close()).unwrap();
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router.close()).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -351,11 +349,8 @@ async fn test_adminspace_ronly() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(false).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
 
@@ -383,11 +378,8 @@ async fn test_adminspace_write() {
         c.adminspace.set_enabled(true).unwrap();
         c.adminspace.permissions.set_read(true).unwrap();
         c.adminspace.permissions.set_write(true).unwrap();
-        c.routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        ztimeout!(zenoh::open(c)).unwrap()
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
     };
     let zid = router.zid();
 
@@ -516,18 +508,16 @@ macro_rules! assert_json_field {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_adminspace_transports_and_links() {
     const TIMEOUT: Duration = Duration::from_secs(60);
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:31001";
-    const ROUTER_CONNECT_ENDPOINT: &str = "tcp/localhost:31001?rel=1;prio=1-7";
 
     zenoh_util::init_log_from_env_or("error");
 
-    // Create router1 with adminspace enabled
+    // Create router1 with adminspace enabled, listening on a dynamic port
     let router1 = {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.adminspace.set_enabled(true).unwrap();
@@ -538,6 +528,17 @@ async fn test_adminspace_transports_and_links() {
         ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid1 = router1.zid();
+
+    // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
+    let router1_tcp_addr = get_locators_from_session(&router1)
+        .await
+        .into_iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router1");
+    // Preserve the original connect-side metadata (?rel=1;prio=1-7)
+    let router_connect_endpoint: EndPoint = format!("{}?rel=1;prio=1-7", router1_tcp_addr)
+        .parse()
+        .unwrap();
 
     // Test 1: Query transports when none exist (except self-connections)
     let transports_unicast: Vec<String> = router1
@@ -580,7 +581,7 @@ async fn test_adminspace_transports_and_links() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![ROUTER_CONNECT_ENDPOINT.parse::<EndPoints>().unwrap()])
+            .set(vec![router_connect_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         // Enable QoS for priorities and reliability support
@@ -798,6 +799,114 @@ async fn test_adminspace_transports_and_links() {
     link_subscriber.undeclare().await.unwrap();
 
     // Cleanup
-    router2.close().await.unwrap();
-    router1.close().await.unwrap();
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router1.close()).unwrap();
+}
+
+#[cfg(feature = "stats")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_adminspace_regression_1() {
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    zenoh_util::init_log_from_env_or("error");
+
+    // Create router1 with adminspace enabled, listening on a dynamic port
+    let router1 = {
+        let mut c = zenoh_config::Config::default();
+        c.set_mode(Some(WhatAmI::Router)).unwrap();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        c.adminspace.permissions.set_read(true).unwrap();
+        c.adminspace.permissions.set_write(false).unwrap();
+        // Enable QoS for priorities and reliability support
+        c.transport.unicast.qos.set_enabled(true).unwrap();
+        ztimeout!(zenoh::open(c)).unwrap()
+    };
+    let zid1 = router1.zid();
+
+    // Resolve the actual TCP endpoint assigned by the OS, then append QoS metadata
+    let router1_tcp_addr = get_locators_from_session(&router1)
+        .await
+        .into_iter()
+        .find(|ep| ep.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP listener endpoint from router1");
+    let router_connect_endpoint: EndPoint = format!("{}?rel=1;prio=1-7", router1_tcp_addr)
+        .parse()
+        .unwrap();
+
+    // Create router2 that connects to router1 (creates unicast transport)
+    let router2 = {
+        let mut c = zenoh_config::Config::default();
+        c.set_mode(Some(WhatAmI::Router)).unwrap();
+        c.listen.endpoints.set(vec![]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_connect_endpoint.into()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        // Enable QoS for priorities and reliability support
+        c.transport.unicast.qos.set_enabled(true).unwrap();
+        ztimeout!(zenoh::open(c)).unwrap()
+    };
+
+    // Give some time for the connection to establish
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let reply = router1
+        .get(format!("@/{zid1}/router?_stats=true"))
+        .await
+        .unwrap()
+        .into_iter()
+        .next();
+    assert!(reply.is_some());
+    let binding = reply.unwrap();
+    let sample = binding.result().ok().unwrap();
+
+    // Verify it's JSON encoded
+    assert_eq!(sample.encoding(), &zenoh::bytes::Encoding::APPLICATION_JSON);
+
+    // Parse and verify JSON content
+    let bytes = sample.payload().to_bytes();
+    let json: serde_json::Value =
+        serde_json::from_slice(&bytes).expect("Failed to parse transport JSON");
+
+    let sessions = navigate_json_path!(json, "sessions").1.as_array().unwrap();
+    assert_eq!(sessions.len(), 1);
+    let rx_t_bytes = navigate_json_path!(sessions[0], "stats.rx_bytes")
+        .1
+        .as_u64()
+        .unwrap();
+    let tx_t_bytes = navigate_json_path!(sessions[0], "stats.tx_bytes")
+        .1
+        .as_u64()
+        .unwrap();
+    let links = navigate_json_path!(sessions[0], "links")
+        .1
+        .as_array()
+        .unwrap();
+    assert_eq!(links.len(), 1);
+    let rx_l_bytes = navigate_json_path!(links[0], "stats.rx_bytes")
+        .1
+        .as_u64()
+        .unwrap();
+    let tx_l_bytes = navigate_json_path!(links[0], "stats.tx_bytes")
+        .1
+        .as_u64()
+        .unwrap();
+
+    assert_ne!(rx_t_bytes, 0);
+    assert_ne!(tx_t_bytes, 0);
+    assert_ne!(rx_l_bytes, 0);
+    assert_ne!(tx_l_bytes, 0);
+
+    assert_eq!(rx_t_bytes, rx_l_bytes);
+    assert_eq!(tx_t_bytes, tx_l_bytes);
+
+    // Cleanup
+    ztimeout!(router2.close()).unwrap();
+    ztimeout!(router1.close()).unwrap();
 }

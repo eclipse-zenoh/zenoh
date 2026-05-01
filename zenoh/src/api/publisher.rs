@@ -44,6 +44,7 @@ use crate::api::{
         },
     },
     bytes::ZBytes,
+    cancellation::SyncGroup,
     encoding::Encoding,
     handlers::DefaultHandler,
     key_expr::KeyExpr,
@@ -70,6 +71,8 @@ impl fmt::Debug for PublisherState {
 }
 
 /// A publisher that allows sending data through a stream.
+/// A Publisher is declared by a [`Session`](crate::api::session::Session) for a given key expression
+/// with method [`Session::declare_publisher`](crate::api::session::Session::declare_publisher).
 ///
 /// Publishers are automatically undeclared when dropped.
 ///
@@ -118,6 +121,7 @@ pub struct Publisher<'a> {
     pub(crate) reliability: Reliability,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
     pub(crate) undeclare_on_drop: bool,
+    pub(crate) sync_group: SyncGroup,
 }
 
 impl<'a> Publisher<'a> {
@@ -354,6 +358,7 @@ impl<'a> Publisher<'a> {
             matching_listeners: &self.matching_listeners,
             matching_status_type: MatchingStatusType::Subscribers,
             handler: DefaultHandler::default(),
+            parent_callback_sync_group_notifier: self.sync_group.notifier(),
         }
     }
 
@@ -369,7 +374,7 @@ impl<'a> Publisher<'a> {
     /// publisher.undeclare().await.unwrap();
     /// # }
     /// ```
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> PublisherUndeclaration<'a> {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
@@ -384,8 +389,8 @@ impl<'a> Publisher<'a> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        self.session.session()
+    pub fn session(&self) -> &WeakSession {
+        &self.session
     }
 }
 
@@ -393,7 +398,10 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
     type Undeclaration = PublisherUndeclaration<'a>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        PublisherUndeclaration(self)
+        PublisherUndeclaration {
+            publisher: self,
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -410,7 +418,28 @@ impl<'a> UndeclarableSealed<()> for Publisher<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct PublisherUndeclaration<'a>(Publisher<'a>);
+pub struct PublisherUndeclaration<'a> {
+    publisher: Publisher<'a>,
+    wait_callbacks: bool,
+}
+
+impl fmt::Debug for PublisherUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublisherUndeclaration")
+            .field("publisher", &self.publisher)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
+impl<'a> PublisherUndeclaration<'a> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl Resolvable for PublisherUndeclaration<'_> {
     type To = ZResult<()>;
@@ -418,7 +447,11 @@ impl Resolvable for PublisherUndeclaration<'_> {
 
 impl Wait for PublisherUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.publisher.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.publisher.sync_group.wait();
+        }
+        Ok(())
     }
 }
 

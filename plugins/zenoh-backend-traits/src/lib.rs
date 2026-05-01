@@ -181,6 +181,7 @@ pub enum History {
     All,
 }
 
+#[derive(Debug)]
 pub enum StorageInsertionResult {
     Outdated,
     Inserted,

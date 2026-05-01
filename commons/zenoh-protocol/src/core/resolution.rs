@@ -174,6 +174,7 @@ impl serde::Serialize for Bits {
     }
 }
 
+#[derive(Debug)]
 pub struct BitsVisitor;
 impl<'de> serde::de::Visitor<'de> for BitsVisitor {
     type Value = Bits;
