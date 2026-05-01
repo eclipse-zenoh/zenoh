@@ -202,6 +202,8 @@ pub(crate) trait HatBaseTrait: Any {
         other_hats: RegionMap<&dyn HatTrait>,
     ) -> ZResult<()>;
 
+    fn update_self_locators(&mut self) {}
+
     fn handle_oam(
         &mut self,
         ctx: DispatcherContext,
