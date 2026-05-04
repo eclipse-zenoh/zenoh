@@ -714,6 +714,8 @@
         // so_rcvbuf: 123456,
         /// Configure TCP write buffer size (bytes)
         // so_sndbuf: 123456,
+        /// Configure TCP linger timeout (seconds)
+        // so_linger: 10,
       },
       // // Configure optional TCP link specific parameters
       // tcp: {
@@ -723,6 +725,8 @@
       //   // so_rcvbuf: 123456,
       //   /// Configure TCP write buffer size (bytes)
       //   // so_sndbuf: 123456,
+      //   /// Configure TCP linger timeout (seconds)
+      //   // so_linger: 10,
       // },
     },
     /// Shared memory configuration.

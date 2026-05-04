@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
     parse_dscp, tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET,
-    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+    TCP_SO_RCV_BUF, TCP_SO_SND_BUF, TCP_SO_LINGER
 };
 use zenoh_protocol::core::{parameters, Address, Config};
 use zenoh_result::{zerror, ZResult};
@@ -41,6 +41,11 @@ impl ConfigurationInspector<ZenohConfig> for TcpConfigurator {
             tx_buffer_size = size.to_string();
             ps.push((TCP_SO_SND_BUF, &tx_buffer_size));
         }
+        let linger_timeout;
+        if let Some(timeout) = c.so_linger() {
+            linger_timeout = timeout.to_string();
+            ps.push((TCP_SO_LINGER, &linger_timeout));
+        }
 
         Ok(parameters::from_iter(ps.drain(..)))
     }
@@ -49,6 +54,7 @@ impl ConfigurationInspector<ZenohConfig> for TcpConfigurator {
 pub(crate) struct TcpLinkConfig<'a> {
     pub(crate) rx_buffer_size: Option<u32>,
     pub(crate) tx_buffer_size: Option<u32>,
+    pub(crate) linger_timeout: Option<u32>,
     pub(crate) bind_iface: Option<&'a str>,
     pub(crate) bind_socket: Option<SocketAddr>,
     pub(crate) dscp: Option<u32>,
@@ -64,6 +70,7 @@ impl<'a> TcpLinkConfig<'a> {
         let mut tcp_config = Self {
             rx_buffer_size: None,
             tx_buffer_size: None,
+            linger_timeout: None,
             bind_iface: config.get(BIND_INTERFACE),
             bind_socket,
             dscp: parse_dscp(config)?,
@@ -81,6 +88,12 @@ impl<'a> TcpLinkConfig<'a> {
                     .map_err(|_| zerror!("Unknown TCP write buffer size argument: {}", size))?,
             );
         };
+        if let Some(timeout) = config.get(TCP_SO_LINGER) {
+            tcp_config.linger_timeout = Some(
+                timeout.parse()
+                    .map_err(|_| zerror!("Unknown TCP linger timeout argument: {}", timeout))?,
+            );
+        };
 
         Ok(tcp_config)
     }
@@ -91,6 +104,7 @@ impl<'a> From<TcpLinkConfig<'a>> for TcpSocketConfig<'a> {
         Self::new(
             value.tx_buffer_size,
             value.rx_buffer_size,
+            value.linger_timeout,
             value.bind_iface,
             value.bind_socket,
             value.dscp,
