@@ -43,7 +43,11 @@ async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open session 02 (create 1 listener and connect to session 01)
     let mut s02_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
     let mut locators = get_locators_from_session(&s01).await;
-    s02_config.connect.endpoints.set(locators.clone()).unwrap();
+    s02_config
+        .connect
+        .endpoints
+        .set(locators.clone().into_iter().map(Into::into).collect())
+        .unwrap();
     println!("[  ][02a] Opening s02 session");
     let s02 = ztimeout!(zenoh::open(s02_config)).unwrap();
 

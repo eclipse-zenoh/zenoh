@@ -39,7 +39,11 @@ mod runtime_state_weak_tests {
         let _ = config.set_mode(Some(mode)).unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
 
-        config.connect.endpoints.set(connect_endpoints).unwrap();
+        config
+            .connect
+            .endpoints
+            .set(connect_endpoints.into_iter().map(Into::into).collect())
+            .unwrap();
         config.listen.endpoints.set(listen_endpoints).unwrap();
 
         config.scouting.gossip.set_enabled(Some(gossip)).unwrap();

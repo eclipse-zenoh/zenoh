@@ -448,7 +448,11 @@ fn lowpass_pub_sub_query_reply_test(
     let reader_session = test_context.open_listener_with_cfg_sync(reader_config);
 
     let locators = get_locators_from_session_sync(&reader_session);
-    writer_config.connect.endpoints.set(locators).unwrap();
+    writer_config
+        .connect
+        .endpoints
+        .set(locators.into_iter().map(Into::into).collect())
+        .unwrap();
 
     let _sub = reader_session
         .declare_subscriber(format!("{ke_prefix}/*"))

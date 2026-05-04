@@ -559,7 +559,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -576,7 +576,10 @@ async fn gossip_regression_1() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.listen
             .endpoints
             .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
@@ -597,7 +600,7 @@ async fn gossip_regression_1() -> Result<()> {
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -650,7 +653,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -668,7 +671,10 @@ async fn gossip_regression_2() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -724,7 +730,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -743,7 +749,10 @@ async fn gossip_regression_3() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.listen
             .endpoints
             .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
@@ -765,7 +774,7 @@ async fn gossip_regression_3() -> Result<()> {
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -1530,7 +1539,7 @@ async fn scouting_delay_regression() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1545,7 +1554,10 @@ async fn scouting_delay_regression() -> Result<()> {
     let start = std::time::Instant::now();
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         ztimeout!(zenoh::open(c)).unwrap()

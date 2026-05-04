@@ -103,7 +103,10 @@ async fn test_adminspace_read() {
         let mut c = zenoh_config::Config::default();
         c.set_mode(Some(WhatAmI::Router)).unwrap();
         c.listen.endpoints.set(vec![]).unwrap();
-        c.connect.endpoints.set(vec![tcp_locator.clone()]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![tcp_locator.clone().into()])
+            .unwrap();
         ztimeout!(zenoh::open(c)).unwrap()
     };
     let zid2 = router2.zid();
@@ -578,7 +581,7 @@ async fn test_adminspace_transports_and_links() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![router_connect_endpoint])
+            .set(vec![router_connect_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         // Enable QoS for priorities and reliability support
@@ -842,7 +845,7 @@ async fn test_adminspace_regression_1() {
         c.listen.endpoints.set(vec![]).unwrap();
         c.connect
             .endpoints
-            .set(vec![router_connect_endpoint])
+            .set(vec![router_connect_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         // Enable QoS for priorities and reliability support
