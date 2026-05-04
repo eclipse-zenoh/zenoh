@@ -38,8 +38,8 @@ use zenoh_config::{
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{
-        whatami::WhatAmIMatcher, EndPoint, EndPoints, Metadata, PriorityRange, WhatAmI,
-        ZenohIdProto,
+        whatami::WhatAmIMatcher, EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange,
+        WhatAmI, ZenohIdProto,
     },
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
@@ -126,6 +126,17 @@ impl StartConditions {
 }
 
 impl Runtime {
+    fn warn_if_oneof(peer_group: &EndPoints) {
+        if let EndPoints::Locators(group) = peer_group {
+            if matches!(group.strategy, LocatorsStrategy::OneOf) {
+                tracing::warn!(
+                    "connect.endpoints locator groups with strategy=oneOf are not implemented yet; \
+                     falling back to current allOf behavior"
+                );
+            }
+        }
+    }
+
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
@@ -365,6 +376,7 @@ impl Runtime {
     async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
         let mut success_flag = false;
         for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
             // try to connect to each peer in the group
             let mut peers_to_retry = Vec::new();
             for peer in peer_group.as_vec() {
@@ -412,6 +424,7 @@ impl Runtime {
 
     async fn connect_peers_multiply_links(&self, peers: &[EndPoints]) -> ZResult<()> {
         for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
             for peer in peer_group.as_vec() {
                 let endpoint = peer.clone();
                 let retry_config = self.get_connect_retry_config(&endpoint);

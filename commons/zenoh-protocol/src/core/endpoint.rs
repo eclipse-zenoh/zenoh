@@ -709,7 +709,10 @@ impl EndPoint {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LocatorsStrategy {
+    /// Open links to all locators in the group.
     AllOf,
+    /// Reserved for future support. The runtime currently only implements
+    /// `AllOf` semantics.
     OneOf,
 }
 
