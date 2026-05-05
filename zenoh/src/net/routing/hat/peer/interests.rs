@@ -280,17 +280,22 @@ impl HatInterestTrait for Hat {
                 return Noop;
             }
 
-            zenoh_runtime::ZRuntime::Net.block_in_place(async move {
-                if let Some(runtime) = &ctx.tables.runtime {
-                    if let Some(runtime) = runtime.upgrade() {
-                        tracing::debug!("Terminating peer connector");
-                        runtime
-                            .start_conditions()
-                            .terminate_peer_connector_zid(ctx.src_face.zid)
-                            .await
-                    }
-                }
-            });
+            if let Some(runtime) = ctx
+                .tables
+                .runtime
+                .as_ref()
+                .and_then(|runtime| runtime.upgrade())
+            {
+                let task_runtime = runtime.clone();
+                let zid = ctx.src_face.zid;
+                runtime.spawn(async move {
+                    tracing::debug!("Terminating peer connector");
+                    task_runtime
+                        .start_conditions()
+                        .terminate_peer_connector_zid(zid)
+                        .await
+                });
+            }
 
             Noop
         } else {
