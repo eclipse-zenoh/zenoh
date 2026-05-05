@@ -225,7 +225,30 @@ mod auth_config {
             .unwrap();
         assert!(AuthPubKey::from_config(&config).is_err());
 
-        // malformed content → Err
+        // empty file → Err
+        let empty_path = write_tmp_file("zenoh-test-cfg-known-empty.pem", "");
+        let mut config = PubKeyConf::default();
+        config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
+        config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
+        config
+            .set_known_keys_file(Some(empty_path.to_str().unwrap().to_owned()))
+            .unwrap();
+        assert!(AuthPubKey::from_config(&config).is_err());
+
+        // truncated block (BEGIN without END) → Err
+        let trunc_path = write_tmp_file(
+            "zenoh-test-cfg-known-trunc.pem",
+            "-----BEGIN RSA PUBLIC KEY-----\nMIGJ\n",
+        );
+        let mut config = PubKeyConf::default();
+        config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
+        config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
+        config
+            .set_known_keys_file(Some(trunc_path.to_str().unwrap().to_owned()))
+            .unwrap();
+        assert!(AuthPubKey::from_config(&config).is_err());
+
+        // invalid PEM body (has END marker but bad content) → Err
         let bad_path = write_tmp_file(
             "zenoh-test-cfg-known-bad.pem",
             "not valid pem content\n-----END RSA PUBLIC KEY-----\n",
@@ -263,6 +286,8 @@ mod auth_config {
         assert!(auth.contains_known_key(&key2_pub));
 
         let _ = std::fs::remove_file(&keys_path);
+        let _ = std::fs::remove_file(&empty_path);
+        let _ = std::fs::remove_file(&trunc_path);
         let _ = std::fs::remove_file(&bad_path);
         let _ = std::fs::remove_file(&single_path);
         let _ = std::fs::remove_file(&two_path);

@@ -137,13 +137,14 @@ impl AuthPubKey {
                     current_key.clear();
                 }
             }
-            if !known_keys.is_empty() {
-                tracing::debug!(
-                    "{S} Loaded {} known public key(s) from file.",
-                    known_keys.len()
-                );
-                lookup = Some(known_keys);
+            if current_key.chars().any(|c| !c.is_whitespace()) {
+                bail!("{S} Truncated RSA public key in known keys file.");
             }
+            if known_keys.is_empty() {
+                bail!("{S} No RSA public keys found in known keys file.");
+            }
+            tracing::debug!("{S} Loaded {} known public key(s) from file.", known_keys.len());
+            lookup = Some(known_keys);
         }
 
         match (pub_key, pri_key) {
