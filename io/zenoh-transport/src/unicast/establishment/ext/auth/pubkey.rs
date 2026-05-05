@@ -79,6 +79,11 @@ impl AuthPubKey {
         Ok(())
     }
 
+    #[cfg(feature = "test")]
+    pub fn contains_known_key(&self, key: &ZPublicKey) -> bool {
+        self.lookup.as_ref().is_some_and(|s| s.contains(key))
+    }
+
     pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
