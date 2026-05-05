@@ -828,9 +828,23 @@ impl TransportManager {
         }
     }
 
-    pub async fn open_transport_unicast(
+    pub async fn open_transport_unicast(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, None).await
+    }
+
+    pub async fn open_transport_unicast_with_zid(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: &ZenohIdProto,
+    ) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, Some(expected_zid))
+            .await
+    }
+
+    async fn open_transport_unicast_inner(
         &self,
         mut endpoint: EndPoint,
+        expected_zid: Option<&ZenohIdProto>,
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
@@ -865,7 +879,9 @@ impl TransportManager {
         // Open the link
         tokio::time::timeout(self.config.unicast.open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
-                Ok(link) => super::establishment::open::open_link(endpoint, link, self).await,
+                Ok(link) => {
+                    super::establishment::open::open_link(endpoint, link, self, expected_zid).await
+                }
                 Err(e) => Err(e),
             }
         })

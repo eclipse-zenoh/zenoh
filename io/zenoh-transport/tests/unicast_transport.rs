@@ -2987,3 +2987,171 @@ async fn test_multilink_max_links(
         .await;
     (router_manager, client_manager, client_transport)
 }
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_with_zid_matching() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 16200).parse().unwrap();
+
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+
+    let router_handler = Arc::new(SHRouter::default());
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+
+    // Open transport with expected ZID - should succeed
+    let transport =
+        ztimeout!(client_manager.open_transport_unicast_with_zid(endpoint.clone(), &router_id))
+            .unwrap();
+    assert_eq!(transport.get_zid().unwrap(), router_id);
+
+    ztimeout!(transport.close()).unwrap();
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
+
+// Test that open_transport_unicast_with_zid fails when connecting to a peer with non-matching ZID
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_with_zid_mismatch() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 16201).parse().unwrap();
+
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+    let wrong_zid = ZenohIdProto::try_from([99]).unwrap();
+
+    let router_handler = Arc::new(SHRouter::default());
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+
+    // Open transport with wrong expected ZID - should fail
+    let result =
+        ztimeout!(client_manager.open_transport_unicast_with_zid(endpoint.clone(), &wrong_zid));
+    assert!(
+        result.is_err(),
+        "Expected connection to fail with wrong ZID"
+    );
+
+    // Cleanup
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
+
+// Test that multilink scenario works with open_transport_unicast_with_zid
+// When connecting to multiple endpoints of the same peer, the same ZID should be enforced
+#[cfg(all(feature = "transport_tcp", feature = "transport_multilink"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_with_zid_multilink() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let endpoints: Vec<EndPoint> = vec![
+        format!("tcp/127.0.0.1:{}", 16202).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16203).parse().unwrap(),
+    ];
+
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+
+    let router_handler = Arc::new(SHRouter::default());
+    let unicast = make_transport_manager_builder(2, false);
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    for e in endpoints.iter() {
+        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+    }
+
+    let unicast = make_transport_manager_builder(2, false);
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+
+    // Open first transport with expected ZID - should succeed
+    let transport1 =
+        ztimeout!(client_manager.open_transport_unicast_with_zid(endpoints[0].clone(), &router_id))
+            .unwrap();
+    assert_eq!(transport1.get_zid().unwrap(), router_id);
+
+    // Open second transport with the same expected ZID - should succeed
+    let transport2 =
+        ztimeout!(client_manager.open_transport_unicast_with_zid(endpoints[1].clone(), &router_id))
+            .unwrap();
+    assert_eq!(transport2.get_zid().unwrap(), router_id);
+
+    ztimeout!(transport1.close()).unwrap();
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    for e in endpoints.iter() {
+        ztimeout!(router_manager.del_listener(e)).unwrap();
+    }
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}

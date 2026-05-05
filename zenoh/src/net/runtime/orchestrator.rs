@@ -1027,7 +1027,7 @@ impl Runtime {
                         Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
                 } else {
-                    match manager.open_transport_unicast(endpoint).await {
+                    match manager.open_transport_unicast_with_zid(endpoint, zid).await {
                         Ok(transport) => {
                             tracing::debug!(
                                 "Successfully connected to newly scouted peer: {:?}",
