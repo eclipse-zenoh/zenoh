@@ -5818,6 +5818,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "bytes",
+ "const_format",
  "flume",
  "futures",
  "git-version",
