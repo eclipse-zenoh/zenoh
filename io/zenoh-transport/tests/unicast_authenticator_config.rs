@@ -166,10 +166,7 @@ mod auth_config {
             .set_public_key_file(Some(pub_path.to_str().unwrap().to_owned()))
             .unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(matches!(
-            AuthPubKey::from_config(&config),
-            Ok(Some(_))
-        ));
+        assert!(matches!(AuthPubKey::from_config(&config), Ok(Some(_))));
 
         // public from PEM, private from file → Some
         let mut config = PubKeyConf::default();
@@ -177,10 +174,7 @@ mod auth_config {
         config
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(matches!(
-            AuthPubKey::from_config(&config),
-            Ok(Some(_))
-        ));
+        assert!(matches!(AuthPubKey::from_config(&config), Ok(Some(_))));
 
         let _ = std::fs::remove_file(&pub_path);
         let _ = std::fs::remove_file(&pri_path);
