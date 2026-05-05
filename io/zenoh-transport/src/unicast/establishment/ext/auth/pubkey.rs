@@ -79,9 +79,10 @@ impl AuthPubKey {
         Ok(())
     }
 
+    #[doc(hidden)]
     #[cfg(feature = "test")]
-    pub fn contains_known_key(&self, key: &ZPublicKey) -> bool {
-        self.lookup.as_ref().is_some_and(|s| s.contains(key))
+    pub fn contains_pubkey(&self, pub_key: &ZPublicKey) -> bool {
+        self.lookup.as_ref().is_some_and(|s| s.contains(pub_key))
     }
 
     pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
@@ -158,8 +159,8 @@ impl AuthPubKey {
                 }
                 Ok(Some(auth))
             }
-            (Some(_), None) => bail!("{S} Missing Rsa Private Key."),
-            (None, Some(_)) => bail!("{S} Missing Rsa Public Key."),
+            (Some(_), None) => bail!("{S} Missing Rsa Private Key: set private_key_pem or private_key_file."),
+            (None, Some(_)) => bail!("{S} Missing Rsa Public Key: set public_key_pem or public_key_file."),
             (None, None) if lookup.is_some() => {
                 bail!("{S} known_keys_file requires a public/private key pair to be configured.")
             }

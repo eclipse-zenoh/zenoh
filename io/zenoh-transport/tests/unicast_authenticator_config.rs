@@ -269,7 +269,7 @@ mod auth_config {
             .set_known_keys_file(Some(single_path.to_str().unwrap().to_owned()))
             .unwrap();
         let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
-        assert!(auth.contains_known_key(&key1_pub));
+        assert!(auth.contains_pubkey(&key1_pub));
 
         // two keys in file → Some, lookup contains both
         let two_keys_content = format!("{}{}", pub_pem, key2_pem);
@@ -281,8 +281,8 @@ mod auth_config {
             .set_known_keys_file(Some(two_path.to_str().unwrap().to_owned()))
             .unwrap();
         let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
-        assert!(auth.contains_known_key(&key1_pub));
-        assert!(auth.contains_known_key(&key2_pub));
+        assert!(auth.contains_pubkey(&key1_pub));
+        assert!(auth.contains_pubkey(&key2_pub));
 
         let _ = std::fs::remove_file(&keys_path);
         let _ = std::fs::remove_file(&empty_path);
