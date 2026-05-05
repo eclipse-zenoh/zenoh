@@ -152,7 +152,6 @@ mod auth_config {
         let _ = std::fs::remove_file(&pri_path);
     }
 
-    // TDD: these tests document desired behavior not yet implemented.
     // public and private keys should be specifiable independently via different sources.
     #[tokio::test]
     async fn auth_config_cross_method() {
@@ -180,7 +179,7 @@ mod auth_config {
         let _ = std::fs::remove_file(&pri_path);
     }
 
-    // TDD: each key must have exactly one source; providing two sources for the same key is an error.
+    // each key must have exactly one source; providing two sources for the same key is an error.
     #[tokio::test]
     async fn auth_config_duplicate_source() {
         let (pub_pem, pri_pem) = keypair_pem();
