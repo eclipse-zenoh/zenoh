@@ -140,14 +140,18 @@ impl AuthPubKey {
                 current_key.push_str(line);
                 current_key.push('\n');
                 if trimmed == "-----END RSA PUBLIC KEY-----" {
-                    let public_key = RsaPublicKey::from_pkcs1_pem(&current_key)
-                        .map_err(|e| zerror!("{S} Invalid RSA public key in known keys file: {}.", e))?;
+                    let public_key = RsaPublicKey::from_pkcs1_pem(&current_key).map_err(|e| {
+                        zerror!("{S} Invalid RSA public key in known keys file: {}.", e)
+                    })?;
                     known_keys.insert(public_key.into());
                     current_key.clear();
                 }
             }
             if !known_keys.is_empty() {
-                tracing::debug!("{S} Loaded {} known public key(s) from file.", known_keys.len());
+                tracing::debug!(
+                    "{S} Loaded {} known public key(s) from file.",
+                    known_keys.len()
+                );
                 lookup = Some(known_keys);
             }
         }
