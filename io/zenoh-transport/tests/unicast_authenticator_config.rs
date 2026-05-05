@@ -179,30 +179,30 @@ mod auth_config {
         let _ = std::fs::remove_file(&pri_path);
     }
 
-    // each key must have exactly one source; providing two sources for the same key is an error.
+    // When both PEM string and file are provided for the same key, PEM wins (file is silently ignored after a warning).
     #[tokio::test]
-    async fn auth_config_duplicate_source() {
+    async fn auth_config_pem_priority_over_file() {
         let (pub_pem, pri_pem) = keypair_pem();
         let pub_path = write_tmp_file("zenoh-test-cfg-dup-pub.pem", &pub_pem);
         let pri_path = write_tmp_file("zenoh-test-cfg-dup-pri.pem", &pri_pem);
 
-        // public key has two sources → Err
+        // public_key_pem + public_key_file: PEM wins → Some
         let mut config = PubKeyConf::default();
         config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
         config
             .set_public_key_file(Some(pub_path.to_str().unwrap().to_owned()))
             .unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).is_err());
+        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
 
-        // private key has two sources → Err
+        // private_key_pem + private_key_file: PEM wins → Some
         let mut config = PubKeyConf::default();
         config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
         config
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).is_err());
+        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
 
         let _ = std::fs::remove_file(&pub_path);
         let _ = std::fs::remove_file(&pri_path);

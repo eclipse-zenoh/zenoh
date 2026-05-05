@@ -90,12 +90,16 @@ impl AuthPubKey {
 
         let pub_key: Option<ZPublicKey> = match (config.public_key_pem(), config.public_key_file())
         {
-            (Some(_), Some(_)) => bail!("{S} Rsa Public Key: multiple sources specified."),
-            (Some(pem), None) => Some(
-                RsaPublicKey::from_pkcs1_pem(pem)
-                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?
-                    .into(),
-            ),
+            (Some(pem), file) => {
+                if file.is_some() {
+                    tracing::warn!("{S} Both public_key_pem and public_key_file are set; public_key_pem takes priority.");
+                }
+                Some(
+                    RsaPublicKey::from_pkcs1_pem(pem)
+                        .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?
+                        .into(),
+                )
+            }
             (None, Some(file)) => Some(
                 RsaPublicKey::read_pkcs1_pem_file(Path::new(file))
                     .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?
@@ -106,12 +110,16 @@ impl AuthPubKey {
 
         let pri_key: Option<ZPrivateKey> =
             match (config.private_key_pem(), config.private_key_file()) {
-                (Some(_), Some(_)) => bail!("{S} Rsa Private Key: multiple sources specified."),
-                (Some(pem), None) => Some(
-                    RsaPrivateKey::from_pkcs1_pem(pem)
-                        .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
-                        .into(),
-                ),
+                (Some(pem), file) => {
+                    if file.is_some() {
+                        tracing::warn!("{S} Both private_key_pem and private_key_file are set; private_key_pem takes priority.");
+                    }
+                    Some(
+                        RsaPrivateKey::from_pkcs1_pem(pem)
+                            .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
+                            .into(),
+                    )
+                }
                 (None, Some(file)) => Some(
                     RsaPrivateKey::read_pkcs1_pem_file(Path::new(file))
                         .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
