@@ -143,7 +143,10 @@ impl AuthPubKey {
             if known_keys.is_empty() {
                 bail!("{S} No RSA public keys found in known keys file.");
             }
-            tracing::debug!("{S} Loaded {} known public key(s) from file.", known_keys.len());
+            tracing::debug!(
+                "{S} Loaded {} known public key(s) from file.",
+                known_keys.len()
+            );
             lookup = Some(known_keys);
         }
 

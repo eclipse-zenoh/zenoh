@@ -78,7 +78,7 @@ mod auth_config {
     }
 
     fn write_tmp_file(name: &str, content: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(name);
+        let path = std::env::temp_dir().join(format!("{}-{}", std::process::id(), name));
         std::fs::write(&path, content).unwrap();
         path
     }
