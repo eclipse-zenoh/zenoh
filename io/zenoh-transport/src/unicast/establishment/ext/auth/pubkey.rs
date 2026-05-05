@@ -81,6 +81,18 @@ impl AuthPubKey {
 
     #[doc(hidden)]
     #[cfg(feature = "test")]
+    pub fn get_own_public_key(&self) -> &ZPublicKey {
+        &self.pub_key
+    }
+
+    #[doc(hidden)]
+    #[cfg(feature = "test")]
+    pub fn get_own_private_key(&self) -> &ZPrivateKey {
+        &self.pri_key
+    }
+
+    #[doc(hidden)]
+    #[cfg(feature = "test")]
     pub fn contains_pubkey(&self, pub_key: &ZPublicKey) -> bool {
         self.lookup.as_ref().is_some_and(|s| s.contains(pub_key))
     }
@@ -108,25 +120,27 @@ impl AuthPubKey {
             (None, None) => None,
         };
 
-        let pri_key: Option<ZPrivateKey> =
-            match (config.private_key_pem(), config.private_key_file()) {
-                (Some(pem), file) => {
-                    if file.is_some() {
-                        tracing::warn!("{S} Both private_key_pem and private_key_file are set; private_key_pem takes priority.");
-                    }
-                    Some(
-                        RsaPrivateKey::from_pkcs1_pem(pem)
-                            .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
-                            .into(),
-                    )
+        let pri_key: Option<ZPrivateKey> = match (
+            config.private_key_pem(),
+            config.private_key_file(),
+        ) {
+            (Some(pem), file) => {
+                if file.is_some() {
+                    tracing::warn!("{S} Both private_key_pem and private_key_file are set; private_key_pem takes priority.");
                 }
-                (None, Some(file)) => Some(
-                    RsaPrivateKey::read_pkcs1_pem_file(Path::new(file))
+                Some(
+                    RsaPrivateKey::from_pkcs1_pem(pem)
                         .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
                         .into(),
-                ),
-                (None, None) => None,
-            };
+                )
+            }
+            (None, Some(file)) => Some(
+                RsaPrivateKey::read_pkcs1_pem_file(Path::new(file))
+                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
+                    .into(),
+            ),
+            (None, None) => None,
+        };
 
         let mut lookup: Option<HashSet<ZPublicKey>> = None;
         if let Some(keys_file) = config.known_keys_file() {

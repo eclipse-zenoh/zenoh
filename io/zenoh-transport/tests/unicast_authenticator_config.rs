@@ -21,7 +21,7 @@ mod auth_config {
         BigUint, RsaPrivateKey, RsaPublicKey,
     };
     use zenoh_config::PubKeyConf;
-    use zenoh_transport::unicast::establishment::ext::auth::{AuthPubKey, ZPublicKey};
+    use zenoh_transport::unicast::establishment::ext::auth::{AuthPubKey, ZPrivateKey, ZPublicKey};
 
     // Returns (pub_key, pri_key) using the same hardcoded key as client01 in unicast_authenticator.rs
     fn keypair() -> (RsaPublicKey, RsaPrivateKey) {
@@ -64,8 +64,15 @@ mod auth_config {
         (pub_pem, pri_pem)
     }
 
-    // Returns a second distinct public key (client02 from unicast_authenticator.rs)
-    fn alt_pub_key() -> RsaPublicKey {
+    fn alt_keypair_pem() -> (String, String) {
+        let (pub_key, pri_key) = alt_keypair();
+        let pub_pem = pub_key.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
+        let pri_pem = pri_key.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
+        (pub_pem, pri_pem)
+    }
+
+    // Returns a second distinct keypair (client02 from unicast_authenticator.rs)
+    fn alt_keypair() -> (RsaPublicKey, RsaPrivateKey) {
         let n = BigUint::from_bytes_le(&[
             0xd1, 0x36, 0xcf, 0x94, 0xda, 0x04, 0x7e, 0x9f, 0x53, 0x39, 0xb8, 0x7b, 0x53, 0x3a,
             0xe6, 0xa4, 0x0e, 0x6c, 0xf0, 0x92, 0x5d, 0xd9, 0x1d, 0x84, 0xc3, 0x10, 0xab, 0x8f,
@@ -74,7 +81,28 @@ mod auth_config {
             0x27, 0x99, 0x53, 0x23, 0x50, 0xad, 0x67, 0xcf,
         ]);
         let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
-        RsaPublicKey::new(n, e).unwrap()
+        let pub_key = RsaPublicKey::new(n.clone(), e.clone()).unwrap();
+        let d = BigUint::from_bytes_le(&[
+            0x01, 0xe4, 0xe9, 0x20, 0x20, 0x8c, 0x17, 0xd3, 0xea, 0xd0, 0x1f, 0xfa, 0x25, 0x5c,
+            0xaf, 0x5d, 0x19, 0xa4, 0x2a, 0xbc, 0x62, 0x5e, 0x2c, 0x63, 0x4f, 0x6e, 0x30, 0x07,
+            0x7c, 0x04, 0x72, 0xc9, 0x57, 0x3d, 0xe0, 0x59, 0x33, 0x8a, 0x36, 0x02, 0x5d, 0xa6,
+            0x81, 0x4e, 0x27, 0x82, 0xce, 0x95, 0x85, 0xd4, 0xa3, 0x9b, 0x5e, 0x2a, 0x04, 0xa8,
+            0x9d, 0x74, 0x25, 0x70, 0xf4, 0x37, 0x7d, 0x27,
+        ]);
+        let primes = vec![
+            BigUint::from_bytes_le(&[
+                0x31, 0x55, 0x19, 0x90, 0xf4, 0xb5, 0x76, 0xed, 0xa4, 0x2e, 0x52, 0x37, 0x16, 0xd5,
+                0xef, 0x0b, 0xcb, 0x00, 0x10, 0xea, 0xff, 0x4f, 0xfe, 0x04, 0xf4, 0x44, 0xac, 0x24,
+                0xfc, 0x68, 0x02, 0xe4,
+            ]),
+            BigUint::from_bytes_le(&[
+                0xa1, 0x13, 0xee, 0xe0, 0xe2, 0x98, 0x4e, 0x0b, 0x90, 0x11, 0x73, 0x87, 0xa2, 0x54,
+                0x8c, 0x5c, 0xe7, 0x03, 0x4b, 0xbf, 0x26, 0xfc, 0xb4, 0xba, 0xf9, 0xf9, 0x03, 0x84,
+                0xb9, 0xbc, 0xdd, 0xe8,
+            ]),
+        ];
+        let pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
+        (pub_key, pri_key)
     }
 
     fn write_tmp_file(name: &str, content: &str) -> PathBuf {
@@ -179,42 +207,49 @@ mod auth_config {
         let _ = std::fs::remove_file(&pri_path);
     }
 
-    // When both PEM string and file are provided for the same key, PEM wins (file is silently ignored after a warning).
+    // When both PEM string and file are provided for the same key, inline PEM wins.
+    // Uses distinct key pairs so the test verifies which key was actually loaded.
     #[tokio::test]
     async fn auth_config_pem_priority_over_file() {
-        let (pub_pem, pri_pem) = keypair_pem();
-        let pub_path = write_tmp_file("zenoh-test-cfg-dup-pub.pem", &pub_pem);
-        let pri_path = write_tmp_file("zenoh-test-cfg-dup-pri.pem", &pri_pem);
+        let (pub1_pem, pri1_pem) = keypair_pem();
+        let (pub2_pem, pri2_pem) = alt_keypair_pem();
+        let pub1_z = ZPublicKey::from(keypair().0);
+        let pub2_z = ZPublicKey::from(alt_keypair().0);
 
-        // public_key_pem + public_key_file: PEM wins → Some
+        // public_key_pem (key1) + public_key_file (key2): loaded pub key must be key1
+        let pub2_path = write_tmp_file("zenoh-test-cfg-pri-pub2.pem", &pub2_pem);
         let mut config = PubKeyConf::default();
-        config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
+        config.set_public_key_pem(Some(pub1_pem.clone())).unwrap();
         config
-            .set_public_key_file(Some(pub_path.to_str().unwrap().to_owned()))
+            .set_public_key_file(Some(pub2_path.to_str().unwrap().to_owned()))
             .unwrap();
-        config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
+        config.set_private_key_pem(Some(pri1_pem.clone())).unwrap();
+        let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
+        assert_eq!(auth.get_own_public_key(), &pub1_z);
+        assert_ne!(auth.get_own_public_key(), &pub2_z);
 
-        // private_key_pem + private_key_file: PEM wins → Some
+        // private_key_pem (key1) + private_key_file (key2): loaded private key must be key1
+        let pri1_z = ZPrivateKey::from(keypair().1);
+        let pri2_path = write_tmp_file("zenoh-test-cfg-pri-pri2.pem", &pri2_pem);
         let mut config = PubKeyConf::default();
-        config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
-        config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
+        config.set_public_key_pem(Some(pub1_pem.clone())).unwrap();
+        config.set_private_key_pem(Some(pri1_pem.clone())).unwrap();
         config
-            .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
+            .set_private_key_file(Some(pri2_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
+        let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
+        assert_eq!(auth.get_own_private_key(), &pri1_z);
 
-        let _ = std::fs::remove_file(&pub_path);
-        let _ = std::fs::remove_file(&pri_path);
+        let _ = std::fs::remove_file(&pub2_path);
+        let _ = std::fs::remove_file(&pri2_path);
     }
 
     #[tokio::test]
     async fn auth_config_known_keys_file() {
         let (pub_pem, pri_pem) = keypair_pem();
         let key1_pub = ZPublicKey::from(keypair().0);
-        let key2 = alt_pub_key();
-        let key2_pem = key2.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
-        let key2_pub = ZPublicKey::from(key2);
+        let (key2_pem, _) = alt_keypair_pem();
+        let key2_pub = ZPublicKey::from(alt_keypair().0);
 
         // known_keys_file without a key pair → Err
         let keys_path = write_tmp_file("zenoh-test-cfg-known.pem", &pub_pem);
