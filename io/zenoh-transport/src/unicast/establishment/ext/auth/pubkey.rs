@@ -159,8 +159,12 @@ impl AuthPubKey {
                 }
                 Ok(Some(auth))
             }
-            (Some(_), None) => bail!("{S} Missing Rsa Private Key: set private_key_pem or private_key_file."),
-            (None, Some(_)) => bail!("{S} Missing Rsa Public Key: set public_key_pem or public_key_file."),
+            (Some(_), None) => {
+                bail!("{S} Missing Rsa Private Key: set private_key_pem or private_key_file.")
+            }
+            (None, Some(_)) => {
+                bail!("{S} Missing Rsa Public Key: set public_key_pem or public_key_file.")
+            }
             (None, None) if lookup.is_some() => {
                 bail!("{S} known_keys_file requires a public/private key pair to be configured.")
             }
