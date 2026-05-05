@@ -79,50 +79,119 @@ impl AuthPubKey {
         Ok(())
     }
 
+    #[doc(hidden)]
+    #[cfg(feature = "test")]
+    pub fn compare_public_key(&self, key: &ZPublicKey) -> bool {
+        &self.pub_key == key
+    }
+
+    #[doc(hidden)]
+    #[cfg(feature = "test")]
+    pub fn compare_private_key(&self, key: &ZPrivateKey) -> bool {
+        &self.pri_key == key
+    }
+
+    #[doc(hidden)]
+    #[cfg(feature = "test")]
+    pub fn contains_pubkey(&self, pub_key: &ZPublicKey) -> bool {
+        self.lookup.as_ref().is_some_and(|s| s.contains(pub_key))
+    }
+
     pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
-        // First, check if PEM keys are provided
-        match (config.public_key_pem(), config.private_key_pem()) {
-            (Some(public), Some(private)) => {
-                let pub_key = RsaPublicKey::from_pkcs1_pem(public)
-                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
-                let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
-                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+        let pub_key: Option<ZPublicKey> = match (config.public_key_pem(), config.public_key_file())
+        {
+            (Some(pem), file) => {
+                if file.is_some() {
+                    tracing::warn!("{S} Both public_key_pem and public_key_file are set; public_key_pem takes priority.");
+                }
+                Some(
+                    RsaPublicKey::from_pkcs1_pem(pem)
+                        .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?
+                        .into(),
+                )
             }
-            (Some(_), None) => {
-                bail!("{S} Missing Rsa Private Key: PEM.")
+            (None, Some(file)) => Some(
+                RsaPublicKey::read_pkcs1_pem_file(Path::new(file))
+                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?
+                    .into(),
+            ),
+            (None, None) => None,
+        };
+
+        let pri_key: Option<ZPrivateKey> = match (
+            config.private_key_pem(),
+            config.private_key_file(),
+        ) {
+            (Some(pem), file) => {
+                if file.is_some() {
+                    tracing::warn!("{S} Both private_key_pem and private_key_file are set; private_key_pem takes priority.");
+                }
+                Some(
+                    RsaPrivateKey::from_pkcs1_pem(pem)
+                        .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
+                        .into(),
+                )
             }
-            (None, Some(_)) => {
-                bail!("{S} Missing Rsa Public Key: PEM.")
+            (None, Some(file)) => Some(
+                RsaPrivateKey::read_pkcs1_pem_file(Path::new(file))
+                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?
+                    .into(),
+            ),
+            (None, None) => None,
+        };
+
+        let mut lookup: Option<HashSet<ZPublicKey>> = None;
+        if let Some(keys_file) = config.known_keys_file() {
+            let content = std::fs::read_to_string(keys_file)
+                .map_err(|e| zerror!("{S} Invalid known keys file: {}.", e))?;
+            let mut known_keys: HashSet<ZPublicKey> = HashSet::new();
+            let mut current_key = String::new();
+            for line in content.lines() {
+                let trimmed = line.trim();
+                current_key.push_str(line);
+                current_key.push('\n');
+                if trimmed == "-----END RSA PUBLIC KEY-----" {
+                    let public_key = RsaPublicKey::from_pkcs1_pem(&current_key).map_err(|e| {
+                        zerror!("{S} Invalid RSA public key in known keys file: {}.", e)
+                    })?;
+                    known_keys.insert(public_key.into());
+                    current_key.clear();
+                }
             }
-            (None, None) => {}
+            if current_key.chars().any(|c| !c.is_whitespace()) {
+                bail!("{S} Truncated RSA public key in known keys file.");
+            }
+            if known_keys.is_empty() {
+                bail!("{S} No RSA public keys found in known keys file.");
+            }
+            tracing::debug!(
+                "{S} Loaded {} known public key(s) from file.",
+                known_keys.len()
+            );
+            lookup = Some(known_keys);
         }
 
-        // Second, check if PEM files are provided
-        match (config.public_key_file(), config.private_key_file()) {
+        match (pub_key, pri_key) {
             (Some(public), Some(private)) => {
-                let path = Path::new(public);
-                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
-                let path = Path::new(private);
-                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+                let mut auth = Self::new(public, private);
+                if let Some(known_keys) = lookup {
+                    auth.lookup = Some(known_keys);
+                }
+                Ok(Some(auth))
             }
             (Some(_), None) => {
-                bail!("{S} Missing Rsa Private Key: file.")
+                bail!("{S} Missing Rsa Private Key: set private_key_pem or private_key_file.")
             }
             (None, Some(_)) => {
-                bail!("{S} Missing Rsa Public Key: file.")
+                bail!("{S} Missing Rsa Public Key: set public_key_pem or public_key_file.")
             }
-            (None, None) => {}
+            (None, None) if lookup.is_some() => {
+                bail!("{S} known_keys_file requires a public/private key pair to be configured.")
+            }
+            (None, None) => Ok(None),
         }
-
-        // @TODO: populate lookup file
-
-        Ok(None)
     }
 }
 
