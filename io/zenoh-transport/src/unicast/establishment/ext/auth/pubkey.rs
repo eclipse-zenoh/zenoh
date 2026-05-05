@@ -87,7 +87,8 @@ impl AuthPubKey {
     pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
-        let pub_key: Option<ZPublicKey> = match (config.public_key_pem(), config.public_key_file()) {
+        let pub_key: Option<ZPublicKey> = match (config.public_key_pem(), config.public_key_file())
+        {
             (Some(_), Some(_)) => bail!("{S} Rsa Public Key: multiple sources specified."),
             (Some(pem), None) => Some(
                 RsaPublicKey::from_pkcs1_pem(pem)
