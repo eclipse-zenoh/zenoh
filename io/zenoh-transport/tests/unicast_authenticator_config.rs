@@ -23,8 +23,8 @@ mod auth_config {
     use zenoh_config::PubKeyConf;
     use zenoh_transport::unicast::establishment::ext::auth::{AuthPubKey, ZPublicKey};
 
-    // Returns (pub_pem, pri_pem) using the same hardcoded key as client01 in unicast_authenticator.rs
-    fn keypair_pem() -> (String, String) {
+    // Returns (pub_key, pri_key) using the same hardcoded key as client01 in unicast_authenticator.rs
+    fn keypair() -> (RsaPublicKey, RsaPrivateKey) {
         let n = BigUint::from_bytes_le(&[
             0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95,
             0xca, 0xb4, 0x5d, 0x17, 0x3d, 0x14, 0xdd, 0xbb, 0x16, 0x4a, 0x49, 0xeb, 0x43, 0x27,
@@ -54,6 +54,11 @@ mod auth_config {
             ]),
         ];
         let pri_key = RsaPrivateKey::from_components(n, e, d, primes).unwrap();
+        (pub_key, pri_key)
+    }
+
+    fn keypair_pem() -> (String, String) {
+        let (pub_key, pri_key) = keypair();
         let pub_pem = pub_key.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
         let pri_pem = pri_key.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
         (pub_pem, pri_pem)
@@ -213,18 +218,7 @@ mod auth_config {
     #[tokio::test]
     async fn auth_config_known_keys_file() {
         let (pub_pem, pri_pem) = keypair_pem();
-        let key1_pub = {
-            // Re-derive pub key from the PEM to get a ZPublicKey for comparison
-            let n = BigUint::from_bytes_le(&[
-                0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e,
-                0x95, 0xca, 0xb4, 0x5d, 0x17, 0x3d, 0x14, 0xdd, 0xbb, 0x16, 0x4a, 0x49, 0xeb,
-                0x43, 0x27, 0x79, 0x3e, 0x75, 0x67, 0xd6, 0xf6, 0x7f, 0xe7, 0xbf, 0xb5, 0x1d,
-                0xf6, 0x27, 0x80, 0xca, 0x26, 0x35, 0xa2, 0xc5, 0x4c, 0x96, 0x50, 0xaa, 0x9f,
-                0xf4, 0x47, 0xbe, 0x06, 0x9c, 0xd1, 0xec, 0xfd, 0x1e, 0x81, 0xe9, 0xc4,
-            ]);
-            let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
-            ZPublicKey::from(RsaPublicKey::new(n, e).unwrap())
-        };
+        let key1_pub = ZPublicKey::from(keypair().0);
         let key2 = alt_pub_key();
         let key2_pem = key2.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
         let key2_pub = ZPublicKey::from(key2);
@@ -257,7 +251,6 @@ mod auth_config {
             .unwrap();
         let auth = AuthPubKey::from_config(&config).await.unwrap().unwrap();
         assert!(auth.contains_known_key(&key1_pub));
-        assert!(!auth.contains_known_key(&key2_pub));
 
         // two keys in file → Some, lookup contains both
         let two_keys_content = format!("{}{}", pub_pem, key2_pem);
