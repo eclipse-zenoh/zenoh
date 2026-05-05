@@ -84,7 +84,7 @@ impl AuthPubKey {
         self.lookup.as_ref().is_some_and(|s| s.contains(key))
     }
 
-    pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
+    pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
         let pub_key: Option<ZPublicKey> = match (config.public_key_pem(), config.public_key_file())
@@ -121,8 +121,7 @@ impl AuthPubKey {
 
         let mut lookup: Option<HashSet<ZPublicKey>> = None;
         if let Some(keys_file) = config.known_keys_file() {
-            let content = tokio::fs::read_to_string(keys_file)
-                .await
+            let content = std::fs::read_to_string(keys_file)
                 .map_err(|e| zerror!("{S} Invalid known keys file: {}.", e))?;
             let mut known_keys: HashSet<ZPublicKey> = HashSet::new();
             let mut current_key = String::new();

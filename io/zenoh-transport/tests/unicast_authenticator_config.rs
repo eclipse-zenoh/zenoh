@@ -89,23 +89,23 @@ mod auth_config {
 
         // empty config → None
         let config = PubKeyConf::default();
-        assert!(AuthPubKey::from_config(&config).await.unwrap().is_none());
+        assert!(AuthPubKey::from_config(&config).unwrap().is_none());
 
         // both keys inline → Some
         let mut config = PubKeyConf::default();
         config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).await.unwrap().is_some());
+        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
 
         // only public → Err
         let mut config = PubKeyConf::default();
         config.set_public_key_pem(Some(pub_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // only private → Err
         let mut config = PubKeyConf::default();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
     }
 
     #[tokio::test]
@@ -122,21 +122,21 @@ mod auth_config {
         config
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.unwrap().is_some());
+        assert!(AuthPubKey::from_config(&config).unwrap().is_some());
 
         // only public file → Err
         let mut config = PubKeyConf::default();
         config
             .set_public_key_file(Some(pub_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // only private file → Err
         let mut config = PubKeyConf::default();
         config
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // nonexistent files → Err
         let mut config = PubKeyConf::default();
@@ -146,7 +146,7 @@ mod auth_config {
         config
             .set_private_key_file(Some("/nonexistent/pri.pem".to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         let _ = std::fs::remove_file(&pub_path);
         let _ = std::fs::remove_file(&pri_path);
@@ -167,7 +167,7 @@ mod auth_config {
             .unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
         assert!(matches!(
-            AuthPubKey::from_config(&config).await,
+            AuthPubKey::from_config(&config),
             Ok(Some(_))
         ));
 
@@ -178,7 +178,7 @@ mod auth_config {
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
         assert!(matches!(
-            AuthPubKey::from_config(&config).await,
+            AuthPubKey::from_config(&config),
             Ok(Some(_))
         ));
 
@@ -200,7 +200,7 @@ mod auth_config {
             .set_public_key_file(Some(pub_path.to_str().unwrap().to_owned()))
             .unwrap();
         config.set_private_key_pem(Some(pri_pem.clone())).unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // private key has two sources → Err
         let mut config = PubKeyConf::default();
@@ -209,7 +209,7 @@ mod auth_config {
         config
             .set_private_key_file(Some(pri_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         let _ = std::fs::remove_file(&pub_path);
         let _ = std::fs::remove_file(&pri_path);
@@ -229,7 +229,7 @@ mod auth_config {
         config
             .set_known_keys_file(Some(keys_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // malformed content → Err
         let bad_path = write_tmp_file(
@@ -242,7 +242,7 @@ mod auth_config {
         config
             .set_known_keys_file(Some(bad_path.to_str().unwrap().to_owned()))
             .unwrap();
-        assert!(AuthPubKey::from_config(&config).await.is_err());
+        assert!(AuthPubKey::from_config(&config).is_err());
 
         // single key in file → Some, lookup contains that key
         let single_path = write_tmp_file("zenoh-test-cfg-known-single.pem", &pub_pem);
@@ -252,7 +252,7 @@ mod auth_config {
         config
             .set_known_keys_file(Some(single_path.to_str().unwrap().to_owned()))
             .unwrap();
-        let auth = AuthPubKey::from_config(&config).await.unwrap().unwrap();
+        let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
         assert!(auth.contains_known_key(&key1_pub));
 
         // two keys in file → Some, lookup contains both
@@ -264,7 +264,7 @@ mod auth_config {
         config
             .set_known_keys_file(Some(two_path.to_str().unwrap().to_owned()))
             .unwrap();
-        let auth = AuthPubKey::from_config(&config).await.unwrap().unwrap();
+        let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
         assert!(auth.contains_known_key(&key1_pub));
         assert!(auth.contains_known_key(&key2_pub));
 
