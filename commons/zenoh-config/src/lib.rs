@@ -870,16 +870,16 @@ validated_struct::validator! {
                 pub pubkey: #[derive(Default)]
                 PubKeyConf {
                     /// RSA public key in PKCS#1 PEM format (inline string).
-                    /// If both `public_key_pem` and `public_key_file` are set, `public_key_pem` takes priority
+                    /// If both `public_key_pem` and `public_key_file` are set, `public_key_pem` takes priority.
                     public_key_pem: Option<String>,
                     /// RSA private key in PKCS#1 PEM format (inline string).
-                    /// If both `private_key_pem` and `private_key_file` are set, `private_key_pem` takes priority
+                    /// If both `private_key_pem` and `private_key_file` are set, `private_key_pem` takes priority.
                     private_key_pem: Option<String>,
                     /// Path to a file containing the RSA public key in PKCS#1 PEM format.
-                    /// Ignored when `public_key_pem` is also set
+                    /// Ignored when `public_key_pem` is also set.
                     public_key_file: Option<String>,
                     /// Path to a file containing the RSA private key in PKCS#1 PEM format.
-                    /// Ignored when `private_key_pem` is also set
+                    /// Ignored when `private_key_pem` is also set.
                     private_key_file: Option<String>,
                     key_size: Option<usize>,
                     /// Path to a file containing one or more trusted peer RSA public keys in PKCS#1 PEM format.
