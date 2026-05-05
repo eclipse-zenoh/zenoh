@@ -14,7 +14,11 @@
 
 #[cfg(feature = "auth_pubkey")]
 mod auth_config {
-    use std::path::PathBuf;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+        path::PathBuf,
+    };
 
     use rsa::{
         pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey, LineEnding},
@@ -22,6 +26,11 @@ mod auth_config {
     };
     use zenoh_config::PubKeyConf;
     use zenoh_transport::unicast::establishment::ext::auth::{AuthPubKey, ZPrivateKey, ZPublicKey};
+    fn hash<T: Hash>(v: &T) -> u64 {
+        let mut h = DefaultHasher::new();
+        v.hash(&mut h);
+        h.finish()
+    }
 
     // Returns (pub_key, pri_key) using the same hardcoded key as client01 in unicast_authenticator.rs
     fn keypair() -> (RsaPublicKey, RsaPrivateKey) {
@@ -225,8 +234,8 @@ mod auth_config {
             .unwrap();
         config.set_private_key_pem(Some(pri1_pem.clone())).unwrap();
         let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
-        assert_eq!(auth.get_own_public_key(), &pub1_z);
-        assert_ne!(auth.get_own_public_key(), &pub2_z);
+        assert_eq!(auth.get_own_public_key_hash(), hash(&pub1_z));
+        assert_ne!(auth.get_own_public_key_hash(), hash(&pub2_z));
 
         // private_key_pem (key1) + private_key_file (key2): loaded private key must be key1
         let pri1_z = ZPrivateKey::from(keypair().1);
@@ -238,7 +247,7 @@ mod auth_config {
             .set_private_key_file(Some(pri2_path.to_str().unwrap().to_owned()))
             .unwrap();
         let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
-        assert_eq!(auth.get_own_private_key(), &pri1_z);
+        assert_eq!(auth.get_own_private_key_hash(), hash(&pri1_z));
 
         let _ = std::fs::remove_file(&pub2_path);
         let _ = std::fs::remove_file(&pri2_path);

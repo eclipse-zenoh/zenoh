@@ -11,6 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "test")]
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 use std::{collections::HashSet, fmt, ops::Deref, path::Path};
 
 use async_trait::async_trait;
@@ -81,14 +86,18 @@ impl AuthPubKey {
 
     #[doc(hidden)]
     #[cfg(feature = "test")]
-    pub fn get_own_public_key(&self) -> &ZPublicKey {
-        &self.pub_key
+    pub fn get_own_public_key_hash(&self) -> u64 {
+        let mut h = DefaultHasher::new();
+        self.pub_key.hash(&mut h);
+        h.finish()
     }
 
     #[doc(hidden)]
     #[cfg(feature = "test")]
-    pub fn get_own_private_key(&self) -> &ZPrivateKey {
-        &self.pri_key
+    pub fn get_own_private_key_hash(&self) -> u64 {
+        let mut h = DefaultHasher::new();
+        self.pri_key.hash(&mut h);
+        h.finish()
     }
 
     #[doc(hidden)]
@@ -246,6 +255,12 @@ impl fmt::Debug for ZPrivateKey {
 impl From<RsaPrivateKey> for ZPrivateKey {
     fn from(x: RsaPrivateKey) -> Self {
         Self(x)
+    }
+}
+
+impl std::hash::Hash for ZPrivateKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
     }
 }
 
