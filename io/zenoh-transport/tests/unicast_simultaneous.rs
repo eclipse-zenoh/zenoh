@@ -30,6 +30,7 @@ mod tests {
         network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
     };
     use zenoh_result::ZResult;
+    use zenoh_test::get_free_tcp_port;
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -128,7 +129,7 @@ mod tests {
             .whatami(WhatAmI::Peer)
             .zid(peer_id01)
             .unicast(unicast)
-            .build(peer_sh01.clone())
+            .build_test(peer_sh01.clone())
             .unwrap();
 
         // Create the peer02 transport manager
@@ -138,7 +139,7 @@ mod tests {
             .whatami(WhatAmI::Peer)
             .zid(peer_id02)
             .unicast(unicast)
-            .build(peer_sh02.clone())
+            .build_test(peer_sh02.clone())
             .unwrap();
 
         // Add the endpoints on the peer01
@@ -287,18 +288,20 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_simultaneous() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint01: Vec<EndPoint> = vec![
-            format!("tcp/127.0.0.1:{}", 15000).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15001).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15002).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15003).parse().unwrap(),
-        ];
-        let endpoint02: Vec<EndPoint> = vec![
-            format!("tcp/127.0.0.1:{}", 15010).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15011).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15012).parse().unwrap(),
-            format!("tcp/127.0.0.1:{}", 15013).parse().unwrap(),
-        ];
+        let endpoint01: Vec<EndPoint> = (0..4)
+            .map(|_| {
+                format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+                    .parse()
+                    .unwrap()
+            })
+            .collect();
+        let endpoint02: Vec<EndPoint> = (0..4)
+            .map(|_| {
+                format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+                    .parse()
+                    .unwrap()
+            })
+            .collect();
 
         transport_simultaneous(endpoint01, endpoint02).await;
     }
@@ -330,18 +333,20 @@ mod tests {
     async fn transport_ws_simultaneous() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoint01: Vec<EndPoint> = vec![
-            format!("ws/127.0.0.1:{}", 15020).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15021).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15022).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15023).parse().unwrap(),
-        ];
-        let endpoint02: Vec<EndPoint> = vec![
-            format!("ws/127.0.0.1:{}", 15030).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15031).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15032).parse().unwrap(),
-            format!("ws/127.0.0.1:{}", 15033).parse().unwrap(),
-        ];
+        let endpoint01: Vec<EndPoint> = (0..4)
+            .map(|_| {
+                format!("ws/127.0.0.1:{}", get_free_tcp_port())
+                    .parse()
+                    .unwrap()
+            })
+            .collect();
+        let endpoint02: Vec<EndPoint> = (0..4)
+            .map(|_| {
+                format!("ws/127.0.0.1:{}", get_free_tcp_port())
+                    .parse()
+                    .unwrap()
+            })
+            .collect();
 
         transport_simultaneous(endpoint01, endpoint02).await;
     }

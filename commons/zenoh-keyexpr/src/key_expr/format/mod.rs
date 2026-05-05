@@ -133,7 +133,7 @@ pub mod macro_support {
     ///
     /// This is a support structure for [`const_new`], which is only meant to be used through the `zenoh::keformat` macro.
     #[doc(hidden)]
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct SegmentBuilder {
         pub segment_start: usize,
         pub prefix_end: usize,
@@ -184,11 +184,16 @@ pub mod macro_support {
         source: &'static str,
         segments: [SegmentBuilder; N],
     ) -> KeFormat<'static, [Segment<'static>; N]> {
+        /// # Safety
+        /// `start..end` must be in-bounds for `source`, and delimit UTF-8 boundaries.
         const unsafe fn substr(source: &'static str, start: usize, end: usize) -> &'static str {
-            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
-                source.as_ptr().add(start),
-                end - start,
-            ))
+            // SAFETY: guaranteed by `const_new` caller and macro-generated offsets.
+            unsafe {
+                core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                    source.as_ptr().add(start),
+                    end - start,
+                ))
+            }
         }
         let mut storage = [Segment {
             prefix: "",
@@ -202,9 +207,11 @@ pub mod macro_support {
         let mut i = 0;
         while i < N {
             let segment = segments[i];
-            let prefix = substr(source, segment.segment_start, segment.prefix_end);
+            // SAFETY: macro-generated indices point to valid UTF-8 segment boundaries.
+            let prefix = unsafe { substr(source, segment.segment_start, segment.prefix_end) };
             let spec = Spec {
-                spec: substr(source, segment.spec_start, segment.spec_end),
+                // SAFETY: macro-generated indices point to valid UTF-8 segment boundaries.
+                spec: unsafe { substr(source, segment.spec_start, segment.spec_end) },
                 id_end: segment.id_end,
                 pattern_end: segment.pattern_end,
             };
@@ -212,7 +219,8 @@ pub mod macro_support {
             suffix_start = segment.segment_end;
             i += 1;
         }
-        let suffix = substr(source, suffix_start, source.len());
+        // SAFETY: `suffix_start` is derived from macro-generated segment ends.
+        let suffix = unsafe { substr(source, suffix_start, source.len()) };
         KeFormat { storage, suffix }
     }
 }
@@ -422,6 +430,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> TryFrom<&KeFormatter<'s, Storage>> for O
             } else if let Some(default) = segments[i].spec.default() {
                 concatenate(default)
             } else {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 unsafe { core::hint::unreachable_unchecked() }
             };
         }
@@ -544,6 +553,7 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
 }
 
 /// A [`KeFormat`] that owns its format-string.
+#[derive(Debug)]
 pub struct OwnedKeFormat<Storage: IKeFormatStorage<'static> + 'static = Vec<Segment<'static>>> {
     _owner: Box<str>,
     format: KeFormat<'static, Storage>,
@@ -558,6 +568,7 @@ impl<Storage: IKeFormatStorage<'static> + 'static> TryFrom<Box<str>> for OwnedKe
     type Error = <KeFormat<'static, Storage> as TryFrom<&'static str>>::Error;
     fn try_from(value: Box<str>) -> Result<Self, Self::Error> {
         let owner = value;
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         let format: KeFormat<'static, Storage> = unsafe {
             // This is safe because
             core::mem::transmute::<&str, &'static str>(&owner)

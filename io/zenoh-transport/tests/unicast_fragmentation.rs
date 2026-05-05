@@ -30,6 +30,7 @@ use zenoh_protocol::{
     network::{push::ext::QoSType, NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push},
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -90,6 +91,7 @@ impl TransportEventHandler for SHRouter {
 }
 
 // Transport Callback for the router
+#[derive(Debug)]
 pub struct SCRouter {
     count: Arc<AtomicUsize>,
 }
@@ -139,7 +141,7 @@ impl TransportEventHandler for SHClient {
 }
 
 // Transport Callback for the client
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
@@ -180,7 +182,7 @@ async fn open_transport_unicast(
         .zid(router_id)
         .whatami(WhatAmI::Router)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     // Create the listener on the router
@@ -199,7 +201,7 @@ async fn open_transport_unicast(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient))
+        .build_test(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client
@@ -291,18 +293,6 @@ async fn run_single(client_endpoints: &[EndPoint], server_endpoints: &[EndPoint]
 
     test_transport(router_handler.clone(), client_transport.clone()).await;
 
-    #[cfg(feature = "stats")]
-    {
-        let c_stats = client_transport.get_stats().unwrap().report();
-        println!("\tClient: {c_stats:?}");
-        let r_stats = ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
-            .unwrap()
-            .get_stats()
-            .map(|s| s.report())
-            .unwrap();
-        println!("\tRouter: {r_stats:?}");
-    }
-
     close_transport(
         router_manager,
         client_manager,
@@ -318,7 +308,9 @@ async fn fragmentation_unicast_tcp_only() {
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16800).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap()];
     // Run
     run_single(&endpoints, &endpoints).await;
 }

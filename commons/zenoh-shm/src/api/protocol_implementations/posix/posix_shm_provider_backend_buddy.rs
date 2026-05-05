@@ -40,6 +40,14 @@ pub struct PosixShmProviderBackendBuddyBuilder<Layout> {
     layout: Layout,
 }
 
+impl<Layout> std::fmt::Debug for PosixShmProviderBackendBuddyBuilder<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBuddyBuilder")
+            .field("layout", &"..")
+            .finish()
+    }
+}
+
 #[zenoh_macros::unstable_doc]
 impl<Layout> Resolvable for PosixShmProviderBackendBuddyBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBuddy>;
@@ -56,6 +64,7 @@ where
 }
 
 /// A buddy_system_allocator backend based on POSIX shared memory.
+///
 /// buddy_system_allocator is the fastest allocator ever. The weak side is it's low memry efficiency and
 /// higher fragmentation as opposed to talc (which is treated as the universal default for zenoh SHM)
 #[zenoh_macros::unstable_doc]
@@ -63,6 +72,16 @@ pub struct PosixShmProviderBackendBuddy {
     segment: Arc<PosixShmSegment>,
     heap: Mutex<Heap<BUDDY_ORDER>>,
     alignment: AllocAlignment,
+}
+
+impl std::fmt::Debug for PosixShmProviderBackendBuddy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBuddy")
+            .field("segment", &"..")
+            .field("heap", &"..")
+            .field("alignment", &self.alignment)
+            .finish()
+    }
 }
 
 // see `buddy_system_allocator` doc for details
@@ -84,6 +103,7 @@ impl PosixShmProviderBackendBuddy {
 
         let mut heap = Heap::empty();
 
+        // SAFETY: we initialized the segment with `real_size` bytes.
         unsafe { heap.init(segment.segment.elem_mut(0) as usize, real_size) };
 
         tracing::trace!(
@@ -110,6 +130,7 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
     fn alloc(&self, layout: &MemoryLayout) -> ChunkAllocResult {
         tracing::trace!("PosixShmProviderBackendBuddy::alloc({:?})", layout);
 
+        // SAFETY: layout is guaranteed to be valid as it's passed from `MemoryLayout`
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 layout.size().get(),
@@ -129,6 +150,7 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
     }
 
     fn free(&self, chunk: &ChunkDescriptor) {
+        // SAFETY: layout is guaranteed to be valid as it's passed from `ChunkDescriptor`
         let alloc_layout = unsafe {
             Layout::from_size_align_unchecked(
                 chunk.len.get(),
@@ -136,8 +158,10 @@ impl ShmProviderBackend for PosixShmProviderBackendBuddy {
             )
         };
 
+        // SAFETY: chunk descriptor is guaranteed to be valid and belong to the segment
         let ptr = unsafe { self.segment.segment.elem_mut(chunk.chunk) };
 
+        // SAFETY: ptr is guaranteed to be non-null and belong to the heap as it's passed from `ChunkDescriptor`
         unsafe { zlock!(self.heap).dealloc(NonNull::new_unchecked(ptr), alloc_layout) };
     }
 

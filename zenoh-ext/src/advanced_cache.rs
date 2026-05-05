@@ -31,6 +31,8 @@ use zenoh::{
     Resolvable, Result as ZResult, Session, Wait, KE_ADV_PREFIX, KE_STARSTAR,
 };
 
+use crate::utils::WrappingSn;
+
 pub(crate) static KE_UHLC: &keyexpr = ke!("uhlc");
 #[zenoh_macros::unstable]
 kedefine!(
@@ -62,6 +64,7 @@ impl Default for RepliesConfig {
 impl QoSBuilderTrait for RepliesConfig {
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`CongestionControl`] to apply when routing the data.
     fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
         self
@@ -69,6 +72,7 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`Priority`] to apply when routing the data.
     fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
@@ -76,6 +80,10 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(mut self, is_express: bool) -> Self {
         self.is_express = is_express;
         self
@@ -188,16 +196,16 @@ impl IntoFuture for AdvancedCacheBuilder<'_, '_, '_> {
 }
 
 #[zenoh_macros::unstable]
-fn decode_range(range: &str) -> (Bound<u32>, Bound<u32>) {
+fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
     let mut split = range.split("..");
     let start = split
         .next()
-        .and_then(|s| s.parse::<u32>().ok().map(Bound::Included))
+        .and_then(|s| s.parse::<WrappingSn>().ok().map(Bound::Included))
         .unwrap_or(Bound::Unbounded);
     let end = split
         .next()
         .map(|s| {
-            s.parse::<u32>()
+            s.parse::<WrappingSn>()
                 .ok()
                 .map(Bound::Included)
                 .unwrap_or(Bound::Unbounded)
@@ -245,7 +253,7 @@ impl AdvancedCache {
                     let range = query
                         .parameters()
                         .get("_sn")
-                        .map(decode_range)
+                        .map(decode_sn_range)
                         .unwrap_or((Bound::Unbounded, Bound::Unbounded));
                     let max = query
                         .parameters()
@@ -258,8 +266,7 @@ impl AdvancedCache {
                                 if range == (Bound::Unbounded, Bound::Unbounded)
                                     || sample
                                         .source_info()
-                                        .source_sn()
-                                        .is_some_and(|sn| range.contains(&sn))
+                                        .is_some_and(|si| range.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())
@@ -302,8 +309,7 @@ impl AdvancedCache {
                                 if range == (Bound::Unbounded, Bound::Unbounded)
                                     || sample
                                         .source_info()
-                                        .source_sn()
-                                        .is_some_and(|sn| range.contains(&sn))
+                                        .is_some_and(|si| range.contains(&si.source_sn()))
                                 {
                                     if let (Some(Ok(time_range)), Some(timestamp)) =
                                         (query.parameters().time_range(), sample.timestamp())

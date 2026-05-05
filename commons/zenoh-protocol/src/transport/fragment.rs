@@ -81,10 +81,7 @@ pub struct Fragment {
 
 // Extensions
 pub mod ext {
-    use crate::{
-        common::{ZExtUnit, ZExtZ64},
-        zextunit, zextz64,
-    };
+    use crate::{zextunit, zextz64};
 
     pub type QoS = zextz64!(0x1, true);
     pub type QoSType = crate::transport::ext::QoSType<{ QoS::ID }>;

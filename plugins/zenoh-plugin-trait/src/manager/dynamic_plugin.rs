@@ -23,7 +23,7 @@ pub enum DynamicPluginSource {
     /// Load plugin with the name in String + `.so | .dll | .dylib`
     /// in LibLoader's search paths.
     ByName((LibLoader, String)),
-    /// Load first avalilable plugin from the list of path to plugin files (absolute or relative to the current working directory)
+    /// Load first available plugin from the list of path to plugin files (absolute or relative to the current working directory)
     ByPaths(Vec<String>),
 }
 

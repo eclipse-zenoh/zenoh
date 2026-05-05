@@ -22,11 +22,8 @@ pub mod manager;
 pub mod multicast;
 pub mod unicast;
 
-#[cfg(feature = "stats")]
-pub use common::stats;
-
 #[cfg(feature = "shared-memory")]
-mod shm;
+pub mod shm;
 #[cfg(feature = "shared-memory")]
 mod shm_context;
 
@@ -36,7 +33,7 @@ pub use manager::*;
 use serde::Serialize;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
@@ -59,7 +56,7 @@ pub trait TransportEventHandler: Send + Sync {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>>;
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportEventHandler;
 
 impl TransportEventHandler for DummyTransportEventHandler {
@@ -89,7 +86,7 @@ pub trait TransportMulticastEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportMulticastEventHandler;
 
 impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
@@ -115,6 +112,7 @@ pub struct TransportPeer {
     pub links: Vec<Link>,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
+    pub region_name: Option<RegionName>,
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {
@@ -126,7 +124,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {

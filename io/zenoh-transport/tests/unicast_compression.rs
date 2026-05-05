@@ -33,6 +33,7 @@ mod tests {
         network::{push::ext::QoSType, NetworkMessage, NetworkMessageMut, Push},
     };
     use zenoh_result::ZResult;
+    use zenoh_test::{get_free_tcp_port, get_free_udp_port};
     use zenoh_transport::{
         multicast::TransportMulticast,
         unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -177,7 +178,7 @@ mod tests {
             .zid(router_id)
             .whatami(WhatAmI::Router)
             .unicast(unicast)
-            .build(router_handler.clone())
+            .build_test(router_handler.clone())
             .unwrap();
 
         // Create the listener on the router
@@ -197,7 +198,7 @@ mod tests {
             .whatami(WhatAmI::Client)
             .zid(client_id)
             .unicast(unicast)
-            .build(Arc::new(SHClient))
+            .build_test(Arc::new(SHClient))
             .unwrap();
 
         // Create an empty transport with the client
@@ -325,19 +326,6 @@ mod tests {
         )
         .await;
 
-        #[cfg(feature = "stats")]
-        {
-            let c_stats = client_transport.get_stats().unwrap().report();
-            println!("\tClient: {c_stats:?}");
-            let r_stats =
-                ztimeout!(router_manager.get_transport_unicast(&client_manager.config.zid))
-                    .unwrap()
-                    .get_stats()
-                    .map(|s| s.report())
-                    .unwrap();
-            println!("\tRouter: {r_stats:?}");
-        }
-
         close_transport(
             router_manager,
             client_manager,
@@ -397,8 +385,12 @@ mod tests {
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![
-            format!("tcp/127.0.0.1:{}", 19000).parse().unwrap(),
-            format!("tcp/[::1]:{}", 19001).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+                .parse()
+                .unwrap(),
+            format!("tcp/[::1]:{}", get_free_tcp_port())
+                .parse()
+                .unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -421,7 +413,9 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Define the locators
-        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 19100).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {
@@ -444,8 +438,12 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            format!("udp/127.0.0.1:{}", 19010).parse().unwrap(),
-            format!("udp/[::1]:{}", 19011).parse().unwrap(),
+            format!("udp/127.0.0.1:{}", get_free_udp_port())
+                .parse()
+                .unwrap(),
+            format!("udp/[::1]:{}", get_free_udp_port())
+                .parse()
+                .unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -468,7 +466,9 @@ mod tests {
         zenoh_util::init_log_from_env_or("error");
 
         // Define the locator
-        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 19110).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", get_free_udp_port())
+            .parse()
+            .unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {

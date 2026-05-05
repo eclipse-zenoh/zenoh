@@ -20,6 +20,7 @@ use zenoh_protocol::{
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -49,6 +50,7 @@ impl TransportEventHandler for SHRouter {
     }
 }
 
+#[derive(Debug)]
 pub struct SCRouter;
 
 impl TransportPeerEventHandler for SCRouter {
@@ -75,12 +77,12 @@ async fn run(endpoints: &[EndPoint]) {
     let router_manager1: TransportManager = TransportManager::builder()
         .zid(router_id1)
         .protocols(Some(vec![])) // No protocols allowed
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
     let router_manager2: TransportManager = TransportManager::builder()
         .zid(router_id2)
         .protocols(Some(vec![])) // No protocols allowed
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
 
     // Create the listener on the router
@@ -102,7 +104,7 @@ async fn run(endpoints: &[EndPoint]) {
         .protocols(Some(Vec::from_iter(
             endpoints.iter().map(|e| e.protocol().to_string()),
         )))
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
     let router_manager2 = TransportManager::builder()
         .zid(router_id2)
@@ -110,7 +112,7 @@ async fn run(endpoints: &[EndPoint]) {
         .protocols(Some(Vec::from_iter(
             endpoints.iter().map(|e| e.protocol().to_string()),
         )))
-        .build(Arc::new(SHRouter))
+        .build_test(Arc::new(SHRouter))
         .unwrap();
 
     // Create the listener on the router
@@ -134,8 +136,12 @@ async fn transport_whitelist_tcp() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 17000).parse().unwrap(),
-        format!("tcp/[::1]:{}", 17001).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/[::1]:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
     ];
     // Run
     run(&endpoints).await;

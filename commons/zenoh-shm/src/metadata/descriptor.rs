@@ -33,6 +33,7 @@ pub struct MetadataDescriptor {
 impl From<&OwnedMetadataDescriptor> for MetadataDescriptor {
     fn from(item: &OwnedMetadataDescriptor) -> Self {
         let id = item.segment.data.id();
+        // SAFETY: `item` is guaranteed to belong to the segment.
         let index = unsafe { item.segment.data.fast_index_compute(item.header) };
 
         Self { id, index }
@@ -43,6 +44,21 @@ impl From<&OwnedMetadataDescriptor> for MetadataDescriptor {
 pub struct OwnedWatchdog {
     watchdog_atomic: &'static AtomicU64,
     watchdog_mask: u64,
+}
+
+impl std::fmt::Debug for OwnedWatchdog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OwnedWatchdog")
+            .field("watchdog_atomic", &self.watchdog_atomic.as_ptr())
+            .field(
+                "watchdog_value",
+                &self
+                    .watchdog_atomic
+                    .load(std::sync::atomic::Ordering::Relaxed),
+            )
+            .field("watchdog_mask", &self.watchdog_mask)
+            .finish_non_exhaustive()
+    }
 }
 
 // The ordering strategy is important. See storage implementation for details

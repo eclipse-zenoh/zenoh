@@ -13,6 +13,7 @@
 //
 use std::{
     fmt::DebugStruct,
+    ops::{Deref, Not},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -22,24 +23,20 @@ use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZenohIdProto},
+    core::{Bound, Priority, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-#[cfg(feature = "unstable")]
-use zenoh_sync::{event, Notifier, Waiter};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
         authentication::TransportAuthId,
         link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
-        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        transport_unicast_inner::{AddLinkResult, TransportStatus, TransportUnicastTrait},
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
     },
@@ -62,23 +59,14 @@ pub(crate) struct TransportUnicastUniversal {
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
     // The links associated to the channel
-    pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
+    pub(super) links: Arc<RwLock<TransportLinks>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
-    // Lock used to ensure no race in add_link method
-    add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
-    pub(super) alive: Arc<AsyncMutex<bool>>,
-    #[cfg(feature = "unstable")]
-    // Notifier for a BlockFirst message to be ready to be sent
-    // (after the previous one has been sent)
-    pub block_first_notifier: Notifier,
-    #[cfg(feature = "unstable")]
-    // Waiter for a BlockFirst message to be ready to be sent
-    pub block_first_waiter: Waiter,
+    pub(super) status: Arc<AsyncMutex<TransportStatus>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportStats>,
+    pub(super) stats: zenoh_stats::TransportStats,
 }
 
 impl TransportUnicastUniversal {
@@ -86,7 +74,7 @@ impl TransportUnicastUniversal {
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::TransportStats,
     ) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
@@ -110,27 +98,17 @@ impl TransportUnicastUniversal {
         for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
-        #[cfg(feature = "unstable")]
-        let (block_first_notifier, block_first_waiter) = event::new();
-        // notify to be make the BlockFirst "slot" available
-        #[cfg(feature = "unstable")]
-        block_first_notifier.notify().unwrap();
 
         let t = Arc::new(TransportUnicastUniversal {
             manager: Arc::new(manager),
             config: Arc::new(config),
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
-            links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
-            add_link_lock: Arc::new(AsyncMutex::new(())),
+            links: Arc::new(RwLock::new(TransportLinks::default())),
             callback: Arc::new(RwLock::new(None)),
-            alive: Arc::new(AsyncMutex::new(false)),
+            status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
             stats,
-            #[cfg(feature = "unstable")]
-            block_first_notifier,
-            #[cfg(feature = "unstable")]
-            block_first_waiter,
             #[cfg(feature = "shared-memory")]
             shm_context,
         });
@@ -150,20 +128,12 @@ impl TransportUnicastUniversal {
 
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = self.get_alive().await;
-        *a_guard = false;
+        let mut status_guard = self.get_status().await;
+        *status_guard = TransportStatus::Closed;
         let callback = zwrite!(self.callback).take();
 
-        // Delete the transport on the manager
-        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
-
         // Close all the links
-        let mut links = {
-            let mut l_guard = zwrite!(self.links);
-            let links = l_guard.to_vec();
-            *l_guard = vec![].into_boxed_slice();
-            links
-        };
+        let mut links = zwrite!(self.links).take();
         for l in links.drain(..) {
             let _ = l.close().await;
         }
@@ -172,84 +142,83 @@ impl TransportUnicastUniversal {
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
-
+        // Delete the transport on the manager - this should be the last step to ensure that no new transport to the same peer can be added while we are closing this transport.
+        // We also drop the status_guard, to avoid deadlock due to different lock acquisition order in init_existing_transport unicast.
+        // The lock is no longer needed at this point, as we have already marked the transport as not alive and taken the callback to notify it of the closure.
+        drop(status_guard);
+        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
         Ok(())
     }
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
-        enum Target {
-            Transport,
-            Link(Box<TransportLinkUnicastUniversal>),
-        }
-
         // Try to remove the link
-        let target = {
-            let mut guard = zwrite!(self.links);
-
-            if let Some(index) = guard.iter().position(|tl| {
-                // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-                Link::new_unicast(
-                    &tl.link.link,
-                    tl.link.config.priorities.clone(),
-                    tl.link.config.reliability,
-                )
-                .eq(&link)
-            }) {
-                let is_last = guard.len() == 1;
-                if is_last {
-                    // Close the whole transport
-                    drop(guard);
-                    Target::Transport
-                } else {
-                    // Remove the link
-                    let mut links = guard.to_vec();
-                    let stl = links.remove(index);
-                    *guard = links.into_boxed_slice();
-                    drop(guard);
-                    Target::Link(stl.into())
-                }
-            } else {
-                bail!(
-                    "Can not delete Link {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
+        let Some((is_last, stl, associated_link)) = zwrite!(self.links).remove_link(&link) else {
+            bail!(
+                "Can not delete Link {} with peer: {}",
+                link,
+                self.config.zid
+            )
         };
 
         // Notify the callback
         let cb = zread!(self.callback).clone();
         if let Some(callback) = cb {
-            callback.del_link(link);
+            let associated_link = associated_link.clone();
+            tokio::task::spawn_blocking(move || {
+                callback.del_link(link);
+                if let Some(asl) = &associated_link {
+                    callback.del_link(Link::new_unicast(
+                        &asl.link.link,
+                        asl.link.config.priorities.clone(),
+                        asl.link.config.reliability,
+                    ));
+                }
+            })
+            .await?;
         }
 
-        match target {
-            Target::Transport => self.delete().await,
-            Target::Link(stl) => stl.close().await,
+        // Associated link must also be closed. run both close calls, return whichever failed first
+        let close_asl = async {
+            match associated_link {
+                Some(asl) => asl.close().await,
+                None => Ok(()),
+            }
+        };
+        let (close_stl_res, close_asl_res) = tokio::join!(stl.close(), close_asl);
+
+        if is_last {
+            self.delete().await?;
         }
+        close_stl_res.and(close_asl_res)
     }
 
-    async fn sync(&self, initial_sn_rx: TransportSn) -> ZResult<()> {
+    async fn sync(
+        &self,
+        initial_sn_rx: TransportSn,
+    ) -> ZResult<AsyncMutexGuard<'_, TransportStatus>> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = zasynclock!(self.alive);
-        if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            tracing::trace!("{}", e);
-            return Err(e.into());
+        let mut status_guard = zasynclock!(self.status);
+
+        match *status_guard {
+            TransportStatus::Uninitialized => {
+                let csn = PrioritySn {
+                    reliable: initial_sn_rx,
+                    best_effort: initial_sn_rx,
+                };
+                for c in self.priority_rx.iter() {
+                    c.sync(csn)?;
+                }
+                *status_guard = TransportStatus::Alive;
+                Ok(status_guard)
+            }
+            TransportStatus::Alive => Ok(status_guard),
+            TransportStatus::Closed => {
+                let e = zerror!("Transport with peer {} is closed", self.config.zid);
+                tracing::trace!("{}", e);
+                Err(e.into())
+            }
         }
-
-        *a_guard = true;
-
-        let csn = PrioritySn {
-            reliable: initial_sn_rx,
-            best_effort: initial_sn_rx,
-        };
-        for c in self.priority_rx.iter() {
-            c.sync(csn)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -264,73 +233,86 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        let add_link_guard = zasynclock!(self.add_link_lock);
+        // sync the RX sequence number
+        let status_guard = match self.sync(other_initial_sn).await {
+            Ok(status_guard) => status_guard,
+            Err(e) => {
+                tracing::error!(
+                    "Error syncing transport with peer {}: {}",
+                    self.config.zid,
+                    e
+                );
+                let (l, asl) = link.fail();
+                return Err((e, l, asl, close::reason::GENERIC));
+            }
+        };
+
+        let mut guard = zwrite!(self.links);
 
         // Check if we can add more inbound links
-        {
-            let guard = zread!(self.links);
-            if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
-                let count = guard
-                    .iter()
-                    .filter(|l| l.link.config.direction == link.inner_config().direction)
-                    .count();
+        if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
+            let limit = zcondfeat!(
+                "transport_multilink",
+                match self.config.multilink {
+                    Some(_) => self.manager.config.unicast.max_links,
+                    None => 1,
+                },
+                1
+            );
 
-                let limit = zcondfeat!(
-                    "transport_multilink",
-                    match self.config.multilink {
-                        Some(_) => self.manager.config.unicast.max_links,
-                        None => 1,
-                    },
-                    1
+            let count = guard.nb_links_multilink(TransportLinkUnicastDirection::Inbound);
+            if count >= limit {
+                let e = zerror!(
+                    "Can not add Link {} with peer {}: max num of links reached ({}/{})",
+                    link,
+                    self.config.zid,
+                    count,
+                    limit
                 );
-
-                if count >= limit {
-                    let e = zerror!(
-                        "Can not add Link {} with peer {}: max num of links reached {}/{}",
-                        link,
-                        self.config.zid,
-                        count,
-                        limit
-                    );
-                    return Err((e.into(), link.fail(), close::reason::MAX_LINKS));
-                }
+                let (l, asl) = link.fail();
+                return Err((e.into(), l, asl, close::reason::MAX_LINKS));
             }
         }
 
-        // sync the RX sequence number
-        let _ = self.sync(other_initial_sn).await;
-
         // Wrap the link
-        let (link, ack) = link.unpack();
+        let (link, ack, associated_link) = link.unpack();
         let (mut link, consumer) =
             TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
+        // Handle associated link (if mixed-reliability link)
+        let al_with_consumer =
+            associated_link.map(|l| TransportLinkUnicastUniversal::new(self, l, &self.priority_tx));
+        let associated_link = al_with_consumer.as_ref().map(|(l, _)| l.clone());
         // Add the link to the channel
-        let mut guard = zwrite!(self.links);
-        let mut links = Vec::with_capacity(guard.len() + 1);
-        links.extend_from_slice(&guard);
-        links.push(link.clone());
-        *guard = links.into_boxed_slice();
+        guard.push_link(link.clone(), associated_link.clone());
 
         drop(guard);
 
         // create a callback to start the link
         let transport = self.clone();
-        let mut c_link = link.clone();
-        let c_transport = transport.clone();
-        let start_tx = Box::new(move || {
-            // Start the TX loop
-            let keep_alive =
-                self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            c_link.start_tx(c_transport, consumer, keep_alive);
-        });
+        let start_tx = {
+            let mut link = link.clone();
+            let transport = transport.clone();
+            Box::new(move || {
+                // Start the TX loop
+                let keep_alive = self.manager.config.unicast.lease
+                    / self.manager.config.unicast.keep_alive as u32;
+                link.start_tx(transport.clone(), consumer, keep_alive);
+                if let Some((mut associated_link, al_consumer)) = al_with_consumer {
+                    associated_link.start_tx(transport, al_consumer, keep_alive);
+                }
+            })
+        };
 
         let start_rx = Box::new(move || {
             // Start the RX loop
-            link.start_rx(transport, other_lease);
+            link.start_rx(transport.clone(), other_lease);
+            if let Some(mut associated_link) = associated_link {
+                associated_link.start_rx(transport, other_lease);
+            }
         });
 
-        Ok((start_tx, start_rx, ack, Some(add_link_guard)))
+        Ok((start_tx, start_rx, ack, status_guard))
     }
 
     /*************************************/
@@ -340,8 +322,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         *zwrite!(self.callback) = Some(callback);
     }
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
-        zasynclock!(self.alive)
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
+        zasynclock!(self.status)
     }
 
     fn get_zid(&self) -> ZenohIdProto {
@@ -361,6 +343,14 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         self.config.is_qos
     }
 
+    fn region_name(&self) -> Option<RegionName> {
+        self.config.region_name.clone()
+    }
+
+    fn get_bound(&self) -> Option<Bound> {
+        self.config.bound
+    }
+
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
     }
@@ -370,16 +360,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> Arc<TransportStats> {
+    fn stats(&self) -> zenoh_stats::TransportStats {
         self.stats.clone()
-    }
-
-    #[cfg(feature = "stats")]
-    fn get_link_stats(&self) -> Vec<(Link, Arc<TransportStats>)> {
-        zread!(self.links)
-            .iter()
-            .map(|l| (l.link.link(), l.stats.clone()))
-            .collect()
     }
 
     /*************************************/
@@ -389,6 +371,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
         let mut pipelines = zread!(self.links)
+            .get_links()
             .iter()
             .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
@@ -410,13 +393,18 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links).iter().map(|l| l.link.link()).collect()
+        zread!(self.links)
+            .get_links()
+            .iter()
+            .map(|l| l.link.link())
+            .collect()
     }
 
     fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
         zread!(self.links)
+            .get_links()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
 
@@ -429,7 +417,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.internal_schedule(msg)
     }
 
@@ -438,5 +426,143 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         s: &'c mut DebugStruct<'a, 'b>,
     ) -> &'c mut DebugStruct<'a, 'b> {
         s.field("sn_resolution", &self.config.sn_resolution)
+    }
+}
+
+/// Container for Transport links that manages link associations (namely for mixed-reliability).
+/// Manages insertion/removal of links and their potential associated links while providing the
+/// following:
+/// - Evaluate multilink limit by considering each link association as a single link.
+/// - Expose a read-only view on links that mixes associations in the same set (as if they were
+///   separate links) for message scheduling based on QoS.
+#[derive(Default)]
+pub(super) struct TransportLinks {
+    /// Two associated links are contiguous within the array as such:
+    /// \[..., Link, AssociatedLink, ...\].
+    ///
+    /// This order is guaranteed at insertion, and assumed at removal.
+    inner: Box<[TransportLinkMarker]>,
+}
+
+impl TransportLinks {
+    pub(super) fn get_links(&self) -> &[TransportLinkMarker] {
+        &self.inner
+    }
+
+    fn push_link(
+        &mut self,
+        link: TransportLinkUnicastUniversal,
+        associated_link: Option<TransportLinkUnicastUniversal>,
+    ) {
+        let mut links =
+            Vec::with_capacity(self.inner.len() + if associated_link.is_some() { 2 } else { 1 });
+        links.extend_from_slice(&self.inner);
+        links.push(TransportLinkMarker::Link(link));
+
+        if let Some(l) = associated_link {
+            links.push(TransportLinkMarker::AssociatedLink(l));
+        }
+
+        self.inner = links.into_boxed_slice();
+    }
+
+    fn remove_link(
+        &mut self,
+        link: &Link,
+    ) -> Option<(
+        bool,
+        TransportLinkUnicastUniversal,
+        Option<TransportLinkUnicastUniversal>,
+    )> {
+        let link_equality = |tl: &TransportLinkUnicastUniversal, link: &Link| {
+            // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+            Link::new_unicast(
+                &tl.link.link,
+                tl.link.config.priorities.clone(),
+                tl.link.config.reliability,
+            )
+            .eq(link)
+        };
+        let index = self.inner.iter().position(|tl| link_equality(tl, link))?;
+        let is_asl = matches!(self.inner[index], TransportLinkMarker::AssociatedLink(_));
+
+        let mut links = self.inner.to_vec();
+
+        // Remove the link
+        let stl = links.remove(index);
+
+        // Remove associated link if applicable (also minding the array bounds)
+        let asl = if is_asl {
+            // Remove the link at index-1, which should NOT be an AssociatedLink variant
+            index.checked_sub(1).map(|i| {
+                let l = links.remove(i);
+                debug_assert!(
+                    matches!(l, TransportLinkMarker::AssociatedLink(_)).not(),
+                    "should be the main link of the removed associated link"
+                );
+                l
+            })
+        } else {
+            // Remove the link at index+1 (which is now at index after removal of the main link) IF it is an AssociatedLink
+            if let Some(l) = links.get(index) {
+                match l {
+                    TransportLinkMarker::Link(_) => None,
+                    TransportLinkMarker::AssociatedLink(_) => Some(links.remove(index)),
+                }
+            } else {
+                None
+            }
+        };
+
+        self.inner = links.into_boxed_slice();
+        Some((
+            self.inner.is_empty(),
+            stl.into_inner(),
+            asl.map(TransportLinkMarker::into_inner),
+        ))
+    }
+
+    fn take(&mut self) -> Vec<TransportLinkUnicastUniversal> {
+        std::mem::take(&mut self.inner)
+            .into_vec()
+            .into_iter()
+            .map(TransportLinkMarker::into_inner)
+            .collect()
+    }
+
+    fn nb_links_multilink(&self, direction: TransportLinkUnicastDirection) -> usize {
+        // Do not count AssociatedLink: pairs of (Link, AssociatedLink) must count as only one for
+        // multilink limit.
+        self.inner
+            .iter()
+            .filter(|l| {
+                matches!(l, TransportLinkMarker::Link(_)) && l.link.config.direction == direction
+            })
+            .count()
+    }
+}
+
+#[derive(Clone)]
+pub(super) enum TransportLinkMarker {
+    Link(TransportLinkUnicastUniversal),
+    AssociatedLink(TransportLinkUnicastUniversal),
+}
+
+impl TransportLinkMarker {
+    fn into_inner(self) -> TransportLinkUnicastUniversal {
+        match self {
+            TransportLinkMarker::Link(l) | TransportLinkMarker::AssociatedLink(l) => l,
+        }
+    }
+}
+
+impl Deref for TransportLinkMarker {
+    type Target = TransportLinkUnicastUniversal;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            TransportLinkMarker::Link(l) => l,
+            TransportLinkMarker::AssociatedLink(l) => l,
+        }
     }
 }

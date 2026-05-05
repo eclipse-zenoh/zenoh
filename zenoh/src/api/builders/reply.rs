@@ -59,7 +59,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     timestamp: Option<Timestamp>,
     qos: QoSBuilder,
     #[cfg(feature = "unstable")]
-    source_info: SourceInfo,
+    source_info: Option<SourceInfo>,
     attachment: Option<ZBytes>,
 }
 
@@ -77,14 +77,14 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderPut {
                 payload: payload.into(),
                 encoding: Encoding::default(),
             },
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -99,11 +99,11 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
         Self {
             query,
             key_expr: key_expr.try_into().map_err(Into::into),
-            qos: response::ext::QoSType::RESPONSE.into(),
+            qos: query.inner.qos.into(),
             kind: ReplyBuilderDelete,
             timestamp: None,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             attachment: None,
         }
     }
@@ -111,6 +111,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
 
 #[zenoh_macros::internal_trait]
 impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional timestamp to be sent along with the reply/response.
     fn timestamp<U: Into<Option<Timestamp>>>(self, timestamp: U) -> Self {
         Self {
             timestamp: timestamp.into(),
@@ -121,6 +122,8 @@ impl<T> TimestampBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
+    /// Sets an optional attachment to be sent along with the reply/response.
+    /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>`.
     fn attachment<U: Into<OptionZBytes>>(self, attachment: U) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
@@ -130,9 +133,10 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[cfg(feature = "unstable")]
-    fn source_info(self, source_info: SourceInfo) -> Self {
+    /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the reply/response.
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
-            source_info,
+            source_info: source_info.into(),
             ..self
         }
     }
@@ -140,16 +144,20 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
-    fn congestion_control(self, congestion_control: CongestionControl) -> Self {
-        let qos = self.qos.congestion_control(congestion_control);
-        Self { qos, ..self }
+    #[deprecated = "calling this function has no impact, replies will use the query congestion control"]
+    fn congestion_control(self, _congestion_control: CongestionControl) -> Self {
+        self
     }
 
-    fn priority(self, priority: Priority) -> Self {
-        let qos = self.qos.priority(priority);
-        Self { qos, ..self }
+    #[deprecated = "calling this function has no impact, replies will use the query priority"]
+    fn priority(self, _priority: Priority) -> Self {
+        self
     }
 
+    /// Changes the Express policy to apply when routing the reply.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(self, is_express: bool) -> Self {
         let qos = self.qos.express(is_express);
         Self { qos, ..self }
@@ -158,6 +166,7 @@ impl<T> QoSBuilderTrait for ReplyBuilder<'_, '_, T> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             kind: ReplyBuilderPut {
@@ -243,6 +252,7 @@ impl<'a> ReplyErrBuilder<'a> {
 
 #[zenoh_macros::internal_trait]
 impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
+    /// Set the [`Encoding`]
     fn encoding<T: Into<Encoding>>(self, encoding: T) -> Self {
         Self {
             encoding: encoding.into(),
@@ -272,7 +282,7 @@ impl Wait for ReplyErrBuilder<'_> {
                 ext_unknown: vec![],
                 payload: self.payload.into(),
             }),
-            ext_qos: response::ext::QoSType::RESPONSE,
+            ext_qos: self.query.inner.qos.into(),
             ext_tstamp: None,
             ext_respid: Some(response::ext::ResponderIdType {
                 zid: self.query.inner.zid,

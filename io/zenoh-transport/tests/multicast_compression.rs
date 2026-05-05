@@ -37,6 +37,7 @@ mod tests {
         },
     };
     use zenoh_result::ZResult;
+    use zenoh_test::get_free_udp_port;
     use zenoh_transport::{
         multicast::{TransportManagerBuilderMulticast, TransportMulticast},
         unicast::TransportUnicast,
@@ -147,7 +148,7 @@ mod tests {
             .zid(peer01_id)
             .whatami(WhatAmI::Peer)
             .multicast(TransportManagerBuilderMulticast::default().compression(true))
-            .build(peer01_handler.clone())
+            .build_test(peer01_handler.clone())
             .unwrap();
 
         // Create the peer02 transport manager
@@ -156,7 +157,7 @@ mod tests {
             .zid(peer02_id)
             .whatami(WhatAmI::Peer)
             .multicast(TransportManagerBuilderMulticast::default().compression(true))
-            .build(peer02_handler.clone())
+            .build_test(peer02_handler.clone())
             .unwrap();
 
         // Create an empty transport with the peer01
@@ -291,14 +292,6 @@ mod tests {
         let (peer01, peer02) = open_transport(endpoint).await;
         test_transport(&peer01, &peer02, channel, msg_size).await;
 
-        #[cfg(feature = "stats")]
-        {
-            let stats = peer01.transport.get_stats().unwrap().report();
-            println!("\tPeer 01: {stats:?}");
-            let stats = peer02.transport.get_stats().unwrap().report();
-            println!("\tPeer 02: {stats:?}");
-        }
-
         close_transport(peer01, peer02, endpoint).await;
     }
 
@@ -320,10 +313,11 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:21000",
+                "udp/224.{}.{}.{}:{}",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
-                rand::random::<u8>()
+                rand::random::<u8>(),
+                get_free_udp_port()
             )
             .parse()
             .unwrap(),

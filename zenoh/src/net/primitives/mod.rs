@@ -30,7 +30,12 @@ pub trait Primitives: Send + Sync {
 
     fn send_declare(&self, msg: &mut Declare);
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability);
+    fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool);
+
+    #[inline(always)]
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+        self.send_push_consume(msg, reliability, true)
+    }
 
     fn send_request(&self, msg: &mut Request);
 
@@ -47,17 +52,17 @@ pub trait Primitives: Send + Sync {
 pub(crate) trait EPrimitives: Send + Sync {
     fn as_any(&self) -> &dyn Any;
 
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>);
+    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool;
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>);
+    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool;
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability);
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool;
 
-    fn send_request(&self, msg: &mut Request);
+    fn send_request(&self, msg: &mut Request) -> bool;
 
-    fn send_response(&self, msg: &mut Response);
+    fn send_response(&self, msg: &mut Response) -> bool;
 
-    fn send_response_final(&self, msg: &mut ResponseFinal);
+    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool;
 }
 
 #[derive(Default)]
@@ -68,7 +73,7 @@ impl Primitives for DummyPrimitives {
 
     fn send_declare(&self, _msg: &mut Declare) {}
 
-    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
+    fn send_push_consume(&self, _msg: &mut Push, _reliability: Reliability, _consume: bool) {}
 
     fn send_request(&self, _msg: &mut Request) {}
 
@@ -84,17 +89,29 @@ impl Primitives for DummyPrimitives {
 }
 
 impl EPrimitives for DummyPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<&mut Interest>) {}
+    fn send_interest(&self, _ctx: RoutingContext<&mut Interest>) -> bool {
+        false
+    }
 
-    fn send_declare(&self, _ctx: RoutingContext<&mut Declare>) {}
+    fn send_declare(&self, _ctx: RoutingContext<&mut Declare>) -> bool {
+        false
+    }
 
-    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
+    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) -> bool {
+        false
+    }
 
-    fn send_request(&self, _msg: &mut Request) {}
+    fn send_request(&self, _msg: &mut Request) -> bool {
+        false
+    }
 
-    fn send_response(&self, _msg: &mut Response) {}
+    fn send_response(&self, _msg: &mut Response) -> bool {
+        false
+    }
 
-    fn send_response_final(&self, _msg: &mut ResponseFinal) {}
+    fn send_response_final(&self, _msg: &mut ResponseFinal) -> bool {
+        false
+    }
 
     fn as_any(&self) -> &dyn Any {
         self

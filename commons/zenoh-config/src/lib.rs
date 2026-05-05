@@ -22,6 +22,7 @@
 #![allow(deprecated)]
 
 pub mod defaults;
+pub mod gateway;
 mod include;
 pub mod qos;
 pub mod wrappers;
@@ -36,7 +37,7 @@ use std::{
     io::Read,
     net::SocketAddr,
     num::{NonZeroU16, NonZeroUsize},
-    ops::{self, Bound, Deref, RangeBounds},
+    ops::{self, Bound, Deref, DerefMut, RangeBounds},
     path::Path,
     sync::{Arc, Weak},
 };
@@ -56,7 +57,7 @@ pub use zenoh_protocol::core::{
 use zenoh_protocol::{
     core::{
         key_expr::{OwnedKeyExpr, OwnedNonWildKeyExpr},
-        Bits,
+        Bits, RegionName,
     },
     transport::{BatchSize, TransportSn},
 };
@@ -249,7 +250,7 @@ impl<'a> serde::Deserialize<'a> for ConfRange {
     {
         struct V;
 
-        impl<'de> serde::de::Visitor<'de> for V {
+        impl serde::de::Visitor<'_> for V {
             type Value = ConfRange;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -404,6 +405,11 @@ pub enum AutoConnectStrategy {
     GreaterZid,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct StatsFilterConfig {
+    pub key: OwnedKeyExpr,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -452,6 +458,48 @@ fn config_keys() {
     dbg!(Vec::from_iter(c.keys()));
 }
 
+/// Deprecated wrapper for `routing.router.peers_failover_brokering`.
+/// Emits a warning on deserialization (both full-config and `--cfg` paths).
+#[derive(Clone, Debug, Default)]
+struct DeprecatedPeersFailoverBrokering(Option<bool>);
+
+impl serde::Serialize for DeprecatedPeersFailoverBrokering {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DeprecatedPeersFailoverBrokering {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        tracing::warn!(
+            "`routing.router.peers_failover_brokering` is deprecated and has no effect; \
+            please remove it from your configuration"
+        );
+        Option::<bool>::deserialize(deserializer).map(Self)
+    }
+}
+
+/// Deprecated wrapper for `routing.peer` (and its `mode` / `linkstate` sub-fields).
+/// Emits a warning on deserialization (both full-config and `--cfg` paths).
+#[derive(Clone, Debug, Default)]
+struct DeprecatedRoutingPeer(Option<Value>);
+
+impl serde::Serialize for DeprecatedRoutingPeer {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for DeprecatedRoutingPeer {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        tracing::warn!(
+            "routing.peer.mode` and `routing.peer.linkstate` are deprecated and have no effect; \
+            please remove them from your configuration"
+        );
+        Option::<Value>::deserialize(deserializer).map(Self)
+    }
+}
+
 validated_struct::validator! {
     #[derive(Default)]
     #[recursive_attrs]
@@ -467,6 +515,8 @@ validated_struct::validator! {
         metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
+        region_name: Option<RegionName>,
+        pub gateway: gateway::GatewayConf,
         /// Which zenoh nodes to connect to.
         pub connect:
         ConnectConfig {
@@ -567,11 +617,9 @@ validated_struct::validator! {
             /// The routing strategy to use in routers and it's configuration.
             pub router: #[derive(Default)]
             RouterRoutingConf {
-                /// When set to true a router will forward data between two peers
-                /// directly connected to it if it detects that those peers are not
-                /// connected to each other.
-                /// The failover brokering only works if gossip discovery is enabled.
-                peers_failover_brokering: Option<bool>,
+                /// Deprecated: this field has no effect and will be removed in a future version.
+                #[serde(default, skip_serializing)]
+                peers_failover_brokering: DeprecatedPeersFailoverBrokering,
                 /// Linkstate mode configuration.
                 pub linkstate: #[derive(Default)]
                 LinkstateConf {
@@ -582,15 +630,9 @@ validated_struct::validator! {
                     pub transport_weights: Vec<TransportWeight>,
                 },
             },
-            /// The routing strategy to use in peers and it's configuration.
-            pub peer: #[derive(Default)]
-            PeerRoutingConf {
-                /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
-                /// This option needs to be set to the same value in all peers and routers of the subsystem.
-                mode: Option<String>,
-                /// Linkstate mode configuration (only taken into account if mode == "linkstate").
-                pub linkstate: LinkstateConf,
-            },
+            /// Deprecated: these fields have no effect and will be removed in a future version.
+            #[serde(default, skip_serializing)]
+            peer: DeprecatedRoutingPeer,
             /// The interests-based routing configuration.
             /// This configuration applies regardless of the mode (router, peer or client).
             pub interests: #[derive(Default)]
@@ -885,6 +927,11 @@ validated_struct::validator! {
 
         /// Configuration of the low-pass filter
         pub low_pass_filter: Vec<LowPassFilterConf>,
+
+        /// Configuration of the stats per keyexpr
+        pub stats: #[derive(Default, PartialEq, Eq)] StatsConfig {
+            filters: Vec<StatsFilterConfig>,
+        },
 
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
@@ -1313,6 +1360,17 @@ impl Config {
                         Ok(c) => zerror!("Invalid configuration: {}", c).into(),
                         Err(e) => zerror!("YAML error: {:?}", e).into(),
                     }),
+                    #[cfg(feature = "unstable")]
+                    Some("toml") => {
+                        tracing::warn!("The TOML configuration format is unstable and may be removed in a future release");
+                        match toml::Deserializer::parse(&content) {
+                            Ok(de) => Config::from_deserializer(de).map_err(|e| match e {
+                                Ok(c) => zerror!("Invalid configuration: {}", c).into(),
+                                Err(e) => zerror!("TOML deserization error: {:?}", e).into(),
+                            }),
+                            Err(e) => bail!("TOML parsing error: {:?}", e),
+                        }
+                    },
                     Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
                     None => bail!("Unsupported file type. Configuration files must have an extension (.json, .json5 and .yaml supported)")
                 }
@@ -1327,6 +1385,53 @@ impl Config {
         } else {
             LibLoader::empty()
         }
+    }
+
+    /// Expands the config with missing but required fields.
+    ///
+    /// This method should be called before a user-supplied config is used in the runtime.
+    ///
+    /// ## Invariants
+    ///
+    /// 1. All getter methods on [`ExpandedConfig`] are infallible (e.g. [`ExpandedConfig::id`] vs [`Config::id`]).
+    pub fn expanded(mut self) -> ExpandedConfig {
+        if self.id.is_none() {
+            self.set_id(Some(ZenohId::default())).unwrap();
+        }
+
+        if self.mode.is_none() {
+            self.set_mode(Some(WhatAmI::default())).unwrap();
+        }
+
+        ExpandedConfig(self)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct ExpandedConfig(Config);
+
+impl ExpandedConfig {
+    pub fn id(&self) -> ZenohId {
+        self.0.id.unwrap()
+    }
+
+    pub fn mode(&self) -> WhatAmI {
+        self.0.mode.unwrap()
+    }
+}
+
+impl Deref for ExpandedConfig {
+    type Target = Config;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ExpandedConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -1779,6 +1884,12 @@ pub trait IConfig: Send + Sync {
 
 pub struct GenericConfig(Arc<dyn IConfig>);
 
+impl std::fmt::Debug for GenericConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("GenericConfig").field(&"..").finish()
+    }
+}
+
 impl Deref for GenericConfig {
     type Target = Arc<dyn IConfig>;
 
@@ -1807,5 +1918,60 @@ impl GenericConfig {
 impl fmt::Display for GenericConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0.to_json())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs::File, io::Write, str::FromStr, time::SystemTime};
+
+    use zenoh_protocol::core::{EndPoint, WhatAmI};
+
+    use crate::{Config, ModeDependentValue, ZenohId};
+
+    #[test]
+    fn test_toml_config_format() {
+        const FILE_CONTENTS: &str = r#"
+            id = "abc"
+            mode = "router"
+
+            [listen]
+            endpoints = ["tcp/localhost:7448"]
+
+            [adminspace]
+            enabled = true
+        "#;
+
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let path = env::temp_dir().join(format!("{timestamp}.test.config.toml"));
+
+        {
+            let mut tmp = File::create(&path).unwrap();
+            tmp.write_all(FILE_CONTENTS.as_bytes()).unwrap();
+            tmp.flush().unwrap();
+        }
+
+        let expected_config = {
+            let mut c = Config::default();
+            c.set_id(Some(ZenohId::from_str("abc").unwrap())).unwrap();
+            c.set_mode(Some(WhatAmI::Router)).unwrap();
+            c.listen
+                .set_endpoints(ModeDependentValue::Unique(vec![EndPoint::from_str(
+                    "tcp/localhost:7448",
+                )
+                .unwrap()]))
+                .unwrap();
+            c.adminspace.set_enabled(true).unwrap();
+            c
+        };
+
+        assert_eq!(
+            Config::from_file(&path).unwrap().to_string(),
+            expected_config.to_string()
+        );
     }
 }

@@ -1,0 +1,18 @@
+name: PR Label Checklists Verify
+
+# This workflow runs in the context of the base repository, so be mindful of the permissions granted here and the actions used in the workflow:
+# For more information see https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#mitigating-the-risks-of-untrusted-code-checkout
+on:
+  pull_request_target:
+    types: [edited]
+
+jobs:
+  verify:
+    name: Verify
+    permissions:
+      pull-requests: read
+      statuses: write
+      contents: read
+    uses: eclipse-zenoh/ci/.github/workflows/pr-label-checklists-verify.yml@main
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

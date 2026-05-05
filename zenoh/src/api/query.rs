@@ -14,7 +14,6 @@
 
 use std::{collections::HashMap, error::Error, fmt::Display};
 
-#[cfg(feature = "unstable")]
 use serde::Deserialize;
 #[cfg(feature = "unstable")]
 use zenoh_config::wrappers::EntityGlobalId;
@@ -44,9 +43,8 @@ use crate::api::{
     bytes::ZBytes,
     encoding::Encoding,
     handlers::{Callback, CallbackParameter},
-    key_expr::KeyExpr,
     sample::Sample,
-    selector::Selector,
+    Id,
 };
 
 /// The reply consolidation strategy to apply to replies to a [`get`](crate::Session::get).
@@ -222,17 +220,12 @@ pub(crate) struct LivelinessQueryState {
 
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
-    pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) parameters: Parameters<'static>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<Reply>,
-}
-
-impl QueryState {
-    pub(crate) fn selector(&self) -> Selector<'_> {
-        Selector::borrowed(&self.key_expr, &self.parameters)
-    }
+    pub(crate) querier_id: Option<Id>,
 }
 /// The kinds of accepted query replies.
 ///
@@ -250,10 +243,10 @@ impl QueryState {
 /// [`accept_replies`](crate::query::QuerierBuilder::accept_replies) for
 /// [`Querier::get`](crate::query::Querier::get))
 /// then the reply with a disjoint key expression will be accepted for this query.
+/// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
 ///
 /// The [`Queryable`](crate::query::Queryable) may check this parameter with
 /// [`Query::accepts_replies`](crate::query::Query::accepts_replies).
-#[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Deserialize)]
 pub enum ReplyKeyExpr {
     /// Accept replies whose key expressions may not match the query key expression.

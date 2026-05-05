@@ -149,6 +149,7 @@ fn main() {
     }
 }
 
+#[derive(Debug)]
 pub struct Benchmarker {
     benches: HashMap<String, Bench>,
 }
@@ -170,14 +171,18 @@ impl Benchmarker {
         self.benches.entry(name.into()).or_default().run_once(f);
     }
 }
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Bench {
     runs: Vec<std::time::Duration>,
 }
+
+#[derive(Debug)]
 pub struct Stats {
     mean: std::time::Duration,
     variance: f64,
 }
+
+#[derive(Debug)]
 pub struct FullStats {
     base: Stats,
     min: f64,
@@ -210,7 +215,7 @@ impl std::fmt::LowerExp for FullStats {
 impl Bench {
     fn run_once<F: FnOnce() -> O, O>(&mut self, f: F) {
         let start = std::time::Instant::now();
-        criterion::black_box(f());
+        std::hint::black_box(f());
         let t = start.elapsed();
         self.runs.push(t);
     }

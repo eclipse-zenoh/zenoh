@@ -30,8 +30,9 @@ use crate::{
 };
 
 #[dynamic(lazy, drop)]
-/// A global lazily-initialized SHM client storage. When initialized,
-/// contains default client set, see [with_default_client_set](ShmClientStorage::with_default_client_set)
+/// A global lazily-initialized SHM client storage.
+///
+/// When initialized, contains default client set, see [with_default_client_set](ShmClientSetBuilder::with_default_client_set)
 #[zenoh_macros::unstable_doc]
 pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
     ShmClientStorage::builder()
@@ -41,6 +42,7 @@ pub static mut GLOBAL_CLIENT_STORAGE: Arc<ShmClientStorage> = Arc::new(
 
 /// Builder to create new client storages
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct ShmClientSetBuilder;
 
 impl ShmClientSetBuilder {
@@ -74,6 +76,14 @@ impl ShmClientSetBuilder {
 #[zenoh_macros::unstable_doc]
 pub struct ShmClientStorageBuilder {
     clients: BTreeMap<ProtocolID, Arc<dyn ShmClient>>,
+}
+
+impl std::fmt::Debug for ShmClientStorageBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmClientStorageBuilder")
+            .field("clients_len", &self.clients.len())
+            .finish()
+    }
 }
 
 impl ShmClientStorageBuilder {
@@ -112,6 +122,7 @@ impl ShmClientStorageBuilder {
 }
 
 /// A storage for SHM clients.
+///
 /// Runtime or Session constructed with instance of this type gets capabilities to read
 /// SHM buffers for Protocols added to this instance.
 #[zenoh_macros::unstable_doc]

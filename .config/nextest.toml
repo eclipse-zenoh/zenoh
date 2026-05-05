@@ -15,6 +15,8 @@ test(=zenoh_unicity_p2p) |
 test(=zenoh_unicity_brokered) |
 test(=transport_tcp_intermittent) |
 test(=transport_tcp_intermittent_for_lowlatency_transport) |
+test(=transport_unicast_quic_only_mutual_success) |
+test(=transport_unicast_quic_only_server) |
 test(=three_node_combination) |
 test(=watchdog_alloc_concurrent) |
 test(=header_check_memory_concurrent) |
@@ -24,3 +26,17 @@ test(=zenoh_querier_matching_status)
 """
 slow-timeout = { period = "60s", terminate-after = 6 }
 threads-required = 'num-cpus'
+
+[test-groups]
+serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(zenoh_querier_matching_status::)'
+test-group = 'serial'
+
+[[profile.default.overrides]]
+filter = """
+package(zenoh) and test(net::tests::regions)
+"""
+retries = 0
+slow-timeout = { period = "2s", terminate-after = 1 }

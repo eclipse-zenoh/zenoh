@@ -32,6 +32,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -116,6 +117,7 @@ impl TransportEventHandler for SHClientStable {
 }
 
 // Transport Callback for the client
+#[derive(Debug)]
 pub struct SCClient {
     counter: Arc<AtomicUsize>,
 }
@@ -157,7 +159,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Router)
         .zid(router_id)
         .unicast(unicast)
-        .build(router_handler.clone())
+        .build_test(router_handler.clone())
         .unwrap();
 
     /* [CLIENT] */
@@ -177,7 +179,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientStable::new(counter.clone())))
+        .build_test(Arc::new(SHClientStable::new(counter.clone())))
         .unwrap();
 
     // Create the transport transport manager for the second client
@@ -191,7 +193,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent))
+        .build_test(Arc::new(SHClientIntermittent))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -205,7 +207,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent))
+        .build_test(Arc::new(SHClientIntermittent))
         .unwrap();
 
     /* [1] */
@@ -403,7 +405,9 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
@@ -411,7 +415,9 @@ async fn transport_tcp_intermittent() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_tcp_intermittent_for_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 
@@ -420,7 +426,9 @@ async fn transport_tcp_intermittent_for_lowlatency_transport() {
 #[ignore]
 async fn transport_ws_intermittent() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     universal_transport_intermittent(&endpoint).await;
 }
 
@@ -429,7 +437,9 @@ async fn transport_ws_intermittent() {
 #[ignore]
 async fn transport_ws_intermittent_for_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     lowlatency_transport_intermittent(&endpoint).await;
 }
 

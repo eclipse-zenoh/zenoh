@@ -13,6 +13,8 @@
 //
 use core::sync::atomic::AtomicU32;
 
+use zenoh_buffers::buffer::Buffer;
+
 use crate::{core::WireExpr, zenoh::RequestBody};
 
 /// The resolution of a RequestId
@@ -69,10 +71,7 @@ pub mod ext {
 
     use serde::Deserialize;
 
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
@@ -133,6 +132,15 @@ pub mod ext {
 }
 
 impl Request {
+    pub fn payload_size(&self) -> usize {
+        match &self.payload {
+            RequestBody::Query(q) => {
+                q.ext_body.as_ref().map_or(0, |b| b.payload.len())
+                    + q.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
+            }
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {

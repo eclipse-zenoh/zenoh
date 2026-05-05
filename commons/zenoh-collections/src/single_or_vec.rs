@@ -33,6 +33,7 @@ impl<T> SingleOrVecInner<T> {
         SingleOrVecInner::Vec(Vec::new())
     }
 
+    #[inline(always)]
     fn push(&mut self, value: T) {
         match self {
             SingleOrVecInner::Vec(vec) if vec.capacity() == 0 => *self = Self::Single(value),
@@ -61,6 +62,7 @@ impl<T> Default for SingleOrVecInner<T> {
 }
 
 impl<T> AsRef<[T]> for SingleOrVecInner<T> {
+    #[inline(always)]
     fn as_ref(&self) -> &[T] {
         match self {
             SingleOrVecInner::Single(t) => slice::from_ref(t),
@@ -95,6 +97,7 @@ impl<T> SingleOrVec<T> {
         Self(SingleOrVecInner::empty())
     }
 
+    #[inline(always)]
     pub fn push(&mut self, value: T) {
         self.0.push(value);
     }
@@ -111,6 +114,7 @@ impl<T> SingleOrVec<T> {
         self.truncate(0);
     }
 
+    #[inline(always)]
     pub fn len(&self) -> usize {
         match &self.0 {
             SingleOrVecInner::Single(_) => 1,
@@ -182,12 +186,14 @@ impl<T> SingleOrVec<T> {
     }
 }
 
+#[derive(Debug)]
 enum DrainInner<'a, T> {
     Vec(alloc::vec::Drain<'a, T>),
     Single(&'a mut SingleOrVecInner<T>),
     Done,
 }
 
+#[derive(Debug)]
 pub struct Drain<'a, T> {
     inner: DrainInner<'a, T>,
 }
@@ -224,6 +230,7 @@ impl<T> Default for SingleOrVec<T> {
 }
 
 impl<T> AsRef<[T]> for SingleOrVec<T> {
+    #[inline(always)]
     fn as_ref(&self) -> &[T] {
         self.0.as_ref()
     }
@@ -273,6 +280,7 @@ impl<T> iter::Extend<T> for SingleOrVec<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct IntoIter<T> {
     pub drain: alloc::vec::IntoIter<T>,
     pub last: Option<T>,

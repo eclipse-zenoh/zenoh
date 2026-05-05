@@ -1,3 +1,6 @@
+use zenoh_buffers::buffer::Buffer;
+
+use crate::zenoh::reply::ReplyBody;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -56,10 +59,7 @@ pub struct Response {
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
 
@@ -71,6 +71,18 @@ pub mod ext {
 }
 
 impl Response {
+    pub fn payload_size(&self) -> usize {
+        match &self.payload {
+            ResponseBody::Reply(r) => match &r.payload {
+                ReplyBody::Put(p) => {
+                    p.payload.len() + p.ext_attachment.as_ref().map_or(0, |a| a.buffer.len())
+                }
+                ReplyBody::Del(d) => d.ext_attachment.as_ref().map_or(0, |a| a.buffer.len()),
+            },
+            ResponseBody::Err(e) => e.payload.len(),
+        }
+    }
+
     #[cfg(feature = "test")]
     #[doc(hidden)]
     pub fn rand() -> Self {

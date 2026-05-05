@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
 #![cfg(unix)]
+#![cfg(feature = "unstable")]
 
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -23,8 +23,11 @@ use std::sync::{
 use nonempty_collections::{nev, NEVec};
 #[cfg(feature = "unstable")]
 use zenoh::query::{ConsolidationMode, Reply};
-use zenoh::{bytes::ZBytes, Config, Wait};
-use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
+use zenoh::{bytes::ZBytes, Wait};
+use zenoh_config::{
+    Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
+};
+use zenoh_test::{get_locators_from_session_sync, TestSessions};
 
 static SMALL_MSG_STR: &str = "S";
 static BIG_MSG_STR: &str = "B";
@@ -34,8 +37,6 @@ static LOWPASS_RULE_BYTES: usize = 25;
 
 static DECLARATION_DELAY_MS: u64 = 250;
 static MESSAGES_DELAY_MS: u64 = 1000;
-
-static TEST_PORTS_TCP: [u16; 4] = [31048, 31049, 31050, 31051];
 
 #[derive(Default)]
 struct LowPassTestResult {
@@ -314,7 +315,6 @@ fn lowpass_query_filter_test(
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_query";
-    let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[0]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
@@ -327,8 +327,7 @@ fn lowpass_query_filter_test(
     };
 
     let (query_config, queryable_config) = build_config(vec![lpf_config], flow);
-    let test_res =
-        lowpass_pub_sub_query_reply_test(&locator, query_config, queryable_config, prefix);
+    let test_res = lowpass_pub_sub_query_reply_test(query_config, queryable_config, prefix);
 
     assertions(&test_res);
 }
@@ -340,7 +339,6 @@ fn lowpass_reply_filter_test(
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_reply";
-    let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[1]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
@@ -353,8 +351,7 @@ fn lowpass_reply_filter_test(
     };
 
     let (queryable_config, query_config) = build_config(vec![lpf_config], flow);
-    let test_res =
-        lowpass_pub_sub_query_reply_test(&locator, query_config, queryable_config, prefix);
+    let test_res = lowpass_pub_sub_query_reply_test(query_config, queryable_config, prefix);
 
     assertions(&test_res);
 }
@@ -366,7 +363,6 @@ fn lowpass_put_filter_test(
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_put";
-    let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[2]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
@@ -379,7 +375,7 @@ fn lowpass_put_filter_test(
     };
 
     let (pub_config, sub_config) = build_config(vec![lpf_config], flow);
-    let test_res = lowpass_pub_sub_query_reply_test(&locator, pub_config, sub_config, prefix);
+    let test_res = lowpass_pub_sub_query_reply_test(pub_config, sub_config, prefix);
 
     assertions(&test_res);
 }
@@ -391,7 +387,6 @@ fn lowpass_del_filter_test(
     assertions: impl Fn(&LowPassTestResult),
 ) {
     let prefix = "test/lowpass_del";
-    let locator = format!("tcp/127.0.0.1:{}", TEST_PORTS_TCP[3]);
 
     let lpf_config = LowPassFilterConf {
         id: None,
@@ -404,7 +399,7 @@ fn lowpass_del_filter_test(
     };
 
     let (pub_config, sub_config) = build_config(vec![lpf_config], flow);
-    let test_res = lowpass_pub_sub_query_reply_test(&locator, pub_config, sub_config, prefix);
+    let test_res = lowpass_pub_sub_query_reply_test(pub_config, sub_config, prefix);
 
     assertions(&test_res);
 }
@@ -432,23 +427,9 @@ fn build_config(lpf_config: Vec<LowPassFilterConf>, flow: InterceptorFlow) -> (C
     (sender_config, receiver_config)
 }
 
-fn set_locators(locator: &str, listen_config: &mut Config, connect_config: &mut Config) {
-    listen_config
-        .listen
-        .endpoints
-        .set(vec![locator.parse().unwrap()])
-        .unwrap();
-    connect_config
-        .connect
-        .endpoints
-        .set(vec![locator.parse().unwrap()])
-        .unwrap();
-}
-
 fn lowpass_pub_sub_query_reply_test(
-    locator: &str,
     mut writer_config: Config,
-    mut reader_config: Config,
+    reader_config: Config,
     ke_prefix: &str,
 ) -> Arc<LowPassTestResult> {
     let test_results = Arc::new(LowPassTestResult::default());
@@ -462,9 +443,13 @@ fn lowpass_pub_sub_query_reply_test(
         .collect::<String>()
         .into();
 
-    set_locators(locator, &mut reader_config, &mut writer_config);
+    let mut test_context = TestSessions::new();
 
-    let reader_session = zenoh::open(reader_config).wait().unwrap();
+    let reader_session = test_context.open_listener_with_cfg_sync(reader_config);
+
+    let locators = get_locators_from_session_sync(&reader_session);
+    writer_config.connect.endpoints.set(locators).unwrap();
+
     let _sub = reader_session
         .declare_subscriber(format!("{ke_prefix}/*"))
         .callback({
@@ -531,7 +516,7 @@ fn lowpass_pub_sub_query_reply_test(
         .wait()
         .unwrap();
 
-    let writer_session = zenoh::open(writer_config).wait().unwrap();
+    let writer_session = test_context.open_connector_with_cfg_sync(writer_config);
     let publ = writer_session
         .declare_publisher(format!("{ke_prefix}/pub"))
         .wait()
@@ -604,7 +589,6 @@ fn lowpass_pub_sub_query_reply_test(
         .unwrap();
 
     std::thread::sleep(std::time::Duration::from_millis(MESSAGES_DELAY_MS));
-    writer_session.close().wait().unwrap();
-    reader_session.close().wait().unwrap();
+    test_context.close_sync();
     test_results
 }

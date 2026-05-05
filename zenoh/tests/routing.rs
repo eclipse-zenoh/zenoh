@@ -11,8 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-#![cfg(feature = "internal_config")]
+#![cfg(feature = "unstable")]
 
 use std::{
     sync::{
@@ -24,10 +23,12 @@ use std::{
 
 use itertools::Itertools;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh::{config::WhatAmI, qos::CongestionControl, Config, Result, Session};
-use zenoh_config::{ModeDependentValue, WhatAmIMatcher};
+use zenoh::{config::WhatAmI, qos::CongestionControl, Result, Session};
+use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
+use zenoh_link::EndPoint;
 use zenoh_result::bail;
+use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -147,7 +148,9 @@ impl Task {
                         }
                     }
                 }
-                println!("Get got sufficient amount of messages. Done.");
+                if counter >= MSG_COUNT {
+                    println!("Get got sufficient amount of messages. Done.");
+                }
             }
 
             // The Liveliness task.
@@ -181,7 +184,9 @@ impl Task {
                         }
                     }
                 }
-                println!("LivelinessGet got sufficient amount of messages. Done.");
+                if counter >= MSG_COUNT {
+                    println!("LivelinessGet got sufficient amount of messages. Done.");
+                }
             }
 
             // The LivelinessLoop task.
@@ -385,10 +390,12 @@ impl Recipe {
 
                     // In case of client can't connect to some peers/routers
                     loop {
-                        if let Ok(session) = ztimeout!(zenoh::open(config.clone())) {
-                            break session;
-                        } else {
-                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        match ztimeout!(zenoh::open(config.clone())) {
+                            Ok(session) => break session,
+                            Err(err) => {
+                                tracing::error!(node = node.name, err = %err, "Failed to open session");
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
                         }
                     }
                 };
@@ -441,7 +448,8 @@ impl Recipe {
                     while let Some(res) = recipe_join_set.join_next().await {
                         res??;
                     }
-                    bail!("Timeout");
+
+                    bail!("Recipe {self} timed out");
                 },
                 res = recipe_join_set.join_next() => {
                     if let Some(res) = res {
@@ -464,7 +472,7 @@ impl Recipe {
 async fn gossip() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    let locator = String::from("tcp/127.0.0.1:17446");
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprGossip");
     let msg_size = 8;
 
@@ -475,11 +483,11 @@ async fn gossip() -> Result<()> {
         mode: WhatAmI::Peer,
         con_task: ConcurrentTask::from([
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Pub(ke.clone(), msg_size),
             ]),
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Queryable(ke.clone(), msg_size),
             ]),
         ]),
@@ -492,12 +500,12 @@ async fn gossip() -> Result<()> {
         connect: vec![locator.clone()],
         con_task: ConcurrentTask::from([
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Sub(ke.clone(), msg_size),
                 Task::Checkpoint,
             ]),
             SequentialTask::from([
-                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sleep(Duration::from_millis(4000)),
                 Task::Get(ke, msg_size),
                 Task::Checkpoint,
             ]),
@@ -514,7 +522,7 @@ async fn gossip() -> Result<()> {
             mode: WhatAmI::Peer,
             listen: vec![locator.clone()],
             con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
-                Duration::from_millis(1000),
+                Duration::from_millis(3000),
             )])]),
             ..Default::default()
         };
@@ -527,11 +535,281 @@ async fn gossip() -> Result<()> {
     Result::Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip_regression_1() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = Config::default();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+    let router_endpoint = get_tcp_locator(&router).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.clone()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer2 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+    let peer_endpoint = get_tcp_locator(&peer2).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer3 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (3) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(!pl.contains(&peer1.zid().to_string()));
+
+    peer3.close().await.unwrap();
+    peer2.close().await.unwrap();
+    peer1.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip_regression_2() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = Config::default();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+    let router_endpoint = get_tcp_locator(&router).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.clone()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+    let peer1_zid = peer1.zid().to_string();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer2 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    peer1.close().await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer2.get("@/*/peer/linkstate/north")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(!pl.contains(&peer1_zid));
+
+    peer2.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip_regression_3() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = Config::default();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+    let router_endpoint = get_tcp_locator(&router).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.clone()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+    let peer1_zid = peer1.zid().to_string();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer2 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (2) ZID: {}", s.zid());
+        s
+    };
+    let peer_endpoint = get_tcp_locator(&peer2).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer3 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
+            .unwrap();
+        c.scouting.gossip.set_multihop(Some(true)).unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (3) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(pl.contains(&peer1_zid));
+
+    peer1.close().await.unwrap();
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let replies = ztimeout!(peer3.get("@/*/peer/linkstate/north")).unwrap();
+    let reply = ztimeout!(replies.recv_async()).unwrap();
+    let sample = reply.into_result().ok().unwrap();
+    let pl = sample.payload().try_to_string().unwrap();
+    assert!(!pl.contains(&peer1_zid));
+
+    peer3.close().await.unwrap();
+    peer2.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
+}
+
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
+#[ignore = "https://github.com/eclipse-zenoh/zenoh/issues/2224"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
     zenoh::init_log_from_env_or("error");
-    let locator = String::from("tcp/127.0.0.1:17449");
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
 
@@ -605,8 +883,6 @@ async fn three_node_combination() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17451 to 17498
-    let base_port = 17450;
 
     let recipe_list: Vec<_> = modes
         .map(|n1| modes.map(|n2| (n1, n2)))
@@ -617,7 +893,7 @@ async fn three_node_combination() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
                 let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("three_node_combination_keyexpr_getqueryable_{idx}");
@@ -782,8 +1058,6 @@ async fn two_node_combination() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17501 to 17509
-    let base_port = 17500;
     let recipe_list: Vec<_> = modes
         .into_iter()
         .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
@@ -795,7 +1069,7 @@ async fn two_node_combination() -> Result<()> {
             let ke_getliveliness = format!("two_node_combination_keyexpr_getliveliness_{idx}");
 
             let (node1_listen_connect, node2_listen_connect) = {
-                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
                 let listen = vec![locator];
                 let connect = vec![];
 
@@ -933,8 +1207,6 @@ async fn three_node_combination_multicast() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 18511 .. 18535
-    let base_port = 18510;
 
     let recipe_list: Vec<_> = modes
         .map(|n1| modes.map(|n2| (n1, n2)))
@@ -945,8 +1217,9 @@ async fn three_node_combination_multicast() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let unicast_locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-                let multicast_locator = format!("udp/224.0.0.1:{}", base_port + idx);
+                let port = get_free_tcp_port();
+                let unicast_locator = format!("tcp/127.0.0.1:{}", port);
+                let multicast_locator = format!("udp/224.0.0.1:{}", port);
 
                 let ke_pubsub = format!("three_node_combination_multicast_keyexpr_pubsub_{idx}");
 
@@ -1039,186 +1312,6 @@ async fn three_node_combination_multicast() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 9)]
-async fn peer_linkstate() -> Result<()> {
-    zenoh_util::try_init_log_from_env();
-    let delay_in_secs = [
-        (0, 1, 2),
-        (0, 2, 1),
-        (1, 2, 0),
-        (1, 0, 2),
-        (2, 0, 1),
-        (2, 1, 0),
-    ];
-
-    let mut idx = 0;
-    // Ports going to be used: 17551 to 17598
-    let base_port = 17550;
-
-    let linkstate_config = || {
-        let mut config = Config::default();
-        config
-            .routing
-            .peer
-            .set_mode(Some("linkstate".to_string()))
-            .unwrap();
-        config
-            .scouting
-            .gossip
-            .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::empty())))
-            .unwrap();
-        Some(config)
-    };
-
-    let recipe_list: Vec<_> = delay_in_secs
-        .into_iter()
-        .map(|d| (1024, d))
-        .map(|(msg_size, (delay1, delay2, delay3))| {
-            idx += 1;
-            let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-
-            let ke_pubsub = format!("peer_linkstate_keyexpr_pubsub_{idx}");
-            let ke_getqueryable = format!("peer_linkstate_keyexpr_getqueryable_{idx}");
-            let ke_subliveliness = format!("peer_linkstate_keyexpr_subliveliness_{idx}");
-            let ke_getliveliness = format!("peer_linkstate_keyexpr_getliveliness_{idx}");
-
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let dummy_node = Node {
-                name: "Dummy Peer".to_string(),
-                mode: WhatAmI::Peer,
-                listen: vec![locator.clone()],
-                con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                warmup: Duration::from_secs(delay1) + Duration::from_millis(rng.gen_range(0..500)),
-                config: linkstate_config(),
-                ..Default::default()
-            };
-
-            let (pub_node, queryable_node, liveliness_node, livelinessloop_node) = {
-                let base = Node {
-                    mode: WhatAmI::Peer,
-                    connect: vec![locator.clone()],
-                    warmup: Duration::from_secs(delay2),
-                    config: linkstate_config(),
-                    ..Default::default()
-                };
-
-                let mut pub_node = base.clone();
-                pub_node.name = "Pub Peer".to_string();
-                pub_node.con_task = ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                    ke_pubsub.clone(),
-                    msg_size,
-                )])]);
-                pub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut queryable_node = base.clone();
-                queryable_node.name = "Queryable Peer".to_string();
-                queryable_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::Queryable(
-                        ke_getqueryable.clone(),
-                        msg_size,
-                    )])]);
-                queryable_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut liveliness_node = base.clone();
-                liveliness_node.name = "Liveliness Peer".to_string();
-                liveliness_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::Liveliness(
-                        ke_getliveliness.clone(),
-                    )])]);
-                liveliness_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinessloop_node = base;
-                livelinessloop_node.name = "LivelinessLoop Peer".to_string();
-                livelinessloop_node.con_task =
-                    ConcurrentTask::from([SequentialTask::from([Task::LivelinessLoop(
-                        ke_subliveliness.clone(),
-                    )])]);
-                livelinessloop_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                (
-                    pub_node,
-                    queryable_node,
-                    liveliness_node,
-                    livelinessloop_node,
-                )
-            };
-
-            let (sub_node, get_node, livelinessget_node, livelinesssub_node) = {
-                let base = Node {
-                    mode: WhatAmI::Peer,
-                    connect: vec![locator],
-                    warmup: Duration::from_secs(delay3),
-                    config: linkstate_config(),
-                    ..Default::default()
-                };
-
-                let mut sub_node = base.clone();
-                sub_node.name = "Sub Peer".to_string();
-                sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::Sub(ke_pubsub, msg_size),
-                    Task::Checkpoint,
-                ])]);
-                sub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut get_node = base.clone();
-                get_node.name = "Get Peer".to_string();
-                get_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::Get(ke_getqueryable, msg_size),
-                    Task::Checkpoint,
-                ])]);
-                get_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinessget_node = base.clone();
-                livelinessget_node.name = "LivelinessGet Peer".to_string();
-                livelinessget_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::LivelinessGet(ke_getliveliness),
-                    Task::Checkpoint,
-                ])]);
-                livelinessget_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                let mut livelinesssub_node = base;
-                livelinesssub_node.name = "LivelinessSub Peer".to_string();
-                livelinesssub_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                    Task::LivelinessSub(ke_subliveliness),
-                    Task::Checkpoint,
-                ])]);
-                livelinesssub_node.warmup += Duration::from_millis(rng.gen_range(0..500));
-
-                (sub_node, get_node, livelinessget_node, livelinesssub_node)
-            };
-
-            (
-                Recipe::new([dummy_node.clone(), pub_node, sub_node]),
-                Recipe::new([dummy_node.clone(), queryable_node, get_node]),
-                Recipe::new([dummy_node.clone(), liveliness_node, livelinessget_node]),
-                Recipe::new([dummy_node, livelinessloop_node, livelinesssub_node]),
-            )
-        })
-        .collect();
-
-    for chunks in recipe_list.chunks(PARALLEL_RECIPES).map(|x| x.to_vec()) {
-        let mut join_set = tokio::task::JoinSet::new();
-        for (pubsub, getqueryable, getlivelienss, subliveliness) in chunks {
-            join_set.spawn(async move {
-                pubsub.run().await?;
-                getqueryable.run().await?;
-                getlivelienss.run().await?;
-                subliveliness.run().await?;
-                Result::Ok(())
-            });
-        }
-
-        while let Some(res) = join_set.join_next().await {
-            res??;
-        }
-    }
-
-    println!("Peer linkstate test passed.");
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn router_linkstate() -> Result<()> {
     zenoh_util::try_init_log_from_env();
     let delay_in_secs = [
@@ -1231,17 +1324,15 @@ async fn router_linkstate() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17601 to 17648
-    let base_port = 17600;
 
     let recipe_list: Vec<_> = delay_in_secs
         .into_iter()
         .map(|d| (1024, d))
         .map(|(msg_size, (delay1, delay2, delay3))| {
             idx += 1;
-            let locator1 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3));
-            let locator2 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3) + 1);
-            let locator3 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3) + 2);
+            let locator1 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator2 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator3 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
             let ke_pubsub = format!("router_linkstate_keyexpr_pubsub_{idx}");
             let ke_getqueryable = format!("router_linkstate_keyexpr_getqueryable_{idx}");
@@ -1413,4 +1504,65 @@ async fn router_linkstate() -> Result<()> {
 
     println!("Router linkstate test passed.");
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn scouting_delay_regression() -> Result<()> {
+    zenoh::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = Config::default();
+        c.listen
+            .endpoints
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Router));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Router ZID: {}", s.zid());
+        s
+    };
+    let router_endpoint = get_tcp_locator(&router).await;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    let peer1 = {
+        let mut c = Config::default();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.clone()])
+            .unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        tracing::info!("Peer (1) ZID: {}", s.zid());
+        s
+    };
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    // Measure how long open() takes. The regression causes a full 500ms delay.
+    let start = std::time::Instant::now();
+    let peer2 = {
+        let mut c = Config::default();
+        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let _ = c.set_mode(Some(WhatAmI::Peer));
+        ztimeout!(zenoh::open(c)).unwrap()
+    };
+    let elapsed = start.elapsed();
+    tracing::info!("Peer (2) ZID: {} (open took {:?})", peer2.zid(), elapsed);
+
+    // The scouting delay default is 500ms.
+    assert!(
+        elapsed < Duration::from_millis(400),
+        "zenoh.open() took {:?}, expected <400ms",
+        elapsed,
+    );
+
+    peer2.close().await.unwrap();
+    peer1.close().await.unwrap();
+    router.close().await.unwrap();
+
+    Result::Ok(())
 }

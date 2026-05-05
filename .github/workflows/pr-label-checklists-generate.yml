@@ -1,0 +1,25 @@
+name: PR Label Checklists Generate
+
+# This workflow runs in the context of the base repository, so be mindful of the permissions granted here and the actions used in the workflow:
+# For more information see https://docs.github.com/en/enterprise-cloud@latest/actions/reference/security/secure-use#mitigating-the-risks-of-untrusted-code-checkout
+on:
+  pull_request_target:
+    types: [opened, reopened, labeled, unlabeled, synchronize]
+
+# Prevent duplicate runs when swapping labels (unlabeled + labeled events fire together)
+concurrency:
+  group: pr-checklists-generate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checklist:
+    name: Generate
+    permissions:
+      pull-requests: write
+      statuses: write
+      contents: read
+    uses: eclipse-zenoh/ci/.github/workflows/pr-label-checklists-generate.yml@main
+    with:
+      checklists-repo: eclipse-zenoh/ci
+    secrets:
+      github-token: ${{ secrets.GITHUB_TOKEN }}

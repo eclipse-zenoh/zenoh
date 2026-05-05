@@ -28,10 +28,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 #[cfg(feature = "unstable")]
-use {
-    crate::query::ReplyKeyExpr, zenoh_config::wrappers::EntityGlobalId,
-    zenoh_protocol::core::EntityGlobalIdProto,
-};
+use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use super::{
     builders::querier::QuerierGetBuilder,
@@ -41,13 +38,13 @@ use super::{
     session::{UndeclarableSealed, WeakSession},
     Id,
 };
-#[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
 use crate::{
     api::{
         builders::matching_listener::MatchingListenerBuilder,
+        cancellation::SyncGroup,
         handlers::DefaultHandler,
         matching::{MatchingStatus, MatchingStatusType},
+        query::ReplyKeyExpr,
     },
     qos::Priority,
 };
@@ -85,10 +82,10 @@ pub struct Querier<'a> {
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) timeout: Duration,
-    #[cfg(feature = "unstable")]
     pub(crate) accept_replies: ReplyKeyExpr,
     pub(crate) undeclare_on_drop: bool,
     pub(crate) matching_listeners: Arc<Mutex<HashSet<Id>>>,
+    pub(crate) callback_sync_group: SyncGroup,
 }
 
 impl fmt::Debug for QuerierState {
@@ -130,23 +127,24 @@ impl<'a> Querier<'a> {
         &self.key_expr
     }
 
-    /// Get the `congestion_control` applied when routing the data.
+    /// Get the [`CongestionControl`] applied when routing the data.
     #[inline]
     pub fn congestion_control(&self) -> CongestionControl {
         self.qos.congestion_control()
     }
 
-    /// Get the priority of the written data.
+    /// Get the [`Priority`] of the querier requests.
     #[inline]
     pub fn priority(&self) -> Priority {
         self.qos.priority()
     }
 
     /// See details in the [`ReplyKeyExpr`](crate::query::ReplyKeyExpr) documentation.
+    ///
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether this querier accepts such disjoint replies.
+    /// Currently, this information is passed in the [`Selector`](crate::api::selector::Selector) parameters as the `_anyke` parameter.
     #[inline]
-    #[zenoh_macros::unstable]
     pub fn accept_replies(&self) -> ReplyKeyExpr {
         self.accept_replies
     }
@@ -170,11 +168,13 @@ impl<'a> Querier<'a> {
         QuerierGetBuilder {
             querier: self,
             #[cfg(feature = "unstable")]
-            source_info: SourceInfo::empty(),
+            source_info: None,
             value: None,
             attachment: None,
             parameters: Parameters::empty(),
             handler: DefaultHandler::default(),
+            #[cfg(feature = "unstable")]
+            cancellation_token: None,
         }
     }
 
@@ -190,7 +190,7 @@ impl<'a> Querier<'a> {
     /// querier.undeclare().await.unwrap();
     /// # }
     /// ```
-    pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
+    pub fn undeclare(self) -> QuerierUndeclaration<'a> {
         UndeclarableSealed::undeclare_inner(self, ())
     }
 
@@ -265,7 +265,13 @@ impl<'a> Querier<'a> {
                 self.target == QueryTarget::AllComplete,
             ),
             handler: DefaultHandler::default(),
+            parent_callback_sync_group_notifier: self.callback_sync_group.notifier(),
         }
+    }
+
+    #[zenoh_macros::internal]
+    pub fn session(&self) -> &WeakSession {
+        &self.session
     }
 }
 
@@ -273,7 +279,10 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
     type Undeclaration = QuerierUndeclaration<'a>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        QuerierUndeclaration(self)
+        QuerierUndeclaration {
+            querier: self,
+            wait_callbacks: false,
+        }
     }
 }
 
@@ -290,7 +299,28 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct QuerierUndeclaration<'a>(Querier<'a>);
+pub struct QuerierUndeclaration<'a> {
+    querier: Querier<'a>,
+    wait_callbacks: bool,
+}
+
+impl fmt::Debug for QuerierUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuerierUndeclaration")
+            .field("querier", &self.querier)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
+impl<'a> QuerierUndeclaration<'a> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of reply and matching listeners' callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl Resolvable for QuerierUndeclaration<'_> {
     type To = ZResult<()>;
@@ -298,7 +328,11 @@ impl Resolvable for QuerierUndeclaration<'_> {
 
 impl Wait for QuerierUndeclaration<'_> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.querier.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.querier.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 

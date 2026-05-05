@@ -11,15 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
-use zenoh_config::{Config, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf};
+use zenoh_config::{ExpandedConfig, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkKind, NewLinkChannelSender};
 use zenoh_protocol::{
-    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohIdProto},
+    core::{
+        Bound, EndPoint, Field, Locator, Priority, RegionName, Resolution, WhatAmI, ZenohIdProto,
+    },
     transport::BatchSize,
     VERSION,
 };
@@ -34,12 +36,15 @@ use super::{
     },
     TransportEventHandler,
 };
-use crate::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+use crate::{
+    multicast::manager::{
+        TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+        TransportManagerStateMulticast,
+    },
+    TransportPeer,
+};
 
 fn duration_from_i64us(us: i64) -> Duration {
     if us >= 0 {
@@ -48,6 +53,8 @@ fn duration_from_i64us(us: i64) -> Duration {
         Duration::MAX
     }
 }
+
+pub type RemoteBoundCallback = Arc<dyn Fn(TransportPeer) -> ZResult<Option<Bound>> + Send + Sync>;
 
 /// # Examples
 /// ```
@@ -122,6 +129,43 @@ pub struct TransportManagerConfig {
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
     pub supported_links: Vec<LinkKind>,
+    pub bound_callback: Option<RemoteBoundCallback>,
+    pub region_name: Option<RegionName>,
+}
+
+impl fmt::Debug for TransportManagerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerConfig")
+            .field("version", &self.version)
+            .field("zid", &self.zid)
+            .field("whatami", &self.whatami)
+            .field("resolution", &self.resolution)
+            .field("batch_size", &self.batch_size)
+            .field("batching", &self.batching)
+            .field("wait_before_drop", &self.wait_before_drop)
+            .field(
+                "max_wait_before_drop_fragments",
+                &self.max_wait_before_drop_fragments,
+            )
+            .field("wait_before_close", &self.wait_before_close)
+            .field("queue_size", &self.queue_size)
+            .field("queue_backoff", &self.queue_backoff)
+            .field("queue_alloc", &self.queue_alloc)
+            .field("defrag_buff_size", &self.defrag_buff_size)
+            .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field("unicast", &self.unicast)
+            .field("multicast", &self.multicast)
+            .field("link_configs", &self.link_configs)
+            .field("handler", &"..")
+            .field("tx_threads", &self.tx_threads)
+            .field("supported_links", &self.supported_links)
+            .field(
+                "bound_callback",
+                &self.bound_callback.as_ref().map(|_| ".."),
+            )
+            .field("region_name", &self.region_name)
+            .finish()
+    }
 }
 
 pub struct TransportManagerState {
@@ -131,9 +175,29 @@ pub struct TransportManagerState {
     pub shm_context: Option<ShmContext>,
 }
 
+impl fmt::Debug for TransportManagerState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerState");
+        debug.field("unicast", &self.unicast);
+        debug.field("multicast", &self.multicast);
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_context", &self.shm_context.as_ref().map(|_| ".."));
+        debug.finish()
+    }
+}
+
 pub struct TransportManagerParams {
     config: TransportManagerConfig,
     state: TransportManagerState,
+}
+
+impl fmt::Debug for TransportManagerParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParams")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 pub struct TransportManagerBuilder {
@@ -156,10 +220,51 @@ pub struct TransportManagerBuilder {
     link_configs: HashMap<LinkKind, String>, // (protocol, config)
     tx_threads: usize,
     supported_links: Option<Vec<LinkKind>>,
+    region_name: Option<RegionName>,
+    bound_callback: Option<RemoteBoundCallback>,
     #[cfg(feature = "shared-memory")]
     shm: zenoh_config::ShmConf,
     #[cfg(feature = "shared-memory")]
     shm_reader: Option<ShmReader>,
+}
+
+impl fmt::Debug for TransportManagerBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilder");
+        debug
+            .field("version", &self.version)
+            .field("zid", &self.zid)
+            .field("whatami", &self.whatami)
+            .field("resolution", &self.resolution)
+            .field("batch_size", &self.batch_size)
+            .field("batching_enabled", &self.batching_enabled)
+            .field("batching_time_limit", &self.batching_time_limit)
+            .field("wait_before_drop", &self.wait_before_drop)
+            .field(
+                "max_wait_before_drop_fragments",
+                &self.max_wait_before_drop_fragments,
+            )
+            .field("wait_before_close", &self.wait_before_close)
+            .field("queue_size", &self.queue_size)
+            .field("queue_alloc", &self.queue_alloc)
+            .field("defrag_buff_size", &self.defrag_buff_size)
+            .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field("unicast", &self.unicast)
+            .field("multicast", &self.multicast)
+            .field("link_configs", &self.link_configs)
+            .field("tx_threads", &self.tx_threads)
+            .field("supported_links", &self.supported_links)
+            .field("region_name", &self.region_name)
+            .field(
+                "bound_callback",
+                &self.bound_callback.as_ref().map(|_| ".."),
+            );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm", &self.shm);
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_reader", &self.shm_reader.as_ref().map(|_| ".."));
+        debug.finish()
+    }
 }
 
 impl TransportManagerBuilder {
@@ -269,13 +374,25 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
-        if let Some(zid) = *config.id() {
-            self = self.zid(zid.into());
-        }
-        if let Some(v) = config.mode() {
-            self = self.whatami(*v);
-        }
+    pub fn region_name(mut self, region_name: Option<RegionName>) -> Self {
+        self.region_name = region_name;
+        self
+    }
+
+    pub fn bound_callback(
+        mut self,
+        callback: impl Fn(TransportPeer) -> ZResult<Option<Bound>> + Send + Sync + 'static,
+    ) -> Self {
+        self.bound_callback = Some(Arc::new(callback));
+        self
+    }
+
+    pub async fn from_config(
+        mut self,
+        config: &ExpandedConfig,
+    ) -> ZResult<TransportManagerBuilder> {
+        self = self.zid(config.id().into());
+        self = self.whatami(config.mode());
 
         let link = config.transport().link();
         let cc_drop = link.tx().queue().congestion_control().drop();
@@ -299,6 +416,7 @@ impl TransportManagerBuilder {
         self = self.queue_alloc(*link.tx().queue().allocation());
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
+        self = self.region_name(config.region_name().clone());
 
         #[cfg(feature = "shared-memory")]
         {
@@ -325,7 +443,11 @@ impl TransportManagerBuilder {
         Ok(self)
     }
 
-    pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+    pub fn build(
+        self,
+        handler: Arc<dyn TransportEventHandler>,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
+    ) -> ZResult<TransportManager> {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
 
@@ -368,6 +490,8 @@ impl TransportManagerBuilder {
             supported_links: self
                 .supported_links
                 .unwrap_or_else(|| zenoh_link::ALL_SUPPORTED_LINKS.to_vec()),
+            bound_callback: self.bound_callback,
+            region_name: self.region_name,
         };
 
         let state = TransportManagerState {
@@ -379,7 +503,23 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params, prng))
+        Ok(TransportManager::new(
+            params,
+            prng,
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+    }
+
+    #[cfg(feature = "test")]
+    pub fn build_test(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
+        #[cfg(feature = "stats")]
+        let stats = zenoh_stats::StatsRegistry::new(self.zid, self.whatami, "test");
+        self.build(
+            handler,
+            #[cfg(feature = "stats")]
+            stats,
+        )
     }
 }
 
@@ -412,6 +552,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             supported_links: None,
+            region_name: None,
+            bound_callback: None,
             #[cfg(feature = "shared-memory")]
             shm: zenoh_config::ShmConf::default(),
             #[cfg(feature = "shared-memory")]
@@ -429,12 +571,34 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     #[cfg(feature = "stats")]
-    pub(crate) stats: Arc<crate::stats::TransportStats>,
+    pub(crate) stats: zenoh_stats::StatsRegistry,
     pub(crate) task_controller: TaskController,
 }
 
+impl fmt::Debug for TransportManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManager");
+        debug
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .field("prng", &"..")
+            .field("cipher", &"..")
+            .field("locator_inspector", &self.locator_inspector)
+            .field("new_unicast_link_sender", &self.new_unicast_link_sender);
+        #[cfg(feature = "stats")]
+        debug.field("stats", &self.stats);
+        debug
+            .field("task_controller", &self.task_controller)
+            .finish()
+    }
+}
+
 impl TransportManager {
-    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+    pub fn new(
+        params: TransportManagerParams,
+        mut prng: PseudoRng,
+        #[cfg(feature = "stats")] stats: zenoh_stats::StatsRegistry,
+    ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -451,7 +615,7 @@ impl TransportManager {
             locator_inspector: Default::default(),
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
-            stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            stats,
             task_controller: TaskController::default(),
         };
 
@@ -486,8 +650,13 @@ impl TransportManager {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
-        self.stats.clone()
+    pub fn stats(&self) -> &zenoh_stats::StatsRegistry {
+        &self.stats
+    }
+
+    #[cfg(feature = "shared-memory")]
+    pub fn get_shm_context(&self) -> &Option<ShmContext> {
+        &self.state.shm_context
     }
 
     pub async fn close(&self) {

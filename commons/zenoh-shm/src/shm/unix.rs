@@ -42,11 +42,23 @@ pub struct SegmentImpl<ID: SegmentID> {
     id: ID,
 }
 
+impl<ID: SegmentID> std::fmt::Debug for SegmentImpl<ID> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SegmentImpl")
+            .field("lock_fd", &self.lock_fd)
+            .field("len", &self.len)
+            .field("data_ptr", &self.data_ptr)
+            .field("id", &self.id.into())
+            .finish()
+    }
+}
+
 // PUBLIC
 impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
+        // SAFETY: we know that the file descriptor is valid.
         let lock_fd = unsafe {
             OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
@@ -119,6 +131,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn open(id: ID) -> ShmOpenResult<Self> {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
+        // SAFETY: we know that the file descriptor is valid.
         let lock_fd = unsafe {
             OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
@@ -210,6 +223,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     fn is_dangling_segment(id: ID) -> bool {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
+        // SAFETY: we know that the file descriptor is valid.
         let lock_fd = unsafe {
             OwnedFd::from_raw_fd({
                 let lockpath = std::env::temp_dir().join(Self::id_str(id));
@@ -303,6 +317,7 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 impl<ID: SegmentID> Drop for SegmentImpl<ID> {
     fn drop(&mut self) {
         tracing::trace!("munmap(addr={:p},len={})", self.data_ptr, self.len);
+        // SAFETY: data_ptr and len are valid for the mapping.
         if let Err(e) = unsafe { munmap(self.data_ptr, self.len.get()) } {
             tracing::debug!("munmap() failed : {}", e);
         };

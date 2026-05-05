@@ -32,7 +32,7 @@ pub use manager::*;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Bits, WhatAmI, ZenohIdProto},
+    core::{Bits, Bound, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::{close, init::ext::PatchType, TransportSn},
 };
@@ -42,8 +42,6 @@ use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
-#[cfg(feature = "stats")]
-use crate::stats::TransportStats;
 use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
@@ -55,6 +53,8 @@ use crate::unicast::establishment::ext::auth::UsrPwdId;
 pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohIdProto,
     pub(crate) whatami: WhatAmI,
+    pub(crate) region_name: Option<RegionName>,
+    pub(crate) bound: Option<Bound>,
     pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: TransportSn,
     pub(crate) is_qos: bool,
@@ -93,6 +93,12 @@ impl TransportUnicast {
         Ok(transport.get_whatami())
     }
 
+    #[inline(always)]
+    pub fn get_bound(&self) -> ZResult<Option<Bound>> {
+        let transport = self.get_inner()?;
+        Ok(transport.get_bound())
+    }
+
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
@@ -115,6 +121,7 @@ impl TransportUnicast {
             is_qos: transport.is_qos(),
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
+            region_name: transport.region_name(),
         };
         Ok(tp)
     }
@@ -131,7 +138,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<bool> {
         let transport = self.get_inner()?;
         transport.schedule(message)
     }
@@ -145,15 +152,13 @@ impl TransportUnicast {
         }
     }
 
+    /// Returns the transport stats, or an error if the transport is closed.
+    ///
+    /// Warning: returning an error prevents interceptors to initialize;
+    /// if the error changes in the future, updating interceptors may be necessary.
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<Arc<crate::stats::TransportStats>> {
+    pub fn get_stats(&self) -> ZResult<zenoh_stats::TransportStats> {
         Ok(self.get_inner()?.stats())
-    }
-
-    #[cfg(feature = "stats")]
-    pub fn get_link_stats(&self) -> ZResult<Vec<(Link, Arc<TransportStats>)>> {
-        let transport = self.get_inner()?;
-        Ok(transport.get_link_stats())
     }
 }
 

@@ -83,7 +83,7 @@ impl<
 pub(crate) trait MayHaveVerbatim {
     fn has_verbatim(&self) -> bool;
     fn has_direct_verbatim(&self) -> bool;
-    unsafe fn has_direct_verbatim_non_empty(&self) -> bool {
+    fn has_direct_verbatim_non_empty(&self) -> bool {
         self.has_direct_verbatim()
     }
 }
@@ -96,7 +96,7 @@ impl MayHaveVerbatim for [u8] {
         self.split(|c| *c == DELIMITER)
             .any(MayHaveVerbatim::has_direct_verbatim)
     }
-    unsafe fn has_direct_verbatim_non_empty(&self) -> bool {
-        unsafe { *self.get_unchecked(0) == b'@' }
+    fn has_direct_verbatim_non_empty(&self) -> bool {
+        self.first() == Some(&b'@')
     }
 }

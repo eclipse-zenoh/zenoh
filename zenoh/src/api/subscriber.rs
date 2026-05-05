@@ -24,6 +24,7 @@ use zenoh_result::ZResult;
 use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalIdProto};
 
 use crate::api::{
+    cancellation::SyncGroup,
     handlers::Callback,
     key_expr::KeyExpr,
     sample::{Locality, Sample},
@@ -73,7 +74,28 @@ pub(crate) struct SubscriberInner {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
-pub struct SubscriberUndeclaration<Handler>(Subscriber<Handler>);
+pub struct SubscriberUndeclaration<Handler> {
+    subscriber: Subscriber<Handler>,
+    wait_callbacks: bool,
+}
+
+impl<Handler> fmt::Debug for SubscriberUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SubscriberUndeclaration")
+            .field("subscriber", &self.subscriber)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
+impl<Handler> SubscriberUndeclaration<Handler> {
+    #[zenoh_macros::internal_or_unstable]
+    /// Block in undeclare operation until all currently running instances of subscriber callbacks (if any) return.
+    pub fn wait_callbacks(mut self) -> Self {
+        self.wait_callbacks = true;
+        self
+    }
+}
 
 impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
     type To = ZResult<()>;
@@ -81,7 +103,11 @@ impl<Handler> Resolvable for SubscriberUndeclaration<Handler> {
 
 impl<Handler> Wait for SubscriberUndeclaration<Handler> {
     fn wait(mut self) -> <Self as Resolvable>::To {
-        self.0.undeclare_impl()
+        self.subscriber.undeclare_impl()?;
+        if self.wait_callbacks {
+            self.subscriber.callback_sync_group.wait();
+        }
+        Ok(())
     }
 }
 
@@ -133,10 +159,20 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// # }
 /// ```
 #[non_exhaustive]
-#[derive(Debug)]
 pub struct Subscriber<Handler> {
     pub(crate) inner: SubscriberInner,
     pub(crate) handler: Handler,
+    pub(crate) callback_sync_group: SyncGroup,
+}
+
+impl<Handler> fmt::Debug for Subscriber<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Subscriber")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 impl<Handler> Subscriber<Handler> {
@@ -212,7 +248,8 @@ impl<Handler> Subscriber<Handler> {
         self.inner.undeclare_on_drop = false;
         self.inner
             .session
-            .undeclare_subscriber_inner(self.inner.id, self.inner.kind)
+            .undeclare_subscriber_inner(self.inner.id, self.inner.kind)?;
+        Ok(())
     }
 
     #[zenoh_macros::internal]
@@ -221,8 +258,8 @@ impl<Handler> Subscriber<Handler> {
     }
 
     #[zenoh_macros::internal]
-    pub fn session(&self) -> &crate::Session {
-        self.inner.session.session()
+    pub fn session(&self) -> &WeakSession {
+        &self.inner.session
     }
 }
 
@@ -240,7 +277,10 @@ impl<Handler: Send> UndeclarableSealed<()> for Subscriber<Handler> {
     type Undeclaration = SubscriberUndeclaration<Handler>;
 
     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
-        SubscriberUndeclaration(self)
+        SubscriberUndeclaration {
+            subscriber: self,
+            wait_callbacks: false,
+        }
     }
 }
 

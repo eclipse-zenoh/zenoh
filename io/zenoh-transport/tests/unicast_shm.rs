@@ -39,6 +39,7 @@ mod tests {
         },
         ShmBufInner,
     };
+    use zenoh_test::get_free_tcp_port;
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -167,7 +168,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_shm01_handler.clone())
+            .build_test(peer_shm01_handler.clone())
             .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
@@ -180,7 +181,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_shm02_handler.clone())
+            .build_test(peer_shm02_handler.clone())
             .unwrap();
 
         let mut shm = zenoh_config::ShmConf::default();
@@ -197,7 +198,7 @@ mod tests {
                     .lowlatency(lowlatency_transport)
                     .qos(!lowlatency_transport),
             )
-            .build(peer_net01_handler.clone())
+            .build_test(peer_net01_handler.clone())
             .unwrap();
 
         // Create the listener on the peer
@@ -333,7 +334,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14002).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         run(&endpoint, false).await;
     }
 
@@ -341,7 +344,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm_with_lowlatency_transport() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         run(&endpoint, true).await;
     }
 
@@ -349,7 +354,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_ws_shm() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         run(&endpoint, false).await;
     }
 
@@ -357,7 +364,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_ws_shm_with_lowlatency_transport() {
         zenoh_util::init_log_from_env_or("error");
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
         run(&endpoint, true).await;
     }
 

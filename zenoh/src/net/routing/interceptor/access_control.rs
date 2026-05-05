@@ -59,6 +59,8 @@ struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
     zid: ZenohIdProto,
+    #[cfg(feature = "stats")]
+    stats: zenoh_stats::DropStats,
 }
 
 impl EgressAclEnforcer {
@@ -91,12 +93,283 @@ impl EgressAclEnforcer {
             None => self.action(action, log_msg, &key_expr),
         }
     }
+
+    fn filter_message(
+        &self,
+        msg: &mut NetworkMessageMut,
+        ctx: &mut dyn InterceptorContext,
+    ) -> bool {
+        let cache = ctx
+            .get_cache(msg)
+            .and_then(|i| match i.downcast_ref::<Cache>() {
+                Some(c) => Some(c),
+                None => {
+                    tracing::debug!("Cache content type is incorrect");
+                    None
+                }
+            });
+
+        match &msg.body {
+            NetworkBodyMut::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.query),
+                    AclMessage::Query,
+                    "Query (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Response(Response { .. }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.reply),
+                    AclMessage::Reply,
+                    "Reply (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.put),
+                    AclMessage::Put,
+                    "Put (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.delete),
+                    AclMessage::Delete,
+                    "Delete (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareSubscriber(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_subscriber),
+                    AclMessage::DeclareSubscriber,
+                    "Declare Subscriber (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                // Undeclaration filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_subscriber),
+                    AclMessage::DeclareSubscriber,
+                    "Undeclare Subscriber (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareQueryable(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_queryable),
+                    AclMessage::DeclareQueryable,
+                    "Declare Queryable (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                // Undeclaration filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_queryable),
+                    AclMessage::DeclareQueryable,
+                    "Undeclare Queryable (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_token),
+                    AclMessage::LivelinessToken,
+                    "Liveliness Token (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                // Undeclaration filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_token),
+                    AclMessage::LivelinessToken,
+                    "Undeclare Liveliness Token (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Current,
+                options,
+                ..
+            }) if options.tokens() => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.query_token),
+                    AclMessage::LivelinessQuery,
+                    "Liveliness Query (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Future | InterestMode::CurrentFuture,
+                options,
+                ..
+            }) if options.tokens() => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_liveliness_subscriber),
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Declare Liveliness Subscriber (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Final,
+                options,
+                ..
+            }) if options.tokens() => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                // Note: options are set for InterestMode::Final for internal use only by egress interceptors.
+
+                // InterestMode::Final filtering diverges between ingress and egress:
+                // in egress the keyexpr has to be provided in the RoutingContext
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_liveliness_subscriber),
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Undeclare Liveliness Subscriber (egress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            // Unfiltered Declare messages
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBodyMut::Interest(_)
+            | NetworkBodyMut::OAM(_)
+            | NetworkBodyMut::ResponseFinal(_) => {}
+        }
+        true
+    }
 }
 
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
     zid: ZenohIdProto,
+    #[cfg(feature = "stats")]
+    stats: zenoh_stats::DropStats,
 }
 
 impl IngressAclEnforcer {
@@ -161,11 +434,263 @@ impl IngressAclEnforcer {
                 // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
                 // if its associated declaration was denied.
                 match key_expr {
-                    Some(ke) => self.action(action, log_msg, &ke),
+                    Some(token) => self.action(action, log_msg, &token),
                     None => Permission::Allow,
                 }
             }
         }
+    }
+
+    fn filter_message(
+        &self,
+        msg: &mut NetworkMessageMut,
+        ctx: &mut dyn InterceptorContext,
+    ) -> bool {
+        let cache = ctx
+            .get_cache(msg)
+            .and_then(|i| match i.downcast_ref::<Cache>() {
+                Some(c) => Some(c),
+                None => {
+                    tracing::debug!("Cache content type is incorrect");
+                    None
+                }
+            });
+
+        match &msg.body {
+            NetworkBodyMut::Request(Request {
+                payload: RequestBody::Query(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.query),
+                    AclMessage::Query,
+                    "Query (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Response(Response { .. }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.reply),
+                    AclMessage::Reply,
+                    "Reply (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Put(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.put),
+                    AclMessage::Put,
+                    "Put (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Push(Push {
+                payload: PushBody::Del(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.delete),
+                    AclMessage::Delete,
+                    "Delete (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareSubscriber(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_subscriber),
+                    AclMessage::DeclareSubscriber,
+                    "Declare Subscriber (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareSubscriber(_),
+                ..
+            }) => {
+                // Undeclaration filtering diverges between ingress and egress:
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                if self.cached_result_or_action_undecl(
+                    cache.map(|c| c.declare_subscriber),
+                    AclMessage::DeclareSubscriber,
+                    "Undeclare Subscriber (ingress)",
+                    ctx.full_keyexpr(msg),
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareQueryable(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_queryable),
+                    AclMessage::DeclareQueryable,
+                    "Declare Queryable (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareQueryable(_),
+                ..
+            }) => {
+                // Undeclaration filtering diverges between ingress and egress:
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                if self.cached_result_or_action_undecl(
+                    cache.map(|c| c.declare_queryable),
+                    AclMessage::DeclareQueryable,
+                    "Undeclare Queryable (ingress)",
+                    ctx.full_keyexpr(msg),
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareToken(_),
+                ..
+            }) => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_token),
+                    AclMessage::LivelinessToken,
+                    "Liveliness Token (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareToken(_),
+                ..
+            }) => {
+                // Undeclaration filtering diverges between ingress and egress:
+                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
+                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
+                // if its associated declaration was denied.
+                if self.cached_result_or_action_undecl(
+                    cache.map(|c| c.declare_token),
+                    AclMessage::LivelinessToken,
+                    "Undeclare Liveliness Token (ingress)",
+                    ctx.full_keyexpr(msg),
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Current,
+                options,
+                ..
+            }) if options.tokens() => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.query_token),
+                    AclMessage::LivelinessQuery,
+                    "Liveliness Query (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Future | InterestMode::CurrentFuture,
+                options,
+                ..
+            }) if options.tokens() => {
+                let Some(token) = ctx.full_keyexpr(msg) else {
+                    return false;
+                };
+                if self.cached_result_or_action(
+                    cache.map(|c| c.declare_liveliness_subscriber),
+                    AclMessage::DeclareLivelinessSubscriber,
+                    "Declare Liveliness Subscriber (ingress)",
+                    token,
+                ) == Permission::Deny
+                {
+                    return false;
+                }
+            }
+            NetworkBodyMut::Interest(Interest {
+                mode: InterestMode::Final,
+                ..
+            }) => {
+                // InterestMode::Final filtering diverges between ingress and egress:
+                // InterestMode::Final ingress is always allowed, it will be rejected by routing logic if its associated Interest was denied
+            }
+            // Unfiltered Declare messages
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareKeyExpr(_),
+                ..
+            })
+            | NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::DeclareFinal(_),
+                ..
+            }) => {}
+            // Unfiltered Undeclare messages
+            NetworkBodyMut::Declare(Declare {
+                body: DeclareBody::UndeclareKeyExpr(_),
+                ..
+            }) => {}
+            // Unfiltered remaining message types
+            NetworkBodyMut::Interest(_)
+            | NetworkBodyMut::OAM(_)
+            | NetworkBodyMut::ResponseFinal(_) => {}
+        }
+        true
     }
 }
 
@@ -251,9 +776,9 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         for ((((username, interface), cert_common_name), link_protocol), zid) in
             iter::once(username)
-                .cartesian_product(interfaces.into_iter())
-                .cartesian_product(cert_common_names.into_iter())
-                .cartesian_product(link_protocols.into_iter())
+                .cartesian_product(interfaces)
+                .cartesian_product(cert_common_names)
+                .cartesian_product(link_protocols)
                 .cartesian_product(iter::once(Some(zid)))
         {
             let query = SubjectQuery {
@@ -287,15 +812,27 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 self.enforcer.default_permission
             );
         }
+        #[cfg(feature = "stats")]
+        let Ok(stats) = transport
+            .get_stats()
+            .map(|stats| stats.drop_stats(zenoh_stats::ReasonLabel::AccessControl))
+        else {
+            // `get_stats` returning an error means the transport is closed
+            return (None, None);
+        };
         let ingress_interceptor = Box::new(IngressAclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects.clone(),
+            #[cfg(feature = "stats")]
+            stats: stats.clone(),
         });
         let egress_interceptor = Box::new(EgressAclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects,
+            #[cfg(feature = "stats")]
+            stats: stats.clone(),
         });
         (
             self.enforcer
@@ -371,252 +908,16 @@ impl InterceptorTrait for IngressAclEnforcer {
         }))
     }
 
-    fn intercept<'a>(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
-        let cache = ctx
-            .get_cache(msg)
-            .and_then(|i| match i.downcast_ref::<Cache>() {
-                Some(c) => Some(c),
-                None => {
-                    tracing::debug!("Cache content type is incorrect");
-                    None
-                }
-            });
-
-        match &msg.body {
-            NetworkBodyMut::Request(Request {
-                payload: RequestBody::Query(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.query),
-                    AclMessage::Query,
-                    "Query (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.reply),
-                    AclMessage::Reply,
-                    "Reply (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Push(Push {
-                payload: PushBody::Put(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.put),
-                    AclMessage::Put,
-                    "Put (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Push(Push {
-                payload: PushBody::Del(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.delete),
-                    AclMessage::Delete,
-                    "Delete (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareSubscriber(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_subscriber),
-                    AclMessage::DeclareSubscriber,
-                    "Declare Subscriber (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareSubscriber(_),
-                ..
-            }) => {
-                // Undeclaration filtering diverges between ingress and egress:
-                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
-                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
-                // if its associated declaration was denied.
-                if self.cached_result_or_action_undecl(
-                    cache.map(|c| c.declare_subscriber),
-                    AclMessage::DeclareSubscriber,
-                    "Undeclare Subscriber (ingress)",
-                    ctx.full_keyexpr(msg),
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareQueryable(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_queryable),
-                    AclMessage::DeclareQueryable,
-                    "Declare Queryable (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareQueryable(_),
-                ..
-            }) => {
-                // Undeclaration filtering diverges between ingress and egress:
-                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
-                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
-                // if its associated declaration was denied.
-                if self.cached_result_or_action_undecl(
-                    cache.map(|c| c.declare_queryable),
-                    AclMessage::DeclareQueryable,
-                    "Undeclare Queryable (ingress)",
-                    ctx.full_keyexpr(msg),
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareToken(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_token),
-                    AclMessage::LivelinessToken,
-                    "Liveliness Token (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareToken(_),
-                ..
-            }) => {
-                // Undeclaration filtering diverges between ingress and egress:
-                // Undeclarations in ingress are only filtered if the ext_wire_expr is set.
-                // If it's not set, we let the undeclaration pass, it will be rejected by the routing logic
-                // if its associated declaration was denied.
-                if self.cached_result_or_action_undecl(
-                    cache.map(|c| c.declare_token),
-                    AclMessage::LivelinessToken,
-                    "Undeclare Liveliness Token (ingress)",
-                    ctx.full_keyexpr(msg),
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Current,
-                options,
-                ..
-            }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.query_token),
-                    AclMessage::LivelinessQuery,
-                    "Liveliness Query (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Future | InterestMode::CurrentFuture,
-                options,
-                ..
-            }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_liveliness_subscriber),
-                    AclMessage::DeclareLivelinessSubscriber,
-                    "Declare Liveliness Subscriber (ingress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Final,
-                ..
-            }) => {
-                // InterestMode::Final filtering diverges between ingress and egress:
-                // InterestMode::Final ingress is always allowed, it will be rejected by routing logic if its associated Interest was denied
-            }
-            // Unfiltered Declare messages
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareKeyExpr(_),
-                ..
-            })
-            | NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareFinal(_),
-                ..
-            }) => {}
-            // Unfiltered Undeclare messages
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareKeyExpr(_),
-                ..
-            }) => {}
-            // Unfiltered remaining message types
-            NetworkBodyMut::Interest(_)
-            | NetworkBodyMut::OAM(_)
-            | NetworkBodyMut::ResponseFinal(_) => {}
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let allowed = self.filter_message(msg, ctx);
+        #[cfg(feature = "stats")]
+        if !allowed {
+            self.stats.observe_network_message_dropped_payload(
+                super::stats_direction(InterceptorFlow::Ingress),
+                msg,
+            );
         }
-        true
+        allowed
     }
 }
 
@@ -656,274 +957,16 @@ impl InterceptorTrait for EgressAclEnforcer {
         }))
     }
 
-    fn intercept(
-        // String, Arc<str>, Box<str>, etc... & -> &str
-        &self,
-        msg: &mut NetworkMessageMut,
-        ctx: &mut dyn InterceptorContext,
-    ) -> bool {
-        let cache = ctx
-            .get_cache(msg)
-            .and_then(|i| match i.downcast_ref::<Cache>() {
-                Some(c) => Some(c),
-                None => {
-                    tracing::debug!("Cache content type is incorrect");
-                    None
-                }
-            });
-
-        match &msg.body {
-            NetworkBodyMut::Request(Request {
-                payload: RequestBody::Query(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.query),
-                    AclMessage::Query,
-                    "Query (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Response(Response { .. }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.reply),
-                    AclMessage::Reply,
-                    "Reply (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Push(Push {
-                payload: PushBody::Put(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.put),
-                    AclMessage::Put,
-                    "Put (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Push(Push {
-                payload: PushBody::Del(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.put),
-                    AclMessage::Delete,
-                    "Delete (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareSubscriber(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_subscriber),
-                    AclMessage::DeclareSubscriber,
-                    "Declare Subscriber (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareSubscriber(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                // Undeclaration filtering diverges between ingress and egress:
-                // in egress the keyexpr has to be provided in the RoutingContext
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_subscriber),
-                    AclMessage::DeclareSubscriber,
-                    "Undeclare Subscriber (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareQueryable(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_queryable),
-                    AclMessage::DeclareQueryable,
-                    "Declare Queryable (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareQueryable(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                // Undeclaration filtering diverges between ingress and egress:
-                // in egress the keyexpr has to be provided in the RoutingContext
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_queryable),
-                    AclMessage::DeclareQueryable,
-                    "Undeclare Queryable (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareToken(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_token),
-                    AclMessage::LivelinessToken,
-                    "Liveliness Token (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareToken(_),
-                ..
-            }) => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                // Undeclaration filtering diverges between ingress and egress:
-                // in egress the keyexpr has to be provided in the RoutingContext
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_token),
-                    AclMessage::LivelinessToken,
-                    "Undeclare Liveliness Token (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Current,
-                options,
-                ..
-            }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.query_token),
-                    AclMessage::LivelinessQuery,
-                    "Liveliness Query (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Future | InterestMode::CurrentFuture,
-                options,
-                ..
-            }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_liveliness_subscriber),
-                    AclMessage::DeclareLivelinessSubscriber,
-                    "Declare Liveliness Subscriber (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            NetworkBodyMut::Interest(Interest {
-                mode: InterestMode::Final,
-                options,
-                ..
-            }) if options.tokens() => {
-                let Some(keyexpr) = ctx.full_keyexpr(msg) else {
-                    return false;
-                };
-                // Note: options are set for InterestMode::Final for internal use only by egress interceptors.
-
-                // InterestMode::Final filtering diverges between ingress and egress:
-                // in egress the keyexpr has to be provided in the RoutingContext
-                if self.cached_result_or_action(
-                    cache.map(|c| c.declare_liveliness_subscriber),
-                    AclMessage::DeclareLivelinessSubscriber,
-                    "Undeclare Liveliness Subscriber (egress)",
-                    keyexpr,
-                ) == Permission::Deny
-                {
-                    return false;
-                }
-            }
-            // Unfiltered Declare messages
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareKeyExpr(_),
-                ..
-            })
-            | NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::DeclareFinal(_),
-                ..
-            }) => {}
-            // Unfiltered Undeclare messages
-            NetworkBodyMut::Declare(Declare {
-                body: DeclareBody::UndeclareKeyExpr(_),
-                ..
-            }) => {}
-            // Unfiltered remaining message types
-            NetworkBodyMut::Interest(_)
-            | NetworkBodyMut::OAM(_)
-            | NetworkBodyMut::ResponseFinal(_) => {}
+    fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
+        let allowed = self.filter_message(msg, ctx);
+        #[cfg(feature = "stats")]
+        if !allowed {
+            self.stats.observe_network_message_dropped_payload(
+                super::stats_direction(InterceptorFlow::Egress),
+                msg,
+            );
         }
-        true
+        allowed
     }
 }
 
