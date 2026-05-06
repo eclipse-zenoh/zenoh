@@ -1,0 +1,4 @@
+# cargo-fuzzy-related
+fuzz/artifacts
+fuzz/corpus
+fuzz/coverage
