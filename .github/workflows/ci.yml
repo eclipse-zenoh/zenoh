@@ -326,6 +326,33 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  fuzz:
+    name: Fuzz target smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup show
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+          workspaces: |
+            . -> target
+            commons/zenoh-codec/fuzz -> commons/zenoh-codec/fuzz/target
+
+      - name: Build transport_message fuzz target
+        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin transport_message
+
+      - name: Generate transport_message seed corpus
+        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_transport_message_corpus
+
+      - name: Verify transport_message seed corpus
+        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_transport_message_corpus
+
   valgrind:
     name: Memory leak checks
     runs-on: ubuntu-latest
@@ -475,6 +502,7 @@ jobs:
         test,
         test_unstable,
         test_shm,
+        fuzz,
         valgrind,
         typos,
         markdown_lint,
