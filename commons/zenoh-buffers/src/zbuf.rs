@@ -263,6 +263,9 @@ impl Reader for ZBufReader<'_> {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+        if self.remaining() < len {
+            return Err(DidntRead);
+        }
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {
             cmp::Ordering::Less => {
