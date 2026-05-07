@@ -12,10 +12,10 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-name = "zenoh-codec-fuzz"
-version = "0.0.0"
-publish = false
 edition = "2021"
+name = "zenoh-codec-fuzz"
+publish = false
+version = "0.0.0"
 
 [package.metadata]
 cargo-fuzz = true
@@ -30,8 +30,8 @@ zenoh-protocol = { path = "../../zenoh-protocol" }
 members = ["."]
 
 [[bin]]
+bench = false
+doc = false
 name = "transport_message"
 path = "fuzz_targets/transport_message.rs"
 test = false
-doc = false
-bench = false
