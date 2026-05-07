@@ -25,4 +25,7 @@ cargo +nightly fuzz run transport_message
 
 # Only rerun a certain input
 cargo +nightly fuzz run transport_message fuzz/artifacts/transport_message/crash-xxxx
+
+# Analyze one input without running the fuzz loop
+cargo run --bin analyze_transport_message -- "[2, 220, 11, 13, 0]"
 ```

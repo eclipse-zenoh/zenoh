@@ -53,6 +53,20 @@ use zenoh_protocol::{
 
 const CORPUS_DIR: &str = "corpus/transport_message";
 
+/// Human-readable analysis output for one `TransportMessage` input.
+///
+/// This is intended for local debugging of fuzz inputs and crash reproducers. It
+/// reports whether decode succeeded, how many bytes were consumed, the decoded
+/// message (when available), and whether the stronger roundtrip check succeeds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransportMessageAnalysis {
+    pub input_len: usize,
+    pub decoded: Option<TransportMessage>,
+    pub consumed: usize,
+    pub trailing: Vec<u8>,
+    pub roundtrip_ok: bool,
+}
+
 /// Runs the `TransportMessage` fuzz harness on one arbitrary byte slice.
 ///
 /// This combines two checks:
@@ -62,6 +76,38 @@ const CORPUS_DIR: &str = "corpus/transport_message";
 pub fn exercise_transport_message(data: &[u8]) {
     if let Some(message) = decode_transport_message(data) {
         assert_transport_message_roundtrip(&message);
+    }
+}
+
+/// Produces a structured analysis of one arbitrary `TransportMessage` input.
+///
+/// Unlike the fuzz harness, this helper never panics on decode failure. It is
+/// meant for local inspection of interesting inputs discovered during fuzzing.
+pub fn analyze_transport_message(data: &[u8]) -> TransportMessageAnalysis {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<TransportMessage, _> = codec.read(&mut reader);
+    let consumed = data.len() - reader.remaining();
+    let trailing = data[consumed..].to_vec();
+
+    match decoded {
+        Ok(message) => {
+            let roundtrip_ok = transport_message_roundtrip_ok(&message);
+            TransportMessageAnalysis {
+                input_len: data.len(),
+                decoded: Some(message),
+                consumed,
+                trailing,
+                roundtrip_ok,
+            }
+        }
+        Err(_) => TransportMessageAnalysis {
+            input_len: data.len(),
+            decoded: None,
+            consumed,
+            trailing,
+            roundtrip_ok: false,
+        },
     }
 }
 
@@ -84,22 +130,29 @@ fn decode_transport_message(data: &[u8]) -> Option<TransportMessage> {
 /// `TransportMessage`, the codec can also serialize that value and decode it back
 /// into the same semantic message.
 fn assert_transport_message_roundtrip(message: &TransportMessage) {
+    assert!(
+        transport_message_roundtrip_ok(message),
+        "re-encoding a decoded transport message should succeed and remain stable"
+    );
+}
+
+/// Returns whether a decoded `TransportMessage` successfully survives
+/// encode/decode roundtripping without changing meaning.
+fn transport_message_roundtrip_ok(message: &TransportMessage) -> bool {
     let codec = Zenoh080::new();
     let mut encoded = Vec::new();
     let mut writer = encoded.writer();
     let write_result: Result<(), _> = codec.write(&mut writer, message);
-    write_result.expect("re-encoding a decoded transport message should succeed");
+    if write_result.is_err() {
+        return false;
+    }
 
     let mut rereader = encoded.reader();
-    let redecoded: TransportMessage = codec
-        .read(&mut rereader)
-        .expect("re-decoding a re-encoded transport message should succeed");
+    let Ok(redecoded): Result<TransportMessage, _> = codec.read(&mut rereader) else {
+        return false;
+    };
 
-    assert_eq!(*message, redecoded);
-    assert!(
-        !rereader.can_read(),
-        "re-encoded transport message should consume its full buffer"
-    );
+    *message == redecoded && !rereader.can_read()
 }
 
 /// Generates the seed corpus for the `transport_message` fuzz target.
