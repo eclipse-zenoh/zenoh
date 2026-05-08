@@ -274,8 +274,10 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
     fn map(len: NonZeroUsize, fd: &OwnedFd) -> nix::Result<NonNull<c_void>> {
         let prot = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+        #[cfg(target_os = "linux")]
         let flags = MapFlags::MAP_SHARED | MapFlags::MAP_NORESERVE;
-
+        #[cfg(not(target_os = "linux"))]
+        let flags = MapFlags::MAP_SHARED;
         tracing::trace!(
             "mmap(addr=NULL, length={}, prot={:X}, flags={:X}, f={}, offset=0)",
             len,
