@@ -288,6 +288,7 @@ impl Wait for ReplyErrBuilder<'_> {
                 zid: self.query.inner.zid,
                 eid: self.query.eid,
             }),
+            ext_ts_stack: None,
         });
         Ok(())
     }

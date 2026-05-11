@@ -318,6 +318,7 @@ impl Face {
                             ext_target: msg.ext_target,
                             ext_budget: msg.ext_budget,
                             ext_timeout: msg.ext_timeout,
+                            ext_ts_stack: msg.ext_ts_stack.clone(),
                             payload: msg.payload.clone(),
                         };
 
@@ -480,6 +481,8 @@ impl Timed for QueryCleanup {
                     ext_qos: self.qos,
                     ext_tstamp: None,
                     ext_respid,
+                    // TODO: Maybe this should be set?
+                    ext_ts_stack: None,
                 },
             );
             let queries_lock = zwrite!(self.tables.queries_lock);

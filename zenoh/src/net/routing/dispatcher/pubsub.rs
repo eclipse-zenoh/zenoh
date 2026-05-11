@@ -339,6 +339,7 @@ pub fn route_data(
                         ext_nodeid: ext::NodeIdType {
                             node_id: dir.node_id,
                         },
+                        ext_ts_stack: msg.ext_ts_stack.clone(),
                         payload: msg.payload.clone(),
                     },
                     reliability,

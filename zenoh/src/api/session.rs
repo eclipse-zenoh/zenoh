@@ -2729,6 +2729,7 @@ impl Session {
                     ext_attachment,
                     ext_unknown: vec![],
                 }),
+                ext_ts_stack: None,
             });
         }
         if destination != Locality::Remote {
@@ -2852,6 +2853,7 @@ impl Session {
         }
     }
 
+    // TODO: add timestamp_stack
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,

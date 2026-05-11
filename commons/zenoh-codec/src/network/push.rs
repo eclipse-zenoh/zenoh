@@ -41,6 +41,7 @@ where
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            ext_ts_stack,
             payload,
         } = x;
 
@@ -48,7 +49,8 @@ where
         let mut header = id::PUSH;
         let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
+            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8)
+            + (ext_ts_stack.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -75,6 +77,10 @@ where
         if ext_nodeid != &ext::NodeIdType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
+        }
+        if let Some(ts_stack) = ext_ts_stack.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (ts_stack, n_exts != 0))?;
         }
         // Payload
         self.write(&mut *writer, payload)?;
@@ -121,6 +127,7 @@ where
         let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
         let mut ext_nodeid = ext::NodeIdType::DEFAULT;
+        let mut ext_ts_stack = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -142,6 +149,11 @@ where
                     ext_nodeid = nid;
                     has_ext = ext;
                 }
+                ext::TsStack::ID => {
+                    let (ts, ext): (ext::TsStackType, bool) = eodec.read(&mut *reader)?;
+                    ext_ts_stack = Some(ts);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "Push", ext)?;
                 }
@@ -157,6 +169,7 @@ where
             ext_qos,
             ext_tstamp,
             ext_nodeid,
+            ext_ts_stack,
         })
     }
 }

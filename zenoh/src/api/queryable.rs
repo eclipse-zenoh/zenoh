@@ -598,6 +598,8 @@ impl Query {
                 zid: self.inner.zid,
                 eid: self.eid,
             }),
+            //TODO: inherit from query
+            ext_ts_stack: None,
         });
         Ok(())
     }
