@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = { workspace = true }
 name = "zenoh-test"
 publish = false
 version = { workspace = true }
