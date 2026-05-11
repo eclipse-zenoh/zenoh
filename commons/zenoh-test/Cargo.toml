@@ -2,7 +2,7 @@
 edition = "2021"
 name = "zenoh-test"
 publish = false
-version = "1.9.0"
+version = { workspace = true }
 
 [features]
 internal = ["zenoh-config/internal", "zenoh/internal"]
