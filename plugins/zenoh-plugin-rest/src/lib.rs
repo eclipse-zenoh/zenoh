@@ -186,7 +186,6 @@ impl From<&Sample> for JSONSample {
     }
 }
 
-
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
 
