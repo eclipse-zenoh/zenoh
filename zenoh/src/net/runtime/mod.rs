@@ -83,6 +83,8 @@ use super::{
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::{GetTimestampCallback, TsStackContext};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -130,6 +132,8 @@ pub(crate) struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     task_controller: TaskController,
     #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
@@ -149,6 +153,8 @@ pub trait IRuntime: Send + Sync {
     fn next_id(&self) -> u32;
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8>;
     fn get_locators(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
@@ -215,6 +221,30 @@ impl IRuntime for RuntimeState {
 
     fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8> {
+        if let Some(cb) = &self.timestamp_callback {
+            return cb(context);
+        }
+
+        let ts = match &self.hlc {
+            Some(hlc) => hlc.new_timestamp(),
+            None => {
+                // TODO: instead of using system time, HLC should be initialized in this case
+                use std::time::{SystemTime, UNIX_EPOCH};
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
+                uhlc::Timestamp::new(now, self.zid.into())
+            }
+        };
+
+        use zenoh_codec::{WCodec, Zenoh080};
+        let mut buf = Vec::new();
+        Zenoh080
+            .write(&mut buf, &ts)
+            .expect("Failed to serialize timestamp");
+        buf
     }
 
     fn get_locators(&self) -> Vec<Locator> {
@@ -562,6 +592,8 @@ pub struct RuntimeBuilder {
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
@@ -598,6 +630,8 @@ impl RuntimeBuilder {
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(feature = "unstable")]
+            timestamp_callback: None,
             #[cfg(test)]
             subregions: None,
             #[cfg(test)]
@@ -614,6 +648,12 @@ impl RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
     pub fn shm_clients(mut self, shm_clients: Option<Arc<ShmClientStorage>>) -> Self {
         self.shm_clients = shm_clients;
+        self
+    }
+
+    #[cfg(feature = "unstable")]
+    pub fn timestamp_callback(mut self, cb: Option<GetTimestampCallback>) -> Self {
+        self.timestamp_callback = cb;
         self
     }
 
@@ -638,6 +678,8 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(feature = "unstable")]
+            timestamp_callback,
             #[cfg(test)]
             subregions,
             #[cfg(test)]
@@ -726,6 +768,8 @@ impl RuntimeBuilder {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
+                #[cfg(feature = "unstable")]
+                timestamp_callback,
                 task_controller: TaskController::default(),
                 #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
@@ -831,6 +875,11 @@ impl Runtime {
     #[allow(dead_code)]
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.state.new_timestamp()
+    }
+
+    #[cfg(feature = "unstable")]
+    pub fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8> {
+        self.state.get_ts_stack_timestamp(context)
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {

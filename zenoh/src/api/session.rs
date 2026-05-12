@@ -73,7 +73,10 @@ use super::{
     connectivity,
 };
 #[cfg(feature = "unstable")]
-use crate::api::{cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters};
+use crate::api::{
+    cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
+    timestamp_stack::GetTimestampCallback,
+};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -1431,6 +1434,7 @@ impl Session {
     pub(super) fn new(
         config: Config,
         #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<ShmClientStorage>>,
+        #[cfg(feature = "unstable")] timestamp_callback: Option<GetTimestampCallback>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -1441,6 +1445,10 @@ impl Session {
             #[cfg(feature = "shared-memory")]
             {
                 runtime = runtime.shm_clients(shm_clients);
+            }
+            #[cfg(feature = "unstable")]
+            {
+                runtime = runtime.timestamp_callback(timestamp_callback);
             }
             let mut runtime = runtime.build().await?;
 

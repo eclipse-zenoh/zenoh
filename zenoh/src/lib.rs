@@ -1123,6 +1123,11 @@ pub mod shm {
     pub use crate::net::runtime::ShmProviderState;
 }
 
+/// Timestamp stack types.
+#[zenoh_macros::unstable]
+#[cfg(feature = "unstable")]
+pub use crate::api::timestamp_stack::{GetTimestampCallback, TsStackContext};
+
 /// Functionality for interrupting queries.
 #[zenoh_macros::unstable]
 pub mod cancellation {
