@@ -348,8 +348,12 @@ async fn subscribe(state: AppState, key_expr: KeyExpr<'static>) -> Response {
         stream: subscriber.handler().clone().into_stream(),
         _subscriber: subscriber,
     };
-    Sse::new(stream.map(|sample| Event::default().json_data(JSONSample::from(&sample))))
-        .into_response()
+    Sse::new(stream.map(|sample| {
+        Event::default()
+            .event(sample.kind().to_string())
+            .json_data(JSONSample::from(&sample))
+    }))
+    .into_response()
 }
 
 async fn query(
@@ -669,7 +673,7 @@ mod tests {
                 serde_json::from_str::<serde_json::Value>(
                     std::str::from_utf8(&sample)
                         .unwrap()
-                        .strip_prefix("data: ")
+                        .strip_prefix("event: PUT\ndata: ")
                         .unwrap()
                 )
                 .unwrap(),
