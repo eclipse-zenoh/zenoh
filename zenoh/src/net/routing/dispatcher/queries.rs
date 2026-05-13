@@ -49,7 +49,6 @@ use crate::net::routing::{
     gateway::{get_or_set_route, node_id_as_source, QueryDirection, QueryTargetQabl, RouteBuilder},
     hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
 };
-
 #[derive(Clone)]
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -268,6 +267,9 @@ impl Face {
                     .ext_timeout
                     .unwrap_or(rtables.data.queries_default_timeout);
 
+                #[cfg(feature = "unstable")]
+                let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+
                 drop(queries_lock);
                 drop(rtables);
 
@@ -321,6 +323,17 @@ impl Face {
                             ext_ts_stack: msg.ext_ts_stack.clone(),
                             payload: msg.payload.clone(),
                         };
+
+                        #[cfg(feature = "unstable")]
+                        if let Some(ref rt) = runtime {
+                            crate::api::timestamp_stack::push_ts_interception(
+                                &mut msg.ext_ts_stack,
+                                rt.zid(),
+                                rt.whatami(),
+                                |ctx| rt.get_ts_stack_timestamp(ctx),
+                                zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                            );
+                        }
 
                         if dir.dst_face.primitives.send_request(msg) {
                             #[cfg(feature = "stats")]
@@ -539,6 +552,8 @@ pub(crate) fn route_send_response(
     msg: &mut Response,
 ) {
     let tables = zread!(tables_ref.tables);
+    #[cfg(feature = "unstable")]
+    let runtime = tables.data.runtime.as_ref().and_then(|w| w.upgrade());
     match tables
         .data
         .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
@@ -588,6 +603,16 @@ pub(crate) fn route_send_response(
 
                     msg.rid = query.src_qid;
                     msg.ext_qos = query.src_qos;
+                    #[cfg(feature = "unstable")]
+                    if let Some(ref rt) = runtime {
+                        crate::api::timestamp_stack::push_ts_interception(
+                            &mut msg.ext_ts_stack,
+                            rt.zid(),
+                            rt.whatami(),
+                            |ctx| rt.get_ts_stack_timestamp(ctx),
+                            zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                        );
+                    }
                     if query.src_face.primitives.send_response(msg) {
                         #[cfg(feature = "stats")]
                         payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);

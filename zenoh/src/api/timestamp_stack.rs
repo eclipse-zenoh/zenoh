@@ -13,7 +13,7 @@
 //
 use std::sync::Arc;
 
-use zenoh_protocol::core::WhatAmI;
+use zenoh_protocol::{core::WhatAmI, network::timestamp_stack::TsStackType};
 
 use crate::session::ZenohId;
 
@@ -41,3 +41,35 @@ pub struct TsStackContext {
 /// to be pushed onto the timestamp stack.
 #[zenoh_macros::unstable]
 pub type GetTimestampCallback = Arc<dyn Fn(TsStackContext) -> Vec<u8> + Send + Sync>;
+
+/// Push a timestamp interception record onto the stack if the corresponding
+/// `conf_flags` bit is set for this interception point.
+///
+/// This is a no-op if `ext_ts_stack` is `None` or if the flag is not present.
+#[cfg(feature = "unstable")]
+pub(crate) fn push_ts_interception<const ID: u8, F>(
+    ext_ts_stack: &mut Option<TsStackType<ID>>,
+    zid: ZenohId,
+    whatami: WhatAmI,
+    get_timestamp: F,
+    point: u8,
+) where
+    F: FnOnce(TsStackContext) -> Vec<u8>,
+{
+    use zenoh_protocol::network::timestamp_stack::Interception;
+
+    if let Some(ts_stack) = ext_ts_stack {
+        if ts_stack.ts_stack.conf_flags & point != 0 {
+            let context = TsStackContext {
+                zid,
+                whatami,
+                interception_point: point,
+            };
+            let timestamp = get_timestamp(context);
+            ts_stack.ts_stack.stack.push(Interception {
+                flags: point,
+                timestamp,
+            });
+        }
+    }
+}

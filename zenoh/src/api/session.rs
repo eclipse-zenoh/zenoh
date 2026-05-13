@@ -3222,6 +3222,14 @@ impl Primitives for WeakSession {
         let callbacks =
             state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
         drop(state);
+        #[cfg(feature = "unstable")]
+        crate::api::timestamp_stack::push_ts_interception(
+            &mut msg.ext_ts_stack,
+            self.0.runtime.zid(),
+            self.0.runtime.whatami(),
+            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+        );
         callbacks.call(
             consume,
             msg.ext_qos,
@@ -3233,6 +3241,15 @@ impl Primitives for WeakSession {
 
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
+        // TODO: move closer to the queryable callback
+        #[cfg(feature = "unstable")]
+        crate::api::timestamp_stack::push_ts_interception(
+            &mut msg.ext_ts_stack,
+            self.0.runtime.zid(),
+            self.0.runtime.whatami(),
+            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+        );
         match &mut msg.payload {
             RequestBody::Query(m) => {
                 let state = zread!(self.0.state);
@@ -3266,6 +3283,14 @@ impl Primitives for WeakSession {
 
     fn send_response(&self, msg: &mut Response) {
         trace!("recv Response {:?}", msg);
+        #[cfg(feature = "unstable")]
+        crate::api::timestamp_stack::push_ts_interception(
+            &mut msg.ext_ts_stack,
+            self.0.runtime.zid(),
+            self.0.runtime.whatami(),
+            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+        );
         match &mut msg.payload {
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.0.state);

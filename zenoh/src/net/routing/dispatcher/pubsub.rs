@@ -306,6 +306,10 @@ pub fn route_data(
             let dir = route.iter().next().unwrap();
 
             if inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face) {
+                // Get the runtime to handle ext_ts_stack
+                #[cfg(feature = "unstable")]
+                let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+
                 drop(rtables);
                 let mut msg_clone;
                 let mut msg = &mut *msg;
@@ -318,6 +322,16 @@ pub fn route_data(
                 msg.ext_nodeid = ext::NodeIdType {
                     node_id: dir.node_id,
                 };
+                #[cfg(feature = "unstable")]
+                if let Some(ref rt) = runtime {
+                    crate::api::timestamp_stack::push_ts_interception(
+                        &mut msg.ext_ts_stack,
+                        rt.zid(),
+                        rt.whatami(),
+                        |ctx| rt.get_ts_stack_timestamp(ctx),
+                        zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                    );
+                }
                 send_push(&dir.dst_face, msg, reliability);
             }
         } else {
@@ -328,8 +342,26 @@ pub fn route_data(
                 })
                 .collect::<Vec<&Direction>>();
 
+            // Get the runtime to handle ext_ts_stack
+            // FIXME: this may be holding the Arc for too long, preventing the runtime from closing?
+            #[cfg(feature = "unstable")]
+            let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+
             drop(rtables);
+
+            #[cfg(feature = "unstable")]
+            if let Some(ref rt) = runtime {
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut msg.ext_ts_stack,
+                    rt.zid(),
+                    rt.whatami(),
+                    |ctx| rt.get_ts_stack_timestamp(ctx),
+                    zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                );
+            }
             for dir in dirs {
+                // TODO: might be more accurate to push the new timestamp to ext_ts_stack here to
+                // account for `send_push` running sequentially for each message
                 send_push(
                     &dir.dst_face,
                     &mut Push {
