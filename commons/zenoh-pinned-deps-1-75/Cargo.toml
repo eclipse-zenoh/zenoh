@@ -27,7 +27,8 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-lock = "=3.4.1"
+axum = "=0.8.4"
+axum-core = "=0.5.2"
 base64ct = "=1.6.0"
 clap_builder = "=4.5.60"
 clap_lex = "=1.0.0"
@@ -47,6 +48,7 @@ pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
 prost = "=0.14.1"
 prost-derive = "=0.14.1"
+rcgen = "=0.14.7"
 rustc-hash = "=2.1.1"
 serde_spanned = "=1.0.1"
 serde_with = "=3.14.1"
@@ -72,7 +74,8 @@ security-framework = "=3.6.0"
 
 [package.metadata.cargo-machete]
 ignored = [
-  "async-lock",
+  "axum",
+  "axum-core",
   "base64ct",
   "clap_builder",
   "clap_lex",
@@ -92,6 +95,7 @@ ignored = [
   "potential_utf",
   "prost",
   "prost-derive",
+  "rcgen",
   "rustc-hash",
   "security-framework",
   "serde_spanned",
