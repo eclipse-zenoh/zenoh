@@ -256,7 +256,7 @@ impl Hat {
     pub(super) fn unregister_node_tokens(&mut self, zid: &ZenohIdProto) -> HashSet<Arc<Resource>> {
         let removed_routers = self
             .net_mut()
-            .remove_link(zid)
+            .find_disconnected_nodes_after_removing_link(zid)
             .into_iter()
             .map(|(_, zid)| zid)
             .collect::<HashSet<_>>();
