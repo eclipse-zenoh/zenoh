@@ -20,9 +20,7 @@ use std::{str::FromStr, thread::sleep};
 
 // use std::collections::HashMap;
 use tokio::runtime::Runtime;
-use zenoh::{
-    internal::zasync_executor_init, query::Reply, sample::Sample, time::Timestamp, Config, Session,
-};
+use zenoh::{query::Reply, sample::Sample, time::Timestamp, Config, Session};
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
@@ -51,7 +49,6 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_wild_card_in_order() {
-    zasync_executor_init!();
     let mut config = Config::default();
     config
         .insert_json5(
