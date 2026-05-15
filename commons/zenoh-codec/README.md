@@ -24,8 +24,39 @@ cargo run --bin verify_transport_message_corpus
 cargo +nightly fuzz run transport_message
 
 # Only rerun a certain input
-cargo +nightly fuzz run transport_message fuzz/artifacts/transport_message/crash-xxxx
+cargo +nightly fuzz run transport_message artifacts/transport_message/crash-xxxx
 
 # Analyze one input without running the fuzz loop
 cargo run --bin analyze_transport_message -- "[2, 220, 11, 13, 0]"
+```
+
+To inspect corpus coverage for the fuzz target, run:
+
+```sh
+# Collect coverage data from the corpus
+# Use `-s none` to disable sanitizers during coverage collection.
+cargo +nightly fuzz coverage -s none transport_message corpus/transport_message
+
+# Resolve the LLVM tools shipped with the nightly toolchain
+LLVM_BIN="$(dirname "$(rustc +nightly --print target-libdir)")/bin"
+
+# Hide Rust stdlib and cargo-registry dependencies from the report.
+# Print a text summary
+"$LLVM_BIN/llvm-cov" report \
+  target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/release/transport_message \
+  -instr-profile=coverage/transport_message/coverage.profdata \
+  --ignore-filename-regex='^/rustc/|^.*/.cargo/registry'
+
+# Hide Rust stdlib and cargo-registry dependencies from the report.
+# Only render HTML for the Zenoh source trees we want to inspect.
+# Generate an HTML report focused on Zenoh sources
+"$LLVM_BIN/llvm-cov" show \
+  target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/release/transport_message \
+  -instr-profile=coverage/transport_message/coverage.profdata \
+  --format=html \
+  --output-dir=coverage/transport_message/html \
+  --ignore-filename-regex='^/rustc/|^.*/.cargo/registry' \
+  ../src \
+  ../../zenoh-protocol/src \
+  ../../zenoh-buffers/src
 ```
