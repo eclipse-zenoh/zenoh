@@ -63,7 +63,6 @@ serde_json = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [dev-dependencies]
-async-global-executor = { workspace = true }
 uhlc = { workspace = true }
 
 [package.metadata.deb]

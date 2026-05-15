@@ -41,6 +41,16 @@ pub struct WatchdogValidator {
     task: PeriodicTask,
 }
 
+impl std::fmt::Debug for WatchdogValidator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WatchdogValidator")
+            .field("cap", &self.cap)
+            .field("sender", &self.sender)
+            .field("task", &self.task)
+            .finish()
+    }
+}
+
 impl WatchdogValidator {
     pub fn new(interval: Duration) -> Self {
         // Our channel here may change it's size (that size that is not capacity) from 0 to

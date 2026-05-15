@@ -114,6 +114,19 @@ impl ConfigValidator for AdminSpace {
     }
 }
 
+impl std::fmt::Debug for AdminSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminSpace")
+            .field("zid", &self.zid)
+            .field("queryable_id", &self.queryable_id)
+            .field("primitives", &"..")
+            .field("mappings", &"..")
+            .field("handlers_len", &self.handlers.len())
+            .field("context", &"..")
+            .finish()
+    }
+}
+
 impl AdminSpace {
     #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
     fn start_plugin(

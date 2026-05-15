@@ -14,7 +14,7 @@
 
 //! Callback handler trait.
 
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use crate::api::handlers::IntoHandler;
 
@@ -72,6 +72,15 @@ impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 pub struct Callback<T> {
     callable: Arc<dyn CallbackImpl<T>>,
     drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
+}
+
+impl<T> fmt::Debug for Callback<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Callback")
+            .field("callable", &"..")
+            .field("has_drop", &self.drop.is_some())
+            .finish()
+    }
 }
 
 impl<T> Clone for Callback<T> {
@@ -178,6 +187,18 @@ where
 {
     pub callback: Callback,
     pub drop: DropFn,
+}
+
+impl<Callback, DropFn> fmt::Debug for CallbackDrop<Callback, DropFn>
+where
+    DropFn: FnMut() + Send + Sync + 'static,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CallbackDrop")
+            .field("callback", &"..")
+            .field("drop", &"..")
+            .finish()
+    }
 }
 
 impl<Callback, DropFn> Drop for CallbackDrop<Callback, DropFn>

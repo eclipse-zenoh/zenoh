@@ -58,7 +58,7 @@ pub trait TransportEventHandler: Send + Sync {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>>;
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportEventHandler;
 
 impl TransportEventHandler for DummyTransportEventHandler {
@@ -88,7 +88,7 @@ pub trait TransportMulticastEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportMulticastEventHandler;
 
 impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
@@ -126,7 +126,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {

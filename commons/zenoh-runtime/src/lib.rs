@@ -21,7 +21,7 @@ use core::panic;
 use std::{
     borrow::Borrow,
     collections::HashMap,
-    env,
+    env, fmt,
     future::Future,
     ops::Deref,
     sync::{
@@ -178,6 +178,7 @@ lazy_static! {
 }
 
 // A runtime guard used to explicitly drop the static variables that Rust doesn't drop by default
+#[derive(Debug)]
 pub struct ZRuntimePoolGuard;
 
 impl Drop for ZRuntimePoolGuard {
@@ -192,6 +193,19 @@ impl Drop for ZRuntimePoolGuard {
 }
 
 pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
+
+impl fmt::Debug for ZRuntimePool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let initialized = self
+            .0
+            .iter()
+            .filter_map(|(runtime, cell)| cell.get().map(|_| runtime))
+            .collect::<Vec<_>>();
+        f.debug_struct("ZRuntimePool")
+            .field("initialized", &initialized)
+            .finish_non_exhaustive()
+    }
+}
 
 impl ZRuntimePool {
     fn new() -> Self {

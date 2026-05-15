@@ -42,6 +42,20 @@ pub struct Intersection<
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for Intersection<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Intersection")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     Intersection<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -244,6 +258,20 @@ pub struct IntersectionMut<
     key: &'a keyexpr,
     ke_indices: Vec<usize>,
     iterators: Vec<StackFrameMut<'a, Children, Node, Weight>>,
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight> core::fmt::Debug
+    for IntersectionMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IntersectionMut")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>

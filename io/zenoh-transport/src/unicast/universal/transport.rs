@@ -14,7 +14,10 @@
 use std::{
     fmt::DebugStruct,
     ops::{Deref, Not},
-    sync::{Arc, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock, RwLock,
+    },
     time::Duration,
 };
 
@@ -43,6 +46,35 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 
+pub(crate) struct ClosableCallback {
+    callback: OnceLock<Arc<dyn TransportPeerEventHandler>>,
+    closed: AtomicBool,
+}
+
+impl ClosableCallback {
+    pub(crate) fn new() -> Self {
+        ClosableCallback {
+            callback: OnceLock::new(),
+            closed: AtomicBool::new(false),
+        }
+    }
+
+    pub(crate) fn set(&self, cb: Arc<dyn TransportPeerEventHandler>) {
+        let _ = self.callback.set(cb);
+    }
+
+    pub(crate) fn get(&self) -> Option<&Arc<dyn TransportPeerEventHandler>> {
+        self.callback
+            .get()
+            .filter(|_| !self.closed.load(Ordering::Relaxed))
+    }
+
+    pub(crate) fn close(&self) -> Option<&Arc<dyn TransportPeerEventHandler>> {
+        self.closed.store(true, Ordering::Relaxed);
+        self.callback.get()
+    }
+}
+
 /*************************************/
 /*        UNIVERSAL TRANSPORT        */
 /*************************************/
@@ -61,7 +93,7 @@ pub(crate) struct TransportUnicastUniversal {
     // The links associated to the channel
     pub(super) links: Arc<RwLock<TransportLinks>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
+    pub(super) callback: Arc<ClosableCallback>,
     // Mutex for notification
     pub(super) status: Arc<AsyncMutex<TransportStatus>>,
     // Transport statistics
@@ -105,7 +137,7 @@ impl TransportUnicastUniversal {
             priority_tx: priority_tx.into_boxed_slice().into(),
             priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(TransportLinks::default())),
-            callback: Arc::new(RwLock::new(None)),
+            callback: Arc::new(ClosableCallback::new()),
             status: Arc::new(AsyncMutex::new(TransportStatus::Uninitialized)),
             #[cfg(feature = "stats")]
             stats,
@@ -130,7 +162,7 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
-        let callback = zwrite!(self.callback).take();
+        let callback = self.callback.close();
 
         // Close all the links
         let mut links = zwrite!(self.links).take();
@@ -139,7 +171,7 @@ impl TransportUnicastUniversal {
         }
 
         // Notify the callback that we have closed the transport
-        if let Some(cb) = callback.as_ref() {
+        if let Some(cb) = callback {
             cb.closed();
         }
         // Delete the transport on the manager - this should be the last step to ensure that no new transport to the same peer can be added while we are closing this transport.
@@ -161,8 +193,7 @@ impl TransportUnicastUniversal {
         };
 
         // Notify the callback
-        let cb = zread!(self.callback).clone();
-        if let Some(callback) = cb {
+        if let Some(callback) = self.callback.get().cloned() {
             let associated_link = associated_link.clone();
             tokio::task::spawn_blocking(move || {
                 callback.del_link(link);
@@ -319,7 +350,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
-        *zwrite!(self.callback) = Some(callback);
+        self.callback.set(callback)
     }
 
     async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
@@ -352,7 +383,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
-        zread!(self.callback).clone()
+        self.callback.get().cloned()
     }
 
     fn get_config(&self) -> &TransportConfigUnicast {

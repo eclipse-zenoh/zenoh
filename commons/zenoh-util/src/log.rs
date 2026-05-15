@@ -67,6 +67,7 @@ fn init_env_filter(env_filter: EnvFilter) {
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
+#[derive(Debug)]
 pub struct LogRecord {
     pub target: String,
     pub level: tracing::Level,

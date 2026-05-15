@@ -24,6 +24,7 @@ use super::LifoQueue;
 
 /// Provides a pool of pre-allocated objects that are automaticlaly reinserted into
 /// the pool when dropped.
+#[derive(Debug)]
 pub struct RecyclingObjectPool<T, F>
 where
     F: Fn() -> T,

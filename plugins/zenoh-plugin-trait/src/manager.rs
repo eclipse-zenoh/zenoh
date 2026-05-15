@@ -13,6 +13,8 @@
 mod dynamic_plugin;
 mod static_plugin;
 
+use std::fmt;
+
 use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
@@ -105,6 +107,18 @@ pub struct PluginsManager<StartArgs: PluginStartArgs, Instance: PluginInstance> 
     default_lib_prefix: String,
     loader: Option<LibLoader>,
     plugins: Vec<PluginRecord<StartArgs, Instance>>,
+}
+
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> fmt::Debug
+    for PluginsManager<StartArgs, Instance>
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PluginsManager")
+            .field("default_lib_prefix", &self.default_lib_prefix)
+            .field("loader", &self.loader.as_ref().map(|_| ".."))
+            .field("plugins_len", &self.plugins.len())
+            .finish()
+    }
 }
 
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>

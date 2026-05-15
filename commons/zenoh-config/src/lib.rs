@@ -1884,6 +1884,12 @@ pub trait IConfig: Send + Sync {
 
 pub struct GenericConfig(Arc<dyn IConfig>);
 
+impl std::fmt::Debug for GenericConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("GenericConfig").field(&"..").finish()
+    }
+}
+
 impl Deref for GenericConfig {
     type Target = Arc<dyn IConfig>;
 

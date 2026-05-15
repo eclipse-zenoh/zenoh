@@ -186,12 +186,14 @@ impl<T> SingleOrVec<T> {
     }
 }
 
+#[derive(Debug)]
 enum DrainInner<'a, T> {
     Vec(alloc::vec::Drain<'a, T>),
     Single(&'a mut SingleOrVecInner<T>),
     Done,
 }
 
+#[derive(Debug)]
 pub struct Drain<'a, T> {
     inner: DrainInner<'a, T>,
 }
@@ -278,6 +280,7 @@ impl<T> iter::Extend<T> for SingleOrVec<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct IntoIter<T> {
     pub drain: alloc::vec::IntoIter<T>,
     pub last: Option<T>,

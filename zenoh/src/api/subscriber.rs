@@ -79,6 +79,15 @@ pub struct SubscriberUndeclaration<Handler> {
     wait_callbacks: bool,
 }
 
+impl<Handler> fmt::Debug for SubscriberUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SubscriberUndeclaration")
+            .field("subscriber", &self.subscriber)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
 impl<Handler> SubscriberUndeclaration<Handler> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of subscriber callbacks (if any) return.
@@ -150,11 +159,20 @@ impl<Handler> IntoFuture for SubscriberUndeclaration<Handler> {
 /// # }
 /// ```
 #[non_exhaustive]
-#[derive(Debug)]
 pub struct Subscriber<Handler> {
     pub(crate) inner: SubscriberInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+impl<Handler> fmt::Debug for Subscriber<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Subscriber")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 impl<Handler> Subscriber<Handler> {

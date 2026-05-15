@@ -304,6 +304,15 @@ pub struct QuerierUndeclaration<'a> {
     wait_callbacks: bool,
 }
 
+impl fmt::Debug for QuerierUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuerierUndeclaration")
+            .field("querier", &self.querier)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
 impl<'a> QuerierUndeclaration<'a> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of reply and matching listeners' callbacks (if any) return.

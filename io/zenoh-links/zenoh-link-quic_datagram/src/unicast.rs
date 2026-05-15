@@ -222,6 +222,7 @@ impl fmt::Debug for LinkUnicastQuicDatagram {
     }
 }
 
+#[derive(Debug)]
 pub struct LinkManagerUnicastQuicDatagram {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,

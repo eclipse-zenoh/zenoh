@@ -527,6 +527,16 @@ pub struct ReplySample<'a> {
 }
 
 #[zenoh_macros::internal]
+impl fmt::Debug for ReplySample<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReplySample")
+            .field("query", &self.query)
+            .field("sample", &self.sample)
+            .finish()
+    }
+}
+
+#[zenoh_macros::internal]
 impl Resolvable for ReplySample<'_> {
     type To = ZResult<()>;
 }
@@ -636,6 +646,15 @@ pub struct QueryableUndeclaration<Handler> {
     wait_callbacks: bool,
 }
 
+impl<Handler> fmt::Debug for QueryableUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QueryableUndeclaration")
+            .field("queryable", &self.queryable)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
 impl<Handler> QueryableUndeclaration<Handler> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of query callbacks (if any) return.
@@ -722,11 +741,20 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// # }
 /// ```
 #[non_exhaustive]
-#[derive(Debug)]
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+impl<Handler> fmt::Debug for Queryable<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Queryable")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 impl<Handler> Queryable<Handler> {

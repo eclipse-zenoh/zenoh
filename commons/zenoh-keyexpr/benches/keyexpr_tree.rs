@@ -149,6 +149,7 @@ fn main() {
     }
 }
 
+#[derive(Debug)]
 pub struct Benchmarker {
     benches: HashMap<String, Bench>,
 }
@@ -170,14 +171,18 @@ impl Benchmarker {
         self.benches.entry(name.into()).or_default().run_once(f);
     }
 }
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Bench {
     runs: Vec<std::time::Duration>,
 }
+
+#[derive(Debug)]
 pub struct Stats {
     mean: std::time::Duration,
     variance: f64,
 }
+
+#[derive(Debug)]
 pub struct FullStats {
     base: Stats,
     min: f64,
