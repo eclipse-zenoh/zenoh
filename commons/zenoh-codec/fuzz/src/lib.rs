@@ -14,7 +14,7 @@
 //! Shared helpers for the `zenoh-codec` fuzz targets.
 //!
 //! This module keeps the actual `libFuzzer` entrypoint thin and provides:
-//! - the reusable `TransportMessage` fuzz harness,
+//! - the reusable `TransportMessage`, `NetworkMessage`, and `Frame` fuzz harnesses,
 //! - deterministic seed corpus generation,
 //! - corpus verification for CI and local checks.
 //!
@@ -24,7 +24,7 @@
 //!
 //! The harness deliberately checks two different properties:
 //! - decode robustness: arbitrary input may decode or fail, but it must not panic,
-//! - codec consistency: if bytes decode into a `TransportMessage`, that value should
+//! - codec consistency: if bytes decode into a message/frame value, that value should
 //!   be serializable and stable across decode/encode/decode.
 
 use std::{
@@ -44,8 +44,7 @@ use zenoh_protocol::{
     core::{Reliability, Resolution, WhatAmI, ZenohIdProto},
     network::{
         declare::common::DeclareFinal,
-        interest::InterestMode,
-        interest::InterestOptions,
+        interest::{InterestMode, InterestOptions},
         request::ext::QueryTarget,
         Declare, Interest, NetworkBody, NetworkMessage, Oam as NetworkOam, Push as NetworkPush,
         Request, Response, ResponseFinal,
@@ -60,6 +59,7 @@ use zenoh_protocol::{
 
 const TRANSPORT_CORPUS_DIR: &str = "corpus/transport_message";
 const NETWORK_CORPUS_DIR: &str = "corpus/network_message";
+const FRAME_CORPUS_DIR: &str = "corpus/frame";
 
 /// Human-readable analysis output for one `TransportMessage` input.
 ///
@@ -80,6 +80,16 @@ pub struct TransportMessageAnalysis {
 pub struct NetworkMessageAnalysis {
     pub input_len: usize,
     pub decoded: Option<NetworkMessage>,
+    pub consumed: usize,
+    pub trailing: Vec<u8>,
+    pub roundtrip_ok: bool,
+}
+
+/// Human-readable analysis output for one `Frame` input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrameAnalysis {
+    pub input_len: usize,
+    pub decoded: Option<Frame>,
     pub consumed: usize,
     pub trailing: Vec<u8>,
     pub roundtrip_ok: bool,
@@ -165,6 +175,42 @@ pub fn analyze_network_message(data: &[u8]) -> NetworkMessageAnalysis {
     }
 }
 
+/// Runs the `Frame` fuzz harness on one arbitrary byte slice.
+pub fn exercise_frame(data: &[u8]) {
+    if let Some(frame) = decode_frame(data) {
+        assert_frame_roundtrip(&frame);
+    }
+}
+
+/// Produces a structured analysis of one arbitrary `Frame` input.
+pub fn analyze_frame(data: &[u8]) -> FrameAnalysis {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<Frame, _> = codec.read(&mut reader);
+    let consumed = data.len() - reader.remaining();
+    let trailing = data[consumed..].to_vec();
+
+    match decoded {
+        Ok(frame) => {
+            let roundtrip_ok = frame_roundtrip_ok(&frame);
+            FrameAnalysis {
+                input_len: data.len(),
+                decoded: Some(frame),
+                consumed,
+                trailing,
+                roundtrip_ok,
+            }
+        }
+        Err(_) => FrameAnalysis {
+            input_len: data.len(),
+            decoded: None,
+            consumed,
+            trailing,
+            roundtrip_ok: false,
+        },
+    }
+}
+
 /// Attempts to decode one raw byte slice as a `TransportMessage`.
 ///
 /// Returning `None` is a normal outcome for arbitrary fuzz input and corresponds to
@@ -181,6 +227,14 @@ fn decode_network_message(data: &[u8]) -> Option<NetworkMessage> {
     let codec = Zenoh080::new();
     let mut reader = data.reader();
     let decoded: Result<NetworkMessage, _> = codec.read(&mut reader);
+    decoded.ok()
+}
+
+/// Attempts to decode one raw byte slice as a `Frame`.
+fn decode_frame(data: &[u8]) -> Option<Frame> {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<Frame, _> = codec.read(&mut reader);
     decoded.ok()
 }
 
@@ -203,6 +257,14 @@ fn assert_network_message_roundtrip(message: &NetworkMessage) {
     assert!(
         network_message_roundtrip_ok(message),
         "re-encoding a decoded network message should succeed and remain stable"
+    );
+}
+
+/// Checks the stronger codec-internal invariant for decoded `Frame`s.
+fn assert_frame_roundtrip(frame: &Frame) {
+    assert!(
+        frame_roundtrip_ok(frame),
+        "re-encoding a decoded frame should succeed and remain stable"
     );
 }
 
@@ -244,6 +306,25 @@ fn network_message_roundtrip_ok(message: &NetworkMessage) -> bool {
     *message == redecoded && !rereader.can_read()
 }
 
+/// Returns whether a decoded `Frame` successfully survives
+/// encode/decode roundtripping without changing meaning.
+fn frame_roundtrip_ok(frame: &Frame) -> bool {
+    let codec = Zenoh080::new();
+    let mut encoded = Vec::new();
+    let mut writer = encoded.writer();
+    let write_result: Result<(), _> = codec.write(&mut writer, frame);
+    if write_result.is_err() {
+        return false;
+    }
+
+    let mut rereader = encoded.reader();
+    let Ok(redecoded): Result<Frame, _> = codec.read(&mut rereader) else {
+        return false;
+    };
+
+    *frame == redecoded && !rereader.can_read()
+}
+
 /// Generates the seed corpus for the `transport_message` fuzz target.
 ///
 /// Each file is created from a deterministic `TransportMessage` sample encoded by
@@ -269,6 +350,21 @@ pub fn write_network_seed_corpus() -> io::Result<Vec<PathBuf>> {
 
     let mut written = Vec::new();
     for (name, bytes) in network_message_seed_corpus() {
+        let path = corpus_dir.join(name);
+        fs::write(&path, bytes)?;
+        written.push(path);
+    }
+
+    Ok(written)
+}
+
+/// Generates the seed corpus for the `frame` fuzz target.
+pub fn write_frame_seed_corpus() -> io::Result<Vec<PathBuf>> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(FRAME_CORPUS_DIR);
+    fs::create_dir_all(&corpus_dir)?;
+
+    let mut written = Vec::new();
+    for (name, bytes) in frame_seed_corpus() {
         let path = corpus_dir.join(name);
         fs::write(&path, bytes)?;
         written.push(path);
@@ -321,6 +417,26 @@ pub fn verify_network_seed_corpus() -> io::Result<()> {
     Ok(())
 }
 
+/// Verifies that the generated `frame` seed corpus matches the encoder.
+pub fn verify_frame_seed_corpus() -> io::Result<()> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(FRAME_CORPUS_DIR);
+    let expected = frame_seed_corpus();
+
+    for (name, expected_bytes) in expected {
+        let path = corpus_dir.join(name);
+        let actual = fs::read(&path)?;
+        assert_eq!(
+            actual,
+            expected_bytes,
+            "seed corpus file {} is out of date",
+            path.display()
+        );
+        exercise_frame(&actual);
+    }
+
+    Ok(())
+}
+
 /// Builds the encoded byte corpus for the checked-in `TransportMessage` seed set.
 fn transport_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
     transport_message_seed_messages()
@@ -334,6 +450,14 @@ fn network_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
     network_message_seed_messages()
         .into_iter()
         .map(|(name, msg)| (name, encode_network_message(&msg)))
+        .collect()
+}
+
+/// Builds the encoded byte corpus for the `Frame` seed set.
+fn frame_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
+    frame_seed_messages()
+        .into_iter()
+        .map(|(name, frame)| (name, encode_frame(&frame)))
         .collect()
 }
 
@@ -356,6 +480,17 @@ fn encode_network_message(message: &NetworkMessage) -> Vec<u8> {
     codec
         .write(&mut writer, message)
         .expect("seed network message encoding should succeed");
+    bytes
+}
+
+/// Encodes one deterministic `Frame` sample into raw fuzz input bytes.
+fn encode_frame(frame: &Frame) -> Vec<u8> {
+    let codec = Zenoh080::new();
+    let mut bytes = Vec::new();
+    let mut writer = bytes.writer();
+    codec
+        .write(&mut writer, frame)
+        .expect("seed frame encoding should succeed");
     bytes
 }
 
@@ -395,6 +530,14 @@ fn network_message_seed_messages() -> Vec<(&'static str, NetworkMessage)> {
         ("response", sample_response_network_message()),
         ("response_final", sample_response_final_network_message()),
     ]
+}
+
+/// Returns one deterministic `Frame` sample per `NetworkMessage` seed variant.
+fn frame_seed_messages() -> Vec<(&'static str, Frame)> {
+    network_message_seed_messages()
+        .into_iter()
+        .map(|(name, message)| (name, sample_frame(message)))
+        .collect()
 }
 
 /// Builds a small `NetworkMessage` payload used by the frame seed and network corpus.

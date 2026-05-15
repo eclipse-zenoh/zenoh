@@ -42,3 +42,10 @@ doc = false
 name = "network_message"
 path = "fuzz_targets/network_message.rs"
 test = false
+
+[[bin]]
+bench = false
+doc = false
+name = "frame"
+path = "fuzz_targets/frame.rs"
+test = false
