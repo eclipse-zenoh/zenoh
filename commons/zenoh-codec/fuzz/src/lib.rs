@@ -42,16 +42,24 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     common::ZExtBody,
     core::{Reliability, Resolution, WhatAmI, ZenohIdProto},
-    network::{NetworkBody, NetworkMessage, Push},
+    network::{
+        declare::common::DeclareFinal,
+        interest::InterestMode,
+        interest::InterestOptions,
+        request::ext::QueryTarget,
+        Declare, Interest, NetworkBody, NetworkMessage, Oam as NetworkOam, Push as NetworkPush,
+        Request, Response, ResponseFinal,
+    },
     transport::{
         batch_size, close, fragment, frame, init, join, oam, Close, Fragment, Frame, InitAck,
         InitSyn, Join, KeepAlive, Oam, OpenAck, OpenSyn, PrioritySn, TransportBody,
         TransportMessage,
     },
-    zenoh::{PushBody, Put},
+    zenoh::{PushBody, Put, Query, Reply, RequestBody, ResponseBody},
 };
 
-const CORPUS_DIR: &str = "corpus/transport_message";
+const TRANSPORT_CORPUS_DIR: &str = "corpus/transport_message";
+const NETWORK_CORPUS_DIR: &str = "corpus/network_message";
 
 /// Human-readable analysis output for one `TransportMessage` input.
 ///
@@ -62,6 +70,16 @@ const CORPUS_DIR: &str = "corpus/transport_message";
 pub struct TransportMessageAnalysis {
     pub input_len: usize,
     pub decoded: Option<TransportMessage>,
+    pub consumed: usize,
+    pub trailing: Vec<u8>,
+    pub roundtrip_ok: bool,
+}
+
+/// Human-readable analysis output for one `NetworkMessage` input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkMessageAnalysis {
+    pub input_len: usize,
+    pub decoded: Option<NetworkMessage>,
     pub consumed: usize,
     pub trailing: Vec<u8>,
     pub roundtrip_ok: bool,
@@ -111,6 +129,42 @@ pub fn analyze_transport_message(data: &[u8]) -> TransportMessageAnalysis {
     }
 }
 
+/// Runs the `NetworkMessage` fuzz harness on one arbitrary byte slice.
+pub fn exercise_network_message(data: &[u8]) {
+    if let Some(message) = decode_network_message(data) {
+        assert_network_message_roundtrip(&message);
+    }
+}
+
+/// Produces a structured analysis of one arbitrary `NetworkMessage` input.
+pub fn analyze_network_message(data: &[u8]) -> NetworkMessageAnalysis {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<NetworkMessage, _> = codec.read(&mut reader);
+    let consumed = data.len() - reader.remaining();
+    let trailing = data[consumed..].to_vec();
+
+    match decoded {
+        Ok(message) => {
+            let roundtrip_ok = network_message_roundtrip_ok(&message);
+            NetworkMessageAnalysis {
+                input_len: data.len(),
+                decoded: Some(message),
+                consumed,
+                trailing,
+                roundtrip_ok,
+            }
+        }
+        Err(_) => NetworkMessageAnalysis {
+            input_len: data.len(),
+            decoded: None,
+            consumed,
+            trailing,
+            roundtrip_ok: false,
+        },
+    }
+}
+
 /// Attempts to decode one raw byte slice as a `TransportMessage`.
 ///
 /// Returning `None` is a normal outcome for arbitrary fuzz input and corresponds to
@@ -119,6 +173,14 @@ fn decode_transport_message(data: &[u8]) -> Option<TransportMessage> {
     let codec = Zenoh080::new();
     let mut reader = data.reader();
     let decoded: Result<TransportMessage, _> = codec.read(&mut reader);
+    decoded.ok()
+}
+
+/// Attempts to decode one raw byte slice as a `NetworkMessage`.
+fn decode_network_message(data: &[u8]) -> Option<NetworkMessage> {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<NetworkMessage, _> = codec.read(&mut reader);
     decoded.ok()
 }
 
@@ -133,6 +195,14 @@ fn assert_transport_message_roundtrip(message: &TransportMessage) {
     assert!(
         transport_message_roundtrip_ok(message),
         "re-encoding a decoded transport message should succeed and remain stable"
+    );
+}
+
+/// Checks the stronger codec-internal invariant for decoded `NetworkMessage`s.
+fn assert_network_message_roundtrip(message: &NetworkMessage) {
+    assert!(
+        network_message_roundtrip_ok(message),
+        "re-encoding a decoded network message should succeed and remain stable"
     );
 }
 
@@ -155,16 +225,50 @@ fn transport_message_roundtrip_ok(message: &TransportMessage) -> bool {
     *message == redecoded && !rereader.can_read()
 }
 
+/// Returns whether a decoded `NetworkMessage` successfully survives
+/// encode/decode roundtripping without changing meaning.
+fn network_message_roundtrip_ok(message: &NetworkMessage) -> bool {
+    let codec = Zenoh080::new();
+    let mut encoded = Vec::new();
+    let mut writer = encoded.writer();
+    let write_result: Result<(), _> = codec.write(&mut writer, message);
+    if write_result.is_err() {
+        return false;
+    }
+
+    let mut rereader = encoded.reader();
+    let Ok(redecoded): Result<NetworkMessage, _> = codec.read(&mut rereader) else {
+        return false;
+    };
+
+    *message == redecoded && !rereader.can_read()
+}
+
 /// Generates the seed corpus for the `transport_message` fuzz target.
 ///
 /// Each file is created from a deterministic `TransportMessage` sample encoded by
 /// the real codec. The returned paths are the files that were written on disk.
 pub fn write_seed_corpus() -> io::Result<Vec<PathBuf>> {
-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(CORPUS_DIR);
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(TRANSPORT_CORPUS_DIR);
     fs::create_dir_all(&corpus_dir)?;
 
     let mut written = Vec::new();
     for (name, bytes) in transport_message_seed_corpus() {
+        let path = corpus_dir.join(name);
+        fs::write(&path, bytes)?;
+        written.push(path);
+    }
+
+    Ok(written)
+}
+
+/// Generates the seed corpus for the `network_message` fuzz target.
+pub fn write_network_seed_corpus() -> io::Result<Vec<PathBuf>> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(NETWORK_CORPUS_DIR);
+    fs::create_dir_all(&corpus_dir)?;
+
+    let mut written = Vec::new();
+    for (name, bytes) in network_message_seed_corpus() {
         let path = corpus_dir.join(name);
         fs::write(&path, bytes)?;
         written.push(path);
@@ -179,7 +283,7 @@ pub fn write_seed_corpus() -> io::Result<Vec<PathBuf>> {
 /// executes each corpus file through the fuzz harness to ensure the seeds remain
 /// valid parser inputs.
 pub fn verify_seed_corpus() -> io::Result<()> {
-    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(CORPUS_DIR);
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(TRANSPORT_CORPUS_DIR);
     let expected = transport_message_seed_corpus();
 
     for (name, expected_bytes) in expected {
@@ -197,11 +301,39 @@ pub fn verify_seed_corpus() -> io::Result<()> {
     Ok(())
 }
 
+/// Verifies that the generated `network_message` seed corpus matches the encoder.
+pub fn verify_network_seed_corpus() -> io::Result<()> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(NETWORK_CORPUS_DIR);
+    let expected = network_message_seed_corpus();
+
+    for (name, expected_bytes) in expected {
+        let path = corpus_dir.join(name);
+        let actual = fs::read(&path)?;
+        assert_eq!(
+            actual,
+            expected_bytes,
+            "seed corpus file {} is out of date",
+            path.display()
+        );
+        exercise_network_message(&actual);
+    }
+
+    Ok(())
+}
+
 /// Builds the encoded byte corpus for the checked-in `TransportMessage` seed set.
 fn transport_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
     transport_message_seed_messages()
         .into_iter()
         .map(|(name, msg)| (name, encode_transport_message(&msg)))
+        .collect()
+}
+
+/// Builds the encoded byte corpus for the `NetworkMessage` seed set.
+fn network_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
+    network_message_seed_messages()
+        .into_iter()
+        .map(|(name, msg)| (name, encode_network_message(&msg)))
         .collect()
 }
 
@@ -216,9 +348,20 @@ fn encode_transport_message(message: &TransportMessage) -> Vec<u8> {
     bytes
 }
 
+/// Encodes one deterministic `NetworkMessage` sample into raw fuzz input bytes.
+fn encode_network_message(message: &NetworkMessage) -> Vec<u8> {
+    let codec = Zenoh080::new();
+    let mut bytes = Vec::new();
+    let mut writer = bytes.writer();
+    codec
+        .write(&mut writer, message)
+        .expect("seed network message encoding should succeed");
+    bytes
+}
+
 /// Returns one deterministic sample for each `TransportBody` variant we currently fuzz.
 fn transport_message_seed_messages() -> Vec<(&'static str, TransportMessage)> {
-    let network_message = sample_network_message();
+    let network_message = sample_push_network_message();
 
     vec![
         (
@@ -241,14 +384,111 @@ fn transport_message_seed_messages() -> Vec<(&'static str, TransportMessage)> {
     ]
 }
 
-/// Builds a small `NetworkMessage` payload used by the frame seed.
-fn sample_network_message() -> NetworkMessage {
+/// Returns one deterministic sample for each `NetworkBody` variant we currently fuzz.
+fn network_message_seed_messages() -> Vec<(&'static str, NetworkMessage)> {
+    vec![
+        ("declare", sample_declare_network_message()),
+        ("interest", sample_interest_network_message()),
+        ("oam", sample_oam_network_message()),
+        ("push", sample_push_network_message()),
+        ("request", sample_request_network_message()),
+        ("response", sample_response_network_message()),
+        ("response_final", sample_response_final_network_message()),
+    ]
+}
+
+/// Builds a small `NetworkMessage` payload used by the frame seed and network corpus.
+fn sample_push_network_message() -> NetworkMessage {
     let put = Put {
         payload: vec![0x11, 0x22, 0x33].into(),
         ..Put::default()
     };
-    let push = Push::from(PushBody::from(put));
+    let push = NetworkPush::from(PushBody::from(put));
     NetworkBody::Push(push).into()
+}
+
+/// Returns a deterministic `Request` network message with a simple query body.
+fn sample_request_network_message() -> NetworkMessage {
+    let request = Request {
+        id: 0x0102_0304,
+        wire_expr: "demo/request".into(),
+        ext_qos: zenoh_protocol::network::request::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: zenoh_protocol::network::request::ext::NodeIdType::DEFAULT,
+        ext_target: QueryTarget::DEFAULT,
+        ext_budget: None,
+        ext_timeout: None,
+        payload: RequestBody::from(Query::default()),
+    };
+    NetworkBody::Request(request).into()
+}
+
+/// Returns a deterministic `Response` network message with a simple reply body.
+fn sample_response_network_message() -> NetworkMessage {
+    let reply = Reply {
+        consolidation: zenoh_protocol::zenoh::ConsolidationMode::DEFAULT,
+        ext_unknown: Vec::new(),
+        payload: PushBody::from(Put {
+            payload: vec![0x44, 0x55].into(),
+            ..Put::default()
+        }),
+    };
+    let response = Response {
+        rid: 0x1112_1314,
+        wire_expr: "demo/response".into(),
+        payload: ResponseBody::from(reply),
+        ext_qos: zenoh_protocol::network::response::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_respid: None,
+    };
+    NetworkBody::Response(response).into()
+}
+
+/// Returns a deterministic `ResponseFinal` network message.
+fn sample_response_final_network_message() -> NetworkMessage {
+    let response_final = ResponseFinal {
+        rid: 0x2122_2324,
+        ext_qos: zenoh_protocol::network::response::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+    };
+    NetworkBody::ResponseFinal(response_final).into()
+}
+
+/// Returns a deterministic `Interest` network message.
+fn sample_interest_network_message() -> NetworkMessage {
+    let interest = Interest {
+        id: 0x3132_3334,
+        mode: InterestMode::Current,
+        options: InterestOptions::KEYEXPRS,
+        wire_expr: None,
+        ext_qos: zenoh_protocol::network::interest::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: zenoh_protocol::network::interest::ext::NodeIdType::DEFAULT,
+    };
+    NetworkBody::Interest(interest).into()
+}
+
+/// Returns a deterministic `Declare` network message with a final declaration body.
+fn sample_declare_network_message() -> NetworkMessage {
+    let declare = Declare {
+        interest_id: None,
+        ext_qos: zenoh_protocol::network::declare::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: zenoh_protocol::network::declare::ext::NodeIdType::DEFAULT,
+        body: zenoh_protocol::network::DeclareBody::DeclareFinal(DeclareFinal),
+    };
+    NetworkBody::Declare(declare).into()
+}
+
+/// Returns a deterministic network-level OAM message.
+fn sample_oam_network_message() -> NetworkMessage {
+    let oam = NetworkOam {
+        id: 9,
+        body: ZExtBody::ZBuf(vec![0x99, 0x01].into()),
+        ext_qos: zenoh_protocol::network::oam::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+    };
+    NetworkBody::OAM(oam).into()
 }
 
 /// Returns a deterministic `Frame` seed containing one valid network message.
