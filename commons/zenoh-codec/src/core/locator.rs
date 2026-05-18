@@ -43,7 +43,16 @@ where
     fn read(self, reader: &mut R) -> Result<Locator, Self::Error> {
         let zodec = Zenoh080Bounded::<u8>::new();
         let loc: String = zodec.read(reader)?;
-        Locator::try_from(loc).map_err(|_| DidntRead)
+        let parsed = Locator::try_from(loc.clone()).map_err(|_| DidntRead)?;
+        // `Locator::try_from()` first parses the input as an `EndPoint`, and
+        // `EndPoint` accepts `#...` config. Converting that `EndPoint` back to
+        // a `Locator` drops the config part, so decode would accept one string
+        // and re-encode a different one. Rechecking the parsed locator string
+        // against the original wire bytes keeps decode/re-encode consistent.
+        if parsed.as_str() != loc {
+            return Err(DidntRead);
+        }
+        Ok(parsed)
     }
 }
 
