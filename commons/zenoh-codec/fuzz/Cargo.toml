@@ -49,3 +49,10 @@ doc = false
 name = "frame"
 path = "fuzz_targets/frame.rs"
 test = false
+
+[[bin]]
+bench = false
+doc = false
+name = "scouting_message"
+path = "fuzz_targets/scouting_message.rs"
+test = false

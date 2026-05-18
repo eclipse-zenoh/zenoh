@@ -14,7 +14,7 @@
 //! Shared helpers for the `zenoh-codec` fuzz targets.
 //!
 //! This module keeps the actual `libFuzzer` entrypoint thin and provides:
-//! - the reusable `TransportMessage`, `NetworkMessage`, and `Frame` fuzz harnesses,
+//! - the reusable `TransportMessage`, `NetworkMessage`, `Frame`, and `ScoutingMessage` fuzz harnesses,
 //! - deterministic seed corpus generation,
 //! - corpus verification for CI and local checks.
 //!
@@ -41,7 +41,7 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     common::ZExtBody,
-    core::{Reliability, Resolution, WhatAmI, ZenohIdProto},
+    core::{Locator, Reliability, Resolution, WhatAmI, ZenohIdProto},
     network::{
         declare::common::DeclareFinal,
         interest::{InterestMode, InterestOptions},
@@ -49,6 +49,7 @@ use zenoh_protocol::{
         Declare, Interest, NetworkBody, NetworkMessage, Oam as NetworkOam, Push as NetworkPush,
         Request, Response, ResponseFinal,
     },
+    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
     transport::{
         batch_size, close, fragment, frame, init, join, oam, Close, Fragment, Frame, InitAck,
         InitSyn, Join, KeepAlive, Oam, OpenAck, OpenSyn, PrioritySn, TransportBody,
@@ -60,6 +61,7 @@ use zenoh_protocol::{
 const TRANSPORT_CORPUS_DIR: &str = "corpus/transport_message";
 const NETWORK_CORPUS_DIR: &str = "corpus/network_message";
 const FRAME_CORPUS_DIR: &str = "corpus/frame";
+const SCOUTING_CORPUS_DIR: &str = "corpus/scouting_message";
 
 /// Human-readable analysis output for one `TransportMessage` input.
 ///
@@ -90,6 +92,16 @@ pub struct NetworkMessageAnalysis {
 pub struct FrameAnalysis {
     pub input_len: usize,
     pub decoded: Option<Frame>,
+    pub consumed: usize,
+    pub trailing: Vec<u8>,
+    pub roundtrip_ok: bool,
+}
+
+/// Human-readable analysis output for one `ScoutingMessage` input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScoutingMessageAnalysis {
+    pub input_len: usize,
+    pub decoded: Option<ScoutingMessage>,
     pub consumed: usize,
     pub trailing: Vec<u8>,
     pub roundtrip_ok: bool,
@@ -211,6 +223,42 @@ pub fn analyze_frame(data: &[u8]) -> FrameAnalysis {
     }
 }
 
+/// Runs the `ScoutingMessage` fuzz harness on one arbitrary byte slice.
+pub fn exercise_scouting_message(data: &[u8]) {
+    if let Some(message) = decode_scouting_message(data) {
+        assert_scouting_message_roundtrip(&message);
+    }
+}
+
+/// Produces a structured analysis of one arbitrary `ScoutingMessage` input.
+pub fn analyze_scouting_message(data: &[u8]) -> ScoutingMessageAnalysis {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<ScoutingMessage, _> = codec.read(&mut reader);
+    let consumed = data.len() - reader.remaining();
+    let trailing = data[consumed..].to_vec();
+
+    match decoded {
+        Ok(message) => {
+            let roundtrip_ok = scouting_message_roundtrip_ok(&message);
+            ScoutingMessageAnalysis {
+                input_len: data.len(),
+                decoded: Some(message),
+                consumed,
+                trailing,
+                roundtrip_ok,
+            }
+        }
+        Err(_) => ScoutingMessageAnalysis {
+            input_len: data.len(),
+            decoded: None,
+            consumed,
+            trailing,
+            roundtrip_ok: false,
+        },
+    }
+}
+
 /// Attempts to decode one raw byte slice as a `TransportMessage`.
 ///
 /// Returning `None` is a normal outcome for arbitrary fuzz input and corresponds to
@@ -235,6 +283,14 @@ fn decode_frame(data: &[u8]) -> Option<Frame> {
     let codec = Zenoh080::new();
     let mut reader = data.reader();
     let decoded: Result<Frame, _> = codec.read(&mut reader);
+    decoded.ok()
+}
+
+/// Attempts to decode one raw byte slice as a `ScoutingMessage`.
+fn decode_scouting_message(data: &[u8]) -> Option<ScoutingMessage> {
+    let codec = Zenoh080::new();
+    let mut reader = data.reader();
+    let decoded: Result<ScoutingMessage, _> = codec.read(&mut reader);
     decoded.ok()
 }
 
@@ -265,6 +321,14 @@ fn assert_frame_roundtrip(frame: &Frame) {
     assert!(
         frame_roundtrip_ok(frame),
         "re-encoding a decoded frame should succeed and remain stable"
+    );
+}
+
+/// Checks the stronger codec-internal invariant for decoded `ScoutingMessage`s.
+fn assert_scouting_message_roundtrip(message: &ScoutingMessage) {
+    assert!(
+        scouting_message_roundtrip_ok(message),
+        "re-encoding a decoded scouting message should succeed and remain stable"
     );
 }
 
@@ -325,6 +389,25 @@ fn frame_roundtrip_ok(frame: &Frame) -> bool {
     *frame == redecoded && !rereader.can_read()
 }
 
+/// Returns whether a decoded `ScoutingMessage` successfully survives
+/// encode/decode roundtripping without changing meaning.
+fn scouting_message_roundtrip_ok(message: &ScoutingMessage) -> bool {
+    let codec = Zenoh080::new();
+    let mut encoded = Vec::new();
+    let mut writer = encoded.writer();
+    let write_result: Result<(), _> = codec.write(&mut writer, message);
+    if write_result.is_err() {
+        return false;
+    }
+
+    let mut rereader = encoded.reader();
+    let Ok(redecoded): Result<ScoutingMessage, _> = codec.read(&mut rereader) else {
+        return false;
+    };
+
+    *message == redecoded && !rereader.can_read()
+}
+
 /// Generates the seed corpus for the `transport_message` fuzz target.
 ///
 /// Each file is created from a deterministic `TransportMessage` sample encoded by
@@ -365,6 +448,21 @@ pub fn write_frame_seed_corpus() -> io::Result<Vec<PathBuf>> {
 
     let mut written = Vec::new();
     for (name, bytes) in frame_seed_corpus() {
+        let path = corpus_dir.join(name);
+        fs::write(&path, bytes)?;
+        written.push(path);
+    }
+
+    Ok(written)
+}
+
+/// Generates the seed corpus for the `scouting_message` fuzz target.
+pub fn write_scouting_seed_corpus() -> io::Result<Vec<PathBuf>> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(SCOUTING_CORPUS_DIR);
+    fs::create_dir_all(&corpus_dir)?;
+
+    let mut written = Vec::new();
+    for (name, bytes) in scouting_message_seed_corpus() {
         let path = corpus_dir.join(name);
         fs::write(&path, bytes)?;
         written.push(path);
@@ -437,6 +535,26 @@ pub fn verify_frame_seed_corpus() -> io::Result<()> {
     Ok(())
 }
 
+/// Verifies that the generated `scouting_message` seed corpus matches the encoder.
+pub fn verify_scouting_seed_corpus() -> io::Result<()> {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(SCOUTING_CORPUS_DIR);
+    let expected = scouting_message_seed_corpus();
+
+    for (name, expected_bytes) in expected {
+        let path = corpus_dir.join(name);
+        let actual = fs::read(&path)?;
+        assert_eq!(
+            actual,
+            expected_bytes,
+            "seed corpus file {} is out of date",
+            path.display()
+        );
+        exercise_scouting_message(&actual);
+    }
+
+    Ok(())
+}
+
 /// Builds the encoded byte corpus for the checked-in `TransportMessage` seed set.
 fn transport_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
     transport_message_seed_messages()
@@ -458,6 +576,14 @@ fn frame_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
     frame_seed_messages()
         .into_iter()
         .map(|(name, frame)| (name, encode_frame(&frame)))
+        .collect()
+}
+
+/// Builds the encoded byte corpus for the `ScoutingMessage` seed set.
+fn scouting_message_seed_corpus() -> Vec<(&'static str, Vec<u8>)> {
+    scouting_message_seed_messages()
+        .into_iter()
+        .map(|(name, message)| (name, encode_scouting_message(&message)))
         .collect()
 }
 
@@ -491,6 +617,17 @@ fn encode_frame(frame: &Frame) -> Vec<u8> {
     codec
         .write(&mut writer, frame)
         .expect("seed frame encoding should succeed");
+    bytes
+}
+
+/// Encodes one deterministic `ScoutingMessage` sample into raw fuzz input bytes.
+fn encode_scouting_message(message: &ScoutingMessage) -> Vec<u8> {
+    let codec = Zenoh080::new();
+    let mut bytes = Vec::new();
+    let mut writer = bytes.writer();
+    codec
+        .write(&mut writer, message)
+        .expect("seed scouting message encoding should succeed");
     bytes
 }
 
@@ -538,6 +675,14 @@ fn frame_seed_messages() -> Vec<(&'static str, Frame)> {
         .into_iter()
         .map(|(name, message)| (name, sample_frame(message)))
         .collect()
+}
+
+/// Returns one deterministic sample for each `ScoutingBody` variant we currently fuzz.
+fn scouting_message_seed_messages() -> Vec<(&'static str, ScoutingMessage)> {
+    vec![
+        ("hello", sample_hello_scouting_message()),
+        ("scout", sample_scout_scouting_message()),
+    ]
 }
 
 /// Builds a small `NetworkMessage` payload used by the frame seed and network corpus.
@@ -632,6 +777,27 @@ fn sample_oam_network_message() -> NetworkMessage {
         ext_tstamp: None,
     };
     NetworkBody::OAM(oam).into()
+}
+
+/// Returns a deterministic `Scout` scouting message.
+fn sample_scout_scouting_message() -> ScoutingMessage {
+    ScoutingBody::Scout(Scout {
+        version: 1,
+        what: WhatAmI::Peer.into(),
+        zid: Some(fixed_zid()),
+    })
+    .into()
+}
+
+/// Returns a deterministic `Hello` scouting message with one locator.
+fn sample_hello_scouting_message() -> ScoutingMessage {
+    let hello = HelloProto {
+        version: 1,
+        whatami: WhatAmI::Peer,
+        zid: fixed_zid(),
+        locators: vec![Locator::new("tcp", "127.0.0.1:7447", "").expect("locator must be valid")],
+    };
+    ScoutingBody::Hello(hello).into()
 }
 
 /// Returns a deterministic `Frame` seed containing one valid network message.

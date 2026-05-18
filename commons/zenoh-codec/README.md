@@ -14,6 +14,7 @@ The `zenoh-codec` crate includes `cargo-fuzz` targets for:
 - `transport_message`
 - `network_message`
 - `frame`
+- `scouting_message`
 
 From the `commons/zenoh-codec/fuzz` directory, run:
 
@@ -22,26 +23,31 @@ From the `commons/zenoh-codec/fuzz` directory, run:
 cargo run --bin gen_transport_message_corpus
 cargo run --bin gen_network_message_corpus
 cargo run --bin gen_frame_corpus
+cargo run --bin gen_scouting_message_corpus
 
 # Optional: verify the generated corpus matches the current encoder
 cargo run --bin verify_transport_message_corpus
 cargo run --bin verify_network_message_corpus
 cargo run --bin verify_frame_corpus
+cargo run --bin verify_scouting_message_corpus
 
 # Run the fuzz targets
 cargo +nightly fuzz run transport_message
 cargo +nightly fuzz run network_message
 cargo +nightly fuzz run frame
+cargo +nightly fuzz run scouting_message
 
 # Only rerun a certain input
 cargo +nightly fuzz run transport_message artifacts/transport_message/crash-xxxx
 cargo +nightly fuzz run network_message artifacts/network_message/crash-xxxx
 cargo +nightly fuzz run frame artifacts/frame/crash-xxxx
+cargo +nightly fuzz run scouting_message artifacts/scouting_message/crash-xxxx
 
 # Analyze one input without running the fuzz loop
 cargo run --bin analyze_transport_message -- "[2, 220, 11, 13, 0]"
 cargo run --bin analyze_network_message -- "[29, 0, 1, 2]"
 cargo run --bin analyze_frame -- "[37, 1]"
+cargo run --bin analyze_scouting_message -- "[1, 1, 10]"
 ```
 
 To inspect corpus coverage for the fuzz target, run:
