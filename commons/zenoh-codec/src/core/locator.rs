@@ -70,6 +70,9 @@ where
 
     fn read(self, reader: &mut R) -> Result<Vec<Locator>, Self::Error> {
         let len = self.read(&mut *reader)?;
+        if len > reader.remaining() {
+            return Err(DidntRead);
+        }
         let mut vec: Vec<Locator> = Vec::with_capacity(len);
         for _ in 0..len {
             vec.push(self.read(&mut *reader)?);
