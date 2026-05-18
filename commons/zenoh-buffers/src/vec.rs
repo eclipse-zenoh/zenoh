@@ -83,7 +83,11 @@ impl Writer for Vec<u8> {
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
-        self.write(bytes).map(|_| ())
+        if bytes.is_empty() {
+            Ok(())
+        } else {
+            self.write(bytes).map(|_| ())
+        }
     }
 
     fn remaining(&self) -> usize {
