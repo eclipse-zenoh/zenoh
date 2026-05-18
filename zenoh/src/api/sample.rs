@@ -335,6 +335,12 @@ impl Sample {
         self.attachment.as_mut()
     }
 
+    /// Changes the optional sample attachment.
+    #[inline]
+    pub fn set_attachment(&mut self, attachment: Option<ZBytes>) {
+        self.attachment = attachment;
+    }
+
     /// Constructs an uninitialized empty Sample.
     #[zenoh_macros::internal]
     pub fn empty() -> Self {
