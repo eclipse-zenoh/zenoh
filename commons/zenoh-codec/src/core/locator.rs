@@ -69,8 +69,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Vec<Locator>, Self::Error> {
-        let len = self.read(&mut *reader)?;
-        let mut vec: Vec<Locator> = Vec::with_capacity(len);
+        let len: usize = self.read(&mut *reader)?;
+        let mut vec = Vec::new();
         for _ in 0..len {
             vec.push(self.read(&mut *reader)?);
         }
