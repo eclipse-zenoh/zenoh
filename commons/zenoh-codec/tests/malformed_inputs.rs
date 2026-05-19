@@ -26,8 +26,8 @@ fn fixed_zid() -> ZenohIdProto {
 fn hello_rejects_locator_count_larger_than_remaining_input() {
     // Start from a valid HELLO with one locator, then corrupt only the
     // locator-count prefix into an absurdly large varint. The decoder should
-    // reject that malformed locator list before allocating attacker-controlled
-    // Vec<Locator> capacity.
+    // fail cleanly once it runs out of bytes for the declared locator list,
+    // without preallocating from that attacker-controlled count.
     let hello = HelloProto {
         version: 1,
         whatami: WhatAmI::Client,
