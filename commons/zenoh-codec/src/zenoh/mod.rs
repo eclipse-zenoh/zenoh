@@ -361,7 +361,9 @@ where
         }
 
         // Calculate how many bytes are left in the payload
-        let len = header.len - (start - end);
+        let Some(len) = header.len.checked_sub(start - end) else {
+            return Err(DidntRead);
+        };
 
         let payload: ZBuf = {
             #[cfg(feature = "shared-memory")]
