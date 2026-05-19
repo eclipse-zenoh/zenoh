@@ -17,6 +17,8 @@ use std::{
 };
 
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::timestamp_stack::TimestampStack;
 use zenoh_protocol::{core::CongestionControl, network::request::ext::QueryTarget};
 use zenoh_result::ZResult;
 
@@ -79,6 +81,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
+    pub(crate) timestamp_stack: Option<TimestampStack>,
+    #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
@@ -99,6 +103,14 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
+            ..self
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+        Self {
+            timestamp_stack: stack.into(),
             ..self
         }
     }
@@ -264,6 +276,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_stack,
             handler: _,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -280,6 +294,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_stack,
             handler,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -405,6 +421,8 @@ where
             self.cancellation_token,
             None,
             None,
+            #[cfg(feature = "unstable")]
+            self.timestamp_stack,
         )?;
         Ok(receiver)
     }

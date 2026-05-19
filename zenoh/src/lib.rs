@@ -1126,7 +1126,14 @@ pub mod shm {
 /// Timestamp stack types.
 #[zenoh_macros::unstable]
 #[cfg(feature = "unstable")]
-pub use crate::api::timestamp_stack::{GetTimestampCallback, TsStackContext};
+pub mod timestamp_stack {
+    // TODO: review public API
+    pub use zenoh_protocol::network::timestamp_stack::{
+        interception_point, Interception, TimestampStack,
+    };
+
+    pub use crate::api::timestamp_stack::{GetTimestampCallback, TsStackContext};
+}
 
 /// Functionality for interrupting queries.
 #[zenoh_macros::unstable]

@@ -20,6 +20,8 @@ use std::{
 
 use tracing::error;
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::core::WhatAmI;
 use zenoh_protocol::{
     core::{EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
@@ -31,6 +33,8 @@ use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalI
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
+#[zenoh_macros::unstable]
+use crate::api::timestamp_stack::GetTimestampCallback;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 use crate::{
@@ -118,6 +122,13 @@ pub(crate) struct QueryInner {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: ReplyPrimitives,
+    // TODO: fix this mess
+    #[cfg(feature = "unstable")]
+    pub(crate) whatami: WhatAmI,
+    #[cfg(feature = "unstable")]
+    pub(crate) ts_stack_callback: Option<GetTimestampCallback>,
+    #[cfg(feature = "unstable")]
+    pub(crate) query_ts_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
 }
 
 impl QueryInner {
@@ -132,6 +143,12 @@ impl QueryInner {
             #[cfg(feature = "unstable")]
             source_info: None,
             primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
+            #[cfg(feature = "unstable")]
+            whatami: WhatAmI::Router, // ?!
+            #[cfg(feature = "unstable")]
+            ts_stack_callback: None,
+            #[cfg(feature = "unstable")]
+            query_ts_stack: None,
         }
     }
 }
@@ -342,6 +359,18 @@ impl Query {
     #[inline]
     pub fn source_info(&self) -> Option<&SourceInfo> {
         self.inner.source_info.as_ref()
+    }
+
+    /// Gets the timestamp stack attached to this query.
+    ///
+    /// The timestamp stack carries interception records (Send, Route, Receive)
+    /// collected along the message's path through the network.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn timestamp_stack(
+        &self,
+    ) -> Option<&zenoh_protocol::network::timestamp_stack::TimestampStack> {
+        self.inner.query_ts_stack.as_ref()
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
@@ -567,7 +596,7 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.map(Into::into);
-        self.inner.primitives.send_response(&mut Response {
+        let mut response = Response {
             rid: self.inner.qid,
             wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
             payload: ResponseBody::Reply(zenoh::Reply {
@@ -598,9 +627,29 @@ impl Query {
                 zid: self.inner.zid,
                 eid: self.eid,
             }),
-            //TODO: inherit from query
             ext_ts_stack: None,
-        });
+        };
+        #[cfg(feature = "unstable")]
+        {
+            response.ext_ts_stack = sample
+                .timestamp_stack
+                .map(|ts_stack| {
+                    let mut ext_ts_stack =
+                        Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+                    if let Some(ref cb) = self.inner.ts_stack_callback {
+                        crate::api::timestamp_stack::push_ts_interception(
+                            &mut ext_ts_stack,
+                            self.inner.zid.into(),
+                            self.inner.whatami,
+                            |ctx| cb(ctx),
+                            zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                        );
+                    }
+                    ext_ts_stack
+                })
+                .flatten();
+        }
+        self.inner.primitives.send_response(&mut response);
         Ok(())
     }
 }

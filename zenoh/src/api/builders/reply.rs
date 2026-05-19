@@ -15,6 +15,8 @@ use std::future::{IntoFuture, Ready};
 
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Wait};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::timestamp_stack::TimestampStack;
 use zenoh_protocol::{
     core::{CongestionControl, WireExpr},
     network::{response, Mapping, Response},
@@ -61,6 +63,8 @@ pub struct ReplyBuilder<'a, 'b, T> {
     #[cfg(feature = "unstable")]
     source_info: Option<SourceInfo>,
     attachment: Option<ZBytes>,
+    #[cfg(feature = "unstable")]
+    timestamp_stack: Option<TimestampStack>,
 }
 
 impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
@@ -86,6 +90,8 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
             #[cfg(feature = "unstable")]
             source_info: None,
             attachment: None,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 }
@@ -105,6 +111,8 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
             #[cfg(feature = "unstable")]
             source_info: None,
             attachment: None,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 }
@@ -137,6 +145,14 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
         Self {
             source_info: source_info.into(),
+            ..self
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+        Self {
+            timestamp_stack: stack.into(),
             ..self
         }
     }
@@ -191,6 +207,8 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
+        #[cfg(feature = "unstable")]
+        let sample = sample.timestamp_stack(self.timestamp_stack);
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -204,6 +222,8 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
             .qos(self.qos.into());
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
+        #[cfg(feature = "unstable")]
+        let sample = sample.timestamp_stack(self.timestamp_stack);
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -235,6 +255,8 @@ pub struct ReplyErrBuilder<'a> {
     query: &'a Query,
     payload: ZBytes,
     encoding: Encoding,
+    #[cfg(feature = "unstable")]
+    timestamp_stack: Option<TimestampStack>,
 }
 
 impl<'a> ReplyErrBuilder<'a> {
@@ -246,6 +268,8 @@ impl<'a> ReplyErrBuilder<'a> {
             query,
             payload: payload.into(),
             encoding: Encoding::default(),
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 }
@@ -261,13 +285,23 @@ impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
     }
 }
 
+#[cfg(feature = "unstable")]
+impl ReplyErrBuilder<'_> {
+    /// Activates timestamp stack instrumentation with the given `stack`.
+    #[zenoh_macros::unstable]
+    pub fn timestamp_stack(mut self, stack: TimestampStack) -> Self {
+        self.timestamp_stack = Some(stack);
+        self
+    }
+}
+
 impl Resolvable for ReplyErrBuilder<'_> {
     type To = ZResult<()>;
 }
 
 impl Wait for ReplyErrBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.send_response(&mut Response {
+        let mut response = Response {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
@@ -289,7 +323,23 @@ impl Wait for ReplyErrBuilder<'_> {
                 eid: self.query.eid,
             }),
             ext_ts_stack: None,
-        });
+        };
+        #[cfg(feature = "unstable")]
+        if let Some(ts_stack) = self.timestamp_stack {
+            let mut ext_ts_stack =
+                Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+            if let Some(ref cb) = self.query.inner.ts_stack_callback {
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut ext_ts_stack,
+                    self.query.inner.zid.into(),
+                    self.query.inner.whatami,
+                    |ctx| cb(ctx),
+                    zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                );
+                response.ext_ts_stack = ext_ts_stack;
+            }
+        }
+        self.query.inner.primitives.send_response(&mut response);
         Ok(())
     }
 }

@@ -17,6 +17,8 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::timestamp_stack::TimestampStack;
 
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
@@ -103,6 +105,8 @@ pub struct PublicationBuilder<P, T> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
+    #[cfg(feature = "unstable")]
+    pub(crate) timestamp_stack: Option<TimestampStack>,
 }
 
 #[zenoh_macros::internal_trait]
@@ -208,6 +212,13 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
             ..self
         }
     }
+    #[zenoh_macros::unstable]
+    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+        Self {
+            timestamp_stack: stack.into(),
+            ..self
+        }
+    }
 }
 
 #[zenoh_macros::internal_trait]
@@ -244,6 +255,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             #[cfg(feature = "unstable")]
             self.source_info,
             self.attachment,
+            #[cfg(feature = "unstable")]
+            self.timestamp_stack,
         )
     }
 }
@@ -267,6 +280,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             #[cfg(feature = "unstable")]
             self.source_info,
             self.attachment,
+            #[cfg(feature = "unstable")]
+            self.timestamp_stack,
         )
     }
 }
@@ -506,6 +521,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             #[cfg(feature = "unstable")]
             self.source_info,
             self.attachment,
+            #[cfg(feature = "unstable")]
+            self.timestamp_stack,
         )
     }
 }
@@ -527,6 +544,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             #[cfg(feature = "unstable")]
             self.source_info,
             self.attachment,
+            #[cfg(feature = "unstable")]
+            self.timestamp_stack,
         )
     }
 }

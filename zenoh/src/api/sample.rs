@@ -250,6 +250,9 @@ pub struct Sample {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
+    // TODO: expose higher-level type instead of using zenoh_protocol
+    #[cfg(feature = "unstable")]
+    pub(crate) timestamp_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
 }
 
 impl Sample {
@@ -317,6 +320,18 @@ impl Sample {
         self.source_info.as_ref()
     }
 
+    /// Gets the optional timestamp stack attached to this sample.
+    ///
+    /// The timestamp stack carries interception records (Send, Route, Receive)
+    /// collected along the message's path through the network.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn timestamp_stack(
+        &self,
+    ) -> Option<&zenoh_protocol::network::timestamp_stack::TimestampStack> {
+        self.timestamp_stack.as_ref()
+    }
+
     /// Gets the optional sample attachment as bytes.
     #[inline]
     pub fn attachment(&self) -> Option<&ZBytes> {
@@ -344,6 +359,8 @@ impl Sample {
             #[cfg(feature = "unstable")]
             source_info: None,
             attachment: None,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 
@@ -366,6 +383,8 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 source_info: put.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut put.ext_attachment).map(Into::into),
+                #[cfg(feature = "unstable")]
+                timestamp_stack: None,
             },
             PushBody::Del(del) => Self {
                 key_expr,
@@ -379,6 +398,8 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 source_info: del.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut del.ext_attachment).map(Into::into),
+                #[cfg(feature = "unstable")]
+                timestamp_stack: None,
             },
         }
     }

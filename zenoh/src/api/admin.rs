@@ -226,6 +226,8 @@ pub(crate) fn init(session: WeakSession) {
                 #[cfg(feature = "unstable")]
                 None,
                 None,
+                #[cfg(feature = "unstable")]
+                None,
             ) {
                 if e.downcast_ref::<SessionClosedError>().is_none() {
                     tracing::error!("Unable to publish transport event: {}", e);
@@ -281,6 +283,8 @@ pub(crate) fn init(session: WeakSession) {
                     None,
                     #[cfg(feature = "unstable")]
                     None,
+                    None,
+                    #[cfg(feature = "unstable")]
                     None,
                 ) {
                     if e.downcast_ref::<SessionClosedError>().is_none() {

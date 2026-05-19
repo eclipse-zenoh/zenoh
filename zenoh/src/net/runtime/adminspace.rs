@@ -502,6 +502,19 @@ impl Primitives for AdminSpace {
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives: ReplyPrimitives::new_remote(None, primitives),
+                        #[cfg(feature = "unstable")]
+                        whatami: self.context.runtime.whatami(),
+                        #[cfg(feature = "unstable")]
+                        ts_stack_callback: {
+                            let runtime = self.context.runtime.clone();
+                            Some(std::sync::Arc::new(
+                                move |ctx: crate::api::timestamp_stack::TsStackContext| {
+                                    runtime.get_ts_stack_timestamp(ctx)
+                                },
+                            ))
+                        },
+                        #[cfg(feature = "unstable")]
+                        query_ts_stack: None,
                     }),
                     eid: self.queryable_id,
                     value: mem::take(&mut query.ext_body)

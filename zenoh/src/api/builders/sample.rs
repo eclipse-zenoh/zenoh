@@ -18,6 +18,8 @@ use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::timestamp_stack::TimestampStack;
 
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
@@ -56,6 +58,12 @@ pub trait SampleBuilderTrait {
     /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
     /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
+    /// Sets the timestamp stack to be sent along with the publication.
+    ///
+    /// The timestamp stack carries interception records (Send, Route, Receive)
+    /// collected along the message's path through the network.
+    #[zenoh_macros::unstable]
+    fn timestamp_stack<T: Into<Option<TimestampStack>>>(self, stack: T) -> Self;
 }
 
 pub trait EncodingBuilderTrait {
@@ -111,6 +119,8 @@ impl SampleBuilder<SampleBuilderPut> {
                 #[cfg(feature = "unstable")]
                 source_info: None,
                 attachment: None,
+                #[cfg(feature = "unstable")]
+                timestamp_stack: None,
             },
             _t: PhantomData::<SampleBuilderPut>,
         }
@@ -143,6 +153,8 @@ impl SampleBuilder<SampleBuilderDelete> {
                 #[cfg(feature = "unstable")]
                 source_info: None,
                 attachment: None,
+                #[cfg(feature = "unstable")]
+                timestamp_stack: None,
             },
             _t: PhantomData::<SampleBuilderDelete>,
         }
@@ -219,6 +231,17 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         Self {
             sample: Sample {
                 attachment: attachment.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+        Self {
+            sample: Sample {
+                timestamp_stack: stack.into(),
                 ..self.sample
             },
             _t: PhantomData::<T>,
@@ -334,6 +357,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>> for Sample
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
             attachment: builder.attachment.clone(),
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 }
@@ -357,6 +382,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete>> for Sam
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
             attachment: builder.attachment.clone(),
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 }
