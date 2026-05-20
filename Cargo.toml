@@ -17,6 +17,7 @@ exclude = [
   "ci/valgrind-check",
   "ci/zenoh-1-75",
   "commons/zenoh-codec/fuzz",
+  "commons/zenoh-protocol/fuzz",
 ]
 members = [
   "commons/zenoh-buffers",

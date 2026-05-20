@@ -343,6 +343,7 @@ jobs:
           workspaces: |
             . -> target
             commons/zenoh-codec/fuzz -> commons/zenoh-codec/fuzz/target
+            commons/zenoh-protocol/fuzz -> commons/zenoh-protocol/fuzz/target
 
       - name: Build zenoh-codec fuzz crate
         run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bins
@@ -352,6 +353,15 @@ jobs:
 
       - name: Verify zenoh-codec seed corpora
         run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_all_corpora
+
+      - name: Build endpoint_from_str fuzz target
+        run: cargo build --manifest-path commons/zenoh-protocol/fuzz/Cargo.toml --bin endpoint_from_str
+
+      - name: Generate endpoint_from_str seed corpus
+        run: cargo run --manifest-path commons/zenoh-protocol/fuzz/Cargo.toml --bin gen_endpoint_corpus
+
+      - name: Verify endpoint_from_str seed corpus
+        run: cargo run --manifest-path commons/zenoh-protocol/fuzz/Cargo.toml --bin verify_endpoint_corpus
 
   valgrind:
     name: Memory leak checks
