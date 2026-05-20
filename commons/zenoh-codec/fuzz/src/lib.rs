@@ -43,7 +43,7 @@ use zenoh_protocol::{
     common::ZExtBody,
     core::{Locator, Reliability, Resolution, WhatAmI, ZenohIdProto},
     network::{
-        declare::common::DeclareFinal,
+        declare::{common::DeclareFinal, subscriber::DeclareSubscriber},
         interest::{InterestMode, InterestOptions},
         request::ext::QueryTarget,
         Declare, Interest, NetworkBody, NetworkMessage, Oam as NetworkOam, Push as NetworkPush,
@@ -412,7 +412,7 @@ fn scouting_message_roundtrip_ok(message: &ScoutingMessage) -> bool {
 ///
 /// Each file is created from a deterministic `TransportMessage` sample encoded by
 /// the real codec. The returned paths are the files that were written on disk.
-pub fn write_seed_corpus() -> io::Result<Vec<PathBuf>> {
+pub fn write_transport_seed_corpus() -> io::Result<Vec<PathBuf>> {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(TRANSPORT_CORPUS_DIR);
     fs::create_dir_all(&corpus_dir)?;
 
@@ -474,7 +474,7 @@ pub fn write_scouting_seed_corpus() -> io::Result<Vec<PathBuf>> {
 /// Generates every deterministic seed corpus for the `zenoh-codec` fuzz crate.
 pub fn write_all_seed_corpora() -> io::Result<Vec<PathBuf>> {
     let mut written = Vec::new();
-    written.extend(write_seed_corpus()?);
+    written.extend(write_transport_seed_corpus()?);
     written.extend(write_network_seed_corpus()?);
     written.extend(write_frame_seed_corpus()?);
     written.extend(write_scouting_seed_corpus()?);
@@ -483,10 +483,10 @@ pub fn write_all_seed_corpora() -> io::Result<Vec<PathBuf>> {
 
 /// Verifies that the generated seed corpus on disk matches the current encoder.
 ///
-/// This is mainly used in CI after `write_seed_corpus()` has been run. It also
+/// This is mainly used in CI after `write_transport_seed_corpus()` has been run. It also
 /// executes each corpus file through the fuzz harness to ensure the seeds remain
 /// valid parser inputs.
-pub fn verify_seed_corpus() -> io::Result<()> {
+pub fn verify_transport_seed_corpus() -> io::Result<()> {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(TRANSPORT_CORPUS_DIR);
     let expected = transport_message_seed_corpus();
 
@@ -567,7 +567,7 @@ pub fn verify_scouting_seed_corpus() -> io::Result<()> {
 
 /// Verifies every generated seed corpus for the `zenoh-codec` fuzz crate.
 pub fn verify_all_seed_corpora() -> io::Result<()> {
-    verify_seed_corpus()?;
+    verify_transport_seed_corpus()?;
     verify_network_seed_corpus()?;
     verify_frame_seed_corpus()?;
     verify_scouting_seed_corpus()?;
@@ -679,9 +679,11 @@ fn transport_message_seed_messages() -> Vec<(&'static str, TransportMessage)> {
 fn network_message_seed_messages() -> Vec<(&'static str, NetworkMessage)> {
     vec![
         ("declare", sample_declare_network_message()),
+        ("declare_final", sample_declare_final_network_message()),
         ("interest", sample_interest_network_message()),
         ("oam", sample_oam_network_message()),
         ("push", sample_push_network_message()),
+        ("push_del", sample_push_del_network_message()),
         ("request", sample_request_network_message()),
         ("response", sample_response_network_message()),
         ("response_final", sample_response_final_network_message()),
@@ -711,6 +713,12 @@ fn sample_push_network_message() -> NetworkMessage {
         ..Put::default()
     };
     let push = NetworkPush::from(PushBody::from(put));
+    NetworkBody::Push(push).into()
+}
+
+/// Builds a small `NetworkMessage` payload that exercises the `PushBody::Del` path.
+fn sample_push_del_network_message() -> NetworkMessage {
+    let push = NetworkPush::from(PushBody::from(zenoh_protocol::zenoh::Del::default()));
     NetworkBody::Push(push).into()
 }
 
@@ -775,8 +783,23 @@ fn sample_interest_network_message() -> NetworkMessage {
     NetworkBody::Interest(interest).into()
 }
 
-/// Returns a deterministic `Declare` network message with a final declaration body.
+/// Returns a deterministic `Declare` network message with a subscriber declaration body.
 fn sample_declare_network_message() -> NetworkMessage {
+    let declare = Declare {
+        interest_id: None,
+        ext_qos: zenoh_protocol::network::declare::ext::QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: zenoh_protocol::network::declare::ext::NodeIdType::DEFAULT,
+        body: zenoh_protocol::network::DeclareBody::DeclareSubscriber(DeclareSubscriber {
+            id: 0x4142_4344,
+            wire_expr: "demo/subscriber".into(),
+        }),
+    };
+    NetworkBody::Declare(declare).into()
+}
+
+/// Returns a deterministic `Declare` network message with a final declaration body.
+fn sample_declare_final_network_message() -> NetworkMessage {
     let declare = Declare {
         interest_id: None,
         ext_qos: zenoh_protocol::network::declare::ext::QoSType::DEFAULT,

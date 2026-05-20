@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{env, process};
 
 use zenoh_codec_fuzz::analyze_transport_message;

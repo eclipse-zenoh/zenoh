@@ -30,7 +30,7 @@ ci/valgrind-check/*.log
 # Code coverage reports
 *.profraw
 
-# cargo-fuzzy-related
+# cargo-fuzz-related
 **/fuzz/artifacts
 **/fuzz/corpus
 **/fuzz/coverage
