@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_codec::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_protocol::{
     core::{Locator, WhatAmI, ZenohIdProto},
     scouting::{HelloProto, ScoutingMessage},
@@ -20,6 +20,19 @@ use zenoh_protocol::{
 
 fn fixed_zid() -> ZenohIdProto {
     ZenohIdProto::try_from([0x14, 0x20, 0x30, 0xff].as_slice()).expect("fixed zid must be valid")
+}
+
+#[test]
+fn bounded_string_rejects_declared_length_larger_than_input() {
+    // This is a length-prefixed string with a declared length of 2, but only 1
+    // byte follows. The bounded byte/string decoder must reject the truncated
+    // payload instead of trusting the declared length for allocation.
+    let bytes = [2, b'a'];
+
+    let codec = Zenoh080Bounded::<usize>::new();
+    let mut reader = bytes.as_slice().reader();
+    let decoded: Result<String, _> = codec.read(&mut reader);
+    assert!(decoded.is_err());
 }
 
 #[test]
