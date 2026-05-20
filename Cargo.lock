@@ -5513,6 +5513,7 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "serde",
+ "serde_json",
  "uhlc",
  "zenoh-buffers",
  "zenoh-keyexpr",
@@ -5617,6 +5618,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-link",
+ "zenoh-protocol",
 ]
 
 [[package]]

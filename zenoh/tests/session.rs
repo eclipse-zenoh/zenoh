@@ -390,7 +390,11 @@ async fn test_session_from_cloned_config() {
 
     // Update pub_config (connector)
     let locator = get_locators_from_session(&sub_session).await;
-    pub_config.connect.endpoints.set(locator).unwrap();
+    pub_config
+        .connect
+        .endpoints
+        .set(locator.into_iter().map(Into::into).collect())
+        .unwrap();
 
     // Create pub session
     let _pub_session = zenoh::open(pub_config).await.unwrap();

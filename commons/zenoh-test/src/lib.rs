@@ -41,9 +41,10 @@ use std::{
 #[cfg(feature = "internal")]
 use zenoh::internal::runtime::{Runtime, RuntimeBuilder};
 use zenoh::{Session, Wait};
-use zenoh_config::{ModeDependentValue, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
+use zenoh_protocol::core::EndPoints;
 
 /// Default timeout applied to async operations via [`ztimeout!`].
 pub const TIMEOUT: Duration = Duration::from_secs(60);
@@ -175,17 +176,15 @@ impl TestSessions {
         locators: Vec<EndPoint>,
     ) -> zenoh_config::Config {
         println!("Connecting to {:?}", locators);
+        let endpoint_groups: Vec<EndPoints> = locators.into_iter().map(Into::into).collect();
         let mut config = zenoh_config::Config::default();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
         config
             .transport
             .unicast
-            .set_max_links(locators.len())
+            .set_max_links(endpoint_groups.len())
             .unwrap();
-        config
-            .connect
-            .set_endpoints(ModeDependentValue::Unique(locators))
-            .unwrap();
+        config.connect.endpoints.set(endpoint_groups).unwrap();
 
         config
     }
