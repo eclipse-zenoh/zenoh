@@ -471,6 +471,16 @@ pub fn write_scouting_seed_corpus() -> io::Result<Vec<PathBuf>> {
     Ok(written)
 }
 
+/// Generates every deterministic seed corpus for the `zenoh-codec` fuzz crate.
+pub fn write_all_seed_corpora() -> io::Result<Vec<PathBuf>> {
+    let mut written = Vec::new();
+    written.extend(write_seed_corpus()?);
+    written.extend(write_network_seed_corpus()?);
+    written.extend(write_frame_seed_corpus()?);
+    written.extend(write_scouting_seed_corpus()?);
+    Ok(written)
+}
+
 /// Verifies that the generated seed corpus on disk matches the current encoder.
 ///
 /// This is mainly used in CI after `write_seed_corpus()` has been run. It also
@@ -552,6 +562,15 @@ pub fn verify_scouting_seed_corpus() -> io::Result<()> {
         exercise_scouting_message(&actual);
     }
 
+    Ok(())
+}
+
+/// Verifies every generated seed corpus for the `zenoh-codec` fuzz crate.
+pub fn verify_all_seed_corpora() -> io::Result<()> {
+    verify_seed_corpus()?;
+    verify_network_seed_corpus()?;
+    verify_frame_seed_corpus()?;
+    verify_scouting_seed_corpus()?;
     Ok(())
 }
 

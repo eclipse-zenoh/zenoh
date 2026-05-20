@@ -20,16 +20,10 @@ From the `commons/zenoh-codec/fuzz` directory, run:
 
 ```sh
 # Generate the deterministic seed corpus
-cargo run --bin gen_transport_message_corpus
-cargo run --bin gen_network_message_corpus
-cargo run --bin gen_frame_corpus
-cargo run --bin gen_scouting_message_corpus
+cargo run --bin gen_all_corpora
 
 # Optional: verify the generated corpus matches the current encoder
-cargo run --bin verify_transport_message_corpus
-cargo run --bin verify_network_message_corpus
-cargo run --bin verify_frame_corpus
-cargo run --bin verify_scouting_message_corpus
+cargo run --bin verify_all_corpora
 
 # Run the fuzz targets
 cargo +nightly fuzz run transport_message

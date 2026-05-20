@@ -344,41 +344,14 @@ jobs:
             . -> target
             commons/zenoh-codec/fuzz -> commons/zenoh-codec/fuzz/target
 
-      - name: Build transport_message fuzz target
-        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin transport_message
+      - name: Build zenoh-codec fuzz crate
+        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bins
 
-      - name: Build network_message fuzz target
-        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin network_message
+      - name: Generate zenoh-codec seed corpora
+        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_all_corpora
 
-      - name: Build frame fuzz target
-        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin frame
-
-      - name: Build scouting_message fuzz target
-        run: cargo build --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin scouting_message
-
-      - name: Generate transport_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_transport_message_corpus
-
-      - name: Generate network_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_network_message_corpus
-
-      - name: Generate frame seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_frame_corpus
-
-      - name: Generate scouting_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin gen_scouting_message_corpus
-
-      - name: Verify transport_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_transport_message_corpus
-
-      - name: Verify network_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_network_message_corpus
-
-      - name: Verify frame seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_frame_corpus
-
-      - name: Verify scouting_message seed corpus
-        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_scouting_message_corpus
+      - name: Verify zenoh-codec seed corpora
+        run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_all_corpora
 
   valgrind:
     name: Memory leak checks
