@@ -603,6 +603,8 @@ impl TryFrom<String> for EndPoint {
     fn try_from(s: String) -> Result<Self, Self::Error> {
         const ERR: &str =
             "Endpoints must be of the form <protocol>/<address>[?<metadata>][#<config>]";
+        const PARAM_ERR: &str =
+            "Endpoint metadata and config must contain at least one valid parameter with a non-empty key";
 
         let pidx = s
             .find(PROTO_SEPARATOR)
@@ -614,6 +616,9 @@ impl TryFrom<String> for EndPoint {
             (None, None) => Ok(EndPoint { inner: s }),
             // There is some metadata
             (Some(midx), None) if midx > pidx && !s[midx + 1..].is_empty() => {
+                if !parameters::is_well_formed(&s[midx + 1..]) {
+                    bail!("{}: {}", PARAM_ERR, s);
+                }
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
                 parameters::from_iter_into(
@@ -624,6 +629,9 @@ impl TryFrom<String> for EndPoint {
             }
             // There is some config
             (None, Some(cidx)) if cidx > pidx && !s[cidx + 1..].is_empty() => {
+                if !parameters::is_well_formed(&s[cidx + 1..]) {
+                    bail!("{}: {}", PARAM_ERR, s);
+                }
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..cidx + 1]); // Includes config separator
                 parameters::from_iter_into(
@@ -639,6 +647,11 @@ impl TryFrom<String> for EndPoint {
                     && !s[midx + 1..cidx].is_empty()
                     && !s[cidx + 1..].is_empty() =>
             {
+                if !parameters::is_well_formed(&s[midx + 1..cidx])
+                    || !parameters::is_well_formed(&s[cidx + 1..])
+                {
+                    bail!("{}: {}", PARAM_ERR, s);
+                }
                 let mut inner = String::with_capacity(s.len());
                 inner.push_str(&s[..midx + 1]); // Includes metadata separator
 
@@ -726,6 +739,12 @@ fn endpoints() {
     assert!(EndPoint::from_str("udp#127.0.0.1:7447/").is_err());
     assert!(EndPoint::from_str("udp#127.0.0.1:7447/?").is_err());
     assert!(EndPoint::from_str("udp/127.0.0.1:7447?a=1#").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?;;;").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447#;;;").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?a=1#;;;").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?=1").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447#=1").is_err());
+    assert!(EndPoint::from_str("udp/127.0.0.1:7447?a=1#=1").is_err());
 
     let endpoint = EndPoint::from_str("udp/127.0.0.1:7447").unwrap();
     assert_eq!(endpoint.as_str(), "udp/127.0.0.1:7447");
