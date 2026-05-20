@@ -311,6 +311,12 @@ impl HatBaseTrait for Hat {
         Ok(())
     }
 
+    fn update_self_locators(&mut self) {
+        if let Some(net) = self.routers_net.as_mut() {
+            net.update_locators();
+        }
+    }
+
     fn close_face(&mut self, ctx: DispatcherContext) {
         debug_assert!(self.owns(ctx.src_face));
 

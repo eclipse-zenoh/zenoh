@@ -528,4 +528,19 @@ impl Gossip {
 
         vec![]
     }
+
+    pub(crate) fn update_locators(&mut self) {
+        self.graph[self.idx].sn += 1;
+        self.send_on_links(
+            vec![(
+                self.idx,
+                Details {
+                    zid: false,
+                    locators: true,
+                    links: false,
+                },
+            )],
+            |link| link.transport.get_whatami().unwrap_or(WhatAmI::Peer) == WhatAmI::Router,
+        );
+    }
 }

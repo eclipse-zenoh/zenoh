@@ -353,6 +353,12 @@ impl HatBaseTrait for Hat {
         }
     }
 
+    fn update_self_locators(&mut self) {
+        if let Some(net) = self.net_mut() {
+            net.update_locators();
+        }
+    }
+
     #[tracing::instrument(level = "trace", skip_all)]
     fn handle_oam(
         &mut self,
@@ -574,6 +580,13 @@ impl NetMut<'_> {
             Self::Network(n) => {
                 n.link_states(link_states, src);
             }
+        }
+    }
+
+    pub(crate) fn update_locators(self) {
+        match self {
+            Self::Gossip(n) => n.update_locators(),
+            Self::Network(n) => n.update_locators(),
         }
     }
 }
