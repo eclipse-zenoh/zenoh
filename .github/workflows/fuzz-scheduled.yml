@@ -83,7 +83,7 @@ jobs:
         run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Install cargo-fuzz
-        uses: taiki-e/install-action@cargo-fuzz
+        run: cargo +stable install --locked cargo-fuzz
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -127,7 +127,7 @@ jobs:
         run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Install cargo-fuzz
-        uses: taiki-e/install-action@cargo-fuzz
+        run: cargo +stable install --locked cargo-fuzz
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
