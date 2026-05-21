@@ -74,11 +74,6 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
-#[cfg(feature = "unstable")]
-use crate::api::{
-    cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
-    timestamp_stack::GetTimestampCallback,
-};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -123,6 +118,14 @@ use crate::{
     },
     query::ReplyError,
     Config,
+};
+#[cfg(feature = "unstable")]
+use crate::{
+    api::{
+        cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
+        timestamp_stack::GetTimestampCallback,
+    },
+    net::runtime::DynamicRuntime,
 };
 
 zconfigurable! {
@@ -2536,9 +2539,7 @@ impl Session {
                 Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
             crate::api::timestamp_stack::push_ts_interception(
                 &mut ext_ts_stack,
-                self.0.runtime.zid(),
-                self.0.runtime.whatami(),
-                |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+                Some(&*self.0.runtime.as_ref()),
                 zenoh_protocol::network::timestamp_stack::interception_point::SEND,
             );
             push.ext_ts_stack = ext_ts_stack;
@@ -2743,9 +2744,7 @@ impl Session {
                     Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut ext_ts_stack,
-                    self.0.runtime.zid(),
-                    self.0.runtime.whatami(),
-                    |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+                    Some(&*self.0.runtime.as_ref()),
                     zenoh_protocol::network::timestamp_stack::interception_point::SEND,
                 );
                 ext_ts_stack
@@ -2955,17 +2954,7 @@ impl Session {
                 ReplyPrimitives::new_remote(Some(self.downgrade()), primitives.into_primitives())
             },
             #[cfg(feature = "unstable")]
-            whatami: self.0.runtime.whatami(),
-            #[cfg(feature = "unstable")]
-            ts_stack_callback: {
-                let runtime = self.0.runtime.clone();
-                // FIXME: check if this keeps strong reference on Runtime
-                Some(std::sync::Arc::new(
-                    move |ctx: crate::api::timestamp_stack::TsStackContext| {
-                        runtime.get_ts_stack_timestamp(ctx)
-                    },
-                ))
-            },
+            runtime: Some(DynamicRuntime::downgrade(&self.0.runtime.deref())),
             #[cfg(feature = "unstable")]
             query_ts_stack: timestamp_stack,
         });
@@ -3286,9 +3275,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
-            self.0.runtime.zid(),
-            self.0.runtime.whatami(),
-            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            Some(&*self.0.runtime.as_ref()),
             zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
         );
         callbacks.call(
@@ -3306,9 +3293,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
-            self.0.runtime.zid(),
-            self.0.runtime.whatami(),
-            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            Some(&*self.0.runtime.as_ref()),
             zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
         );
         match &mut msg.payload {
@@ -3350,9 +3335,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
-            self.0.runtime.zid(),
-            self.0.runtime.whatami(),
-            |ctx| self.0.runtime.get_ts_stack_timestamp(ctx),
+            Some(&*self.0.runtime.as_ref()),
             zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
         );
         match &mut msg.payload {

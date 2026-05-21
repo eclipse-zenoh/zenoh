@@ -77,11 +77,8 @@ async fn test_reply_preserves_optimized_ke() {
         #[cfg(feature = "unstable")]
         source_info: None,
         primitives: ReplyPrimitives::new_remote(Some(session.downgrade()), primitives.clone()),
-        // TODO: fix this mess
         #[cfg(feature = "unstable")]
-        whatami: zenoh_protocol::core::WhatAmI::Peer,
-        #[cfg(feature = "unstable")]
-        ts_stack_callback: None,
+        runtime: None,
         #[cfg(feature = "unstable")]
         query_ts_stack: None,
     };

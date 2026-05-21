@@ -568,6 +568,7 @@ impl RuntimeState {
     }
 }
 
+#[derive(Clone)]
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
@@ -805,7 +806,7 @@ impl RuntimeBuilder {
 
 #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RuntimeState>,
+    pub(crate) state: Arc<RuntimeState>,
 }
 
 impl fmt::Debug for Runtime {
@@ -820,6 +821,12 @@ impl fmt::Debug for Runtime {
 
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl DynamicRuntime {
+    pub(crate) fn downgrade(&self) -> WeakDynamicRuntime {
+        WeakDynamicRuntime(Arc::downgrade(&self.0))
+    }
+}
 
 impl fmt::Debug for DynamicRuntime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -845,6 +852,15 @@ impl StructVersion for DynamicRuntime {
 }
 
 impl PluginStartArgs for DynamicRuntime {}
+
+#[derive(Clone)]
+pub struct WeakDynamicRuntime(pub(crate) Weak<dyn IRuntime>);
+
+impl WeakDynamicRuntime {
+    pub(crate) fn upgrade(&self) -> Option<DynamicRuntime> {
+        self.0.upgrade().map(|r| DynamicRuntime(r))
+    }
+}
 
 impl Runtime {
     #[inline(always)]

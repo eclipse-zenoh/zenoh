@@ -308,7 +308,7 @@ pub fn route_data(
             if inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face) {
                 // Get the runtime to handle ext_ts_stack
                 #[cfg(feature = "unstable")]
-                let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+                let weak_runtime = rtables.data.runtime.clone();
 
                 drop(rtables);
                 let mut msg_clone;
@@ -323,12 +323,12 @@ pub fn route_data(
                     node_id: dir.node_id,
                 };
                 #[cfg(feature = "unstable")]
-                if let Some(ref rt) = runtime {
+                {
+                    let rt = weak_runtime.and_then(|r| r.upgrade());
+                    let rt_state = rt.as_ref().map(|r| r.state.as_ref());
                     crate::api::timestamp_stack::push_ts_interception(
                         &mut msg.ext_ts_stack,
-                        rt.zid(),
-                        rt.whatami(),
-                        |ctx| rt.get_ts_stack_timestamp(ctx),
+                        rt_state,
                         zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                     );
                 }
@@ -343,19 +343,18 @@ pub fn route_data(
                 .collect::<Vec<&Direction>>();
 
             // Get the runtime to handle ext_ts_stack
-            // FIXME: this may be holding the Arc for too long, preventing the runtime from closing?
             #[cfg(feature = "unstable")]
-            let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+            let weak_runtime = rtables.data.runtime.clone();
 
             drop(rtables);
 
             #[cfg(feature = "unstable")]
-            if let Some(ref rt) = runtime {
+            {
+                let rt = weak_runtime.and_then(|r| r.upgrade());
+                let rt_state = rt.as_ref().map(|r| r.state.as_ref());
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut msg.ext_ts_stack,
-                    rt.zid(),
-                    rt.whatami(),
-                    |ctx| rt.get_ts_stack_timestamp(ctx),
+                    rt_state,
                     zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                 );
             }

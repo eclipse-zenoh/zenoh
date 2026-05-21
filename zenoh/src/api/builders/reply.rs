@@ -326,18 +326,17 @@ impl Wait for ReplyErrBuilder<'_> {
         };
         #[cfg(feature = "unstable")]
         if let Some(ts_stack) = self.timestamp_stack {
+            use std::ops::Deref;
+            let rt = self.query.inner.runtime.clone().and_then(|r| r.upgrade());
+            let irt = rt.as_deref().map(|r| r.deref());
             let mut ext_ts_stack =
                 Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
-            if let Some(ref cb) = self.query.inner.ts_stack_callback {
-                crate::api::timestamp_stack::push_ts_interception(
-                    &mut ext_ts_stack,
-                    self.query.inner.zid.into(),
-                    self.query.inner.whatami,
-                    |ctx| cb(ctx),
-                    zenoh_protocol::network::timestamp_stack::interception_point::SEND,
-                );
-                response.ext_ts_stack = ext_ts_stack;
-            }
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut ext_ts_stack,
+                irt,
+                zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+            );
+            response.ext_ts_stack = ext_ts_stack;
         }
         self.query.inner.primitives.send_response(&mut response);
         Ok(())

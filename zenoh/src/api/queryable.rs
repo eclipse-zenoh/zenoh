@@ -20,8 +20,6 @@ use std::{
 
 use tracing::error;
 use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::WhatAmI;
 use zenoh_protocol::{
     core::{EntityId, Parameters, WireExpr, ZenohIdProto},
     network::{response, Mapping, RequestId, Response, ResponseFinal},
@@ -33,10 +31,10 @@ use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalI
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
-#[zenoh_macros::unstable]
-use crate::api::timestamp_stack::GetTimestampCallback;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
+#[cfg(feature = "unstable")]
+use crate::net::runtime::WeakDynamicRuntime;
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
@@ -122,11 +120,8 @@ pub(crate) struct QueryInner {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: ReplyPrimitives,
-    // TODO: fix this mess
     #[cfg(feature = "unstable")]
-    pub(crate) whatami: WhatAmI,
-    #[cfg(feature = "unstable")]
-    pub(crate) ts_stack_callback: Option<GetTimestampCallback>,
+    pub(crate) runtime: Option<WeakDynamicRuntime>,
     #[cfg(feature = "unstable")]
     pub(crate) query_ts_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
 }
@@ -144,9 +139,7 @@ impl QueryInner {
             source_info: None,
             primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
             #[cfg(feature = "unstable")]
-            whatami: WhatAmI::Router, // ?!
-            #[cfg(feature = "unstable")]
-            ts_stack_callback: None,
+            runtime: None,
             #[cfg(feature = "unstable")]
             query_ts_stack: None,
         }
@@ -631,20 +624,18 @@ impl Query {
         };
         #[cfg(feature = "unstable")]
         {
+            let rt = self.inner.runtime.clone().and_then(|r| r.upgrade());
+            let irt = rt.as_deref().map(|r| r.deref());
             response.ext_ts_stack = sample
                 .timestamp_stack
                 .map(|ts_stack| {
                     let mut ext_ts_stack =
                         Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
-                    if let Some(ref cb) = self.inner.ts_stack_callback {
-                        crate::api::timestamp_stack::push_ts_interception(
-                            &mut ext_ts_stack,
-                            self.inner.zid.into(),
-                            self.inner.whatami,
-                            |ctx| cb(ctx),
-                            zenoh_protocol::network::timestamp_stack::interception_point::SEND,
-                        );
-                    }
+                    crate::api::timestamp_stack::push_ts_interception(
+                        &mut ext_ts_stack,
+                        irt,
+                        zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                    );
                     ext_ts_stack
                 })
                 .flatten();

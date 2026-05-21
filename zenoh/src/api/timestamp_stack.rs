@@ -13,9 +13,12 @@
 //
 use std::sync::Arc;
 
-use zenoh_protocol::{core::WhatAmI, network::timestamp_stack::TsStackType};
+use zenoh_protocol::{
+    core::WhatAmI,
+    network::timestamp_stack::{Interception, TsStackType},
+};
 
-use crate::session::ZenohId;
+use crate::{net::runtime::IRuntime, session::ZenohId};
 
 /// Context passed to the user-defined timestamp callback.
 ///
@@ -45,31 +48,26 @@ pub type GetTimestampCallback = Arc<dyn Fn(TsStackContext) -> Vec<u8> + Send + S
 /// Push a timestamp interception record onto the stack if the corresponding
 /// `conf_flags` bit is set for this interception point.
 ///
-/// This is a no-op if `ext_ts_stack` is `None` or if the flag is not present.
+/// This is a no-op if `ext_ts_stack` is `None`, if the flag is not present, or if `runtime` is `None`.
 #[cfg(feature = "unstable")]
-pub(crate) fn push_ts_interception<const ID: u8, F>(
+pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized>(
     ext_ts_stack: &mut Option<TsStackType<ID>>,
-    zid: ZenohId,
-    whatami: WhatAmI,
-    get_timestamp: F,
+    runtime: Option<&T>,
     point: u8,
-) where
-    F: FnOnce(TsStackContext) -> Vec<u8>,
-{
-    use zenoh_protocol::network::timestamp_stack::Interception;
-
-    if let Some(ts_stack) = ext_ts_stack {
-        if ts_stack.ts_stack.conf_flags & point != 0 {
-            let context = TsStackContext {
-                zid,
-                whatami,
-                interception_point: point,
-            };
-            let timestamp = get_timestamp(context);
-            ts_stack.ts_stack.stack.push(Interception {
-                flags: point,
-                timestamp,
-            });
-        }
+) {
+    let (Some(runtime), Some(ts_stack)) = (runtime, ext_ts_stack) else {
+        return;
+    };
+    if ts_stack.ts_stack.conf_flags & point != 0 {
+        let context = TsStackContext {
+            zid: runtime.zid(),
+            whatami: runtime.whatami(),
+            interception_point: point,
+        };
+        let timestamp = runtime.get_ts_stack_timestamp(context);
+        ts_stack.ts_stack.stack.push(Interception {
+            flags: point,
+            timestamp,
+        });
     }
 }

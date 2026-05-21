@@ -268,7 +268,7 @@ impl Face {
                     .unwrap_or(rtables.data.queries_default_timeout);
 
                 #[cfg(feature = "unstable")]
-                let runtime = rtables.data.runtime.as_ref().and_then(|w| w.upgrade());
+                let weak_runtime = rtables.data.runtime.clone();
 
                 drop(queries_lock);
                 drop(rtables);
@@ -325,16 +325,15 @@ impl Face {
                         };
 
                         #[cfg(feature = "unstable")]
-                        if let Some(ref rt) = runtime {
+                        {
+                            let rt = weak_runtime.clone().and_then(|r| r.upgrade());
+                            let rt_state = rt.as_ref().map(|r| r.state.as_ref());
                             crate::api::timestamp_stack::push_ts_interception(
                                 &mut msg.ext_ts_stack,
-                                rt.zid(),
-                                rt.whatami(),
-                                |ctx| rt.get_ts_stack_timestamp(ctx),
+                                rt_state,
                                 zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                             );
                         }
-
                         if dir.dst_face.primitives.send_request(msg) {
                             #[cfg(feature = "stats")]
                             payload_observer.observe_payload(zenoh_stats::Tx, &dir.dst_face, msg);
@@ -553,7 +552,7 @@ pub(crate) fn route_send_response(
 ) {
     let tables = zread!(tables_ref.tables);
     #[cfg(feature = "unstable")]
-    let runtime = tables.data.runtime.as_ref().and_then(|w| w.upgrade());
+    let weak_runtime = tables.data.runtime.clone();
     match tables
         .data
         .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
@@ -604,12 +603,12 @@ pub(crate) fn route_send_response(
                     msg.rid = query.src_qid;
                     msg.ext_qos = query.src_qos;
                     #[cfg(feature = "unstable")]
-                    if let Some(ref rt) = runtime {
+                    {
+                        let rt = weak_runtime.and_then(|r| r.upgrade());
+                        let rt_state = rt.as_ref().map(|r| r.state.as_ref());
                         crate::api::timestamp_stack::push_ts_interception(
                             &mut msg.ext_ts_stack,
-                            rt.zid(),
-                            rt.whatami(),
-                            |ctx| rt.get_ts_stack_timestamp(ctx),
+                            rt_state,
                             zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                         );
                     }

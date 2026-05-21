@@ -386,9 +386,7 @@ impl Primitives for AdminSpace {
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
-            self.context.runtime.zid(),
-            self.context.runtime.whatami(),
-            |ctx| self.context.runtime.get_ts_stack_timestamp(ctx),
+            Some(self.context.runtime.state.as_ref()),
             zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
         );
         {
@@ -452,9 +450,7 @@ impl Primitives for AdminSpace {
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
-            self.context.runtime.zid(),
-            self.context.runtime.whatami(),
-            |ctx| self.context.runtime.get_ts_stack_timestamp(ctx),
+            Some(self.context.runtime.state.as_ref()),
             zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
         );
         match &mut msg.payload {
@@ -503,16 +499,9 @@ impl Primitives for AdminSpace {
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives: ReplyPrimitives::new_remote(None, primitives),
                         #[cfg(feature = "unstable")]
-                        whatami: self.context.runtime.whatami(),
-                        #[cfg(feature = "unstable")]
-                        ts_stack_callback: {
-                            let runtime = self.context.runtime.clone();
-                            Some(std::sync::Arc::new(
-                                move |ctx: crate::api::timestamp_stack::TsStackContext| {
-                                    runtime.get_ts_stack_timestamp(ctx)
-                                },
-                            ))
-                        },
+                        runtime: Some(crate::internal::runtime::DynamicRuntime::downgrade(
+                            &self.context.runtime.clone().into(),
+                        )),
                         #[cfg(feature = "unstable")]
                         query_ts_stack: None,
                     }),
