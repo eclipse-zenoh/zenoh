@@ -66,7 +66,7 @@ jobs:
     name: Codec fuzz (${{ needs.determine-profile.outputs.label }}) - ${{ matrix.target }}
     needs: determine-profile
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
@@ -105,11 +105,20 @@ jobs:
         run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run ${{ matrix.target }} -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
         working-directory: commons/zenoh-codec/fuzz
 
+      - name: Upload codec fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
+          path: commons/zenoh-codec/fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 14
+
   fuzz-protocol:
     name: Protocol fuzz (${{ needs.determine-profile.outputs.label }}) - endpoint_from_str
     needs: determine-profile
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 330
     steps:
       - name: Clone this repository
         uses: actions/checkout@v4
@@ -139,3 +148,12 @@ jobs:
       - name: Run endpoint_from_str fuzz target
         run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run endpoint_from_str -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
         working-directory: commons/zenoh-protocol/fuzz
+
+      - name: Upload protocol fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
+          path: commons/zenoh-protocol/fuzz/artifacts/endpoint_from_str
+          if-no-files-found: ignore
+          retention-days: 14

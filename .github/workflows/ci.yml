@@ -377,6 +377,17 @@ jobs:
         working-directory: commons/zenoh-protocol/fuzz
         run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run endpoint_from_str -- -max_total_time=60
 
+      - name: Upload fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-pr-smoke
+          path: |
+            commons/zenoh-codec/fuzz/artifacts
+            commons/zenoh-protocol/fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 14
+
   valgrind:
     name: Memory leak checks
     runs-on: ubuntu-latest
