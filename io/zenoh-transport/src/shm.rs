@@ -53,7 +53,7 @@ struct ProviderInitCfg {
 
 #[derive(Debug)]
 pub enum ProviderInitState {
-    Initializing,
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
@@ -128,8 +128,8 @@ impl LazyShmProvider {
                         });
                 });
 
-                *lock = ProviderInitStateInner::Initializing(receiver);
-                ProviderInitState::Initializing
+                *lock = ProviderInitStateInner::Initializing(receiver.clone());
+                ProviderInitState::Initializing(receiver)
             }
             ProviderInitStateInner::Initializing(join_handle) => match join_handle.try_recv() {
                 Ok(Some(shm_provider)) => {
@@ -140,7 +140,7 @@ impl LazyShmProvider {
                     *lock = ProviderInitStateInner::Error;
                     ProviderInitState::Error
                 }
-                Err(_) => ProviderInitState::Initializing,
+                Err(_) => ProviderInitState::Initializing(join_handle.clone()),
             },
             ProviderInitStateInner::Ready(shm_provider) => {
                 ProviderInitState::Ready(shm_provider.clone())
