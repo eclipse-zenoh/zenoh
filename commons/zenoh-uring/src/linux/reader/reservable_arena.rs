@@ -14,11 +14,14 @@
 
 use std::sync::Arc;
 
+use io_uring::{opcode, squeue::Flags, SubmissionQueue};
+use zenoh_result::ZResult;
+
 use crate::{
     api::types::BufferCount,
     batch_arena::{BatchArena, Batches},
     reader::submission::SubmissionIface,
-    types::BufferId,
+    types::{BufferGroupId, BufferId},
 };
 
 pub(crate) struct ReservableArenaInner {
@@ -52,6 +55,70 @@ impl ReservableArenaInner {
 
     pub(crate) fn batch_size(&self) -> usize {
         self.arena.batch_size()
+    }
+
+    pub fn provide_batches_to_group(
+        &self,
+        group_id: BufferGroupId,
+        mut count: BufferCount,
+        sq: &mut SubmissionQueue<'_>,
+    ) -> ZResult<BufferCount> {
+        // recycle batches from the recycled_batches queue first
+        while let Some(buf_id) = self.recycled_batches.pop() {
+            let data = unsafe { self.arena.index_mut_unchecked(buf_id as usize) };
+
+            let entry = opcode::ProvideBuffers::new(
+                data.as_mut_ptr(),
+                self.arena.batch_size() as i32,
+                1,
+                group_id,
+                buf_id as BufferId,
+            )
+            .build()
+            .flags(Flags::SKIP_SUCCESS);
+
+            unsafe {
+                sq.push(&entry)?;
+            }
+
+            count -= 1;
+
+            if count == 0 {
+                break;
+            }
+        }
+
+        // allocate more memory if needed
+        if count > 0 {
+            if let Some(additional_batches) = self.arena.allocate_more_batches() {
+                let (primary, to_recycle) =
+                    additional_batches.split(count as BufferCount, self.arena.batch_size());
+
+                // push the primary batch to the result
+                let entry = opcode::ProvideBuffers::new(
+                    primary.addr,
+                    self.arena.batch_size() as i32,
+                    primary.nbufs,
+                    group_id,
+                    primary.start_bid as BufferId,
+                )
+                .build()
+                .flags(Flags::SKIP_SUCCESS);
+
+                unsafe {
+                    sq.push(&entry)?;
+                }
+
+                // recycle the leftover batches
+                if let Some(to_recycle) = to_recycle {
+                    for buf_id in to_recycle.start_bid..to_recycle.start_bid + to_recycle.nbufs {
+                        self.recycle_batch(buf_id);
+                    }
+                }
+            }
+        }
+
+        Ok(count)
     }
 
     pub fn pop_batches(&self, count: BufferCount) -> Vec<Batches> {

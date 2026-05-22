@@ -139,9 +139,20 @@ impl BufferGroup {
         buf_len: usize,
         sq: &mut SubmissionQueue<'_>,
     ) -> ZResult<RxBuffer> {
+        let count = self
+            .buffers_missing
+            .load(std::sync::atomic::Ordering::Relaxed)
+            + 1;
+        let leftover = self
+            .arena
+            .arena
+            .provide_batches_to_group(self.id, count, sq)?;
         self.buffers_missing
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.ensure_batches_to_ring(sq)?;
+            .store(leftover, std::sync::atomic::Ordering::Relaxed);
+
+        //self.buffers_missing
+        //    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        //self.ensure_batches_to_ring(sq)?;
 
         let data = &mut unsafe {
             self.arena

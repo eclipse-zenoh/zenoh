@@ -88,6 +88,8 @@ impl Reader {
     }
 
     pub fn new(batch_size: usize, batch_count: BufferCount) -> ZResult<Self> {
+        let batch_size = batch_size + batch_size / 2; // add some headroom to reduce ENOBUFS errors
+
         // create eventfd to wake io_uring on demand by producing read events
         let waker = Arc::new(nix::sys::eventfd::EventFd::from_value_and_flags(
             0,
@@ -184,16 +186,11 @@ impl Reader {
             }
 
             loop {
+                #[cfg(feature = "uring_trace")]
+                let mut i = 0;
+
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     let mut sq = unsafe { ring.submission_shared() };
-
-                    roll_cmds(
-                        &receiver,
-                        &mut context_storage,
-                        &arena,
-                        &mut sq,
-                        batch_count,
-                    )?;
 
                     match e.user_data() {
                         IndexGeneration::INVALID_MIN => {
@@ -205,9 +202,16 @@ impl Reader {
                             unsafe { sq.push(&waker_read)? };
                         }
                         index => {
+                            #[cfg(feature = "uring_trace")]
+                            {
+                                i += 1;
+                            }
+
                             let index = unsafe { IndexGeneration::new_unchecked(index) };
-                            if Reader::multi(&context_storage, &e, index, &arena, &mut sq)? {
-                                let len = sq.len() as u32;
+                            let to_submit =
+                                Reader::multi(&context_storage, &e, index, &arena, &mut sq)?;
+                            let len = sq.len() as u32;
+                            if to_submit || len >= (batch_count / 2) as u32 {
                                 drop(sq);
                                 //ring.submit()?;
                                 unsafe {
@@ -222,6 +226,9 @@ impl Reader {
                         }
                     }
                 }
+
+                #[cfg(feature = "uring_trace")]
+                tracing::info!("Processed {} completion entries", i);
 
                 // receive external submissions
                 let mut sq = unsafe { ring.submission_shared() };
@@ -354,16 +361,17 @@ impl Reader {
     ) -> ZResult<bool> {
         let mut need_submit = false;
         if e.result() < 0 {
-            tracing::trace!("Error entry: {:?}", e);
+            tracing::debug!("Error entry: {:?}", e);
 
             match e.result().neg() {
                 libc::ENOBUFS => {
                     // We are out of buffers
                     tracing::debug!("ENOBUFS: Restart multishot receive for task {:?}", index);
 
-                    let recv = opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
+                    let recv =
+                        opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
                             .build()
-                            //.flags(io_uring::squeue::Flags::ASYNC)
+                            .flags(io_uring::squeue::Flags::ASYNC)
                             .user_data(index.into());
 
                     unsafe { sq.push(&recv)? };
@@ -393,7 +401,7 @@ impl Reader {
                             context.buffer_group().id(),
                         )
                         .build()
-                        //.flags(io_uring::squeue::Flags::ASYNC)
+                        .flags(io_uring::squeue::Flags::ASYNC)
                         .user_data(index.into());
 
                         unsafe { sq.push(&recv)? };
