@@ -321,18 +321,46 @@ pub fn route_data(
                 send_push(&dir.dst_face, msg, reliability);
             }
         } else {
-            let dirs = route
+            // Concurrent multi-destination fan-out.
+            //
+            // The previous loop dispatched each destination's `send_push`
+            // serially. For a `CongestionControl::Block` message the
+            // per-destination `send_push` can wait up to `wait_before_close`
+            // (default 5 s) when the destination's `TransmissionPipeline` is
+            // back-pressured (peer congested, transport tearing down, ...).
+            // With N peers in a full p2p mesh and K back-pressured pipelines,
+            // the serial loop accumulated K × wait_before_close inside a
+            // single `publisher.put(...).wait()` call (up to ~30 s observed
+            // on a 50-peer / 3-churner workload with the default 5 s wait).
+            //
+            // Each destination has its own face / pipeline / link, so the
+            // waits are mutually independent and safe to parallelize. Snapshot
+            // the destination set into owned `(Arc<FaceState>, Push)` pairs
+            // (the routing-table lock is dropped before the spawn), then
+            // dispatch one `ZRuntime::Net.spawn_blocking` task per
+            // destination. The total wall-clock for the fan-out is bounded by
+            // `max(per-face wait)`, not by their sum.
+            //
+            // Implementation notes:
+            // - `spawn_blocking` reuses tokio's shared blocking pool
+            //   (default cap ~512), so the per-put cost is an enqueue, not
+            //   an OS-thread create/destroy.
+            // - `futures::executor::block_on` is runtime-agnostic and is
+            //   used to wait for every JoinHandle on the calling thread.
+            //   The blocking work runs on tokio's separate blocking-pool
+            //   workers, so there is no nested-runtime deadlock even when
+            //   `route_data` is invoked from a tokio recv-task worker.
+            // - Single-destination case stays on the synchronous path to
+            //   avoid the (small) spawn / join overhead.
+            // - Panics in spawned tasks are propagated via `resume_unwind`,
+            //   preserving the pre-change fail-fast behavior.
+            let dispatch: Vec<(Arc<FaceState>, Push)> = route
                 .iter()
                 .filter(|dir| {
                     inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face)
                 })
-                .collect::<Vec<&Direction>>();
-
-            drop(rtables);
-            for dir in dirs {
-                send_push(
-                    &dir.dst_face,
-                    &mut Push {
+                .map(|dir| {
+                    let push = Push {
                         wire_expr: dir.wire_expr.clone(),
                         ext_qos: msg.ext_qos,
                         ext_tstamp: None,
@@ -340,9 +368,58 @@ pub fn route_data(
                             node_id: dir.node_id,
                         },
                         payload: msg.payload.clone(),
-                    },
-                    reliability,
-                );
+                    };
+                    (dir.dst_face.clone(), push)
+                })
+                .collect();
+
+            drop(rtables);
+
+            if dispatch.len() <= 1 {
+                // Single destination: skip the spawn/join overhead and stay on
+                // the synchronous path.
+                for (dst_face, mut push) in dispatch {
+                    send_push(&dst_face, &mut push, reliability);
+                }
+            } else {
+                let mut joins = Vec::with_capacity(dispatch.len());
+                for (dst_face, mut push) in dispatch {
+                    joins.push(zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
+                        let sent = dst_face.primitives.send_push(&mut push, reliability);
+                        (dst_face, push, sent)
+                    }));
+                }
+                // Block synchronously on every task. Iterating in order is fine:
+                // tasks run in parallel on the blocking pool, so the cumulative
+                // wait equals the slowest task (not the sum).
+                for join in joins {
+                    let result: Result<_, tokio::task::JoinError> =
+                        futures::executor::block_on(join);
+                    match result {
+                        Ok((dst_face, push, sent)) => {
+                            #[cfg(feature = "stats")]
+                            if sent {
+                                payload_observer
+                                    .observe_payload(zenoh_stats::Tx, &dst_face, &push);
+                            }
+                            #[cfg(not(feature = "stats"))]
+                            {
+                                let _ = (dst_face, push, sent);
+                            }
+                        }
+                        Err(join_err) => {
+                            if join_err.is_panic() {
+                                std::panic::resume_unwind(join_err.into_panic());
+                            }
+                            // Cancellation should not happen here (we hold the
+                            // JoinHandle), but log it so we don't silently lose
+                            // a fanout slot if it ever does.
+                            tracing::error!(
+                                "concurrent fanout task cancelled unexpectedly: {join_err}"
+                            );
+                        }
+                    }
+                }
             }
         }
     }
