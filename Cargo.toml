@@ -12,7 +12,13 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [workspace]
-exclude = ["ci/nostd-check", "ci/valgrind-check", "ci/zenoh-1-75"]
+exclude = [
+  "ci/nostd-check",
+  "ci/valgrind-check",
+  "ci/zenoh-1-75",
+  "commons/zenoh-codec/fuzz",
+  "commons/zenoh-protocol/fuzz",
+]
 members = [
   "commons/zenoh-buffers",
   "commons/zenoh-codec",

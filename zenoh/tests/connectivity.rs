@@ -21,6 +21,14 @@ mod tests {
     };
 
     use zenoh::sample::SampleKind;
+    #[cfg(feature = "transport_multilink")]
+    use zenoh::{config::WhatAmI, Session};
+    #[cfg(feature = "transport_multilink")]
+    use zenoh_config::EndPoint;
+    #[cfg(feature = "transport_multilink")]
+    use zenoh_protocol::core::{EndPoints, Locators, LocatorsStrategy};
+    #[cfg(feature = "transport_multilink")]
+    use zenoh_test::get_free_tcp_port;
     use zenoh_test::TestSessions;
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
@@ -34,6 +42,47 @@ mod tests {
     }
 
     const SLEEP: Duration = Duration::from_millis(100);
+
+    #[cfg(feature = "transport_multilink")]
+    async fn wait_for_connection_counts(
+        session: &Session,
+        expected_transports: usize,
+        expected_links: usize,
+    ) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let transports = session.info().transports().await.count();
+                let links = session.info().links().await.count();
+                if transports == expected_transports && links == expected_links {
+                    break;
+                }
+                tokio::time::sleep(SLEEP).await;
+            }
+        })
+        .await
+        .expect("Timed out waiting for expected transport/link counts");
+    }
+
+    #[cfg(feature = "transport_multilink")]
+    fn get_client_allof_config(locators: Vec<EndPoint>) -> zenoh_config::Config {
+        let mut config = zenoh_config::Config::default();
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config
+            .transport
+            .unicast
+            .set_max_links(locators.len())
+            .unwrap();
+        config
+            .connect
+            .endpoints
+            .set(vec![EndPoints::Locators(Locators {
+                strategy: LocatorsStrategy::AllOf,
+                locators,
+            })])
+            .unwrap();
+        config
+    }
 
     /// Test that transports() returns an iterator of Transport objects
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -246,6 +295,59 @@ mod tests {
         );
 
         session1.close().await.unwrap();
+    }
+
+    /// Test that a client configured with an allOf locator group opens
+    /// multiple links to the same remote session.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn client_connect_allof_opens_multiple_links() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let listener_config = test_context.get_listener_config("tcp/127.0.0.1:0", 2);
+        let listener = test_context.open_listener_with_cfg(listener_config).await;
+        let locators = test_context.locators();
+        assert_eq!(locators.len(), 2, "Listener should expose 2 locators");
+
+        let client = test_context
+            .open_connector_with_cfg(get_client_allof_config(locators))
+            .await;
+
+        wait_for_connection_counts(&listener, 1, 2).await;
+        wait_for_connection_counts(&client, 1, 2).await;
+
+        test_context.close().await;
+    }
+
+    /// Test that an allOf locator group is best effort today: if one locator
+    /// is unreachable, the session still opens and the reachable locator
+    /// yields one link.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn client_connect_allof_survives_partial_failure() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let listener = test_context.open_listener().await;
+        let mut locators = test_context.locators();
+        assert_eq!(locators.len(), 1, "Listener should expose 1 locator");
+
+        let unreachable_port = get_free_tcp_port();
+        locators.push(
+            format!("tcp/127.0.0.1:{unreachable_port}")
+                .parse::<EndPoint>()
+                .unwrap(),
+        );
+
+        let client = test_context
+            .open_connector_with_cfg(get_client_allof_config(locators))
+            .await;
+
+        wait_for_connection_counts(&listener, 1, 1).await;
+        wait_for_connection_counts(&client, 1, 1).await;
+
+        test_context.close().await;
     }
 
     /// Test that event history works correctly - sends existing transports/links as Put events
