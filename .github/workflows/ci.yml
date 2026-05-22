@@ -334,7 +334,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install latest Rust toolchain
-        run: rustup show
+        run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+
+      - name: Install cargo-fuzz
+        run: cargo +stable install --locked cargo-fuzz
 
       - name: Setup rust-cache
         uses: Swatinem/rust-cache@v2
@@ -354,6 +357,13 @@ jobs:
       - name: Verify zenoh-codec seed corpora
         run: cargo run --manifest-path commons/zenoh-codec/fuzz/Cargo.toml --bin verify_all_corpora
 
+      - name: Smoke fuzz zenoh-codec targets
+        working-directory: commons/zenoh-codec/fuzz
+        run: |
+          for target in transport_message network_message frame scouting_message; do
+            cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run "$target" -- -max_total_time=60
+          done
+
       - name: Build endpoint_from_str fuzz target
         run: cargo build --manifest-path commons/zenoh-protocol/fuzz/Cargo.toml --bin endpoint_from_str
 
@@ -362,6 +372,21 @@ jobs:
 
       - name: Verify endpoint_from_str seed corpus
         run: cargo run --manifest-path commons/zenoh-protocol/fuzz/Cargo.toml --bin verify_endpoint_corpus
+
+      - name: Smoke fuzz endpoint_from_str
+        working-directory: commons/zenoh-protocol/fuzz
+        run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run endpoint_from_str -- -max_total_time=60
+
+      - name: Upload fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-pr-smoke
+          path: |
+            commons/zenoh-codec/fuzz/artifacts
+            commons/zenoh-protocol/fuzz/artifacts
+          if-no-files-found: ignore
+          retention-days: 14
 
   valgrind:
     name: Memory leak checks
