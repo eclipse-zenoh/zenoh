@@ -102,7 +102,7 @@ pub struct ReplyError {
     pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
     #[cfg(feature = "unstable")]
-    pub(crate) timestamp_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
+    pub(crate) timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
 }
 
 impl ReplyError {
@@ -150,9 +150,7 @@ impl ReplyError {
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn timestamp_stack(
-        &self,
-    ) -> Option<&zenoh_protocol::network::timestamp_stack::TimestampStack> {
+    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
         self.timestamp_stack.as_ref()
     }
 }

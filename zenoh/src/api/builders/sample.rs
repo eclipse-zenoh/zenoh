@@ -18,9 +18,9 @@ use zenoh_core::zresult;
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::timestamp_stack::TimestampStack;
 
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
@@ -58,12 +58,12 @@ pub trait SampleBuilderTrait {
     /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
     /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
-    /// Sets the timestamp stack to be sent along with the publication.
+    /// Sets the timestamp stack instrumentation to be sent along with the publication.
     ///
     /// The timestamp stack carries interception records (Send, Route, Receive)
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
-    fn timestamp_stack<T: Into<Option<TimestampStack>>>(self, stack: T) -> Self;
+    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self;
 }
 
 pub trait EncodingBuilderTrait {
@@ -238,10 +238,11 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
     }
 
     #[zenoh_macros::unstable]
-    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
         Self {
             sample: Sample {
-                timestamp_stack: stack.into(),
+                timestamp_stack: instrumentation
+                    .map(|instr| crate::api::timestamp_stack::TimestampStack::new(instr)),
                 ..self.sample
             },
             _t: PhantomData::<T>,

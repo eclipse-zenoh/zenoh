@@ -40,8 +40,6 @@ use zenoh_config::{
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::timestamp_stack::TimestampStack;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -74,6 +72,8 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 #[cfg(feature = "unstable")]
 use crate::api::{
     cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
@@ -1352,7 +1352,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             source_info: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 
@@ -1389,7 +1389,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             source_info: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
     /// Query data from the matching queryables in the system. This is a shortcut for declaring
@@ -1441,7 +1441,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             cancellation_token: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 }
@@ -2501,7 +2501,7 @@ impl Session {
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         attachment: Option<ZBytes>,
-        #[cfg(feature = "unstable")] timestamp_stack: Option<TimestampStack>,
+        #[cfg(feature = "unstable")] timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
         let state = zread!(self.0.state);
@@ -2544,13 +2544,20 @@ impl Session {
             })
         };
         #[cfg(feature = "unstable")]
-        if let Some(ts_stack) = timestamp_stack {
-            let mut ext_ts_stack =
-                Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+        if let Some(instrumentation) = timestamp_instrumentation {
+            use zenoh_protocol::network::timestamp_stack::{
+                interception_point, TimestampStack, TsStackType,
+            };
+            let mut ext_ts_stack = Some(TsStackType {
+                ts_stack: TimestampStack {
+                    conf_flags: instrumentation.conf_flags(),
+                    stack: vec![],
+                },
+            });
             crate::api::timestamp_stack::push_ts_interception(
                 &mut ext_ts_stack,
                 Some(&*self.0.runtime.as_ref()),
-                zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                interception_point::SEND,
             );
             push.ext_ts_stack = ext_ts_stack;
         }
@@ -2675,7 +2682,7 @@ impl Session {
         #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
         querier_id: Option<EntityId>,
         querier_notifier: Option<SyncGroupNotifier>,
-        #[cfg(feature = "unstable")] timestamp_stack: Option<TimestampStack>,
+        #[cfg(feature = "unstable")] timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
@@ -2758,14 +2765,21 @@ impl Session {
         #[cfg(not(feature = "unstable"))]
         let ext_ts_stack = None;
         #[cfg(feature = "unstable")]
-        let ext_ts_stack = timestamp_stack
-            .map(|ts_stack| {
-                let mut ext_ts_stack =
-                    Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+        let ext_ts_stack = timestamp_instrumentation
+            .map(|instrumentation| {
+                use zenoh_protocol::network::timestamp_stack::{
+                    interception_point, TimestampStack, TsStackType,
+                };
+                let mut ext_ts_stack = Some(TsStackType {
+                    ts_stack: TimestampStack {
+                        conf_flags: instrumentation.conf_flags(),
+                        stack: vec![],
+                    },
+                });
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut ext_ts_stack,
                     Some(&*self.0.runtime.as_ref()),
-                    zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                    interception_point::SEND,
                 );
                 ext_ts_stack
             })
@@ -2939,7 +2953,9 @@ impl Session {
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
-        #[cfg(feature = "unstable")] timestamp_stack: Option<TimestampStack>,
+        #[cfg(feature = "unstable")] timestamp_stack: Option<
+            zenoh_protocol::network::timestamp_stack::TimestampStack,
+        >,
     ) {
         let Ok(primitives) = state.primitives() else {
             return;
@@ -2960,6 +2976,12 @@ impl Session {
 
         let zid = self.zid();
 
+        #[cfg(feature = "unstable")]
+        let query_ts_stack = timestamp_stack
+            .as_ref()
+            .map(|ts| crate::api::timestamp_stack::TimestampStack::try_from(ts).ok())
+            .flatten();
+
         let query_inner = Arc::new(QueryInner {
             key_expr: key_expr.clone().into_owned(),
             parameters: parameters.to_owned().into(),
@@ -2976,7 +2998,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             runtime: Some(self.0.runtime.downgrade()),
             #[cfg(feature = "unstable")]
-            query_ts_stack: timestamp_stack,
+            query_ts_stack,
         });
         if !queryables.is_empty() {
             let mut query = Query {
@@ -3378,7 +3400,7 @@ impl Primitives for WeakSession {
                                 timestamp_stack: msg
                                     .ext_ts_stack
                                     .as_ref()
-                                    .map(|ts| ts.ts_stack.clone()),
+                                    .map(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts.ts_stack).ok()).flatten(),
                             }),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {

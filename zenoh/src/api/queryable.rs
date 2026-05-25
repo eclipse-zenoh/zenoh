@@ -123,7 +123,7 @@ pub(crate) struct QueryInner {
     #[cfg(feature = "unstable")]
     pub(crate) runtime: Option<WeakDynamicRuntime>,
     #[cfg(feature = "unstable")]
-    pub(crate) query_ts_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
+    pub(crate) query_ts_stack: Option<crate::api::timestamp_stack::TimestampStack>,
 }
 
 impl QueryInner {
@@ -360,9 +360,7 @@ impl Query {
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn timestamp_stack(
-        &self,
-    ) -> Option<&zenoh_protocol::network::timestamp_stack::TimestampStack> {
+    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
         self.inner.query_ts_stack.as_ref()
     }
 
@@ -628,13 +626,17 @@ impl Query {
             let irt = rt.as_deref().map(|r| r.deref());
             response.ext_ts_stack = sample
                 .timestamp_stack
-                .map(|ts_stack| {
-                    let mut ext_ts_stack =
-                        Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+                .map(|ts_stack_view| {
+                    use zenoh_protocol::network::timestamp_stack::{
+                        interception_point, TsStackType,
+                    };
+                    let mut ext_ts_stack = Some(TsStackType {
+                        ts_stack: (&ts_stack_view).into(),
+                    });
                     crate::api::timestamp_stack::push_ts_interception(
                         &mut ext_ts_stack,
                         irt,
-                        zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                        interception_point::SEND,
                     );
                     ext_ts_stack
                 })

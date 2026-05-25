@@ -176,7 +176,7 @@ impl<'a> Querier<'a> {
             #[cfg(feature = "unstable")]
             cancellation_token: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 

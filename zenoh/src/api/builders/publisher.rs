@@ -17,11 +17,11 @@ use zenoh_core::{Resolvable, Result as ZResult, Wait};
 use zenoh_protocol::core::CongestionControl;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::Reliability;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::timestamp_stack::TimestampStack;
 
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
         builders::sample::{
@@ -106,7 +106,7 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) timestamp_stack: Option<TimestampStack>,
+    pub(crate) timestamp_instrumentation: Option<TimestampInstrumentation>,
 }
 
 #[zenoh_macros::internal_trait]
@@ -213,9 +213,9 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         }
     }
     #[zenoh_macros::unstable]
-    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
         Self {
-            timestamp_stack: stack.into(),
+            timestamp_instrumentation: instrumentation,
             ..self
         }
     }
@@ -256,7 +256,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.source_info,
             self.attachment,
             #[cfg(feature = "unstable")]
-            self.timestamp_stack,
+            self.timestamp_instrumentation,
         )
     }
 }
@@ -281,7 +281,7 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.source_info,
             self.attachment,
             #[cfg(feature = "unstable")]
-            self.timestamp_stack,
+            self.timestamp_instrumentation,
         )
     }
 }
@@ -522,7 +522,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.source_info,
             self.attachment,
             #[cfg(feature = "unstable")]
-            self.timestamp_stack,
+            self.timestamp_instrumentation,
         )
     }
 }
@@ -545,7 +545,7 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.source_info,
             self.attachment,
             #[cfg(feature = "unstable")]
-            self.timestamp_stack,
+            self.timestamp_instrumentation,
         )
     }
 }

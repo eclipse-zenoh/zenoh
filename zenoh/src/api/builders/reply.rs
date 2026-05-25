@@ -15,8 +15,6 @@ use std::future::{IntoFuture, Ready};
 
 use uhlc::Timestamp;
 use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::timestamp_stack::TimestampStack;
 use zenoh_protocol::{
     core::{CongestionControl, WireExpr},
     network::{response, Mapping, Response},
@@ -26,6 +24,8 @@ use zenoh_result::ZResult;
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::api::{
     builders::sample::{
         EncodingBuilderTrait, QoSBuilderTrait, SampleBuilder, SampleBuilderTrait,
@@ -64,7 +64,7 @@ pub struct ReplyBuilder<'a, 'b, T> {
     source_info: Option<SourceInfo>,
     attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    timestamp_stack: Option<TimestampStack>,
+    timestamp_instrumentation: Option<TimestampInstrumentation>,
 }
 
 impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
@@ -91,7 +91,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderPut> {
             source_info: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 }
@@ -112,7 +112,7 @@ impl<'a, 'b> ReplyBuilder<'a, 'b, ReplyBuilderDelete> {
             source_info: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 }
@@ -150,9 +150,9 @@ impl<T> SampleBuilderTrait for ReplyBuilder<'_, '_, T> {
     }
 
     #[zenoh_macros::unstable]
-    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
         Self {
-            timestamp_stack: stack.into(),
+            timestamp_instrumentation: instrumentation,
             ..self
         }
     }
@@ -208,7 +208,7 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderPut> {
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
         #[cfg(feature = "unstable")]
-        let sample = sample.timestamp_stack(self.timestamp_stack);
+        let sample = sample.timestamp_instrumentation(self.timestamp_instrumentation);
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -223,7 +223,7 @@ impl Wait for ReplyBuilder<'_, '_, ReplyBuilderDelete> {
         #[cfg(feature = "unstable")]
         let sample = sample.source_info(self.source_info);
         #[cfg(feature = "unstable")]
-        let sample = sample.timestamp_stack(self.timestamp_stack);
+        let sample = sample.timestamp_instrumentation(self.timestamp_instrumentation);
         let sample = sample.attachment(self.attachment);
         self.query._reply_sample(sample.into())
     }
@@ -256,7 +256,7 @@ pub struct ReplyErrBuilder<'a> {
     payload: ZBytes,
     encoding: Encoding,
     #[cfg(feature = "unstable")]
-    timestamp_stack: Option<TimestampStack>,
+    timestamp_instrumentation: Option<TimestampInstrumentation>,
 }
 
 impl<'a> ReplyErrBuilder<'a> {
@@ -269,7 +269,7 @@ impl<'a> ReplyErrBuilder<'a> {
             payload: payload.into(),
             encoding: Encoding::default(),
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 }
@@ -287,10 +287,13 @@ impl EncodingBuilderTrait for ReplyErrBuilder<'_> {
 
 #[cfg(feature = "unstable")]
 impl ReplyErrBuilder<'_> {
-    /// Activates timestamp stack instrumentation with the given `stack`.
+    /// Activates timestamp stack instrumentation with the given config.
     #[zenoh_macros::unstable]
-    pub fn timestamp_stack(mut self, stack: TimestampStack) -> Self {
-        self.timestamp_stack = Some(stack);
+    pub fn timestamp_instrumentation(
+        mut self,
+        instrumentation: Option<TimestampInstrumentation>,
+    ) -> Self {
+        self.timestamp_instrumentation = instrumentation;
         self
     }
 }
@@ -325,16 +328,24 @@ impl Wait for ReplyErrBuilder<'_> {
             ext_ts_stack: None,
         };
         #[cfg(feature = "unstable")]
-        if let Some(ts_stack) = self.timestamp_stack {
+        if let Some(instrumentation) = self.timestamp_instrumentation {
             use std::ops::Deref;
+
+            use zenoh_protocol::network::timestamp_stack::{
+                interception_point, TimestampStack, TsStackType,
+            };
             let rt = self.query.inner.runtime.clone().and_then(|r| r.upgrade());
             let irt = rt.as_deref().map(|r| r.deref());
-            let mut ext_ts_stack =
-                Some(zenoh_protocol::network::timestamp_stack::TsStackType { ts_stack });
+            let mut ext_ts_stack = Some(TsStackType {
+                ts_stack: TimestampStack {
+                    conf_flags: instrumentation.conf_flags(),
+                    stack: vec![],
+                },
+            });
             crate::api::timestamp_stack::push_ts_interception(
                 &mut ext_ts_stack,
                 irt,
-                zenoh_protocol::network::timestamp_stack::interception_point::SEND,
+                interception_point::SEND,
             );
             response.ext_ts_stack = ext_ts_stack;
         }

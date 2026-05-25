@@ -17,8 +17,6 @@ use std::{
 };
 
 use zenoh_core::{Resolvable, Wait};
-#[cfg(feature = "unstable")]
-use zenoh_protocol::network::timestamp_stack::TimestampStack;
 use zenoh_protocol::{
     core::{CongestionControl, Parameters},
     network::request::ext::QueryTarget,
@@ -30,6 +28,8 @@ use super::sample::QoSBuilderTrait;
 use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
         builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
@@ -246,7 +246,7 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
-    pub(crate) timestamp_stack: Option<TimestampStack>,
+    pub(crate) timestamp_instrumentation: Option<TimestampInstrumentation>,
     #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
@@ -316,9 +316,9 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
     }
 
     #[zenoh_macros::unstable]
-    fn timestamp_stack<S: Into<Option<TimestampStack>>>(self, stack: S) -> Self {
+    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
         Self {
-            timestamp_stack: stack.into(),
+            timestamp_instrumentation: instrumentation,
             ..self
         }
     }
@@ -437,7 +437,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             #[cfg(feature = "unstable")]
-            timestamp_stack,
+            timestamp_instrumentation,
             handler: _,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -450,7 +450,7 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             #[cfg(feature = "unstable")]
             source_info,
             #[cfg(feature = "unstable")]
-            timestamp_stack,
+            timestamp_instrumentation,
             handler,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -520,7 +520,7 @@ where
             Some(self.querier.id),
             self.querier.callback_sync_group.notifier(),
             #[cfg(feature = "unstable")]
-            self.timestamp_stack,
+            self.timestamp_instrumentation,
         )?;
         Ok(receiver)
     }

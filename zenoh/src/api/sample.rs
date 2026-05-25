@@ -252,7 +252,7 @@ pub struct Sample {
     pub(crate) attachment: Option<ZBytes>,
     // TODO: expose higher-level type instead of using zenoh_protocol
     #[cfg(feature = "unstable")]
-    pub(crate) timestamp_stack: Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
+    pub(crate) timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
 }
 
 impl Sample {
@@ -326,9 +326,7 @@ impl Sample {
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn timestamp_stack(
-        &self,
-    ) -> Option<&zenoh_protocol::network::timestamp_stack::TimestampStack> {
+    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
         self.timestamp_stack.as_ref()
     }
 
@@ -373,6 +371,10 @@ impl Sample {
             zenoh_protocol::network::timestamp_stack::TimestampStack,
         >,
     ) -> Self {
+        #[cfg(feature = "unstable")]
+        let timestamp_stack = timestamp_stack
+            .map(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts).ok())
+            .flatten();
         match body {
             PushBody::Put(put) => Self {
                 key_expr,

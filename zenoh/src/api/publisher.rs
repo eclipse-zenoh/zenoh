@@ -270,7 +270,7 @@ impl<'a> Publisher<'a> {
             source_info: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 
@@ -299,7 +299,7 @@ impl<'a> Publisher<'a> {
             source_info: None,
             attachment: None,
             #[cfg(feature = "unstable")]
-            timestamp_stack: None,
+            timestamp_instrumentation: None,
         }
     }
 
