@@ -893,11 +893,6 @@ impl Runtime {
         self.state.new_timestamp()
     }
 
-    #[cfg(feature = "unstable")]
-    pub fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8> {
-        self.state.get_ts_stack_timestamp(context)
-    }
-
     pub fn get_locators(&self) -> Vec<Locator> {
         self.state.get_locators()
     }

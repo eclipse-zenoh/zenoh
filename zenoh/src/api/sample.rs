@@ -369,6 +369,9 @@ impl Sample {
         qos: push::ext::QoSType,
         body: &mut PushBody,
         #[cfg(feature = "unstable")] reliability: Reliability,
+        #[cfg(feature = "unstable")] timestamp_stack: Option<
+            zenoh_protocol::network::timestamp_stack::TimestampStack,
+        >,
     ) -> Self {
         match body {
             PushBody::Put(put) => Self {
@@ -384,7 +387,7 @@ impl Sample {
                 source_info: put.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut put.ext_attachment).map(Into::into),
                 #[cfg(feature = "unstable")]
-                timestamp_stack: None,
+                timestamp_stack,
             },
             PushBody::Del(del) => Self {
                 key_expr,
@@ -399,7 +402,7 @@ impl Sample {
                 source_info: del.ext_sinfo.map(Into::into),
                 attachment: mem::take(&mut del.ext_attachment).map(Into::into),
                 #[cfg(feature = "unstable")]
-                timestamp_stack: None,
+                timestamp_stack,
             },
         }
     }
@@ -412,6 +415,7 @@ impl CallbackParameter for Sample {
         push::ext::QoSType,
         &'a mut PushBody,
         Reliability,
+        Option<zenoh_protocol::network::timestamp_stack::TimestampStack>,
     );
     #[cfg(not(feature = "unstable"))]
     type Message<'a> = (KeyExpr<'static>, push::ext::QoSType, &'a mut PushBody);
@@ -423,6 +427,8 @@ impl CallbackParameter for Sample {
             msg.2,
             #[cfg(feature = "unstable")]
             msg.3,
+            #[cfg(feature = "unstable")]
+            msg.4,
         )
     }
 }

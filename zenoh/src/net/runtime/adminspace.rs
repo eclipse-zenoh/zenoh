@@ -47,8 +47,6 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
-#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
-use crate::internal::runtime::DynamicRuntime;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -59,7 +57,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{dispatcher::tables::Tables, gateway::Resource, hat::Sources},
-        runtime::region,
+        runtime::{region, DynamicRuntime},
     },
     LONG_VERSION,
 };
@@ -499,9 +497,9 @@ impl Primitives for AdminSpace {
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives: ReplyPrimitives::new_remote(None, primitives),
                         #[cfg(feature = "unstable")]
-                        runtime: Some(crate::internal::runtime::DynamicRuntime::downgrade(
-                            &self.context.runtime.clone().into(),
-                        )),
+                        runtime: Some(
+                            DynamicRuntime::from(self.context.runtime.clone()).downgrade(),
+                        ),
                         #[cfg(feature = "unstable")]
                         query_ts_stack: None,
                     }),

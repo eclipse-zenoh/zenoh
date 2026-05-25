@@ -74,6 +74,11 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
+#[cfg(feature = "unstable")]
+use crate::api::{
+    cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
+    timestamp_stack::GetTimestampCallback,
+};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -118,14 +123,6 @@ use crate::{
     },
     query::ReplyError,
     Config,
-};
-#[cfg(feature = "unstable")]
-use crate::{
-    api::{
-        cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
-        timestamp_stack::GetTimestampCallback,
-    },
-    net::runtime::DynamicRuntime,
 };
 
 zconfigurable! {
@@ -560,11 +557,20 @@ impl SubscriberCallbacks {
         qos: push::ext::QoSType,
         msg: &mut PushBody,
         #[cfg(feature = "unstable")] reliability: Reliability,
+        #[cfg(feature = "unstable")] timestamp_stack: Option<
+            zenoh_protocol::network::timestamp_stack::TimestampStack,
+        >,
     ) {
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = self.0.into_iter();
         for (cb, key_expr) in drain {
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
+            cb.call_with_message((
+                key_expr,
+                qos,
+                &mut msg.clone(),
+                reliability,
+                timestamp_stack.clone(),
+            ));
             #[cfg(not(feature = "unstable"))]
             cb.call_with_message((key_expr, qos, &mut msg.clone()));
         }
@@ -576,7 +582,7 @@ impl SubscriberCallbacks {
                 msg = &mut msg_clone;
             }
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, msg, reliability));
+            cb.call_with_message((key_expr, qos, msg, reliability, timestamp_stack));
             #[cfg(not(feature = "unstable"))]
             cb.call_with_message((key_expr, qos, msg));
         }
@@ -2473,6 +2479,10 @@ impl Session {
             msg,
             #[cfg(feature = "unstable")]
             reliability,
+            // NOTE: execute_subscriber_callbacks is currently only caled for Liveliness subscribers,
+            // so there is not need to pass ext_ts_stack in its parameters.
+            #[cfg(feature = "unstable")]
+            None,
         );
     }
 
@@ -2561,6 +2571,9 @@ impl Session {
                 callbacks: SubscriberCallbacks,
                 push: &mut Push,
                 #[cfg(feature = "unstable")] reliability: Reliability,
+                #[cfg(feature = "unstable")] timestamp_stack: Option<
+                    zenoh_protocol::network::timestamp_stack::TimestampStack,
+                >,
             ) {
                 callbacks.call(
                     true,
@@ -2568,13 +2581,20 @@ impl Session {
                     &mut push.payload,
                     #[cfg(feature = "unstable")]
                     reliability,
+                    #[cfg(feature = "unstable")]
+                    timestamp_stack,
                 );
             }
+
+            #[cfg(feature = "unstable")]
+            let timestamp_stack = push.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone());
             call_local(
                 callbacks,
                 &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
+                #[cfg(feature = "unstable")]
+                timestamp_stack,
             );
         }
         // ext_unknown is not touched by routing/callbacks, so it must be empty
@@ -2954,7 +2974,7 @@ impl Session {
                 ReplyPrimitives::new_remote(Some(self.downgrade()), primitives.into_primitives())
             },
             #[cfg(feature = "unstable")]
-            runtime: Some(DynamicRuntime::downgrade(&self.0.runtime.deref())),
+            runtime: Some(self.0.runtime.downgrade()),
             #[cfg(feature = "unstable")]
             query_ts_stack: timestamp_stack,
         });
@@ -3284,12 +3304,13 @@ impl Primitives for WeakSession {
             &mut msg.payload,
             #[cfg(feature = "unstable")]
             _reliability,
+            #[cfg(feature = "unstable")]
+            msg.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone()),
         );
     }
 
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
-        // TODO: move closer to the queryable callback
         #[cfg(feature = "unstable")]
         crate::api::timestamp_stack::push_ts_interception(
             &mut msg.ext_ts_stack,
@@ -3352,6 +3373,12 @@ impl Primitives for WeakSession {
                             result: Err(ReplyError {
                                 payload: mem::take(&mut e.payload).into(),
                                 encoding: mem::take(&mut e.encoding).into(),
+                                #[cfg(feature = "unstable")]
+                                // TODO: avoid this clone if possible. should we just mem::take ?
+                                timestamp_stack: msg
+                                    .ext_ts_stack
+                                    .as_ref()
+                                    .map(|ts| ts.ts_stack.clone()),
                             }),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
@@ -3401,6 +3428,9 @@ impl Primitives for WeakSession {
                                 &mut m.payload,
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
+                                #[cfg(feature = "unstable")]
+                                // TODO: avoid this clone if possible. should we just mem::take ?
+                                msg.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone()),
                             )),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
