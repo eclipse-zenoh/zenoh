@@ -21,6 +21,8 @@ mod adminspace;
 pub mod orchestrator;
 mod region;
 
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use std::future::IntoFuture;
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
@@ -46,6 +48,8 @@ use zenoh_config::{
 };
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -104,7 +108,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ShmProviderState {
     Disabled,
-    Initializing,
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
@@ -112,11 +116,48 @@ pub enum ShmProviderState {
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
 impl ShmProviderState {
-    pub fn into_option(self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+    pub fn into_option(self) -> <Self as Resolvable>::To {
         match self {
             ShmProviderState::Ready(provider) => Some(provider),
             _ => None,
         }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Resolvable for ShmProviderState {
+    type To = Option<Arc<ShmProvider<PosixShmProviderBackend>>>;
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Wait for ShmProviderState {
+    fn wait(self) -> <Self as Resolvable>::To {
+        match self {
+            ShmProviderState::Ready(provider) => Some(provider),
+            ShmProviderState::Initializing(receiver) => receiver.recv().ok().flatten(),
+            ShmProviderState::Disabled | ShmProviderState::Error => None,
+        }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl IntoFuture for ShmProviderState {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            match self {
+                ShmProviderState::Ready(provider) => Some(provider),
+                ShmProviderState::Initializing(receiver) => {
+                    receiver.recv_async().await.ok().flatten()
+                }
+                ShmProviderState::Disabled | ShmProviderState::Error => None,
+            }
+        })
     }
 }
 
@@ -385,7 +426,7 @@ impl IRuntime for RuntimeState {
         match &self.manager.get_shm_context() {
             Some(ctx) => match ctx.shm_provider() {
                 Some(provider) => match provider.try_get_provider() {
-                    ProviderInitState::Initializing => ShmProviderState::Initializing,
+                    ProviderInitState::Initializing(recv) => ShmProviderState::Initializing(recv),
                     ProviderInitState::Ready(provider) => ShmProviderState::Ready(provider),
                     ProviderInitState::Error => ShmProviderState::Error,
                 },
