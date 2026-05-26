@@ -117,13 +117,9 @@ impl Reader {
             // io_uring read
             let ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::builder()
                 .setup_submit_all()
-                //.setup_sqpoll(1)
-                //.setup_iopoll()
-                //.setup_sqpoll_cpu(0)
-                //.setup_coop_taskrun()
                 .setup_defer_taskrun()
                 .setup_single_issuer()
-                .build((4096 /*batch_count*2*/).try_into()?)?;
+                .build(4096)?;
             let arena = BatchArena::new(batch_size, batch_count, BufferCount::MAX)?;
             let arena = ReservableArena::new(arena, c_submitter);
             let arena = GroupedArena::new(arena);
@@ -144,8 +140,6 @@ impl Reader {
                 sq: &mut SubmissionQueue<'_>,
                 batch_count: BufferCount,
             ) -> ZResult<()> {
-                //tracing::debug!("Reading cmds....");
-
                 // receive external submissions
                 while let Ok(val) = receiver.try_recv() {
                     tracing::debug!("Cmd: {:?}", val);
@@ -161,7 +155,7 @@ impl Reader {
 
                             let recv = opcode::RecvMulti::new(types::Fd(fd), group_id)
                                 .build()
-                                //.flags(io_uring::squeue::Flags::ASYNC)
+                                .flags(io_uring::squeue::Flags::ASYNC)
                                 .user_data(index.into());
 
                             unsafe { sq.push(&recv)? }
@@ -191,6 +185,14 @@ impl Reader {
 
                 while let Some(e) = unsafe { ring.completion_shared() }.next() {
                     let mut sq = unsafe { ring.submission_shared() };
+
+                    roll_cmds(
+                        &receiver,
+                        &mut context_storage,
+                        &arena,
+                        &mut sq,
+                        batch_count,
+                    )?;
 
                     match e.user_data() {
                         IndexGeneration::INVALID_MIN => {
