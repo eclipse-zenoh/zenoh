@@ -536,13 +536,13 @@ async fn accept_task(
             dst_addr
         );
 
-        let stream = accept_async(MaybeTlsStream::Plain(stream))
-            .await
-            .map_err(|e| {
-                let e = zerror!("Error when creating the WebSocket session: {}", e);
-                tracing::trace!("{}", e);
-                e
-            })?;
+        let stream = match accept_async(MaybeTlsStream::Plain(stream)).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                tracing::trace!("Error when creating the WebSocket session: {e}");
+                continue;
+            }
+        };
         // Create the new link object
         let link: Arc<dyn LinkUnicastTrait> =
             Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));
