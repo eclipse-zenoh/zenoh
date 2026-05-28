@@ -2594,6 +2594,14 @@ impl Session {
             }
 
             #[cfg(feature = "unstable")]
+            {
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut push.ext_ts_stack,
+                    Some(&*self.0.runtime.as_ref()),
+                    zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+                );
+            }
+            #[cfg(feature = "unstable")]
             let timestamp_stack = push.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone());
             call_local(
                 callbacks,
@@ -2765,7 +2773,7 @@ impl Session {
         #[cfg(not(feature = "unstable"))]
         let ext_ts_stack = None;
         #[cfg(feature = "unstable")]
-        let ext_ts_stack = timestamp_instrumentation
+        let mut ext_ts_stack = timestamp_instrumentation
             .map(|instrumentation| {
                 use zenoh_protocol::network::timestamp_stack::{
                     interception_point, TimestampStack, TsStackType,
@@ -2817,6 +2825,15 @@ impl Session {
             });
         }
         if destination != Locality::Remote {
+            // TODO: maybe RECEIVE points can be pushed inside handle_query?
+            #[cfg(feature = "unstable")]
+            {
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut ext_ts_stack,
+                    Some(&*self.0.runtime.as_ref()),
+                    zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+                );
+            }
             self.handle_query(
                 zread!(self.0.state),
                 true,
