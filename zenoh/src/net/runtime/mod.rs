@@ -22,6 +22,8 @@ pub mod orchestrator;
 mod region;
 
 #[cfg(feature = "unstable")]
+use std::sync::OnceLock;
+#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -132,6 +134,11 @@ pub(crate) struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
+    // TODO: lazy_hlc is added for timestamp instrumentation feature, in order to avoid breaking
+    // existing logic that relies on state of hlc Option to check if timestamping is enabled or
+    // not. Once ts_instrumetnation is stabilized, hlc should be changed to use OnceLock instead.
+    #[cfg(feature = "unstable")]
+    lazy_hlc: OnceLock<Arc<HLC>>,
     #[cfg(feature = "unstable")]
     timestamp_callback: Option<GetTimestampCallback>,
     task_controller: TaskController,
@@ -231,15 +238,13 @@ impl IRuntime for RuntimeState {
             return (cb(context), true);
         }
 
-        let ts = match &self.hlc {
-            Some(hlc) => hlc.new_timestamp(),
-            None => {
-                // TODO: instead of using system time, HLC should be initialized in this case
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into();
-                uhlc::Timestamp::new(now, self.zid.into())
-            }
-        };
+        let hlc = self.hlc.as_ref().unwrap_or_else(|| {
+            self.lazy_hlc.get_or_init(|| {
+                Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(self.zid)).build())
+            })
+        });
+
+        let ts = hlc.new_timestamp();
 
         use zenoh_codec::{WCodec, Zenoh080};
         let mut buf = Vec::new();
@@ -771,6 +776,8 @@ impl RuntimeBuilder {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
+                #[cfg(feature = "unstable")]
+                lazy_hlc: OnceLock::new(),
                 #[cfg(feature = "unstable")]
                 timestamp_callback,
                 task_controller: TaskController::default(),
