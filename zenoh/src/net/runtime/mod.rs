@@ -153,8 +153,10 @@ pub trait IRuntime: Send + Sync {
     fn next_id(&self) -> u32;
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
+    /// Returns a timestamp for timestamp instrumentation. The boolean indicates if the timsetamp
+    /// is the result of a custom user-callback or Zenoh UHLC
     #[cfg(feature = "unstable")]
-    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8>;
+    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
@@ -224,9 +226,9 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> Vec<u8> {
+    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> (Vec<u8>, bool) {
         if let Some(cb) = &self.timestamp_callback {
-            return cb(context);
+            return (cb(context), true);
         }
 
         let ts = match &self.hlc {
@@ -244,7 +246,7 @@ impl IRuntime for RuntimeState {
         Zenoh080
             .write(&mut buf, &ts)
             .expect("Failed to serialize timestamp");
-        buf
+        (buf, false)
     }
 
     fn get_locators(&self) -> Vec<Locator> {

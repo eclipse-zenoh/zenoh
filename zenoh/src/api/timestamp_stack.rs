@@ -58,7 +58,7 @@ impl TryFrom<u8> for InterceptionPoint {
     type Error = zenoh_result::Error;
 
     fn try_from(value: u8) -> zenoh_result::ZResult<Self> {
-        match value {
+        match value & !interception_point::IS_CUSTOM_TS {
             interception_point::SEND => Ok(Self::Send),
             interception_point::RECEIVE => Ok(Self::Receive),
             interception_point::ROUTE => Ok(Self::Route),
@@ -167,6 +167,7 @@ impl TimestampInstrumentation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimestampStackRecord {
     point: InterceptionPoint,
+    is_custom_ts: bool,
     timestamp: Vec<u8>,
 }
 
@@ -175,6 +176,15 @@ impl TimestampStackRecord {
     #[zenoh_macros::unstable]
     pub fn point(&self) -> InterceptionPoint {
         self.point
+    }
+
+    /// Whether the timestamp was produced by a user-defined callback.
+    ///
+    /// Returns `true` when the timestamp bytes were produced by a user-defined callback,
+    /// and `false` when the timestamp is a standard UHLC timestamp.
+    #[zenoh_macros::unstable]
+    pub fn is_custom(&self) -> bool {
+        self.is_custom_ts
     }
 
     /// Raw timestamp bytes (format defined by the wire protocol).
@@ -234,9 +244,14 @@ pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized>(
                 .try_into()
                 .expect("internal calls should provide valid interception point IDs"),
         };
-        let timestamp = runtime.get_ts_stack_timestamp(context);
+        let (timestamp, is_custom) = runtime.get_ts_stack_timestamp(context);
         ts_stack.ts_stack.stack.push(Interception {
-            flags: point,
+            flags: point
+                | if is_custom {
+                    interception_point::IS_CUSTOM_TS
+                } else {
+                    0
+                },
             timestamp,
         });
     }
@@ -265,8 +280,10 @@ impl TryFrom<&zenoh_protocol::network::timestamp_stack::TimestampStack> for Time
                     continue;
                 }
             };
+            let is_custom = (record.flags & interception_point::IS_CUSTOM_TS) != 0;
             instance.records.push(TimestampStackRecord {
                 point,
+                is_custom_ts: is_custom,
                 timestamp: record.timestamp.clone(),
             });
         }
@@ -283,7 +300,12 @@ impl From<&TimestampStack> for zenoh_protocol::network::timestamp_stack::Timesta
                 .records
                 .iter()
                 .map(|r| Interception {
-                    flags: r.point.into(),
+                    flags: u8::from(r.point)
+                        | if r.is_custom_ts {
+                            interception_point::IS_CUSTOM_TS
+                        } else {
+                            0
+                        },
                     timestamp: r.timestamp.clone(),
                 })
                 .collect(),
