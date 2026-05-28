@@ -55,7 +55,7 @@ jobs:
           live-run: ${{ inputs.live-run || false }}
           version: ${{ steps.create-release-branch.outputs.version }}
           branch: ${{ steps.create-release-branch.outputs.branch }}
-          bump-deps-pattern: zenoh.*
+          bump-deps-pattern: "zenoh(?!-test).*"
           bump-deps-version: ${{ steps.create-release-branch.outputs.version }}
           github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
 
@@ -91,7 +91,7 @@ jobs:
       repo: ${{ github.repository }}
       live-run: ${{ inputs.live-run || false }}
       branch: ${{ needs.tag.outputs.branch }}
-      unpublished-deps-patterns: "zenoh.*"
+      unpublished-deps-patterns: "zenoh(?!-test).*"
     secrets: inherit
 
   debian:
