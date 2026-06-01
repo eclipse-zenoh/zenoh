@@ -20,7 +20,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use event_listener::{Event as EventLib, Listener};
+use tokio::time::timeout_at;
+
+use event_listener::Event as EventLib;
 
 // Error types
 const WAIT_ERR_STR: &str = "No notifier available";
@@ -252,7 +254,7 @@ impl Waiter {
 
     /// Waits for the condition to be notified
     #[inline]
-    pub fn wait(&self) -> Result<(), WaitError> {
+    pub async fn wait(&self) -> Result<(), WaitError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
@@ -273,7 +275,7 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
-            listener.wait();
+            listener.await;
         }
 
         Ok(())
@@ -281,8 +283,9 @@ impl Waiter {
 
     /// Waits for the condition to be notified or returns an error when the deadline is reached
     #[inline]
-    pub fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
+    pub async fn wait_deadline(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
         // Wait until the flag is set.
+        let deadline = deadline.into();
         loop {
             // Check the flag.
             match self.0.check() {
@@ -302,7 +305,7 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
-            if listener.wait_deadline(deadline).is_none() {
+            if timeout_at(deadline, listener).await.is_err() {
                 return Err(WaitDeadlineError::Deadline);
             }
         }
@@ -312,7 +315,7 @@ impl Waiter {
 
     /// Waits for the condition to be notified or returns an error when the timeout is expired
     #[inline]
-    pub fn wait_timeout(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
+    pub async fn wait_timeout(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
         // Wait until the flag is set.
         loop {
             // Check the flag.
@@ -333,7 +336,7 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
-            if listener.wait_timeout(timeout).is_none() {
+            if tokio::time::timeout(timeout, listener).await.is_err() {
                 return Err(WaitTimeoutError::Timeout);
             }
         }
@@ -362,8 +365,8 @@ impl Drop for Waiter {
 }
 
 mod tests {
-    #[test]
-    fn event_timeout() {
+    #[tokio::test]
+    async fn event_timeout() {
         use std::{
             sync::{Arc, Barrier},
             time::Duration,
@@ -376,9 +379,9 @@ mod tests {
         let tslot = Duration::from_secs(1);
 
         let bs = barrier.clone();
-        let s = std::thread::spawn(move || {
+        let s = tokio::task::spawn(async move {
             // 1 - Wait one notification
-            match waiter.wait_timeout(tslot) {
+            match waiter.wait_timeout(tslot).await {
                 Ok(()) => {}
                 Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
@@ -389,13 +392,13 @@ mod tests {
             // 2 - Being notified twice but waiting only once
             bs.wait();
 
-            match waiter.wait_timeout(tslot) {
+            match waiter.wait_timeout(tslot).await {
                 Ok(()) => {}
                 Err(WaitTimeoutError::Timeout) => panic!("Timeout {tslot:#?}"),
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
             }
 
-            match waiter.wait_timeout(tslot) {
+            match waiter.wait_timeout(tslot).await {
                 Ok(()) => panic!("Event Ok but it should be Timeout"),
                 Err(WaitTimeoutError::Timeout) => {}
                 Err(WaitTimeoutError::WaitError) => panic!("Event closed"),
@@ -406,7 +409,7 @@ mod tests {
             // 3 - Notifier has been dropped
             bs.wait();
 
-            waiter.wait().unwrap_err();
+            waiter.wait().await.unwrap_err();
 
             bs.wait();
         });
@@ -432,12 +435,12 @@ mod tests {
             bp.wait();
         });
 
-        s.join().unwrap();
+        s.await.unwrap();
         p.join().unwrap();
     }
 
-    #[test]
-    fn event_deadline() {
+    #[tokio::test]
+    async fn event_deadline() {
         use std::{
             sync::{Arc, Barrier},
             time::{Duration, Instant},
@@ -450,9 +453,9 @@ mod tests {
         let tslot = Duration::from_secs(1);
 
         let bs = barrier.clone();
-        let s = std::thread::spawn(move || {
+        let s = tokio::task::spawn(async move {
             // 1 - Wait one notification
-            match waiter.wait_deadline(Instant::now() + tslot) {
+            match waiter.wait_deadline(Instant::now() + tslot).await {
                 Ok(()) => {}
                 Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
@@ -463,13 +466,13 @@ mod tests {
             // 2 - Being notified twice but waiting only once
             bs.wait();
 
-            match waiter.wait_deadline(Instant::now() + tslot) {
+            match waiter.wait_deadline(Instant::now() + tslot).await {
                 Ok(()) => {}
                 Err(WaitDeadlineError::Deadline) => panic!("Timeout {tslot:#?}"),
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
             }
 
-            match waiter.wait_deadline(Instant::now() + tslot) {
+            match waiter.wait_deadline(Instant::now() + tslot).await {
                 Ok(()) => panic!("Event Ok but it should be Timeout"),
                 Err(WaitDeadlineError::Deadline) => {}
                 Err(WaitDeadlineError::WaitError) => panic!("Event closed"),
@@ -480,7 +483,7 @@ mod tests {
             // 3 - Notifier has been dropped
             bs.wait();
 
-            waiter.wait().unwrap_err();
+            waiter.wait().await.unwrap_err();
 
             bs.wait();
         });
@@ -506,12 +509,12 @@ mod tests {
             bp.wait();
         });
 
-        s.join().unwrap();
+        s.await.unwrap();
         p.join().unwrap();
     }
 
-    #[test]
-    fn event_loop() {
+    #[tokio::test]
+    async fn event_loop() {
         use std::{
             sync::{
                 atomic::{AtomicUsize, Ordering},
@@ -527,9 +530,9 @@ mod tests {
         let barrier = Arc::new(Barrier::new(2));
 
         let bs = barrier.clone();
-        let s = std::thread::spawn(move || {
+        let s = tokio::task::spawn(async move {
             for _ in 0..N {
-                waiter.wait().unwrap();
+                waiter.wait().await.unwrap();
                 COUNTER.fetch_add(1, Ordering::Relaxed);
                 bs.wait();
             }
@@ -552,15 +555,15 @@ mod tests {
                 panic!("Timeout {tout:#?}. Counter: {n}/{N}");
             }
 
-            std::thread::sleep(Duration::from_millis(100));
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        s.join().unwrap();
+        s.await.unwrap();
         p.join().unwrap();
     }
 
-    #[test]
-    fn event_multiple() {
+    #[tokio::test]
+    async fn event_multiple() {
         use std::{
             sync::atomic::{AtomicUsize, Ordering},
             time::{Duration, Instant},
@@ -572,39 +575,39 @@ mod tests {
         let (notifier, waiter) = super::new();
 
         let w1 = waiter.clone();
-        let s1 = std::thread::spawn(move || {
+        let s1 = tokio::task::spawn(async move {
             let mut n = 0;
             while COUNTER.fetch_add(1, Ordering::Relaxed) < N - 2 {
-                w1.wait().unwrap();
+                w1.wait().await.unwrap();
                 n += 1;
             }
             println!("S1: {n}");
         });
-        let s2 = std::thread::spawn(move || {
+        let s2 = tokio::task::spawn(async move {
             let mut n = 0;
             while COUNTER.fetch_add(1, Ordering::Relaxed) < N - 2 {
-                waiter.wait().unwrap();
+                waiter.wait().await.unwrap();
                 n += 1;
             }
             println!("S2: {n}");
         });
 
         let n1 = notifier.clone();
-        let p1 = std::thread::spawn(move || {
+        let p1 = tokio::task::spawn(async move {
             let mut n = 0;
             while COUNTER.load(Ordering::Relaxed) < N {
                 n1.notify().unwrap();
                 n += 1;
-                std::thread::sleep(Duration::from_millis(1));
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
             println!("P1: {n}");
         });
-        let p2 = std::thread::spawn(move || {
+        let p2 = tokio::task::spawn(async move {
             let mut n = 0;
             while COUNTER.load(Ordering::Relaxed) < N {
                 notifier.notify().unwrap();
                 n += 1;
-                std::thread::sleep(Duration::from_millis(1));
+                tokio::time::sleep(Duration::from_millis(1)).await;
             }
             println!("P2: {n}");
         });
@@ -625,10 +628,10 @@ mod tests {
             }
         });
 
-        p1.join().unwrap();
-        p2.join().unwrap();
+        p1.await.unwrap();
+        p2.await.unwrap();
 
-        s1.join().unwrap();
-        s2.join().unwrap();
+        s1.await.unwrap();
+        s2.await.unwrap();
     }
 }

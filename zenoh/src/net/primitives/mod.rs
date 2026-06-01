@@ -14,6 +14,8 @@
 mod demux;
 mod mux;
 
+use async_trait::async_trait;
+
 use std::any::Any;
 
 pub use demux::*;
@@ -49,20 +51,21 @@ pub trait Primitives: Send + Sync {
     fn as_any(&self) -> &dyn Any;
 }
 
+#[async_trait]
 pub(crate) trait EPrimitives: Send + Sync {
     fn as_any(&self) -> &dyn Any;
 
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool;
+    async fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool;
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool;
+    async fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool;
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool;
+    async fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool;
 
-    fn send_request(&self, msg: &mut Request) -> bool;
+    async fn send_request(&self, msg: &mut Request) -> bool;
 
-    fn send_response(&self, msg: &mut Response) -> bool;
+    async fn send_response(&self, msg: &mut Response) -> bool;
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool;
+    async fn send_response_final(&self, msg: &mut ResponseFinal) -> bool;
 }
 
 #[derive(Default)]
@@ -88,28 +91,29 @@ impl Primitives for DummyPrimitives {
     }
 }
 
+#[async_trait]
 impl EPrimitives for DummyPrimitives {
-    fn send_interest(&self, _ctx: RoutingContext<&mut Interest>) -> bool {
+    async fn send_interest(&self, _ctx: RoutingContext<&mut Interest>) -> bool {
         false
     }
 
-    fn send_declare(&self, _ctx: RoutingContext<&mut Declare>) -> bool {
+    async fn send_declare(&self, _ctx: RoutingContext<&mut Declare>) -> bool {
         false
     }
 
-    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) -> bool {
+    async fn send_push(&self, _msg: &mut Push, _reliability: Reliability) -> bool {
         false
     }
 
-    fn send_request(&self, _msg: &mut Request) -> bool {
+    async fn send_request(&self, _msg: &mut Request) -> bool {
         false
     }
 
-    fn send_response(&self, _msg: &mut Response) -> bool {
+    async fn send_response(&self, _msg: &mut Response) -> bool {
         false
     }
 
-    fn send_response_final(&self, _msg: &mut ResponseFinal) -> bool {
+    async fn send_response_final(&self, _msg: &mut ResponseFinal) -> bool {
         false
     }
 

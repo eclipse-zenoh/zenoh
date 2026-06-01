@@ -186,10 +186,8 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         zasynclock!(self.status)
     }
 
-    fn get_links(&self) -> Vec<Link> {
-        let handle = tokio::runtime::Handle::current();
-        let guard =
-            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+    async fn get_links(&self) -> Vec<Link> {
+        let guard = zasyncread!(self.link);
         guard.as_ref().map(|l| vec![l.link()]).unwrap_or_default()
     }
 
@@ -197,12 +195,10 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.config.zid
     }
 
-    fn get_auth_ids(&self) -> TransportAuthId {
+    async fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
-        let handle = tokio::runtime::Handle::current();
-        let guard =
-            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        let guard = zasyncread!(self.link);
         if let Some(val) = guard.as_ref() {
             transport_auth_id.push_link_auth_id(val.link.get_auth_id().clone());
         }
@@ -249,8 +245,8 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
-        self.internal_schedule(msg)?;
+    async fn schedule<'a>(&self, msg: NetworkMessageMut<'a>) -> ZResult<bool> {
+        self.internal_schedule(msg).await?;
         Ok(true)
     }
 

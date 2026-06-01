@@ -16,14 +16,14 @@ use std::{
     ops::{Deref, Not},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, OnceLock, RwLock,
+        Arc, OnceLock,
     },
     time::Duration,
 };
 
 use async_trait::async_trait;
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
-use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
+use tokio::sync::{RwLock, Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zcondfeat};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bound, Priority, RegionName, WhatAmI, ZenohIdProto},
@@ -102,7 +102,7 @@ pub(crate) struct TransportUnicastUniversal {
 }
 
 impl TransportUnicastUniversal {
-    pub fn make(
+    pub async fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
         #[cfg(feature = "shared-memory")] shm_context: Option<UnicastTransportShmContext>,
@@ -128,7 +128,7 @@ impl TransportUnicastUniversal {
             best_effort: config.tx_initial_sn,
         };
         for c in priority_tx.iter() {
-            c.sync(initial_sn)?;
+            c.sync(initial_sn).await?;
         }
 
         let t = Arc::new(TransportUnicastUniversal {
@@ -165,7 +165,7 @@ impl TransportUnicastUniversal {
         let callback = self.callback.close();
 
         // Close all the links
-        let mut links = zwrite!(self.links).take();
+        let mut links = zasyncwrite!(self.links).take();
         for l in links.drain(..) {
             let _ = l.close().await;
         }
@@ -184,7 +184,7 @@ impl TransportUnicastUniversal {
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
         // Try to remove the link
-        let Some((is_last, stl, associated_link)) = zwrite!(self.links).remove_link(&link) else {
+        let Some((is_last, stl, associated_link)) = zasyncwrite!(self.links).remove_link(&link) else {
             bail!(
                 "Can not delete Link {} with peer: {}",
                 link,
@@ -278,7 +278,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
         };
 
-        let mut guard = zwrite!(self.links);
+        let mut guard = zasyncwrite!(self.links);
 
         // Check if we can add more inbound links
         if let TransportLinkUnicastDirection::Inbound = link.inner_config().direction {
@@ -401,7 +401,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     async fn close(&self, reason: u8) -> ZResult<()> {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let mut pipelines = zread!(self.links)
+        let mut pipelines = zasyncread!(self.links)
             .get_links()
             .iter()
             .map(|sl| sl.pipeline.clone())
@@ -417,24 +417,24 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
             .into();
 
-            p.push_transport_message(msg, Priority::Background);
+            p.push_transport_message(msg, Priority::Background).await;
         }
         // Terminate and clean up the transport
         self.delete().await
     }
 
-    fn get_links(&self) -> Vec<Link> {
-        zread!(self.links)
+    async fn get_links(&self) -> Vec<Link> {
+        zasyncread!(self.links)
             .get_links()
             .iter()
             .map(|l| l.link.link())
             .collect()
     }
 
-    fn get_auth_ids(&self) -> TransportAuthId {
+    async fn get_auth_ids(&self) -> TransportAuthId {
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
         // Convert LinkUnicast auth ids to AuthId
-        zread!(self.links)
+        zasyncread!(self.links)
             .get_links()
             .iter()
             .for_each(|l| transport_auth_id.push_link_auth_id(l.link.link.get_auth_id().clone()));
@@ -448,8 +448,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
-        self.internal_schedule(msg)
+    async fn schedule<'a>(&self, msg: NetworkMessageMut<'a>) -> ZResult<bool> {
+        self.internal_schedule(msg).await
     }
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(

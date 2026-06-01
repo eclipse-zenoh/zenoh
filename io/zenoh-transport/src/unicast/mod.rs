@@ -112,12 +112,12 @@ impl TransportUnicast {
         Ok(transport.get_callback())
     }
 
-    pub fn get_peer(&self) -> ZResult<TransportPeer> {
+    pub async fn get_peer(&self) -> ZResult<TransportPeer> {
         let transport = self.get_inner()?;
         let tp = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            links: transport.get_links(),
+            links: transport.get_links().await,
             is_qos: transport.is_qos(),
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
@@ -127,20 +127,20 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_links(&self) -> ZResult<Vec<Link>> {
+    pub async fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = self.get_inner()?;
-        Ok(transport.get_links())
+        Ok(transport.get_links().await)
     }
 
-    pub fn get_auth_ids(&self) -> ZResult<TransportAuthId> {
+    pub async fn get_auth_ids(&self) -> ZResult<TransportAuthId> {
         let transport = self.get_inner()?;
-        Ok(transport.get_auth_ids())
+        Ok(transport.get_auth_ids().await)
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessageMut) -> ZResult<bool> {
+    pub async fn schedule<'a>(&self, message: NetworkMessageMut<'a>) -> ZResult<bool> {
         let transport = self.get_inner()?;
-        transport.schedule(message)
+        transport.schedule(message).await
     }
 
     #[inline(always)]
@@ -189,7 +189,7 @@ impl fmt::Debug for TransportUnicast {
                             .field("whatami", &transport.get_whatami())
                             .field("is_qos", &transport.is_qos())
                             .field("is_shm", &is_shm)
-                            .field("links", &transport.get_links()),
+                            .field("links", & zenoh_runtime::ZRuntime::Application.block_on(transport.get_links())),
                     )
                     .finish()
             }

@@ -95,10 +95,6 @@ pub(crate) async fn read_with_link(
 }
 
 impl TransportUnicastLowlatency {
-    pub(super) fn send(&self, msg: TransportMessageLowLatencyRef) -> ZResult<()> {
-        zenoh_runtime::ZRuntime::TX.block_in_place(self.send_async(msg))
-    }
-
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatencyRef<'_>) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
         let link = &guard.as_ref().ok_or_else(|| zerror!("No link"))?.link;
