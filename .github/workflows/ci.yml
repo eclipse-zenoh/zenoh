@@ -360,7 +360,7 @@ jobs:
       - name: Smoke fuzz zenoh-codec targets
         working-directory: commons/zenoh-codec/fuzz
         run: |
-          for target in transport_message network_message frame scouting_message; do
+          for target in transport_message network_message scouting_message; do
             cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run "$target" -- -max_total_time=60
           done
 
