@@ -12,7 +12,7 @@ It is highly recommended to depend solely on the zenoh and zenoh-ext crates and 
 The `zenoh-codec` crate includes `cargo-fuzz` targets for:
 
 - `transport_message`
-- `network_message`
+- `network_message` (structured `arbitrary` model)
 - `frame`
 - `scouting_message`
 
@@ -43,6 +43,10 @@ cargo run --bin analyze_network_message -- "[29, 0, 1, 2]"
 cargo run --bin analyze_frame -- "[37, 1]"
 cargo run --bin analyze_scouting_message -- "[1, 1, 10]"
 ```
+
+`network_message` intentionally differs from the outer parser targets: it uses a
+structured `arbitrary` model to generate valid inner-message states more
+efficiently, while raw wire parsing is still covered by `transport_message`.
 
 To inspect corpus coverage for the fuzz target, run:
 

@@ -21,6 +21,7 @@ version = "0.0.0"
 cargo-fuzz = true
 
 [dependencies]
+arbitrary = "1"
 libfuzzer-sys = "0.4"
 zenoh-buffers = { path = "../../zenoh-buffers" }
 zenoh-codec = { path = ".." }
