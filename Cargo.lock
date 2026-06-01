@@ -5477,6 +5477,7 @@ dependencies = [
  "tracing",
  "zenoh",
  "zenoh-plugin-trait",
+ "zenoh-test",
 ]
 
 [[package]]
