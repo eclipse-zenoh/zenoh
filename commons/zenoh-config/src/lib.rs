@@ -655,6 +655,44 @@ validated_struct::validator! {
             subscribers: Vec<OwnedKeyExpr>,
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
+            /// Router upstream (northbound) declaration aggregation. **Opt-in** and effective only on
+            /// a router's north-bound forwarding — distinct from the session-local `subscribers`/
+            /// `publishers` above. When a north-bound router HAT forwards a downstream subscriber or
+            /// queryable whose key-expression is *included* by one of these prefixes, the per-key
+            /// children are folded into a single `${prefix}` declaration toward the upstream and the
+            /// children are suppressed upstream (they remain registered locally for downward
+            /// routing), so an upstream router holds one routing resource per configured prefix
+            /// instead of one per forwarded child key-expression. The folded queryable is advertised
+            /// `complete=false` (presence, not authority) so it never shadows a distinct complete
+            /// source; `target=AllComplete` queries are still forwarded through the aggregate to the
+            /// real child queryables. Empty by default → behaviour is identical to stock.
+            ///
+            /// **Trade-offs when enabled — apply per-key policy and introspection at the router that
+            /// performs the fold (downstream of the aggregation point), where the child key-expressions
+            /// are still visible:**
+            /// - Per-key declaration ACL / QoS-overwrite / interceptors at the *upstream* node act on
+            ///   the `${prefix}` aggregate, not the individual child keys (granularity degrades to the
+            ///   prefix).
+            /// - Upstream admin-space enumeration (`@/${zid}/router/subscriber|queryable/**`) shows the
+            ///   aggregate, not the per-key children.
+            /// - The aggregate is a wildcard, so data published to *unsubscribed* keys under the prefix
+            ///   is still forwarded toward the folding router (which drops it); keep prefixes as tight
+            ///   as the actually-subscribed sub-tree.
+            /// - Only subscribers and queryables are folded. Liveliness tokens are intentionally NOT
+            ///   folded: a liveliness sample's key-expression *is* the token's own key (there is no
+            ///   reply fan-out to recover per-key identity, unlike a wildcard queryable `get`), so a
+            ///   single `${prefix}/**` token could neither enumerate the live per-key set nor emit a
+            ///   per-key removal when one child token is undeclared.
+            /// - Each prefix should cover the key-expression sub-tree a single downstream branch owns;
+            ///   prefixes should be disjoint, not a bare `**` root, and not under the `@/` admin
+            ///   key-space (misconfigured prefixes are warned about at startup).
+            pub upstream: #[derive(Default)]
+            UpstreamAggregationConf {
+                /// Key-expression prefixes whose downstream subscribers are folded upstream.
+                subscribers: Vec<OwnedKeyExpr>,
+                /// Key-expression prefixes whose downstream queryables are folded upstream.
+                queryables: Vec<OwnedKeyExpr>,
+            },
         },
 
         /// Overwrite QoS options for Zenoh messages by key expression (ignores Zenoh API QoS config)
