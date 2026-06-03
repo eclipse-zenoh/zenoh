@@ -13,14 +13,10 @@
 //
 #![cfg(feature = "test")]
 
-use std::{
-    sync::atomic::Ordering,
-    time::Duration,
-};
+use std::{sync::atomic::Ordering, time::Duration};
 
 use zenoh_shm::{
-    metadata::storage::GLOBAL_METADATA_STORAGE,
-    watchdog::validator::GLOBAL_VALIDATOR,
+    metadata::storage::GLOBAL_METADATA_STORAGE, watchdog::validator::GLOBAL_VALIDATOR,
 };
 
 // The validator runs every 100 ms. We wait 300 ms between checks to allow for

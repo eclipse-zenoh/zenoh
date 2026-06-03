@@ -403,7 +403,9 @@ mod tests {
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             }
         }))
-        .expect("messages not delivered despite transport_ref_count guard (issue #2628 regression)");
+        .expect(
+            "messages not delivered despite transport_ref_count guard (issue #2628 regression)",
+        );
 
         ztimeout!(transport.close()).unwrap();
         ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
