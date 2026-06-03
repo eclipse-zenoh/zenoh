@@ -17,6 +17,8 @@ use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
 };
+#[cfg(feature = "shared-memory")]
+use std::{collections::VecDeque, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
@@ -32,6 +34,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::{zerror, ZResult};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm::PendingShmBuf;
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
@@ -71,6 +75,9 @@ pub(crate) struct TransportUnicastLowlatency {
 
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
+    // Per-connection SHM lease set (Gray & Cheriton lease model).
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_pending: Arc<Mutex<VecDeque<PendingShmBuf>>>,
 }
 
 impl TransportUnicastLowlatency {
@@ -94,6 +101,8 @@ impl TransportUnicastLowlatency {
             tracker: TaskTracker::new(),
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(feature = "shared-memory")]
+            shm_pending: Arc::new(Mutex::new(VecDeque::new())),
         }) as Arc<dyn TransportUnicastTrait>
     }
 
@@ -130,6 +139,13 @@ impl TransportUnicastLowlatency {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
+        // Release all in-flight SHM leases so ConfirmedDescriptors drop and the
+        // watchdog validator can reclaim chunks within ≤100 ms.
+        #[cfg(feature = "shared-memory")]
+        self.shm_pending
+            .lock()
+            .expect("shm_pending lock")
+            .clear();
 
         // Close and drop the link
         self.token.cancel();

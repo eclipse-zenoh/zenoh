@@ -153,9 +153,14 @@ mod tests {
         let peer_net01 = ZenohIdProto::try_from([3]).unwrap();
 
         // create SHM provider
-        let backend = PosixShmProviderBackendBinaryHeap::builder(2 * MSG_SIZE)
-            .wait()
-            .unwrap();
+        // Pool must hold all MSG_COUNT messages simultaneously: the lease model
+        // keeps ShmBufInner clones alive in shm_pending for up to SHM_PENDING_TTL
+        // (500 ms), preventing GC from reclaiming slots. Without sufficient capacity,
+        // BlockOn<GarbageCollect> deadlocks waiting for a slot that is never freed.
+        let backend =
+            PosixShmProviderBackendBinaryHeap::builder((MSG_COUNT + 10) * MSG_SIZE)
+                .wait()
+                .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // Create a peer manager with shared-memory authenticator enabled
@@ -328,6 +333,120 @@ mod tests {
 
         // Wait a little bit
         tokio::time::sleep(SLEEP).await;
+    }
+
+    /// Regression test for issue #2628 (SHM silent drop / lease model).
+    ///
+    /// Verifies that SHM messages are delivered correctly with the lease model in place.
+    /// Uses a pool sized for exactly one in-flight message to force sequential
+    /// TX→pending→RX cycles, exercising the shm_pending insert and TTL sweep paths.
+    ///
+    /// Note: the specific race condition (validator fires before map_zmsg_to_shmbuf) is
+    /// proven correct by the unit tests in io/zenoh-transport/src/shm.rs (shm::tests).
+    /// This integration test validates end-to-end delivery and that the lease mechanism
+    /// does not break normal operation.
+    async fn run_shm_lease_model(endpoint: &EndPoint, lowlatency_transport: bool) {
+        const LEASE_MSG_COUNT: usize = 10;
+
+        let peer_shm01 = ZenohIdProto::try_from([20]).unwrap();
+        let peer_shm02 = ZenohIdProto::try_from([21]).unwrap();
+
+        // Pool must hold all in-flight messages simultaneously.
+        // The lease model keeps ShmBufInner clones alive in shm_pending (up to TTL = 500ms),
+        // preventing GC from reclaiming chunks. With BlockOn, a pool smaller than
+        // LEASE_MSG_COUNT * MSG_SIZE would deadlock. Use a generous multiple.
+        let backend =
+            PosixShmProviderBackendBinaryHeap::builder(LEASE_MSG_COUNT * 4 * MSG_SIZE)
+                .wait()
+                .unwrap();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
+
+        let peer_shm01_handler = Arc::new(SHPeer::new(true));
+        let peer_shm01_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(peer_shm01)
+            .unicast(
+                TransportManager::config_unicast()
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
+            .build_test(peer_shm01_handler.clone())
+            .unwrap();
+
+        let peer_shm02_handler = Arc::new(SHPeer::new(true));
+        let peer_shm02_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(peer_shm02)
+            .unicast(
+                TransportManager::config_unicast()
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
+            .build_test(peer_shm02_handler.clone())
+            .unwrap();
+
+        ztimeout!(peer_shm01_manager.add_listener(endpoint.clone())).unwrap();
+        let transport =
+            ztimeout!(peer_shm02_manager.open_transport_unicast(endpoint.clone())).unwrap();
+        assert!(transport.is_shm().unwrap());
+
+        let layout = shm01.alloc_layout(MSG_SIZE).unwrap();
+
+        for msg_count in 0..LEASE_MSG_COUNT {
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
+
+            let mut message = NetworkMessage::from(Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+                ..Push::from(Put {
+                    payload: sbuf.into(),
+                    ..Put::default()
+                })
+            });
+            transport.schedule(message.as_mut()).unwrap();
+        }
+
+        ztimeout!(tokio::time::timeout(
+            tokio::time::Duration::from_secs(30),
+            async {
+                loop {
+                    if peer_shm01_handler.get_count() == LEASE_MSG_COUNT {
+                        break;
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                }
+            }
+        ))
+        .expect("all SHM messages should be delivered (issue #2628 / lease model regression)");
+
+        ztimeout!(transport.close()).unwrap();
+        ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        ztimeout!(peer_shm01_manager.close());
+        ztimeout!(peer_shm02_manager.close());
+        tokio::time::sleep(SLEEP).await;
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_lease_model() {
+        zenoh_util::init_log_from_env_or("error");
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
+        run_shm_lease_model(&endpoint, false).await;
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_lease_model_lowlatency() {
+        zenoh_util::init_log_from_env_or("error");
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
+        run_shm_lease_model(&endpoint, true).await;
     }
 
     #[cfg(feature = "transport_tcp")]

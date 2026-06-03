@@ -20,6 +20,8 @@ use std::{
     },
     time::Duration,
 };
+#[cfg(feature = "shared-memory")]
+use std::{collections::VecDeque, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -32,6 +34,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 
+#[cfg(feature = "shared-memory")]
+use crate::shm::{PendingShmBuf};
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
@@ -90,6 +94,10 @@ pub(crate) struct TransportUnicastUniversal {
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
+    // Per-connection SHM lease set: clones of in-flight ShmBufInner kept alive until
+    // TTL expiry or connection close (Gray & Cheriton lease model).
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_pending: Arc<Mutex<VecDeque<PendingShmBuf>>>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<TransportLinks>>,
     // The callback
@@ -143,6 +151,8 @@ impl TransportUnicastUniversal {
             stats,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(feature = "shared-memory")]
+            shm_pending: Arc::new(Mutex::new(VecDeque::new())),
         });
 
         Ok(t)
@@ -162,6 +172,13 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
+        // Release all in-flight SHM leases so ConfirmedDescriptors drop and the
+        // watchdog validator can reclaim chunks within ≤100 ms.
+        #[cfg(feature = "shared-memory")]
+        self.shm_pending
+            .lock()
+            .expect("shm_pending lock")
+            .clear();
         let callback = self.callback.close();
 
         // Close all the links

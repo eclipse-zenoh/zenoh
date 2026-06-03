@@ -174,7 +174,7 @@ impl ShmBufInner {
         self.metadata.owned.header().len()
     }
 
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         let header = self.metadata.owned.header();
 
         !header.watchdog_invalidated.load(Ordering::SeqCst)

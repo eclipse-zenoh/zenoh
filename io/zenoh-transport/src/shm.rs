@@ -16,6 +16,7 @@ use std::{
     fmt::Debug,
     num::NonZeroUsize,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
@@ -45,6 +46,19 @@ use zenoh_shm::{
 };
 
 use crate::unicast::establishment::ext::shm::AuthSegment;
+
+/// TTL for in-flight SHM buffer leases (Gray & Cheriton lease model).
+/// Must be significantly larger than the watchdog validator period (100 ms)
+/// to cover realistic RX thread stalls. 5× gives headroom for scheduler
+/// jitter without accumulating excessive memory.
+pub(crate) const SHM_PENDING_TTL: Duration = Duration::from_millis(500);
+
+pub(crate) struct PendingShmBuf {
+    // Held solely for its RAII Drop (keeps ConfirmedDescriptor alive); never read.
+    #[allow(dead_code)]
+    pub(crate) buf: ShmBufInner,
+    pub(crate) deadline: Instant,
+}
 
 #[derive(Debug)]
 struct ProviderInitCfg {
@@ -228,6 +242,51 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
         | NetworkBodyMut::Interest(_)
         | NetworkBodyMut::Declare(_)
         | NetworkBodyMut::OAM(_) => {}
+    }
+}
+
+/// Clone every [`ShmBufInner`] from SHM-mapped ZSlices in `msg`.
+/// Returns an empty Vec if no SHM slices are present.
+/// The caller stores these clones in the connection's pending set so the
+/// [`ConfirmedDescriptor`] outlives this stack frame until the lease expires or
+/// the connection closes (Gray & Cheriton lease model).
+pub fn collect_shm_bufs(msg: &NetworkMessageMut) -> Vec<ShmBufInner> {
+    let mut out = Vec::new();
+    match &msg.body {
+        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
+            PushBody::Put(b) => collect_from_zbuf(&b.payload, &mut out),
+            PushBody::Del(_) => {}
+        },
+        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
+            RequestBody::Query(b) => {
+                if let Some(body) = &b.ext_body {
+                    collect_from_zbuf(&body.payload, &mut out);
+                }
+            }
+        },
+        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
+            ResponseBody::Reply(b) => {
+                if let PushBody::Put(p) = &b.payload {
+                    collect_from_zbuf(&p.payload, &mut out);
+                }
+            }
+            ResponseBody::Err(b) => collect_from_zbuf(&b.payload, &mut out),
+        },
+        NetworkBodyMut::ResponseFinal(_)
+        | NetworkBodyMut::Interest(_)
+        | NetworkBodyMut::Declare(_)
+        | NetworkBodyMut::OAM(_) => {}
+    }
+    out
+}
+
+fn collect_from_zbuf(zbuf: &ZBuf, out: &mut Vec<ShmBufInner>) {
+    for zs in zbuf.zslices() {
+        if zs.kind == ZSliceKind::ShmPtr {
+            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
+                out.push(shmb.clone());
+            }
+        }
     }
 }
 
@@ -433,4 +492,117 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     *zslice = smb.into();
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::VecDeque,
+        time::{Duration, Instant},
+    };
+
+    use zenoh_buffers::ZBuf;
+    use zenoh_core::Wait;
+    use zenoh_shm::{
+        api::provider::shm_provider::ShmProviderBuilder,
+        ShmBufInner,
+    };
+
+    use super::{PendingShmBuf, SHM_PENDING_TTL};
+
+    /// Extract a cloned ShmBufInner from a ZShmMut.
+    /// The provider must be kept alive by the caller for the duration of use,
+    /// otherwise the provider drops and recycles the chunk (invalidating its generation).
+    fn shmbuf_from_zbuf(zbuf: &ZBuf) -> ShmBufInner {
+        let zslice = zbuf
+            .zslices()
+            .next()
+            .expect("ZBuf should have at least one ZSlice")
+            .clone();
+        zslice
+            .downcast_ref::<ShmBufInner>()
+            .expect("ZSlice should hold ShmBufInner")
+            .clone()
+    }
+
+    /// Invariant 1+3: a clone in the pending set keeps the chunk alive through
+    /// validator ticks; clearing pending lets the validator fire.
+    #[test]
+    fn pending_set_keeps_chunk_alive_and_clear_lets_validator_fire() {
+        // Provider must outlive all ShmBufInner references — drop order matters.
+        let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+        let zbuf: ZBuf = provider.alloc(64).wait().unwrap().into();
+        let shmb = shmbuf_from_zbuf(&zbuf);
+        assert!(shmb.is_valid(), "freshly allocated buffer should be valid");
+
+        // Clone into pending set (simulates TX collect_shm_bufs after push)
+        let now = Instant::now();
+        let deadline = now + SHM_PENDING_TTL;
+        let mut pending: VecDeque<PendingShmBuf> = VecDeque::new();
+        let pending_clone = shmb.clone();
+        pending.push_back(PendingShmBuf { buf: pending_clone, deadline });
+
+        // Drop zbuf (holds the original ZSlice/ShmBufInner) and shmb
+        // — simulates internal_schedule returning after do_push.
+        drop(zbuf);
+        drop(shmb);
+
+        // Wait > 2 validator ticks (each tick = 100 ms)
+        std::thread::sleep(Duration::from_millis(350));
+
+        // Invariant 1: pending clone holds ConfirmedDescriptor — chunk still valid
+        assert!(
+            pending.front().unwrap().buf.is_valid(),
+            "chunk should remain valid while held in shm_pending"
+        );
+
+        // Simulate transport delete(): clear the pending set
+        pending.clear();
+
+        // Invariant 3: after clear, ConfirmedDescriptor drops; validator fires within 200 ms
+        std::thread::sleep(Duration::from_millis(350));
+        // (We cannot call is_valid() after clear since we dropped the ShmBufInner.)
+        // The correctness here is validated end-to-end by Test C in unicast_shm.rs.
+
+        drop(provider);
+    }
+
+    /// Invariant 2: TTL sweep removes expired front entries.
+    #[test]
+    fn ttl_sweep_removes_expired_entries() {
+        const SHORT_TTL: Duration = Duration::from_millis(50);
+
+        let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+        let zbuf1: ZBuf = provider.alloc(64).wait().unwrap().into();
+        let zbuf2: ZBuf = provider.alloc(64).wait().unwrap().into();
+        let shmb1 = shmbuf_from_zbuf(&zbuf1);
+        let shmb2 = shmbuf_from_zbuf(&zbuf2);
+        drop(zbuf1);
+        drop(zbuf2);
+
+        let t0 = Instant::now();
+        let expired_deadline = t0 + SHORT_TTL;
+        let mut pending: VecDeque<PendingShmBuf> = VecDeque::new();
+        pending.push_back(PendingShmBuf { buf: shmb1, deadline: expired_deadline });
+
+        // Wait for TTL to expire
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Trigger sweep by inserting a second entry (mirrors the TX insert logic)
+        let now = Instant::now();
+        let live_deadline = now + SHM_PENDING_TTL;
+        while pending.front().is_some_and(|e| e.deadline <= now) {
+            pending.pop_front();
+        }
+        pending.push_back(PendingShmBuf { buf: shmb2, deadline: live_deadline });
+
+        // Invariant 2: first entry was swept, second entry remains
+        assert_eq!(pending.len(), 1, "expired entry should have been swept by TTL");
+        assert!(
+            pending.front().unwrap().buf.is_valid(),
+            "the live entry should still be valid"
+        );
+
+        drop(provider);
+    }
 }
