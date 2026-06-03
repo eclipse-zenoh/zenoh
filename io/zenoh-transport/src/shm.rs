@@ -231,49 +231,6 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     }
 }
 
-/// Release the transport references that were claimed by [`map_zmsg_to_partner`].
-/// Call this when a message is discarded before reaching the wire (no link available,
-/// pipeline congestion drop) so that the watchdog validator can eventually reclaim
-/// the chunk. If the message was successfully pushed, do NOT call this — the RX side
-/// will release the reference in [`map_zmsg_to_shmbuf`] via [`read_shmbuf`].
-pub fn release_zmsg_transport_refs(msg: &mut NetworkMessageMut) {
-    match &mut msg.body {
-        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
-            PushBody::Put(b) => release_transport_refs_in_zbuf(&mut b.payload),
-            PushBody::Del(_) => {}
-        },
-        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
-            RequestBody::Query(b) => {
-                if let Some(body) = &mut b.ext_body {
-                    release_transport_refs_in_zbuf(&mut body.payload);
-                }
-            }
-        },
-        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Reply(b) => {
-                if let PushBody::Put(p) = &mut b.payload {
-                    release_transport_refs_in_zbuf(&mut p.payload);
-                }
-            }
-            ResponseBody::Err(b) => release_transport_refs_in_zbuf(&mut b.payload),
-        },
-        NetworkBodyMut::ResponseFinal(_)
-        | NetworkBodyMut::Interest(_)
-        | NetworkBodyMut::Declare(_)
-        | NetworkBodyMut::OAM(_) => {}
-    }
-}
-
-fn release_transport_refs_in_zbuf(zbuf: &mut ZBuf) {
-    for zs in zbuf.zslices_mut() {
-        if zs.kind == ZSliceKind::ShmPtr {
-            if let Some(shmb) = zs.downcast_ref::<ShmBufInner>() {
-                shmb.release_transport_ref();
-            }
-        }
-    }
-}
-
 pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<()> {
     match msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
@@ -336,10 +293,6 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
-                    // Claim a transport reference before releasing TX ownership.
-                    // The validator will not invalidate this chunk while the count
-                    // is above zero; the RX side decrements it in read_shmbuf().
-                    shmb.claim_transport_ref();
                     zs.kind = ZSliceKind::ShmPtr;
                     *ext_shm = Some(ShmType::new());
                 }
@@ -480,48 +433,4 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
     *zslice = smb.into();
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use zenoh_protocol::{
-        core::Reliability,
-        network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
-    };
-
-    use super::release_zmsg_transport_refs;
-
-    /// release_zmsg_transport_refs must be a no-op on a Request with no SHM payload.
-    #[test]
-    fn release_is_noop_on_request_without_shm() {
-        let mut request = Request::rand();
-        let mut msg = NetworkMessageMut {
-            body: NetworkBodyMut::Request(&mut request),
-            reliability: Reliability::Reliable,
-        };
-        // Must not panic or fault on a non-SHM message.
-        release_zmsg_transport_refs(&mut msg);
-    }
-
-    /// release_zmsg_transport_refs must be a no-op on a Push with no SHM payload.
-    #[test]
-    fn release_is_noop_on_push_without_shm() {
-        let mut push = Push::rand();
-        let mut msg = NetworkMessageMut {
-            body: NetworkBodyMut::Push(&mut push),
-            reliability: Reliability::Reliable,
-        };
-        release_zmsg_transport_refs(&mut msg);
-    }
-
-    /// release_zmsg_transport_refs must be a no-op on a Response with no SHM payload.
-    #[test]
-    fn release_is_noop_on_response_without_shm() {
-        let mut response = Response::rand();
-        let mut msg = NetworkMessageMut {
-            body: NetworkBodyMut::Response(&mut response),
-            reliability: Reliability::Reliable,
-        };
-        release_zmsg_transport_refs(&mut msg);
-    }
 }

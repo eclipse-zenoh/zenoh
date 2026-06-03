@@ -73,11 +73,6 @@ impl ShmReader {
             info: info.clone(),
         });
 
-        // Transport phase complete: the RX side now owns the ConfirmedDescriptor
-        // which resumes watchdog kicks. Release the transport reference regardless
-        // of whether the buffer is still valid — the chunk has been processed.
-        shmb.release_transport_ref();
-
         // Validate buffer
         match shmb.is_valid() {
             true => Ok(shmb),

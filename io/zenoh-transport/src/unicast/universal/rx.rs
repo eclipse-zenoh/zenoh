@@ -53,13 +53,6 @@ impl TransportUnicastUniversal {
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
-                // In tests, sleep here to simulate an RX thread stall longer than the
-                // watchdog validator period (100 ms). This exercises the transport_ref_count
-                // guard: without it the chunk would be invalidated before map_zmsg_to_shmbuf
-                // runs and the message would be silently dropped (issue #2628).
-                #[cfg(test)]
-                std::thread::sleep(std::time::Duration::from_millis(300));
-
                 if let Err(e) =
                     crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
                 {

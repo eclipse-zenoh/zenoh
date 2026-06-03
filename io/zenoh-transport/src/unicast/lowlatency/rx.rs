@@ -43,10 +43,6 @@ impl TransportUnicastLowlatency {
             #[cfg(feature = "shared-memory")]
             {
                 if let Some(shm_context) = &self.shm_context {
-                    // Synthetic stall for test — see universal/rx.rs for rationale.
-                    #[cfg(test)]
-                    std::thread::sleep(std::time::Duration::from_millis(300));
-
                     if let Err(e) =
                         crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
                     {

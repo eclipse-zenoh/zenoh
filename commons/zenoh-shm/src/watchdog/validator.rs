@@ -106,18 +106,8 @@ impl WatchdogValidator {
                     watchdogs.retain(|watchdog| {
                         let old_val = watchdog.validate();
                         if old_val == 0 {
-                            let header = watchdog.header();
-                            if header
-                                .transport_ref_count
-                                .load(std::sync::atomic::Ordering::SeqCst)
-                                > 0
-                            {
-                                // Chunk is in transit: the sender has sent it but
-                                // the receiver's RX thread has not yet called
-                                // read_shmbuf(). Do not invalidate; keep watching.
-                                return true;
-                            }
-                            header
+                            watchdog
+                                .header()
                                 .watchdog_invalidated
                                 .store(true, std::sync::atomic::Ordering::Relaxed);
                             return false;

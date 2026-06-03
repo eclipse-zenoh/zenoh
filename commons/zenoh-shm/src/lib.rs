@@ -189,29 +189,6 @@ impl ShmBufInner {
         self.metadata.owned.header().refcount.load(Ordering::SeqCst)
     }
 
-    /// Increment the transport-layer reference count.
-    /// Must be paired with a later call to [`release_transport_ref`].
-    /// Called by the transport TX path when a chunk is sent over SHM so the
-    /// watchdog validator does not invalidate it before the receiver mounts it.
-    pub fn claim_transport_ref(&self) {
-        self.metadata
-            .owned
-            .header()
-            .transport_ref_count
-            .fetch_add(1, Ordering::SeqCst);
-    }
-
-    /// Decrement the transport-layer reference count.
-    /// Called by the transport RX path (`read_shmbuf`) after acquiring a
-    /// `ConfirmedDescriptor`, and by the TX path on push failure.
-    pub fn release_transport_ref(&self) {
-        self.metadata
-            .owned
-            .header()
-            .transport_ref_count
-            .fetch_sub(1, Ordering::SeqCst);
-    }
-
     /// Increments buffer's reference count
     ///
     /// # Safety
