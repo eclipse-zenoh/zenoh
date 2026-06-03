@@ -23,7 +23,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::shm::{map_zmsg_to_partner, release_zmsg_transport_refs};
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
@@ -112,7 +112,21 @@ impl TransportUnicastUniversal {
         if let Some(shm_context) = &self.shm_context {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
-        let msg = msg.as_ref();
+
+        let result = self.do_push(msg.as_ref());
+
+        // If the message was not pushed to the wire, the RX side will never call
+        // read_shmbuf() to release the transport reference. Release it here so the
+        // watchdog validator can eventually reclaim the chunk.
+        #[cfg(feature = "shared-memory")]
+        if !matches!(result, Ok(true)) {
+            release_zmsg_transport_refs(&mut msg);
+        }
+
+        result
+    }
+
+    fn do_push(&self, msg: NetworkMessageRef) -> ZResult<bool> {
         let transport_links = self
             .links
             .read()

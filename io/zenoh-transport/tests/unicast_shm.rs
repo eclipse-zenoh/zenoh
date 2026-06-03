@@ -330,6 +330,89 @@ mod tests {
         tokio::time::sleep(SLEEP).await;
     }
 
+    /// Run a reduced-count SHM transfer with a synthetic RX stall injected before
+    /// `map_zmsg_to_shmbuf`. The stall (300 ms) exceeds the watchdog validator period
+    /// (100 ms) so the chunk *would* be invalidated without the `transport_ref_count`
+    /// guard. If all messages arrive the guard is working correctly.
+    async fn run_with_stall(endpoint: &EndPoint, lowlatency_transport: bool) {
+        // Only 3 messages: each RX call stalls 300 ms, so the total is ~1 s.
+        const STALL_MSG_COUNT: usize = 3;
+
+        let peer_shm01 = ZenohIdProto::try_from([10]).unwrap();
+        let peer_shm02 = ZenohIdProto::try_from([11]).unwrap();
+
+        let backend = PosixShmProviderBackendBinaryHeap::builder(2 * MSG_SIZE)
+            .wait()
+            .unwrap();
+        let shm01 = ShmProviderBuilder::backend(backend).wait();
+
+        let peer_shm01_handler = Arc::new(SHPeer::new(true));
+        let peer_shm01_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(peer_shm01)
+            .unicast(
+                TransportManager::config_unicast()
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
+            .build_test(peer_shm01_handler.clone())
+            .unwrap();
+
+        let peer_shm02_handler = Arc::new(SHPeer::new(true));
+        let peer_shm02_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(peer_shm02)
+            .unicast(
+                TransportManager::config_unicast()
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
+            .build_test(peer_shm02_handler.clone())
+            .unwrap();
+
+        ztimeout!(peer_shm01_manager.add_listener(endpoint.clone())).unwrap();
+        let transport =
+            ztimeout!(peer_shm02_manager.open_transport_unicast(endpoint.clone())).unwrap();
+        assert!(transport.is_shm().unwrap());
+
+        let layout = shm01.alloc_layout(MSG_SIZE).unwrap();
+
+        for (msg_count, _) in (0..STALL_MSG_COUNT).enumerate() {
+            let mut sbuf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            sbuf[0..8].copy_from_slice(&msg_count.to_le_bytes());
+
+            let mut message = NetworkMessage::from(Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+                ..Push::from(Put {
+                    payload: sbuf.into(),
+                    ..Put::default()
+                })
+            });
+            transport.schedule(message.as_mut()).unwrap();
+        }
+
+        // Each message stalls 300 ms in the RX thread, so allow 5 s total.
+        let deadline = tokio::time::Duration::from_secs(5);
+        ztimeout!(tokio::time::timeout(deadline, async {
+            loop {
+                if peer_shm01_handler.get_count() == STALL_MSG_COUNT {
+                    break;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            }
+        }))
+        .expect("messages not delivered despite transport_ref_count guard (issue #2628 regression)");
+
+        ztimeout!(transport.close()).unwrap();
+        ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
+        tokio::time::sleep(SLEEP).await;
+        ztimeout!(peer_shm01_manager.close());
+        ztimeout!(peer_shm02_manager.close());
+        tokio::time::sleep(SLEEP).await;
+    }
+
     #[cfg(feature = "transport_tcp")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_tcp_shm() {
@@ -338,6 +421,30 @@ mod tests {
             .parse()
             .unwrap();
         run(&endpoint, false).await;
+    }
+
+    /// Regression test for issue #2628: SHM messages must survive an RX thread stall
+    /// longer than the watchdog validator period. The synthetic 300 ms stall is injected
+    /// in trigger_callback (see universal/rx.rs) via `#[cfg(test)]`.
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_rx_stall() {
+        zenoh_util::init_log_from_env_or("error");
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
+        run_with_stall(&endpoint, false).await;
+    }
+
+    /// Low-latency transport variant of the stall regression test.
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_rx_stall_lowlatency() {
+        zenoh_util::init_log_from_env_or("error");
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
+        run_with_stall(&endpoint, true).await;
     }
 
     #[cfg(feature = "transport_tcp")]

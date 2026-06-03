@@ -34,6 +34,12 @@ pub struct ChunkHeaderType {
     /// Protocol identifier for particular SHM implementation
     pub protocol: AtomicU32,
 
+    /// Number of transport-layer references: frames that have been sent over SHM
+    /// transport but not yet mounted by the receiver. The watchdog validator will
+    /// not invalidate a chunk while this count is above zero, preventing the race
+    /// where the sender's watchdog expires before the receiver's RX thread runs.
+    pub transport_ref_count: AtomicU32,
+
     /// The data chunk descriptor
     segment: AtomicU32,
     chunk: AtomicU32,
