@@ -427,9 +427,13 @@ fn parse_duration(s: &str) -> Result<f64, ZError> {
     let mut it = s.bytes().enumerate().rev();
     match it.next().unwrap() {
         (i, b'u') => s[..i].parse::<f64>().map(|u| U_TO_SECS * u),
-        (_, b's') => match it.next().unwrap() {
-            (i, b'm') => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms),
-            (i, _) => s[..i + 1].parse::<f64>(),
+        (_, b's') => match it.next() {
+            Some((i, b'm')) => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms),
+            Some((i, _)) => s[..i + 1].parse::<f64>(),
+            // A bare "s" with no preceding value: behave like the other unit-only
+            // inputs ("u", "m", ...) and return an error instead of panicking on the
+            // exhausted iterator.
+            None => "".parse::<f64>(),
         },
         (i, b'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m),
         (i, b'h') => s[..i].parse::<f64>().map(|h| H_TO_SECS * h),
@@ -683,5 +687,22 @@ mod tests {
         assert!(parse_duration("abcd").is_err());
         assert!(parse_duration("4mm").is_err());
         assert!(parse_duration("1h4m").is_err());
+
+        // Unit-only inputs (no numeric part) must all return an error, not panic.
+        // Regression: a bare "s" used to double-`next().unwrap()` an exhausted
+        // iterator and panic while disambiguating "s" from "ms".
+        for unit in ["u", "ms", "s", "m", "h", "d", "w"] {
+            assert!(
+                parse_duration(unit).is_err(),
+                "parse_duration({unit:?}) should be an error, not a panic"
+            );
+        }
+
+        // The same malformed duration reached through the public time DSL must
+        // surface as a parse error rather than a panic.
+        assert!("now(s)".parse::<TimeExpr>().is_err());
+        assert!("now(-s)".parse::<TimeExpr>().is_err());
+        assert!("[now(s)..]".parse::<TimeRange>().is_err());
+        assert!("[1970-01-01T00:00:00Z;s]".parse::<TimeRange>().is_err());
     }
 }
