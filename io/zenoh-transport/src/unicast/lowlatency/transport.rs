@@ -13,12 +13,12 @@
 //
 #[cfg(feature = "stats")]
 use std::sync::OnceLock;
+#[cfg(feature = "shared-memory")]
+use std::{collections::HashMap, sync::Mutex};
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
 };
-#[cfg(feature = "shared-memory")]
-use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
