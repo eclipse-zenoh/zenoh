@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use std::{collections::HashMap, sync::Mutex};
 use std::{
     fmt::DebugStruct,
     ops::{Deref, Not},
@@ -22,6 +20,8 @@ use std::{
     },
     time::Duration,
 };
+#[cfg(feature = "shared-memory")]
+use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -33,6 +33,8 @@ use zenoh_protocol::{
     transport::{close, Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 
 #[cfg(feature = "shared-memory")]
 use crate::shm::PendingShmBuf;
@@ -49,8 +51,6 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 
 pub(crate) struct ClosableCallback {
     callback: OnceLock<Arc<dyn TransportPeerEventHandler>>,
