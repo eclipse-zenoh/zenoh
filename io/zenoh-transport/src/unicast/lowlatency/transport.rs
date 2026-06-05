@@ -13,12 +13,12 @@
 //
 #[cfg(feature = "stats")]
 use std::sync::OnceLock;
+#[cfg(feature = "shared-memory")]
+use std::{collections::HashMap, sync::Mutex};
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
 };
-#[cfg(feature = "shared-memory")]
-use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
@@ -37,8 +37,6 @@ use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "shared-memory")]
 use crate::shm::PendingShmBuf;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::metadata::descriptor::MetadataDescriptor;
-#[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
     unicast::{
@@ -49,6 +47,8 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 
 /*************************************/
 /*       LOW-LATENCY TRANSPORT       */
@@ -144,10 +144,7 @@ impl TransportUnicastLowlatency {
         // Release all in-flight SHM leases so ConfirmedDescriptors drop and the
         // watchdog validator can reclaim chunks within ≤100 ms.
         #[cfg(feature = "shared-memory")]
-        self.shm_pending
-            .lock()
-            .expect("shm_pending lock")
-            .clear();
+        self.shm_pending.lock().expect("shm_pending lock").clear();
 
         // Close and drop the link
         self.token.cancel();

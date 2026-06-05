@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use std::{collections::HashMap, sync::Mutex};
 use std::{
     fmt::DebugStruct,
     ops::{Deref, Not},
@@ -20,8 +22,6 @@ use std::{
     },
     time::Duration,
 };
-#[cfg(feature = "shared-memory")]
-use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -37,8 +37,6 @@ use zenoh_result::{bail, zerror, ZResult};
 #[cfg(feature = "shared-memory")]
 use crate::shm::PendingShmBuf;
 #[cfg(feature = "shared-memory")]
-use zenoh_shm::metadata::descriptor::MetadataDescriptor;
-#[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
@@ -51,6 +49,8 @@ use crate::{
     },
     TransportManager, TransportPeerEventHandler,
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 
 pub(crate) struct ClosableCallback {
     callback: OnceLock<Arc<dyn TransportPeerEventHandler>>,
@@ -177,10 +177,7 @@ impl TransportUnicastUniversal {
         // Release all in-flight SHM leases so ConfirmedDescriptors drop and the
         // watchdog validator can reclaim chunks within ≤100 ms.
         #[cfg(feature = "shared-memory")]
-        self.shm_pending
-            .lock()
-            .expect("shm_pending lock")
-            .clear();
+        self.shm_pending.lock().expect("shm_pending lock").clear();
         let callback = self.callback.close();
 
         // Close all the links

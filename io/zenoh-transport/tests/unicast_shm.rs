@@ -157,10 +157,9 @@ mod tests {
         // keeps ShmBufInner clones alive in shm_pending for up to SHM_PENDING_TTL
         // (500 ms), preventing GC from reclaiming slots. Without sufficient capacity,
         // BlockOn<GarbageCollect> deadlocks waiting for a slot that is never freed.
-        let backend =
-            PosixShmProviderBackendBinaryHeap::builder((MSG_COUNT + 10) * MSG_SIZE)
-                .wait()
-                .unwrap();
+        let backend = PosixShmProviderBackendBinaryHeap::builder((MSG_COUNT + 10) * MSG_SIZE)
+            .wait()
+            .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         // Create a peer manager with shared-memory authenticator enabled
@@ -355,10 +354,9 @@ mod tests {
         // The lease model keeps ShmBufInner clones alive in shm_pending (up to TTL = 500ms),
         // preventing GC from reclaiming chunks. With BlockOn, a pool smaller than
         // LEASE_MSG_COUNT * MSG_SIZE would deadlock. Use a generous multiple.
-        let backend =
-            PosixShmProviderBackendBinaryHeap::builder(LEASE_MSG_COUNT * 4 * MSG_SIZE)
-                .wait()
-                .unwrap();
+        let backend = PosixShmProviderBackendBinaryHeap::builder(LEASE_MSG_COUNT * 4 * MSG_SIZE)
+            .wait()
+            .unwrap();
         let shm01 = ShmProviderBuilder::backend(backend).wait();
 
         let peer_shm01_handler = Arc::new(SHPeer::new(true));

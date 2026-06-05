@@ -23,10 +23,10 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
-use std::time::Instant;
-#[cfg(feature = "shared-memory")]
 use crate::shm::{collect_shm_bufs, map_zmsg_to_partner, PendingShmBuf, SHM_PENDING_TTL};
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
+#[cfg(feature = "shared-memory")]
+use std::time::Instant;
 
 impl TransportUnicastUniversal {
     /// Returns the index of the best matching [`Reliability`]-[`PriorityRange`] pair.

@@ -184,11 +184,7 @@ impl ShmBufInner {
     /// Returns true if RX has installed its ConfirmedDescriptor for this buffer.
     /// TX sweep uses this to release the pending lease before TTL expiry.
     pub fn is_rx_acked(&self) -> bool {
-        self.metadata
-            .owned
-            .header()
-            .rx_ack
-            .load(Ordering::Acquire)
+        self.metadata.owned.header().rx_ack.load(Ordering::Acquire)
     }
 
     /// Set rx_ack on this buffer. Called by `read_shmbuf` after the ConfirmedDescriptor

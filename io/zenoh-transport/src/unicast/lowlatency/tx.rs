@@ -19,9 +19,9 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "shared-memory")]
-use std::time::Instant;
-#[cfg(feature = "shared-memory")]
 use crate::shm::{collect_shm_bufs, map_zmsg_to_partner, PendingShmBuf, SHM_PENDING_TTL};
+#[cfg(feature = "shared-memory")]
+use std::time::Instant;
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled

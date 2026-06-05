@@ -503,10 +503,7 @@ mod tests {
 
     use zenoh_buffers::ZBuf;
     use zenoh_core::Wait;
-    use zenoh_shm::{
-        api::provider::shm_provider::ShmProviderBuilder,
-        ShmBufInner,
-    };
+    use zenoh_shm::{api::provider::shm_provider::ShmProviderBuilder, ShmBufInner};
 
     use super::{PendingShmBuf, SHM_PENDING_TTL};
 
@@ -541,7 +538,13 @@ mod tests {
         let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
         let key = shmb.info.metadata.clone();
         let pending_clone = shmb.clone();
-        pending.insert(key, PendingShmBuf { buf: pending_clone, deadline });
+        pending.insert(
+            key,
+            PendingShmBuf {
+                buf: pending_clone,
+                deadline,
+            },
+        );
 
         // Drop zbuf (holds the original ZSlice/ShmBufInner) and shmb
         // — simulates internal_schedule returning after do_push.
@@ -586,7 +589,13 @@ mod tests {
         let t0 = Instant::now();
         let expired_deadline = t0 + SHORT_TTL;
         let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
-        pending.insert(key1, PendingShmBuf { buf: shmb1, deadline: expired_deadline });
+        pending.insert(
+            key1,
+            PendingShmBuf {
+                buf: shmb1,
+                deadline: expired_deadline,
+            },
+        );
 
         // Wait for TTL to expire
         std::thread::sleep(Duration::from_millis(100));
@@ -595,10 +604,20 @@ mod tests {
         let now = Instant::now();
         let live_deadline = now + SHM_PENDING_TTL;
         pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
-        pending.insert(key2, PendingShmBuf { buf: shmb2, deadline: live_deadline });
+        pending.insert(
+            key2,
+            PendingShmBuf {
+                buf: shmb2,
+                deadline: live_deadline,
+            },
+        );
 
         // Invariant 2: first entry was swept, second entry remains
-        assert_eq!(pending.len(), 1, "expired entry should have been swept by TTL");
+        assert_eq!(
+            pending.len(),
+            1,
+            "expired entry should have been swept by TTL"
+        );
         assert!(
             pending.values().next().unwrap().buf.is_valid(),
             "the live entry should still be valid"
@@ -620,7 +639,13 @@ mod tests {
         let deadline = now + SHM_PENDING_TTL; // TTL far in the future
 
         let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
-        pending.insert(key, PendingShmBuf { buf: shmb, deadline });
+        pending.insert(
+            key,
+            PendingShmBuf {
+                buf: shmb,
+                deadline,
+            },
+        );
 
         assert_eq!(pending.len(), 1, "entry should be present before ack");
 
@@ -630,7 +655,11 @@ mod tests {
         // Sweep: should remove the acked entry immediately, well before TTL
         pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
 
-        assert_eq!(pending.len(), 0, "rx_acked entry should be removed by retain sweep");
+        assert_eq!(
+            pending.len(),
+            0,
+            "rx_acked entry should be removed by retain sweep"
+        );
 
         drop(provider);
     }
