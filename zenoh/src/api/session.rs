@@ -1713,7 +1713,12 @@ impl Session {
                     p.destination != Locality::SessionLocal
                         && p.remote_id == querier_state.remote_id
                 });
-            (primitives, querier_state.remote_id, removed_queries, send_final)
+            (
+                primitives,
+                querier_state.remote_id,
+                removed_queries,
+                send_final,
+            )
         };
         // Lock released. Drop the removed queries (and their callbacks) and send
         // the final interest without holding the state lock.
