@@ -399,7 +399,7 @@ async fn test_querier_drop_pending_query_completion_callback_reentrancy() {
 
     // Give the query time to reach the queryable and become pending.
     tokio::time::sleep(SLEEP).await;
-    
+
     // Drop the querier.
     drop(querier);
 
