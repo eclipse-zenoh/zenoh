@@ -359,6 +359,54 @@ async fn test_undeclare_subscribers_same_keyexpr() {
     ztimeout!(sub2.undeclare()).unwrap();
 }
 
+/// Regression test: dropping a `Querier` while one of its queries is still
+/// pending must not deadlock, even if the query's completion (drop) callback
+/// re-enters the `Session`.
+///
+/// The querier destructor removes the pending query; the query's callback (and
+/// thus its completion callback) must be dropped *without* holding the session
+/// state lock, otherwise re-entering the `Session` from the completion callback
+/// deadlocks.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_querier_drop_pending_query_completion_callback_reentrancy() {
+    use std::sync::Mutex;
+
+    use zenoh::{handlers::CallbackDrop, query::Reply, Wait};
+
+    let key_expr = "test/querier/drop/pending/completion";
+    let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+
+    // Queryable that keeps queries pending forever (never replies), so the
+    // query is still in flight when the querier is dropped.
+    let held: Arc<Mutex<Vec<zenoh::query::Query>>> = Arc::new(Mutex::new(Vec::new()));
+    let c_held = held.clone();
+    let _queryable = ztimeout!(session
+        .declare_queryable(key_expr)
+        .callback(move |q| c_held.lock().unwrap().push(q)))
+    .unwrap();
+
+    let querier = ztimeout!(session.declare_querier(key_expr)).unwrap();
+
+    // The query's completion callback re-enters the Session via `put`.
+    let c_session = session.clone();
+    ztimeout!(querier.get().with(CallbackDrop {
+        callback: |_reply: Reply| {},
+        drop: move || {
+            c_session.put(key_expr, "done").wait().unwrap();
+        },
+    }))
+    .unwrap();
+
+    // Give the query time to reach the queryable and become pending.
+    tokio::time::sleep(SLEEP).await;
+    
+    // Drop the querier.
+    drop(querier);
+
+    // Release the held queries.
+    held.lock().unwrap().clear();
+}
+
 #[cfg(feature = "internal")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_session_from_cloned_config() {

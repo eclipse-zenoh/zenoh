@@ -1681,39 +1681,55 @@ impl Session {
     }
 
     pub(crate) fn undeclare_querier_inner(&self, querier_id: Id) -> ZResult<()> {
-        let mut state = zwrite!(self.0.state);
-        let Ok(primitives) = state.primitives() else {
-            return Ok(());
-        };
-        if let Some(querier_state) = state.queriers.remove(&querier_id) {
+        // Everything that needs the state lock happens in this scope. The
+        // removed `QueryState`s (which own the user callbacks, including
+        // completion/drop callbacks) are returned out of the scope so they are
+        // dropped *after* the lock is released: a completion callback that
+        // re-enters the `Session` would otherwise deadlock re-acquiring the lock.
+        let (primitives, remote_id, removed_queries, send_final) = {
+            let mut state = zwrite!(self.0.state);
+            let Ok(primitives) = state.primitives() else {
+                return Ok(());
+            };
+            let Some(querier_state) = state.queriers.remove(&querier_id) else {
+                return Err(zerror!("Unable to find querier").into());
+            };
             trace!("undeclare_querier({:?})", querier_state);
-            // remove all pending queries from this querier
-            state
+            // Remove all pending queries from this querier.
+            let removed_query_ids: Vec<_> = state
                 .queries
-                .retain(|_, q| q.querier_id != Some(querier_id));
-            if querier_state.destination != Locality::SessionLocal {
-                // Note: there might be several queriers on the same KeyExpr.
-                // Before calling forget_queriers(key_expr), check if this was the last one.
-                if !state.queriers.values().any(|p| {
+                .iter()
+                .filter(|(_, q)| q.querier_id == Some(querier_id))
+                .map(|(id, _)| *id)
+                .collect();
+            let removed_queries: Vec<_> = removed_query_ids
+                .into_iter()
+                .filter_map(|id| state.queries.remove(&id))
+                .collect();
+            // Note: there might be several queriers on the same KeyExpr.
+            // Before calling forget_queriers(key_expr), check if this was the last one.
+            let send_final = querier_state.destination != Locality::SessionLocal
+                && !state.queriers.values().any(|p| {
                     p.destination != Locality::SessionLocal
                         && p.remote_id == querier_state.remote_id
-                }) {
-                    drop(state);
-                    primitives.send_interest(&mut Interest {
-                        id: querier_state.remote_id,
-                        mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
-                        wire_expr: None,
-                        ext_qos: interest::ext::QoSType::DEFAULT,
-                        ext_tstamp: None,
-                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
-                    });
-                }
-            }
-            Ok(())
-        } else {
-            Err(zerror!("Unable to find querier").into())
+                });
+            (primitives, querier_state.remote_id, removed_queries, send_final)
+        };
+        // Lock released. Drop the removed queries (and their callbacks) and send
+        // the final interest without holding the state lock.
+        drop(removed_queries);
+        if send_final {
+            primitives.send_interest(&mut Interest {
+                id: remote_id,
+                mode: InterestMode::Final,
+                options: InterestOptions::empty(),
+                wire_expr: None,
+                ext_qos: interest::ext::QoSType::DEFAULT,
+                ext_tstamp: None,
+                ext_nodeid: interest::ext::NodeIdType::DEFAULT,
+            });
         }
+        Ok(())
     }
 
     fn register_callback_drop_notifier<T>(
