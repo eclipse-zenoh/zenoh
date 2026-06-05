@@ -48,10 +48,11 @@ impl TransportUnicastLowlatency {
             let now = Instant::now();
             let deadline = now + SHM_PENDING_TTL;
             let mut pending = self.shm_pending.lock().expect("shm_pending lock");
-            while pending.front().is_some_and(|e| e.deadline <= now) {
-                pending.pop_front();
+            pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+            for buf in shm_bufs {
+                let key = buf.info.metadata.clone();
+                pending.insert(key, PendingShmBuf { buf, deadline });
             }
-            pending.extend(shm_bufs.into_iter().map(|buf| PendingShmBuf { buf, deadline }));
         }
 
         #[cfg(feature = "stats")]

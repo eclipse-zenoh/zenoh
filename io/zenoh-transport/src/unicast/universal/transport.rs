@@ -21,7 +21,7 @@ use std::{
     time::Duration,
 };
 #[cfg(feature = "shared-memory")]
-use std::{collections::VecDeque, sync::Mutex};
+use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -35,7 +35,9 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
-use crate::shm::{PendingShmBuf};
+use crate::shm::PendingShmBuf;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
@@ -95,9 +97,9 @@ pub(crate) struct TransportUnicastUniversal {
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
     // Per-connection SHM lease set: clones of in-flight ShmBufInner kept alive until
-    // TTL expiry or connection close (Gray & Cheriton lease model).
+    // rx_ack is set (RX mounted) or TTL expiry or connection close (A+C lease model).
     #[cfg(feature = "shared-memory")]
-    pub(super) shm_pending: Arc<Mutex<VecDeque<PendingShmBuf>>>,
+    pub(super) shm_pending: Arc<Mutex<HashMap<MetadataDescriptor, PendingShmBuf>>>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<TransportLinks>>,
     // The callback
@@ -152,7 +154,7 @@ impl TransportUnicastUniversal {
             #[cfg(feature = "shared-memory")]
             shm_context,
             #[cfg(feature = "shared-memory")]
-            shm_pending: Arc::new(Mutex::new(VecDeque::new())),
+            shm_pending: Arc::new(Mutex::new(HashMap::new())),
         });
 
         Ok(t)

@@ -55,6 +55,14 @@ impl ShmReader {
         // attach to the watchdog before doing other things
         let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(metadata);
 
+        // Signal TX that the ConfirmedDescriptor is installed — TX sweep can release the
+        // pending lease early. Must happen after add() returns (watchdog is kicking).
+        confirmed_metadata
+            .owned
+            .header()
+            .rx_ack
+            .store(true, std::sync::atomic::Ordering::Release);
+
         // retrieve data descriptor from metadata
         let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
 

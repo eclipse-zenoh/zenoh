@@ -18,7 +18,7 @@ use std::{
     time::Duration,
 };
 #[cfg(feature = "shared-memory")]
-use std::{collections::VecDeque, sync::Mutex};
+use std::{collections::HashMap, sync::Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
@@ -36,6 +36,8 @@ use zenoh_result::{zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
 use crate::shm::PendingShmBuf;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
@@ -75,9 +77,9 @@ pub(crate) struct TransportUnicastLowlatency {
 
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
-    // Per-connection SHM lease set (Gray & Cheriton lease model).
+    // Per-connection SHM lease set: keyed by MetadataDescriptor for O(1) rx_ack early release.
     #[cfg(feature = "shared-memory")]
-    pub(super) shm_pending: Arc<Mutex<VecDeque<PendingShmBuf>>>,
+    pub(super) shm_pending: Arc<Mutex<HashMap<MetadataDescriptor, PendingShmBuf>>>,
 }
 
 impl TransportUnicastLowlatency {
@@ -102,7 +104,7 @@ impl TransportUnicastLowlatency {
             #[cfg(feature = "shared-memory")]
             shm_context,
             #[cfg(feature = "shared-memory")]
-            shm_pending: Arc::new(Mutex::new(VecDeque::new())),
+            shm_pending: Arc::new(Mutex::new(HashMap::new())),
         }) as Arc<dyn TransportUnicastTrait>
     }
 

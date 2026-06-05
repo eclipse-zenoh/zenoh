@@ -497,7 +497,7 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::VecDeque,
+        collections::HashMap,
         time::{Duration, Instant},
     };
 
@@ -525,7 +525,7 @@ mod tests {
             .clone()
     }
 
-    /// Invariant 1+3: a clone in the pending set keeps the chunk alive through
+    /// Invariant 1+3: a clone in the pending map keeps the chunk alive through
     /// validator ticks; clearing pending lets the validator fire.
     #[test]
     fn pending_set_keeps_chunk_alive_and_clear_lets_validator_fire() {
@@ -535,12 +535,13 @@ mod tests {
         let shmb = shmbuf_from_zbuf(&zbuf);
         assert!(shmb.is_valid(), "freshly allocated buffer should be valid");
 
-        // Clone into pending set (simulates TX collect_shm_bufs after push)
+        // Clone into pending map (simulates TX collect_shm_bufs after push)
         let now = Instant::now();
         let deadline = now + SHM_PENDING_TTL;
-        let mut pending: VecDeque<PendingShmBuf> = VecDeque::new();
+        let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
+        let key = shmb.info.metadata.clone();
         let pending_clone = shmb.clone();
-        pending.push_back(PendingShmBuf { buf: pending_clone, deadline });
+        pending.insert(key, PendingShmBuf { buf: pending_clone, deadline });
 
         // Drop zbuf (holds the original ZSlice/ShmBufInner) and shmb
         // — simulates internal_schedule returning after do_push.
@@ -552,11 +553,11 @@ mod tests {
 
         // Invariant 1: pending clone holds ConfirmedDescriptor — chunk still valid
         assert!(
-            pending.front().unwrap().buf.is_valid(),
+            pending.values().next().unwrap().buf.is_valid(),
             "chunk should remain valid while held in shm_pending"
         );
 
-        // Simulate transport delete(): clear the pending set
+        // Simulate transport delete(): clear the pending map
         pending.clear();
 
         // Invariant 3: after clear, ConfirmedDescriptor drops; validator fires within 200 ms
@@ -567,7 +568,7 @@ mod tests {
         drop(provider);
     }
 
-    /// Invariant 2: TTL sweep removes expired front entries.
+    /// Invariant 2: TTL sweep removes expired entries; live entry survives.
     #[test]
     fn ttl_sweep_removes_expired_entries() {
         const SHORT_TTL: Duration = Duration::from_millis(50);
@@ -577,13 +578,15 @@ mod tests {
         let zbuf2: ZBuf = provider.alloc(64).wait().unwrap().into();
         let shmb1 = shmbuf_from_zbuf(&zbuf1);
         let shmb2 = shmbuf_from_zbuf(&zbuf2);
+        let key1 = shmb1.info.metadata.clone();
+        let key2 = shmb2.info.metadata.clone();
         drop(zbuf1);
         drop(zbuf2);
 
         let t0 = Instant::now();
         let expired_deadline = t0 + SHORT_TTL;
-        let mut pending: VecDeque<PendingShmBuf> = VecDeque::new();
-        pending.push_back(PendingShmBuf { buf: shmb1, deadline: expired_deadline });
+        let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
+        pending.insert(key1, PendingShmBuf { buf: shmb1, deadline: expired_deadline });
 
         // Wait for TTL to expire
         std::thread::sleep(Duration::from_millis(100));
@@ -591,17 +594,43 @@ mod tests {
         // Trigger sweep by inserting a second entry (mirrors the TX insert logic)
         let now = Instant::now();
         let live_deadline = now + SHM_PENDING_TTL;
-        while pending.front().is_some_and(|e| e.deadline <= now) {
-            pending.pop_front();
-        }
-        pending.push_back(PendingShmBuf { buf: shmb2, deadline: live_deadline });
+        pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+        pending.insert(key2, PendingShmBuf { buf: shmb2, deadline: live_deadline });
 
         // Invariant 2: first entry was swept, second entry remains
         assert_eq!(pending.len(), 1, "expired entry should have been swept by TTL");
         assert!(
-            pending.front().unwrap().buf.is_valid(),
+            pending.values().next().unwrap().buf.is_valid(),
             "the live entry should still be valid"
         );
+
+        drop(provider);
+    }
+
+    /// Invariant 4: rx_ack early release — entry is removed by retain before TTL expiry.
+    #[test]
+    fn rx_ack_releases_entry_before_ttl() {
+        let provider = ShmProviderBuilder::default_backend(65536).wait().unwrap();
+        let zbuf: ZBuf = provider.alloc(64).wait().unwrap().into();
+        let shmb = shmbuf_from_zbuf(&zbuf);
+        drop(zbuf);
+
+        let key = shmb.info.metadata.clone();
+        let now = Instant::now();
+        let deadline = now + SHM_PENDING_TTL; // TTL far in the future
+
+        let mut pending: HashMap<_, PendingShmBuf> = HashMap::new();
+        pending.insert(key, PendingShmBuf { buf: shmb, deadline });
+
+        assert_eq!(pending.len(), 1, "entry should be present before ack");
+
+        // Simulate RX setting rx_ack (as read_shmbuf does after GLOBAL_CONFIRMATOR.add)
+        pending.values().next().unwrap().buf.mark_rx_acked();
+
+        // Sweep: should remove the acked entry immediately, well before TTL
+        pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+
+        assert_eq!(pending.len(), 0, "rx_acked entry should be removed by retain sweep");
 
         drop(provider);
     }
