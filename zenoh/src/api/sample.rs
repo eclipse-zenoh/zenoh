@@ -250,7 +250,6 @@ pub struct Sample {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
-    // TODO: expose higher-level type instead of using zenoh_protocol
     #[cfg(feature = "unstable")]
     pub(crate) timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
 }

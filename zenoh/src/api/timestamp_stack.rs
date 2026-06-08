@@ -33,7 +33,6 @@ pub struct TsStackContext {
     pub zid: ZenohId,
     /// The mode of the current node (router, peer, or client).
     pub whatami: WhatAmI,
-    // TODO: should be a non-exhaustive enum
     /// The interception point identifier (e.g., `zenoh_protocol::network::timestamp_stack::interception_point::SEND`).
     pub interception_point: InterceptionPoint,
 }

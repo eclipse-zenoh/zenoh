@@ -2818,12 +2818,10 @@ impl Session {
                     ext_attachment,
                     ext_unknown: vec![],
                 }),
-                // TODO: avoid this clone if possible
                 ext_ts_stack: ext_ts_stack.clone(),
             });
         }
         if destination != Locality::Remote {
-            // TODO: maybe RECEIVE points can be pushed inside handle_query?
             #[cfg(feature = "unstable")]
             {
                 crate::api::timestamp_stack::push_ts_interception(
@@ -3375,8 +3373,7 @@ impl Primitives for WeakSession {
                             mem::take(&mut m.ext_body),
                             mem::take(&mut m.ext_attachment).map(Into::into),
                             #[cfg(feature = "unstable")]
-                            // TODO: avoid this clone if possible. should we just mem::take ?
-                            msg.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone()),
+                            mem::take(&mut msg.ext_ts_stack).map(|ts| ts.ts_stack),
                         );
                     }
                     Err(err) => {
@@ -3410,11 +3407,12 @@ impl Primitives for WeakSession {
                                 payload: mem::take(&mut e.payload).into(),
                                 encoding: mem::take(&mut e.encoding).into(),
                                 #[cfg(feature = "unstable")]
-                                // TODO: avoid this clone if possible. should we just mem::take ?
-                                timestamp_stack: msg
-                                    .ext_ts_stack
-                                    .as_ref()
-                                    .and_then(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts.ts_stack).ok()),
+                                timestamp_stack: msg.ext_ts_stack.as_ref().and_then(|ts| {
+                                    crate::api::timestamp_stack::TimestampStack::try_from(
+                                        &ts.ts_stack,
+                                    )
+                                    .ok()
+                                }),
                             }),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
@@ -3465,8 +3463,7 @@ impl Primitives for WeakSession {
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
                                 #[cfg(feature = "unstable")]
-                                // TODO: avoid this clone if possible. should we just mem::take ?
-                                msg.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone()),
+                                mem::take(&mut msg.ext_ts_stack).map(|ts| ts.ts_stack),
                             )),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
