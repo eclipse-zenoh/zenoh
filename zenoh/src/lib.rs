@@ -1129,8 +1129,9 @@ pub mod shm {
 #[cfg(feature = "unstable")]
 pub mod timestamp_stack {
     pub use crate::api::timestamp_stack::{
-        GetTimestampCallback, InterceptionPoint, TimestampInstrumentation,
-        TimestampInstrumentationBuilder, TimestampStack, TimestampStackRecord, TsStackContext,
+        GetTimestampCallback, InstrumentationTimestamp, InterceptionPoint,
+        TimestampInstrumentation, TimestampInstrumentationBuilder, TimestampStack,
+        TimestampStackRecord, TsStackContext,
     };
 }
 

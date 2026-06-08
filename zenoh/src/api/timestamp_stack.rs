@@ -162,13 +162,22 @@ impl TimestampInstrumentation {
     }
 }
 
+/// A timestamp measurement, either UHLC or the result of a custom user-defined callback.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstrumentationTimestamp {
+    /// Zenoh UHLC timestamp
+    UHLC(uhlc::Timestamp),
+    /// User-defined timestamp format
+    Custom(Vec<u8>),
+}
+
 /// A single interception record in a timestamp stack.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimestampStackRecord {
     point: InterceptionPoint,
-    is_custom_ts: bool,
-    timestamp: Vec<u8>,
+    timestamp: InstrumentationTimestamp,
 }
 
 impl TimestampStackRecord {
@@ -180,16 +189,16 @@ impl TimestampStackRecord {
 
     /// Whether the timestamp was produced by a user-defined callback.
     ///
-    /// Returns `true` when the timestamp bytes were produced by a user-defined callback,
+    /// Returns `true` when the timestamp was produced by a user-defined callback,
     /// and `false` when the timestamp is a standard UHLC timestamp.
     #[zenoh_macros::unstable]
     pub fn is_custom(&self) -> bool {
-        self.is_custom_ts
+        matches!(self.timestamp, InstrumentationTimestamp::Custom(_))
     }
 
     /// Raw timestamp bytes (format defined by the wire protocol).
     #[zenoh_macros::unstable]
-    pub fn timestamp(&self) -> &[u8] {
+    pub fn timestamp(&self) -> &InstrumentationTimestamp {
         &self.timestamp
     }
 }
@@ -283,11 +292,25 @@ impl TryFrom<&zenoh_protocol::network::timestamp_stack::TimestampStack> for Time
                 }
             };
             let is_custom = (record.flags & interception_point::IS_CUSTOM_TS) != 0;
-            instance.records.push(TimestampStackRecord {
-                point,
-                is_custom_ts: is_custom,
-                timestamp: record.timestamp.clone(),
-            });
+            let timestamp = match is_custom {
+                true => InstrumentationTimestamp::Custom(record.timestamp.clone()),
+                false => {
+                    use zenoh_buffers::reader::HasReader;
+                    use zenoh_codec::{RCodec, Zenoh080};
+
+                    let mut reader = (&record.timestamp).reader();
+                    let Ok(ts): Result<uhlc::Timestamp, _> = Zenoh080.read(&mut reader) else {
+                        tracing::warn!(
+                            "Skipping instrumentation measurement with malformed uhlc timestamp"
+                        );
+                        continue;
+                    };
+                    InstrumentationTimestamp::UHLC(ts)
+                }
+            };
+            instance
+                .records
+                .push(TimestampStackRecord { point, timestamp });
         }
         Ok(instance)
     }
@@ -303,12 +326,23 @@ impl From<&TimestampStack> for zenoh_protocol::network::timestamp_stack::Timesta
                 .iter()
                 .map(|r| Interception {
                     flags: u8::from(r.point)
-                        | if r.is_custom_ts {
+                        | if matches!(r.timestamp, InstrumentationTimestamp::Custom(_)) {
                             interception_point::IS_CUSTOM_TS
                         } else {
                             0
                         },
-                    timestamp: r.timestamp.clone(),
+                    timestamp: match &r.timestamp {
+                        InstrumentationTimestamp::UHLC(ts) => {
+                            use zenoh_codec::{WCodec, Zenoh080};
+
+                            let mut buf = Vec::new();
+                            Zenoh080
+                                .write(&mut buf, ts)
+                                .expect("serializing valid UHLC timestamp should not fail");
+                            buf
+                        }
+                        InstrumentationTimestamp::Custom(ts) => ts.clone(),
+                    },
                 })
                 .collect(),
         }

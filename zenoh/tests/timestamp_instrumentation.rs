@@ -20,8 +20,8 @@ use zenoh::{
     config::WhatAmI,
     query::ConsolidationMode,
     timestamp_stack::{
-        GetTimestampCallback, InterceptionPoint, TimestampInstrumentation,
-        TimestampInstrumentationBuilder,
+        GetTimestampCallback, InstrumentationTimestamp, InterceptionPoint,
+        TimestampInstrumentation, TimestampInstrumentationBuilder,
     },
 };
 use zenoh_core::ztimeout;
@@ -81,10 +81,22 @@ fn assert_record(
 ) {
     assert_eq!(record.point(), expected_point);
     assert_eq!(record.is_custom(), expected_custom);
-    assert!(
-        !record.timestamp().is_empty(),
-        "timestamp bytes should not be empty"
-    );
+    match record.timestamp() {
+        InstrumentationTimestamp::Custom(ts_bytes) => {
+            assert!(!ts_bytes.is_empty(), "timestamp bytes should not be empty")
+        }
+        InstrumentationTimestamp::UHLC(_timestamp) => return,
+    }
+}
+
+fn assert_custom_ts_record(
+    record: &zenoh::timestamp_stack::InstrumentationTimestamp,
+    content: &[u8],
+) {
+    match record {
+        InstrumentationTimestamp::UHLC(_) => panic!("expected custom timestamp, found UHLC"),
+        InstrumentationTimestamp::Custom(ts) => assert_eq!(ts, content),
+    }
 }
 
 // ─── Builder & Unit Tests ───────────────────────────────────────────────
@@ -192,8 +204,8 @@ async fn records_non_empty_timestamp_bytes() {
         .expect("timestamp_stack should be Some");
     for record in ts_stack.records() {
         assert!(
-            !record.timestamp().is_empty(),
-            "UHLC timestamp bytes should not be empty"
+            matches!(record.timestamp(), InstrumentationTimestamp::UHLC(_)),
+            "UHLC timestamp should be valid"
         );
     }
 
@@ -1391,7 +1403,7 @@ async fn custom_callback_pub_sub() {
         record.is_custom(),
         "is_custom should be true when using custom callback"
     );
-    assert_eq!(record.timestamp(), b"custom_ts_123");
+    assert_custom_ts_record(record.timestamp(), b"custom_ts_123");
 
     session.close().await.unwrap();
 }
@@ -1442,10 +1454,10 @@ async fn custom_callback_query_reply() {
     assert_eq!(ts_stack.records().len(), 2);
     // Query side uses session1's callback for SEND, session2's callback for RECEIVE
     assert!(ts_stack.records()[0].is_custom());
-    assert_eq!(ts_stack.records()[0].timestamp(), b"custom_query_ts");
+    assert_custom_ts_record(ts_stack.records()[0].timestamp(), b"custom_query_ts");
     assert!(ts_stack.records()[1].is_custom());
     // RECEIVE is pushed on session2's side, so it uses session2's callback
-    assert_eq!(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
+    assert_custom_ts_record(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
 
     ztimeout!(query.reply(ke, "data")).unwrap();
     std::mem::drop(query);
@@ -1460,16 +1472,16 @@ async fn custom_callback_query_reply() {
     assert_eq!(ts_stack.records().len(), 4);
     // Query side is the same
     assert!(ts_stack.records()[0].is_custom());
-    assert_eq!(ts_stack.records()[0].timestamp(), b"custom_query_ts");
+    assert_custom_ts_record(ts_stack.records()[0].timestamp(), b"custom_query_ts");
     assert!(ts_stack.records()[1].is_custom());
-    assert_eq!(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
+    assert_custom_ts_record(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
 
     // Reply side uses session2's callback for SEND, session1's callback for RECEIVE
     assert!(ts_stack.records()[2].is_custom());
-    assert_eq!(ts_stack.records()[2].timestamp(), b"custom_reply_ts");
+    assert_custom_ts_record(ts_stack.records()[2].timestamp(), b"custom_reply_ts");
     assert!(ts_stack.records()[3].is_custom());
     // RECEIVE is pushed on session1's side, so it uses session1's callback
-    assert_eq!(ts_stack.records()[3].timestamp(), b"custom_query_ts");
+    assert_custom_ts_record(ts_stack.records()[3].timestamp(), b"custom_query_ts");
 
     session1.close().await.unwrap();
     session2.close().await.unwrap();
