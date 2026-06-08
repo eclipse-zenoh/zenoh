@@ -132,7 +132,7 @@ impl TimestampInstrumentationBuilder {
     }
 }
 
-/// A config for timestramp instrumentation. Build via [`TimestampInstrumentationBuilder`].
+/// A config for timestamp instrumentation. Build via [`TimestampInstrumentationBuilder`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TimestampInstrumentation {

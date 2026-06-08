@@ -2479,7 +2479,7 @@ impl Session {
             msg,
             #[cfg(feature = "unstable")]
             reliability,
-            // NOTE: execute_subscriber_callbacks is currently only caled for Liveliness subscribers,
+            // NOTE: execute_subscriber_callbacks is currently only called for Liveliness subscribers,
             // so there is not need to pass ext_ts_stack in its parameters.
             #[cfg(feature = "unstable")]
             None,
