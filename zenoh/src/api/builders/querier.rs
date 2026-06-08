@@ -32,7 +32,9 @@ use crate::api::sample::SourceInfo;
 use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, SampleBuilderTrait, TimestampInstrumentationBuilderTrait,
+        },
         bytes::ZBytes,
         cancellation::SyncGroup,
         encoding::Encoding,
@@ -314,11 +316,17 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
             ..self
         }
     }
+}
 
+#[zenoh_macros::internal_trait]
+impl<Handler> TimestampInstrumentationBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self {
         Self {
-            timestamp_instrumentation: instrumentation,
+            timestamp_instrumentation: instrumentation.into(),
             ..self
         }
     }

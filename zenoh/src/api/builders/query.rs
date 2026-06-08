@@ -28,7 +28,10 @@ use crate::api::sample::SourceInfo;
 use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
+        },
         bytes::ZBytes,
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -106,11 +109,17 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
             ..self
         }
     }
+}
 
+#[zenoh_macros::internal_trait]
+impl<Handler> TimestampInstrumentationBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
     #[zenoh_macros::unstable]
-    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self {
         Self {
-            timestamp_instrumentation: instrumentation,
+            timestamp_instrumentation: instrumentation.into(),
             ..self
         }
     }

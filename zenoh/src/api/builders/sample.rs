@@ -58,12 +58,18 @@ pub trait SampleBuilderTrait {
     /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
     /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
+}
+
+pub trait TimestampInstrumentationBuilderTrait {
     /// Sets the timestamp stack instrumentation to be sent along with the publication.
     ///
     /// The timestamp stack carries interception records (Send, Route, Receive)
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
-    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self;
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self;
 }
 
 pub trait EncodingBuilderTrait {
@@ -236,12 +242,19 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
             _t: PhantomData::<T>,
         }
     }
+}
 
+#[zenoh_macros::internal_trait]
+impl<T> TimestampInstrumentationBuilderTrait for SampleBuilder<T> {
     #[zenoh_macros::unstable]
-    fn timestamp_instrumentation(self, instrumentation: Option<TimestampInstrumentation>) -> Self {
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self {
         Self {
             sample: Sample {
                 timestamp_stack: instrumentation
+                    .into()
                     .map(|instr| crate::api::timestamp_stack::TimestampStack::new(instr)),
                 ..self.sample
             },

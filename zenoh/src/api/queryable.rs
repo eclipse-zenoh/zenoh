@@ -624,23 +624,18 @@ impl Query {
         {
             let rt = self.inner.runtime.clone().and_then(|r| r.upgrade());
             let irt = rt.as_deref().map(|r| r.deref());
-            response.ext_ts_stack = sample
-                .timestamp_stack
-                .map(|ts_stack_view| {
-                    use zenoh_protocol::network::timestamp_stack::{
-                        interception_point, TsStackType,
-                    };
-                    let mut ext_ts_stack = Some(TsStackType {
-                        ts_stack: (&ts_stack_view).into(),
-                    });
-                    crate::api::timestamp_stack::push_ts_interception(
-                        &mut ext_ts_stack,
-                        irt,
-                        interception_point::SEND,
-                    );
-                    ext_ts_stack
-                })
-                .flatten();
+            response.ext_ts_stack = self.inner.query_ts_stack.as_ref().and_then(|ts_stack| {
+                use zenoh_protocol::network::timestamp_stack::{interception_point, TsStackType};
+                let mut ext_ts_stack = Some(TsStackType {
+                    ts_stack: ts_stack.into(),
+                });
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut ext_ts_stack,
+                    irt,
+                    interception_point::SEND,
+                );
+                ext_ts_stack
+            })
         }
         self.inner.primitives.send_response(&mut response);
         Ok(())

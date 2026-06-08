@@ -184,10 +184,7 @@ async fn records_non_empty_timestamp_bytes() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -216,10 +213,7 @@ async fn records_order_matters() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -249,10 +243,7 @@ async fn instrumentation_config_preserved() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -279,10 +270,7 @@ async fn pubsub_same_session_send_only() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -305,10 +293,7 @@ async fn pubsub_same_session_receive_only() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -331,10 +316,7 @@ async fn pubsub_same_session_send_receive() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -387,10 +369,7 @@ async fn pubsub_local_and_remote_no_duplicate_receive() {
     let remote_sub = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
 
     // Local subscriber should get exactly 1 RECEIVE (not duplicated)
     let local_sample = ztimeout!(local_sub.recv_async()).unwrap();
@@ -453,10 +432,7 @@ async fn pubsub_local_only_destination() {
     let remote_sub = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
 
     // Local subscriber should get exactly 1 RECEIVE
     let local_sample = ztimeout!(local_sub.recv_async()).unwrap();
@@ -505,10 +481,7 @@ async fn pubsub_remote_only_destination() {
     let remote_sub = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
 
     // Remote subscriber should get exactly 1 RECEIVE
     let remote_sample = ztimeout!(remote_sub.recv_async()).unwrap();
@@ -556,10 +529,7 @@ async fn pubsub_p2p_send_only() {
     let subscriber = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -584,10 +554,7 @@ async fn pubsub_p2p_receive_only() {
     let subscriber = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -612,10 +579,7 @@ async fn pubsub_p2p_send_receive() {
     let subscriber = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -641,10 +605,7 @@ async fn pubsub_p2p_route_only() {
     let subscriber = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     // In peer-peer, message goes through routing layer on both peers → 2 ROUTE records
@@ -699,10 +660,7 @@ async fn pubsub_routed_send_only() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -727,10 +685,7 @@ async fn pubsub_routed_route_only() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -757,10 +712,7 @@ async fn pubsub_routed_receive_only() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -785,10 +737,7 @@ async fn pubsub_routed_send_route() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -816,10 +765,7 @@ async fn pubsub_routed_send_receive() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -845,10 +791,7 @@ async fn pubsub_routed_route_receive() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -876,10 +819,7 @@ async fn pubsub_routed_send_route_receive() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -933,7 +873,7 @@ async fn delete_p2p_send_receive() {
     let subscriber = ztimeout!(peer2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher.delete().timestamp_instrumentation(Some(instr))).unwrap();
+    ztimeout!(publisher.delete().timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.kind(), zenoh::sample::SampleKind::Delete);
@@ -960,7 +900,7 @@ async fn delete_routed_send_route_receive() {
     let subscriber = ztimeout!(client2.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher.delete().timestamp_instrumentation(Some(instr))).unwrap();
+    ztimeout!(publisher.delete().timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     assert_eq!(sample.kind(), zenoh::sample::SampleKind::Delete);
@@ -993,7 +933,7 @@ async fn queryreply_local_and_remote_no_duplicate_receive() {
     tokio::time::sleep(SLEEP).await;
 
     // Local querier on peer1 (queries peer2)
-    let local_replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let local_replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     // Receive query on peer2
     let query = ztimeout!(queryable.recv_async()).unwrap();
@@ -1012,11 +952,8 @@ async fn queryreply_local_and_remote_no_duplicate_receive() {
         false,
     );
 
-    // Reply with instrumentation
-    ztimeout!(query
-        .reply(ke, "data")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    // Reply
+    ztimeout!(query.reply(ke, "data")).unwrap();
     std::mem::drop(query);
 
     // Receive reply on peer1
@@ -1028,8 +965,8 @@ async fn queryreply_local_and_remote_no_duplicate_receive() {
         .expect("timestamp_stack should be Some");
     assert_eq!(
         reply_ts_stack.records().len(),
-        2,
-        "reply sample should have exactly SEND + RECEIVE"
+        4,
+        "reply sample should have exactly SEND + RECEIVE + SEND + RECEIVE"
     );
     assert_record(&reply_ts_stack.records()[0], InterceptionPoint::Send, false);
     assert_record(
@@ -1037,7 +974,12 @@ async fn queryreply_local_and_remote_no_duplicate_receive() {
         InterceptionPoint::Receive,
         false,
     );
-
+    assert_record(&reply_ts_stack.records()[2], InterceptionPoint::Send, false);
+    assert_record(
+        &reply_ts_stack.records()[3],
+        InterceptionPoint::Receive,
+        false,
+    );
     test_context.close().await;
 }
 
@@ -1060,7 +1002,7 @@ async fn queryreply_local_and_remote_queryable_no_duplicate_receive() {
         .get(ke)
         // Disable consolidation to receive both replies
         .consolidation(ConsolidationMode::None)
-        .timestamp_instrumentation(Some(instr)))
+        .timestamp_instrumentation(instr))
     .unwrap();
 
     // Both queryables should receive the query
@@ -1114,6 +1056,22 @@ async fn queryreply_local_and_remote_queryable_no_duplicate_receive() {
     let reply2 = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply1.result().is_ok());
     assert!(reply2.result().is_ok());
+    for r in [reply1, reply2] {
+        let ts_stack = r
+            .result()
+            .unwrap()
+            .timestamp_stack()
+            .expect("timestamp_stack should be Some");
+        assert_eq!(
+            ts_stack.records().len(),
+            4,
+            "reply ts_stack should have exactly SEND + RECEIVE + SEND + RECEIVE"
+        );
+        assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
+        assert_record(&ts_stack.records()[1], InterceptionPoint::Receive, false);
+        assert_record(&ts_stack.records()[2], InterceptionPoint::Send, false);
+        assert_record(&ts_stack.records()[3], InterceptionPoint::Receive, false);
+    }
 
     test_context.close().await;
 }
@@ -1132,7 +1090,7 @@ async fn queryreply_p2p_query_send_only() {
     let queryable = ztimeout!(peer2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1146,6 +1104,18 @@ async fn queryreply_p2p_query_send_only() {
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply.result().is_ok());
+    let ts_stack = reply
+        .result()
+        .unwrap()
+        .timestamp_stack()
+        .expect("timestamp_stack should be Some");
+    assert_eq!(
+        ts_stack.records().len(),
+        2,
+        "reply ts_stack should have exactly SEND + SEND"
+    );
+    assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
+    assert_record(&ts_stack.records()[1], InterceptionPoint::Send, false);
 
     test_context.close().await;
 }
@@ -1162,7 +1132,7 @@ async fn queryreply_p2p_query_send_receive() {
     let queryable = ztimeout!(peer2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1177,6 +1147,21 @@ async fn queryreply_p2p_query_send_receive() {
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply.result().is_ok());
+
+    let ts_stack = reply
+        .result()
+        .unwrap()
+        .timestamp_stack()
+        .expect("timestamp_stack should be Some");
+    assert_eq!(
+        ts_stack.records().len(),
+        4,
+        "reply ts_stack should have exactly SEND + RECEIVE + SEND + RECEIVE"
+    );
+    assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
+    assert_record(&ts_stack.records()[1], InterceptionPoint::Receive, false);
+    assert_record(&ts_stack.records()[2], InterceptionPoint::Send, false);
+    assert_record(&ts_stack.records()[3], InterceptionPoint::Receive, false);
 
     test_context.close().await;
 }
@@ -1210,41 +1195,6 @@ async fn queryreply_p2p_query_no_instrumentation() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn queryreply_p2p_reply_send_receive() {
-    zenoh_util::init_log_from_env_or("error");
-    let ke = "test/ts_instr/reply/peer/send_receive";
-    let instr = make_instrumentation(true, false, true);
-
-    let mut test_context = TestSessions::new();
-    let (peer1, peer2) = ztimeout!(open_peer_sessions(&mut test_context));
-
-    let queryable = ztimeout!(peer2.declare_queryable(ke)).unwrap();
-    tokio::time::sleep(SLEEP).await;
-
-    let replies = ztimeout!(peer1.get(ke)).unwrap();
-
-    let query = ztimeout!(queryable.recv_async()).unwrap();
-    ztimeout!(query
-        .reply(ke, "data")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
-    std::mem::drop(query);
-
-    let reply = ztimeout!(replies.recv_async()).unwrap();
-    assert!(reply.result().is_ok());
-    let sample = reply.result().unwrap();
-
-    let ts_stack = sample
-        .timestamp_stack()
-        .expect("timestamp_stack should be Some");
-    assert_eq!(ts_stack.records().len(), 2);
-    assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
-    assert_record(&ts_stack.records()[1], InterceptionPoint::Receive, false);
-
-    test_context.close().await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn queryreply_p2p_reply_no_instrumentation() {
     zenoh_util::init_log_from_env_or("error");
     let ke = "test/ts_instr/reply/peer/no_instr";
@@ -1267,7 +1217,7 @@ async fn queryreply_p2p_reply_no_instrumentation() {
 
     assert!(
         sample.timestamp_stack().is_none(),
-        "timestamp_stack should be None when no instrumentation on reply"
+        "timestamp_stack should be None when no instrumentation on query"
     );
 
     test_context.close().await;
@@ -1287,7 +1237,7 @@ async fn queryreply_routed_query_send_route_receive() {
     let queryable = ztimeout!(client2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(client1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(client1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1305,45 +1255,24 @@ async fn queryreply_routed_query_send_route_receive() {
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply.result().is_ok());
-
-    test_context.close().await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn queryreply_routed_reply_send_route_receive() {
-    zenoh_util::init_log_from_env_or("error");
-    let ke = "test/ts_instr/reply/routed/send_route_receive";
-    let instr = make_instrumentation(true, true, true);
-
-    let mut test_context = TestSessions::new();
-    let (client1, client2, _router) = ztimeout!(open_routed_sessions(&mut test_context));
-
-    let queryable = ztimeout!(client2.declare_queryable(ke)).unwrap();
-    tokio::time::sleep(SLEEP).await;
-
-    let replies = ztimeout!(client1.get(ke)).unwrap();
-
-    let query = ztimeout!(queryable.recv_async()).unwrap();
-    ztimeout!(query
-        .reply(ke, "data")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
-    std::mem::drop(query);
-
-    let reply = ztimeout!(replies.recv_async()).unwrap();
-    assert!(reply.result().is_ok());
-    let sample = reply.result().unwrap();
-
-    let ts_stack = sample
+    let ts_stack = reply
+        .result()
+        .unwrap()
         .timestamp_stack()
         .expect("timestamp_stack should be Some");
-    assert_eq!(ts_stack.records().len(), 5);
+    assert_eq!(ts_stack.records().len(), 10);
+
     assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
     for i in 1..4 {
         assert_record(&ts_stack.records()[i], InterceptionPoint::Route, false);
     }
     assert_record(&ts_stack.records()[4], InterceptionPoint::Receive, false);
 
+    assert_record(&ts_stack.records()[5], InterceptionPoint::Send, false);
+    for i in 6..9 {
+        assert_record(&ts_stack.records()[i], InterceptionPoint::Route, false);
+    }
+    assert_record(&ts_stack.records()[9], InterceptionPoint::Receive, false);
     test_context.close().await;
 }
 
@@ -1359,7 +1288,7 @@ async fn queryreply_routed_query_route_only() {
     let queryable = ztimeout!(client2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(client1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(client1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1375,6 +1304,16 @@ async fn queryreply_routed_query_route_only() {
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
     assert!(reply.result().is_ok());
+    let ts_stack = reply
+        .result()
+        .unwrap()
+        .timestamp_stack()
+        .expect("timestamp_stack should be Some");
+    assert_eq!(ts_stack.records().len(), 6);
+
+    for r in ts_stack.records() {
+        assert_record(r, InterceptionPoint::Route, false);
+    }
 
     test_context.close().await;
 }
@@ -1393,13 +1332,17 @@ async fn queryreply_reply_err_send_receive() {
     let queryable = ztimeout!(peer2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(peer1.get(ke)).unwrap();
+    let replies = ztimeout!(peer1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
-    ztimeout!(query
-        .reply_err("error payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    let ts_stack = query
+        .timestamp_stack()
+        .expect("timestamp_stack should be Some");
+    assert_eq!(ts_stack.records().len(), 2);
+    assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
+    assert_record(&ts_stack.records()[1], InterceptionPoint::Receive, false);
+
+    ztimeout!(query.reply_err("error payload")).unwrap();
     std::mem::drop(query);
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
@@ -1409,9 +1352,11 @@ async fn queryreply_reply_err_send_receive() {
     let ts_stack = reply_err
         .timestamp_stack()
         .expect("timestamp_stack should be Some");
-    assert_eq!(ts_stack.records().len(), 2);
+    assert_eq!(ts_stack.records().len(), 4);
     assert_record(&ts_stack.records()[0], InterceptionPoint::Send, false);
     assert_record(&ts_stack.records()[1], InterceptionPoint::Receive, false);
+    assert_record(&ts_stack.records()[2], InterceptionPoint::Send, false);
+    assert_record(&ts_stack.records()[3], InterceptionPoint::Receive, false);
 
     test_context.close().await;
 }
@@ -1433,10 +1378,7 @@ async fn custom_callback_pub_sub() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let ts_stack = sample
@@ -1466,8 +1408,15 @@ async fn custom_callback_query_reply() {
 
     let instr = make_instrumentation(true, false, true);
 
-    let session1 =
-        ztimeout!(zenoh::open(zenoh::Config::default()).with_timestamp_callback(cb_query)).unwrap();
+    let mut config = zenoh::Config::default();
+    config
+        .listen
+        .set_endpoints(zenoh_config::ModeDependentValue::Unique(
+            ["tcp/127.0.0.1:0".parse().unwrap()].to_vec(),
+        ))
+        .unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session1 = ztimeout!(zenoh::open(config).with_timestamp_callback(cb_query)).unwrap();
 
     let locators = session1.info().locators().await;
     let mut config2 = zenoh::Config::default();
@@ -1484,7 +1433,7 @@ async fn custom_callback_query_reply() {
     let queryable = ztimeout!(session2.declare_queryable(ke)).unwrap();
     tokio::time::sleep(SLEEP).await;
 
-    let replies = ztimeout!(session1.get(ke).timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(session1.get(ke).timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1498,10 +1447,7 @@ async fn custom_callback_query_reply() {
     // RECEIVE is pushed on session2's side, so it uses session2's callback
     assert_eq!(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
 
-    ztimeout!(query
-        .reply(ke, "data")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(query.reply(ke, "data")).unwrap();
     std::mem::drop(query);
 
     let reply = ztimeout!(replies.recv_async()).unwrap();
@@ -1511,13 +1457,19 @@ async fn custom_callback_query_reply() {
     let ts_stack = sample
         .timestamp_stack()
         .expect("timestamp_stack should be Some");
-    assert_eq!(ts_stack.records().len(), 2);
-    // Reply side uses session2's callback for SEND, session1's callback for RECEIVE
+    assert_eq!(ts_stack.records().len(), 4);
+    // Query side is the same
     assert!(ts_stack.records()[0].is_custom());
-    assert_eq!(ts_stack.records()[0].timestamp(), b"custom_reply_ts");
+    assert_eq!(ts_stack.records()[0].timestamp(), b"custom_query_ts");
     assert!(ts_stack.records()[1].is_custom());
+    assert_eq!(ts_stack.records()[1].timestamp(), b"custom_reply_ts");
+
+    // Reply side uses session2's callback for SEND, session1's callback for RECEIVE
+    assert!(ts_stack.records()[2].is_custom());
+    assert_eq!(ts_stack.records()[2].timestamp(), b"custom_reply_ts");
+    assert!(ts_stack.records()[3].is_custom());
     // RECEIVE is pushed on session1's side, so it uses session1's callback
-    assert_eq!(ts_stack.records()[1].timestamp(), b"custom_query_ts");
+    assert_eq!(ts_stack.records()[3].timestamp(), b"custom_query_ts");
 
     session1.close().await.unwrap();
     session2.close().await.unwrap();
@@ -1557,10 +1509,7 @@ async fn custom_callback_context() {
     let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
 
     tokio::time::sleep(SLEEP).await;
-    ztimeout!(publisher
-        .put("payload")
-        .timestamp_instrumentation(Some(instr)))
-    .unwrap();
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let _sample = ztimeout!(subscriber.recv_async()).unwrap();
 
     let contexts = capture.contexts.lock().unwrap();
@@ -1598,7 +1547,7 @@ async fn querier_get_send_receive() {
     tokio::time::sleep(SLEEP).await;
 
     let querier = ztimeout!(peer1.declare_querier(ke)).unwrap();
-    let replies = ztimeout!(querier.get().timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(querier.get().timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
@@ -1630,7 +1579,7 @@ async fn querier_get_routed_send_route_receive() {
     tokio::time::sleep(SLEEP).await;
 
     let querier = ztimeout!(client1.declare_querier(ke)).unwrap();
-    let replies = ztimeout!(querier.get().timestamp_instrumentation(Some(instr))).unwrap();
+    let replies = ztimeout!(querier.get().timestamp_instrumentation(instr)).unwrap();
 
     let query = ztimeout!(queryable.recv_async()).unwrap();
     let ts_stack = query
