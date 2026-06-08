@@ -373,8 +373,7 @@ impl Sample {
     ) -> Self {
         #[cfg(feature = "unstable")]
         let timestamp_stack = timestamp_stack
-            .map(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts).ok())
-            .flatten();
+            .and_then(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts).ok());
         match body {
             PushBody::Put(put) => Self {
                 key_expr,

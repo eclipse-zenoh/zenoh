@@ -1511,24 +1511,24 @@ async fn custom_callback_context() {
     tokio::time::sleep(SLEEP).await;
     ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
     let _sample = ztimeout!(subscriber.recv_async()).unwrap();
+    {
+        let contexts = capture.contexts.lock().unwrap();
+        assert_eq!(
+            contexts.len(),
+            2,
+            "Expected 2 context captures (SEND + RECEIVE)"
+        );
 
-    let contexts = capture.contexts.lock().unwrap();
-    assert_eq!(
-        contexts.len(),
-        2,
-        "Expected 2 context captures (SEND + RECEIVE)"
-    );
+        // SEND context
+        assert_eq!(contexts[0].0, expected_zid);
+        assert_eq!(contexts[0].1, WhatAmI::Peer);
+        assert_eq!(contexts[0].2, InterceptionPoint::Send);
 
-    // SEND context
-    assert_eq!(contexts[0].0, expected_zid);
-    assert_eq!(contexts[0].1, WhatAmI::Peer);
-    assert_eq!(contexts[0].2, InterceptionPoint::Send);
-
-    // RECEIVE context
-    assert_eq!(contexts[1].0, expected_zid);
-    assert_eq!(contexts[1].1, WhatAmI::Peer);
-    assert_eq!(contexts[1].2, InterceptionPoint::Receive);
-
+        // RECEIVE context
+        assert_eq!(contexts[1].0, expected_zid);
+        assert_eq!(contexts[1].1, WhatAmI::Peer);
+        assert_eq!(contexts[1].2, InterceptionPoint::Receive);
+    }
     session.close().await.unwrap();
 }
 

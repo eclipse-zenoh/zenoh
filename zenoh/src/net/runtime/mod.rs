@@ -867,7 +867,7 @@ pub struct WeakDynamicRuntime(pub(crate) Weak<dyn IRuntime>);
 
 impl WeakDynamicRuntime {
     pub(crate) fn upgrade(&self) -> Option<DynamicRuntime> {
-        self.0.upgrade().map(|r| DynamicRuntime(r))
+        self.0.upgrade().map(DynamicRuntime)
     }
 }
 

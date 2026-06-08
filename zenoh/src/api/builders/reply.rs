@@ -301,7 +301,7 @@ impl Wait for ReplyErrBuilder<'_> {
                 .inner
                 .query_ts_stack
                 .as_ref()
-                .map(|ts_stack| {
+                .and_then(|ts_stack| {
                     use zenoh_protocol::network::timestamp_stack::{
                         interception_point, TsStackType,
                     };
@@ -314,8 +314,7 @@ impl Wait for ReplyErrBuilder<'_> {
                         interception_point::SEND,
                     );
                     ext_ts_stack
-                })
-                .flatten();
+                });
         }
         self.query.inner.primitives.send_response(&mut response);
         Ok(())

@@ -255,7 +255,7 @@ impl<T> TimestampInstrumentationBuilderTrait for SampleBuilder<T> {
             sample: Sample {
                 timestamp_stack: instrumentation
                     .into()
-                    .map(|instr| crate::api::timestamp_stack::TimestampStack::new(instr)),
+                    .map(crate::api::timestamp_stack::TimestampStack::new),
                 ..self.sample
             },
             _t: PhantomData::<T>,
