@@ -13,6 +13,8 @@
 //
 use alloc::vec::Vec;
 
+pub const MAX_STACK_SIZE: usize = 255;
+
 /// Zenoh extension wrapper for the timestamp stack.
 ///
 /// The `const ID: u8` parameter encodes the extension's wire ID, ensuring

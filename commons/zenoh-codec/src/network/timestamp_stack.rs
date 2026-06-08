@@ -93,7 +93,9 @@ where
     fn read(self, reader: &mut R) -> Result<TimestampStack, Self::Error> {
         let conf_flags: u8 = self.read(&mut *reader)?;
         let count: usize = self.read(&mut *reader)?;
-        //FIXME: this can panic due to call with unsanitized count input
+        if count > zenoh_protocol::network::timestamp_stack::MAX_STACK_SIZE {
+            return Err(DidntRead);
+        }
         let mut stack: Vec<Interception> = Vec::with_capacity(count);
         for _ in 0..count {
             stack.push(self.read(&mut *reader)?);
