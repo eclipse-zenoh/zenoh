@@ -1035,6 +1035,7 @@ pub mod internal {
     pub mod traits {
         pub use crate::api::builders::sample::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
         };
     }
     pub use zenoh_core::{
