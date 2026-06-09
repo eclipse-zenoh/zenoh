@@ -85,7 +85,7 @@ fn assert_record(
         InstrumentationTimestamp::Custom(ts_bytes) => {
             assert!(!ts_bytes.is_empty(), "timestamp bytes should not be empty")
         }
-        InstrumentationTimestamp::UHLC(_timestamp) => return,
+        InstrumentationTimestamp::UHLC(_timestamp) => (),
     }
 }
 
