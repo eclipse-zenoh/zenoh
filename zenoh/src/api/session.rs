@@ -1687,28 +1687,41 @@ impl Session {
         };
         if let Some(querier_state) = state.queriers.remove(&querier_id) {
             trace!("undeclare_querier({:?})", querier_state);
-            // remove all pending queries from this querier
-            state
+            // Remove all pending queries from this querier. The removed queries own
+            // the user callbacks (including completion/drop callbacks); they must be
+            // dropped *after* the state lock is released below, otherwise a completion
+            // callback that re-enters the `Session` would deadlock re-acquiring the lock.
+            let removed_query_ids: Vec<_> = state
                 .queries
-                .retain(|_, q| q.querier_id != Some(querier_id));
-            if querier_state.destination != Locality::SessionLocal {
-                // Note: there might be several queriers on the same KeyExpr.
-                // Before calling forget_queriers(key_expr), check if this was the last one.
-                if !state.queriers.values().any(|p| {
+                .iter()
+                .filter(|(_, q)| q.querier_id == Some(querier_id))
+                .map(|(id, _)| *id)
+                .collect();
+            let removed_queries = removed_query_ids
+                .into_iter()
+                .filter_map(|id| state.queries.remove(&id))
+                .collect::<Vec<_>>();
+            // Note: there might be several queriers on the same KeyExpr.
+            // Before calling forget_queriers(key_expr), check if this was the last one.
+            let send_final = querier_state.destination != Locality::SessionLocal
+                && !state.queriers.values().any(|p| {
                     p.destination != Locality::SessionLocal
                         && p.remote_id == querier_state.remote_id
-                }) {
-                    drop(state);
-                    primitives.send_interest(&mut Interest {
-                        id: querier_state.remote_id,
-                        mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
-                        wire_expr: None,
-                        ext_qos: interest::ext::QoSType::DEFAULT,
-                        ext_tstamp: None,
-                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
-                    });
-                }
+                });
+            drop(state);
+            // Lock released: now it is safe to drop the removed queries (and their
+            // callbacks, which may re-enter the `Session`).
+            drop(removed_queries);
+            if send_final {
+                primitives.send_interest(&mut Interest {
+                    id: querier_state.remote_id,
+                    mode: InterestMode::Final,
+                    options: InterestOptions::empty(),
+                    wire_expr: None,
+                    ext_qos: interest::ext::QoSType::DEFAULT,
+                    ext_tstamp: None,
+                    ext_nodeid: interest::ext::NodeIdType::DEFAULT,
+                });
             }
             Ok(())
         } else {
