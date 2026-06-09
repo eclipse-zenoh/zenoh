@@ -132,7 +132,7 @@ fn get_basic_router_config() -> Config {
 fn get_basic_client_config(endpoint: zenoh_link::EndPoint) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
-    config.connect.endpoints.set(vec![endpoint]).unwrap();
+    config.connect.endpoints.set(vec![endpoint.into()]).unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     config
 }

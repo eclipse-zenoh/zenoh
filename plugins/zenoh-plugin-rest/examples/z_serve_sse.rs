@@ -22,6 +22,7 @@ const HTML: &str = r#"
 if(typeof(EventSource) !== "undefined") {
   var source = new EventSource("/demo/sse/event");
   source.addEventListener("PUT", function(e) {
+    console.log(e);
     document.getElementById("result").innerHTML += e.data + "<br>";
   }, false);
 } else {
@@ -89,26 +90,26 @@ fn parse_args() -> Config {
         )
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
+    let mut config = if let Some(conf_file) = args.get_one::<String>("config") {
         Config::from_file(conf_file).unwrap()
     } else {
         Config::default()
     };
-    match args.get_one::<&String>("mode").map(|m| m.parse()) {
+    match args.get_one::<String>("mode").map(|m| m.parse()) {
         Some(Ok(mode)) => {
             config.set_mode(Some(mode)).unwrap();
         }
         Some(Err(e)) => panic!("Invalid mode: {e}"),
         None => {}
     };
-    if let Some(values) = args.get_many::<&String>("connect") {
+    if let Some(values) = args.get_many::<String>("connect") {
         config
             .connect
             .endpoints
             .set(values.into_iter().map(|v| v.parse().unwrap()).collect())
             .unwrap();
     }
-    if let Some(values) = args.get_many::<&String>("listen") {
+    if let Some(values) = args.get_many::<String>("listen") {
         config
             .listen
             .endpoints

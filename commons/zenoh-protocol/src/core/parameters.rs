@@ -111,6 +111,13 @@ pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s st
     }
 }
 
+/// Returns `true` if the parameter string contains at least one valid entry
+/// and none of its keys are empty.
+pub fn is_well_formed(s: &str) -> bool {
+    let mut iter = iter(s);
+    iter.clone().next().is_some() && iter.all(|(k, _)| !k.is_empty())
+}
+
 fn _insert<'s, I>(
     i: I,
     k: &'s str,

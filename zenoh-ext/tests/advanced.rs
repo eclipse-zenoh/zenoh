@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     sync::{atomic::AtomicUsize, Arc},
     time::Duration,
@@ -23,7 +22,7 @@ use zenoh::{
     sample::{Sample, SampleKind},
     Session,
 };
-use zenoh_config::{EndPoint, ModeDependentValue, WhatAmI};
+use zenoh_config::{EndPoint, EndPoints, ModeDependentValue, WhatAmI};
 use zenoh_ext::{
     AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt, CacheConfig, HistoryConfig, Miss,
     MissDetectionConfig, RecoveryConfig,
@@ -164,7 +163,7 @@ async fn test_advanced_retransmission_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = pub_namespace;
@@ -178,7 +177,7 @@ async fn test_advanced_retransmission_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -324,7 +323,7 @@ async fn test_advanced_retransmission_periodic_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = pub_namespace;
@@ -338,7 +337,7 @@ async fn test_advanced_retransmission_periodic_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -477,7 +476,7 @@ async fn test_advanced_sample_miss_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = pub_namespace;
@@ -491,7 +490,7 @@ async fn test_advanced_sample_miss_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -626,7 +625,7 @@ async fn test_advanced_retransmission_sample_miss_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = pub_namespace;
@@ -640,7 +639,7 @@ async fn test_advanced_retransmission_sample_miss_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -772,7 +771,7 @@ async fn test_advanced_late_joiner_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.timestamping
@@ -789,7 +788,7 @@ async fn test_advanced_late_joiner_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -923,7 +922,7 @@ async fn test_advanced_retransmission_heartbeat_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = pub_namespace;
@@ -937,7 +936,7 @@ async fn test_advanced_retransmission_heartbeat_inner(
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![endpoint.parse::<EndPoint>().unwrap()])
+            .set(vec![endpoint.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.namespace = sub_namespace;
@@ -1093,7 +1092,7 @@ async fn create_peer_pair() -> (Session, Session) {
         let mut c = zenoh::Config::default();
         c.connect
             .endpoints
-            .set(vec![locator.parse::<EndPoint>().unwrap()])
+            .set(vec![locator.parse::<EndPoints>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1122,7 +1121,7 @@ async fn create_client(locator: &str) -> Session {
     let mut c = zenoh::Config::default();
     c.connect
         .endpoints
-        .set(vec![locator.parse::<EndPoint>().unwrap()])
+        .set(vec![locator.parse::<EndPoints>().unwrap()])
         .unwrap();
     c.scouting.multicast.set_enabled(Some(false)).unwrap();
     let _ = c.set_mode(Some(WhatAmI::Client));

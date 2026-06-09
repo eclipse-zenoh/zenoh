@@ -1038,9 +1038,7 @@ pub mod internal {
             TimestampInstrumentationBuilderTrait,
         };
     }
-    pub use zenoh_core::{
-        zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
-    };
+    pub use zenoh_core::{zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture};
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};

@@ -1433,8 +1433,10 @@ async fn custom_callback_query_reply() {
     let locators = session1.info().locators().await;
     let mut config2 = zenoh::Config::default();
     config2.scouting.multicast.set_enabled(Some(false)).unwrap();
-    let endpoints: Vec<zenoh_link::EndPoint> =
-        locators.into_iter().map(|l| l.to_endpoint()).collect();
+    let endpoints: Vec<zenoh_config::EndPoints> = locators
+        .into_iter()
+        .map(|l| l.to_endpoint().into())
+        .collect();
     config2
         .connect
         .set_endpoints(zenoh_config::ModeDependentValue::Unique(endpoints))
