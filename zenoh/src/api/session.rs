@@ -1684,8 +1684,9 @@ impl Session {
         // The pending queries removed below own the user callbacks (including
         // completion/drop callbacks). They must be dropped *after* the state lock
         // is released, otherwise a completion callback that re-enters the
-        // `Session` would deadlock re-acquiring the lock. Declared before `state`
-        // so it is dropped last.
+        // `Session` would deadlock re-acquiring the lock.
+        // "_removed_queries" is specifically declared before `state` so it is dropped after
+        // the lock is released.
         let _removed_queries;
         let mut state = zwrite!(self.0.state);
         let Ok(primitives) = state.primitives() else {
