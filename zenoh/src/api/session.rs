@@ -1688,17 +1688,16 @@ impl Session {
         if let Some(querier_state) = state.queriers.remove(&querier_id) {
             trace!("undeclare_querier({:?})", querier_state);
             // Remove all pending queries from this querier. The removed queries own
-            // the user callbacks (including completion/drop callbacks); they are
-            // dropped at the end of this function, *after* the state lock has been
-            // released below, otherwise a completion callback that re-enters the
-            // `Session` would deadlock re-acquiring the lock.
+            // the user callbacks (including completion/drop callbacks); they must be
+            // dropped *after* the state lock is released below, otherwise a completion
+            // callback that re-enters the `Session` would deadlock re-acquiring the lock.
             let removed_query_ids: Vec<_> = state
                 .queries
                 .iter()
                 .filter(|(_, q)| q.querier_id == Some(querier_id))
                 .map(|(id, _)| *id)
                 .collect();
-            let _removed_queries = removed_query_ids
+            let removed_queries = removed_query_ids
                 .into_iter()
                 .filter_map(|id| state.queries.remove(&id))
                 .collect::<Vec<_>>();
@@ -1710,6 +1709,9 @@ impl Session {
                         && p.remote_id == querier_state.remote_id
                 });
             drop(state);
+            // Lock released: now it is safe to drop the removed queries (and their
+            // callbacks, which may re-enter the `Session`).
+            drop(removed_queries);
             if send_final {
                 primitives.send_interest(&mut Interest {
                     id: querier_state.remote_id,
