@@ -92,6 +92,10 @@ where
 
     fn read(self, reader: &mut R) -> Result<TimestampStack, Self::Error> {
         let conf_flags: u8 = self.read(&mut *reader)?;
+        if conf_flags == 0 {
+            // empty conf_flags is invalid
+            return Err(DidntRead);
+        }
         let count: usize = self.read(&mut *reader)?;
         if count > zenoh_protocol::network::timestamp_stack::MAX_STACK_SIZE {
             return Err(DidntRead);
