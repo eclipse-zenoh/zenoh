@@ -73,7 +73,6 @@ jobs:
         target:
           - transport_message
           - network_message
-          - frame
           - scouting_message
     steps:
       - name: Clone this repository
