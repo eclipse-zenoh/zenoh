@@ -29,7 +29,6 @@ use io_uring::{
     squeue, types, IoUring, SubmissionQueue,
 };
 use nix::sys::eventfd::EfdFlags;
-//use thread_priority::{RealtimeThreadSchedulePolicy, ThreadBuilder, ThreadPriority};
 use zenoh_core::bail;
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -215,7 +214,6 @@ impl Reader {
                             let len = sq.len() as u32;
                             if to_submit || len >= (batch_count / 2) as u32 {
                                 drop(sq);
-                                //ring.submit()?;
                                 unsafe {
                                     ring.submitter().enter::<libc::sigset_t>(
                                         len,
@@ -241,7 +239,6 @@ impl Reader {
                     &mut sq,
                     batch_count,
                 )?;
-                //let len = sq.len();
                 drop(sq);
 
                 if c_exit_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -250,17 +247,6 @@ impl Reader {
 
                 // this wait can be interrupted by Self::wake_reader_thread
                 ring.submit_and_wait(1)?;
-                //std::thread::sleep(std::time::Duration::from_millis(1));
-                //ring.submit()?;
-
-                //unsafe {
-                //    ring.submitter().enter::<libc::sigset_t>(
-                //        len as u32,
-                //        0,
-                //        io_uring::EnterFlags::GETEVENTS.bits(),
-                //        None,
-                //    )?;
-                //}
             }
             Ok(())
         };
@@ -270,55 +256,8 @@ impl Reader {
                 tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
             }
-            tracing::debug!("Urng reactor thread finished!");
+            tracing::debug!("Uring reactor thread finished!");
         });
-
-        /*
-        #[cfg(unix)]
-        let builder = ThreadBuilder::default()
-            .name("uring_task")
-            .policy(thread_priority::ThreadSchedulePolicy::Realtime(
-                RealtimeThreadSchedulePolicy::Fifo,
-            ))
-            .priority(ThreadPriority::Min);
-
-        let _ = builder.spawn(move |result| {
-            if let Err(e) = result {
-                let mut err = format!(
-                    "{:?}: error setting scheduling priority for thread: {:?}, will run with ",
-                    std::thread::current().name(),
-                    e
-                );
-                #[cfg(windows)]
-                {
-                    err.push_str("the default one. ");
-                }
-                #[cfg(unix)]
-                {
-                    use thread_priority::ThreadPriorityValue;
-
-                    for priority in (ThreadPriorityValue::MIN..ThreadPriorityValue::MAX).rev() {
-                        if let Ok(p) = priority.try_into() {
-                            use thread_priority::set_current_thread_priority;
-
-                            if set_current_thread_priority(ThreadPriority::Crossplatform(p)).is_ok()
-                            {
-                                err.push_str(&format!("priority {priority}. "));
-                                break;
-                            }
-                        }
-                    }
-                }
-                err.push_str("This is not an hard error and it can be safely ignored under normal operating conditions. \
-                Though the SHM subsystem may experience some timeouts in case of an heavy congested system where this watchdog thread may not be scheduled at the required frequency.");
-                        tracing::debug!( "{}", err);
-            }
-
-            if let Err(e) = ring_worker() {
-                let _ = join_sender.send(e.to_string());
-            }
-        });
-        */
 
         let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
 
@@ -414,9 +353,7 @@ impl Reader {
                     let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
                     context.run_callback(buffer);
                 }
-                None => {
-                    //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
-                }
+                None => {}
             };
         }
         Ok(need_submit)
@@ -430,9 +367,7 @@ impl Reader {
                     arena.recycle_batch(buf_id);
                     return true;
                 }
-                None => {
-                    //bail!("no IORING_CQE_F_BUFFER: {:?}", e);
-                }
+                None => {}
             }
         }
         false

@@ -19,7 +19,6 @@ use zenoh_uring::api::{reader::Reader, types::BufferCount};
 
 #[derive(Clone)]
 pub struct Uring {
-    //pub writer: Arc<Writer>,
     pub reader: Reader,
 }
 
@@ -29,10 +28,7 @@ impl Uring {
         let batch_size = batch_size + (u16::BITS / 8) as usize;
         let batch_count = max(link_rx_buffer_size / batch_size, 16) as BufferCount;
 
-        //let writer = Arc::new(Writer::new());
         let reader = Reader::new(batch_size, batch_count)?;
-        Ok(Self {
-            /*writer,*/ reader,
-        })
+        Ok(Self { reader })
     }
 }

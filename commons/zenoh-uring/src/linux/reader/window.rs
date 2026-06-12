@@ -53,16 +53,6 @@ impl Default for RxWindow {
     }
 }
 
-//macro_rules! log {
-//    ($level:expr, $($arg:tt)*) => {
-//        eprintln!("[{}] {}:{} - {}",
-//            $level,
-//            file!(),
-//            line!(),
-//            format_args!($($arg)*));
-//    };
-//}
-
 impl RxWindow {
     pub(crate) fn push<F>(&mut self, buffer: Arc<RxBuffer>, on_batch: &mut F) -> ZResult<()>
     where
