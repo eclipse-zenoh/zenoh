@@ -176,7 +176,7 @@ pub struct TransportManagerState {
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
     #[cfg(all(feature = "uring", target_os = "linux"))]
-    pub uring: Uring,
+    pub uring: Option<Uring>,
 }
 
 impl fmt::Debug for TransportManagerState {
@@ -504,7 +504,14 @@ impl TransportManagerBuilder {
             #[cfg(feature = "shared-memory")]
             shm_context,
             #[cfg(all(feature = "uring", target_os = "linux"))]
-            uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)?,
+            uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)
+                .map_err(|e| {
+                    tracing::warn!(
+                        "io_uring reactor init failed, falling back to tokio RX: {e}"
+                    );
+                    e
+                })
+                .ok(),
         };
 
         let params = TransportManagerParams { config, state };
