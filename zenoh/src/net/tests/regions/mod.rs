@@ -43,7 +43,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             common::ext::WireExprType,
-            queryable::{QueryableId, UndeclareQueryable},
+            queryable::{ext::QueryableInfoType, QueryableId, UndeclareQueryable},
             subscriber::{SubscriberId, UndeclareSubscriber},
             token::{TokenId, UndeclareToken},
             DeclareQueryable, DeclareSubscriber, DeclareToken,
@@ -601,8 +601,8 @@ impl MockFace {
         interest_id: Option<InterestId>,
         id: QueryableId,
         wire_expr: impl Into<WireExpr<'static>>,
+        info: QueryableInfoType,
     ) {
-        use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
         self.face.send_declare(&mut Declare {
             interest_id,
             ext_qos: ext::QoSType::DECLARE,
@@ -611,7 +611,7 @@ impl MockFace {
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id,
                 wire_expr: wire_expr.into(),
-                ext_info: QueryableInfoType::DEFAULT,
+                ext_info: info,
             }),
         });
     }

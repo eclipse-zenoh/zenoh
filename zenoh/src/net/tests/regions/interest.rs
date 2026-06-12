@@ -17,7 +17,7 @@
 use zenoh_protocol::{
     core::{Bound, Region, WhatAmI},
     network::{
-        declare::{DeclareToken, TokenId},
+        declare::{queryable::ext::QueryableInfoType, DeclareToken, TokenId},
         interest::{InterestMode, InterestOptions},
     },
 };
@@ -233,7 +233,7 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     assert_eq!(n.recorder().interests().len(), 1);
     assert_eq!(s.recorder().queryables().len(), 0);
 
-    n.declare_queryable(Some(42), 1999, "k");
+    n.declare_queryable(Some(42), 1999, "k", QueryableInfoType::DEFAULT);
 
     assert_eq!(s.recorder().queryables().len(), 1);
 }

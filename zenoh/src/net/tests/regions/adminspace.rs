@@ -19,7 +19,10 @@ use std::collections::HashSet;
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_protocol::{
     core::{Region, WhatAmI},
-    network::interest::{InterestMode, InterestOptions},
+    network::{
+        declare::queryable::ext::QueryableInfoType,
+        interest::{InterestMode, InterestOptions},
+    },
     zenoh::{PushBody, ResponseBody},
 };
 
@@ -60,7 +63,12 @@ fn test_sourced_entities_and_interests(mode: WhatAmI) {
 
     for (prefix, face) in [("g", &g), ("s", &s), ("c", &c), ("p", &p)] {
         face.declare_subscriber(None, 1, format!("{prefix}/subscriber"));
-        face.declare_queryable(None, 1, format!("{prefix}/queryable"));
+        face.declare_queryable(
+            None,
+            1,
+            format!("{prefix}/queryable"),
+            QueryableInfoType::DEFAULT,
+        );
         face.declare_token(None, 1, format!("{prefix}/token"));
         face.interest(
             1,
