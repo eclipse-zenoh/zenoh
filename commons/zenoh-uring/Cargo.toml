@@ -34,7 +34,6 @@ io-uring = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["event"] }
 rand = { workspace = true, features = ["default"] }
-thread-priority = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 zenoh-buffers = { workspace = true }
