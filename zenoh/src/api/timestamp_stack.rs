@@ -45,11 +45,37 @@ pub struct TsStackContext {
 pub type GetTimestampCallback = Arc<dyn Fn(TsStackContext) -> Vec<u8> + Send + Sync>;
 
 /// Identifies which interception point a timestamp record was captured at.
+///
+/// The three points represent the lifecycle of a message traveling through
+/// the Zenoh topology:
+///
+/// - [`Send`](InterceptionPoint::Send): triggered when the message leaves
+///   the publishing/replying application.
+/// - [`Route`](InterceptionPoint::Route): triggered at each intermediate
+///   node (router or peer) that forwards the message.
+/// - [`Receive`](InterceptionPoint::Receive): triggered when the message
+///   is delivered to the subscribing/querying application.
+///
+/// # Example
+///
+/// ```
+/// use std::convert::TryFrom;
+/// use zenoh::timestamp_stack::InterceptionPoint;
+///
+/// assert!(InterceptionPoint::try_from(1u8).is_ok());
+/// assert!(InterceptionPoint::try_from(0xFFu8).is_err());
+/// ```
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InterceptionPoint {
+    /// Timestamp recorded when the message leaves the publishing or replying
+    /// node — the application layer's "send" side.
     Send,
+    /// Timestamp recorded when the message passes through a routing node
+    /// (router or peer forwarding layer).
     Route,
+    /// Timestamp recorded when the message arrives at a subscribing or
+    /// queryable node — the application layer's "receive" side.
     Receive,
 }
 
@@ -76,7 +102,32 @@ impl From<InterceptionPoint> for u8 {
     }
 }
 
-/// Builder for [`TimestampInstrumentation`] instances
+/// Builder for [`TimestampInstrumentation`] instances.
+///
+/// Collects which interception points should be instrumented and produces
+/// an immutable [`TimestampInstrumentation`] via [`build`](Self::build).
+///
+/// At least one interception point must be enabled; calling [`build`](Self::build)
+/// with none enabled returns an error.
+///
+/// # Example
+///
+/// ```
+/// use zenoh::timestamp_stack::{
+///     InterceptionPoint, TimestampInstrumentationBuilder,
+/// };
+///
+/// let instr = TimestampInstrumentationBuilder::new()
+///     .set_send(true)
+///     .set_route(true)
+///     .set_receive(true)
+///     .build()
+///     .unwrap();
+///
+/// assert!(instr.is_instrumented(InterceptionPoint::Send));
+/// assert!(instr.is_instrumented(InterceptionPoint::Route));
+/// assert!(instr.is_instrumented(InterceptionPoint::Receive));
+/// ```
 #[zenoh_macros::unstable]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TimestampInstrumentationBuilder {
@@ -85,11 +136,20 @@ pub struct TimestampInstrumentationBuilder {
 
 #[zenoh_macros::unstable]
 impl TimestampInstrumentationBuilder {
+    /// Creates a new builder with no interception points enabled.
+    ///
+    /// At least one point must be enabled via [`set_send`](Self::set_send),
+    /// [`set_route`](Self::set_route), or [`set_receive`](Self::set_receive)
+    /// before calling [`build`](Self::build).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Record timestamps at the SEND point.
+    /// Enable or disable timestamp recording at the [`Send`](InterceptionPoint::Send)
+    /// interception point.
+    ///
+    /// The SEND point is triggered when a message is about to leave the
+    /// publishing or replying node.
     pub fn set_send(self, enabled: bool) -> Self {
         Self {
             conf_flags: if enabled {
@@ -100,7 +160,11 @@ impl TimestampInstrumentationBuilder {
         }
     }
 
-    /// Record timestamps at the ROUTE point.
+    /// Enable or disable timestamp recording at the [`Route`](InterceptionPoint::Route)
+    /// interception point.
+    ///
+    /// The ROUTE point is triggered on every intermediate node (router or peer)
+    /// that forwards the message through its routing layer.
     pub fn set_route(self, enabled: bool) -> Self {
         Self {
             conf_flags: if enabled {
@@ -111,7 +175,11 @@ impl TimestampInstrumentationBuilder {
         }
     }
 
-    /// Record timestamps at the RECEIVE point.
+    /// Enable or disable timestamp recording at the [`Receive`](InterceptionPoint::Receive)
+    /// interception point.
+    ///
+    /// The RECEIVE point is triggered when a message is delivered to a
+    /// subscribing or queryable application.
     pub fn set_receive(self, enabled: bool) -> Self {
         Self {
             conf_flags: if enabled {
@@ -122,6 +190,9 @@ impl TimestampInstrumentationBuilder {
         }
     }
 
+    /// Consumes the builder and produces a [`TimestampInstrumentation`].
+    ///
+    /// Returns an error if no interception points were enabled.
     pub fn build(self) -> zenoh_result::ZResult<TimestampInstrumentation> {
         if self.conf_flags == 0 {
             bail!("Invalid instrumentation config: at least one point must be active");
@@ -162,16 +233,60 @@ impl TimestampInstrumentation {
 }
 
 /// A timestamp measurement, either UHLC or the result of a custom user-defined callback.
+///
+/// The semantics depend on whether a [custom timestamp callback](GetTimestampCallback)
+/// was registered on the session that performed the measurement:
+///
+/// - **UHLC**: the default — a Zenoh UHLC hybrid logical clock timestamp.
+/// - **Custom**: arbitrary bytes produced by the user-defined callback.
+///
+/// # Example
+///
+/// ```
+/// use zenoh::timestamp_stack::InstrumentationTimestamp;
+///
+/// // Pattern match to handle both variants:
+/// match &ts {
+///     InstrumentationTimestamp::UHLC(uhlc_ts) => println!("UHLC: {:?}", uhlc_ts),
+///     InstrumentationTimestamp::Custom(bytes) => println!("Custom({} bytes)", bytes.len()),
+/// }
+/// ```
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstrumentationTimestamp {
-    /// Zenoh UHLC timestamp
+    /// A Zenoh [UHLC] hybrid logical clock timestamp.
+    ///
+    /// [UHLC]: https://github.com/eclipse-zenoh/uhlc-rs
     UHLC(uhlc::Timestamp),
-    /// User-defined timestamp format
+    /// A timestamp in a format defined by the user's
+    /// [custom timestamp callback](GetTimestampCallback).
     Custom(Vec<u8>),
 }
 
 /// A single interception record in a timestamp stack.
+///
+/// Each record captures the [`InterceptionPoint`] where the measurement was
+/// taken and the [`InstrumentationTimestamp`] that was recorded. Records are
+/// obtained by iterating over [`TimestampStack::records`].
+///
+/// # Example
+///
+/// ```
+/// use zenoh::timestamp_stack::{
+///     InstrumentationTimestamp, InterceptionPoint,
+/// };
+///
+/// // Records are typically obtained from a received TimestampStack.
+/// // This shows how to inspect a hypothetical record:
+/// fn inspect(record: &zenoh::timestamp_stack::TimestampStackRecord) {
+///     println!("Point: {:?}", record.point());
+///     if record.is_custom() {
+///         println!("Custom timestamp: {:?}", record.timestamp());
+///     } else {
+///         println!("UHLC timestamp: {:?}", record.timestamp());
+///     }
+/// }
+/// ```
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimestampStackRecord {
@@ -203,6 +318,64 @@ impl TimestampStackRecord {
 }
 
 /// The timestamp stack carried by a received message.
+///
+/// When timestamp instrumentation is enabled on a publication or query, the
+/// resulting message carries a [`TimestampStack`] that accumulates records at
+/// each interception point it passes through. The stack can be accessed from
+/// a [`Sample`] via [`Sample::timestamp_stack`] or from a [`Query`] via
+/// [`Query::timestamp_stack`].
+///
+/// Use [`instrumentation`](Self::instrumentation) to inspect which points were
+/// configured, and [`records`](Self::records) to iterate over the ordered list
+/// of timestamps collected along the message path.
+///
+/// # Example
+///
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::timestamp_stack::{
+///     InstrumentationTimestamp, InterceptionPoint, TimestampInstrumentationBuilder,
+/// };
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let subscriber = session.declare_subscriber("key/expr").await.unwrap();
+/// let publisher = session.declare_publisher("key/expr").await.unwrap();
+///
+/// let instr = TimestampInstrumentationBuilder::new()
+///     .set_send(true)
+///     .set_receive(true)
+///     .build()
+///     .unwrap();
+///
+/// publisher
+///     .put("payload")
+///     .timestamp_instrumentation(instr)
+///     .await
+///     .unwrap();
+///
+/// let sample = subscriber.recv_async().await.unwrap();
+/// if let Some(stack) = sample.timestamp_stack() {
+///     // Check which points were configured
+///     let config = stack.instrumentation();
+///     assert!(config.is_instrumented(InterceptionPoint::Send));
+///
+///     // Iterate records in traversal order
+///     for record in stack.records() {
+///         match record.point() {
+///             InterceptionPoint::Send => println!("sent at {:?}", record.timestamp()),
+///             InterceptionPoint::Receive => println!("received at {:?}", record.timestamp()),
+///             _ => {}
+///         }
+///     }
+/// }
+/// # }
+/// ```
+///
+/// [`Sample`]: crate::sample::Sample
+/// [`Sample::timestamp_stack`]: crate::sample::Sample::timestamp_stack
+/// [`Query`]: crate::query::Query
+/// [`Query::timestamp_stack`]: crate::query::Query::timestamp_stack
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimestampStack {
