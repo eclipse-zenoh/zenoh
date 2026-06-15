@@ -31,7 +31,7 @@ impl<const ID: u8> TsStackType<{ ID }> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        let conf_flags: u8 = rng.gen();
+        let conf_flags: u8 = rng.gen_range(1..=7);
         let n: usize = rng.gen_range(0..=3);
         let mut stack = Vec::with_capacity(n);
         let points = [
