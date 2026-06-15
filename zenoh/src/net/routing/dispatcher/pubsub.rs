@@ -347,32 +347,27 @@ pub fn route_data(
 
             drop(rtables);
 
-            #[cfg(feature = "unstable")]
-            {
-                let weak = weak_runtime;
-                crate::api::timestamp_stack::push_ts_interception(
-                    &mut msg.ext_ts_stack,
-                    move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
-                    zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
-                );
-            }
             for dir in dirs {
-                // TODO: might be more accurate to push the new timestamp to ext_ts_stack here to
-                // account for `send_push` running sequentially for each message
-                send_push(
-                    &dir.dst_face,
-                    &mut Push {
-                        wire_expr: dir.wire_expr.clone(),
-                        ext_qos: msg.ext_qos,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType {
-                            node_id: dir.node_id,
-                        },
-                        ext_ts_stack: msg.ext_ts_stack.clone(),
-                        payload: msg.payload.clone(),
+                let mut push = Push {
+                    wire_expr: dir.wire_expr.clone(),
+                    ext_qos: msg.ext_qos,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType {
+                        node_id: dir.node_id,
                     },
-                    reliability,
-                );
+                    ext_ts_stack: msg.ext_ts_stack.clone(),
+                    payload: msg.payload.clone(),
+                };
+                #[cfg(feature = "unstable")]
+                {
+                    let weak = weak_runtime.as_ref();
+                    crate::api::timestamp_stack::push_ts_interception(
+                        &mut push.ext_ts_stack,
+                        || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
+                        zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                    );
+                }
+                send_push(&dir.dst_face, &mut push, reliability);
             }
         }
     }
