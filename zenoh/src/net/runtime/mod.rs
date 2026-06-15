@@ -876,6 +876,10 @@ impl DynamicRuntime {
     pub(crate) fn downgrade(&self) -> WeakDynamicRuntime {
         WeakDynamicRuntime(Arc::downgrade(&self.0))
     }
+
+    pub(crate) fn get_inner(&self) -> Arc<dyn IRuntime> {
+        self.0.clone()
+    }
 }
 
 impl fmt::Debug for DynamicRuntime {

@@ -292,10 +292,7 @@ impl Wait for ReplyErrBuilder<'_> {
         };
         #[cfg(feature = "unstable")]
         {
-            use std::ops::Deref;
-
-            let rt = self.query.inner.runtime.clone().and_then(|r| r.upgrade());
-            let irt = rt.as_deref().map(|r| r.deref());
+            let weak_rt = self.query.inner.runtime.clone();
             response.ext_ts_stack = self
                 .query
                 .inner
@@ -308,9 +305,10 @@ impl Wait for ReplyErrBuilder<'_> {
                     let mut ext_ts_stack = Some(TsStackType {
                         ts_stack: (ts_stack).into(),
                     });
+                    let upgrade = weak_rt.clone();
                     crate::api::timestamp_stack::push_ts_interception(
                         &mut ext_ts_stack,
-                        irt,
+                        move || upgrade.and_then(|r| r.upgrade()).map(|dr| dr.get_inner()),
                         interception_point::SEND,
                     );
                     ext_ts_stack

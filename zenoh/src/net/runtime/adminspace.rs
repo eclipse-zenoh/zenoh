@@ -382,11 +382,14 @@ impl Primitives for AdminSpace {
     fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
         trace!("recv Push {:?}", msg);
         #[cfg(feature = "unstable")]
-        crate::api::timestamp_stack::push_ts_interception(
-            &mut msg.ext_ts_stack,
-            Some(self.context.runtime.state.as_ref()),
-            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
-        );
+        {
+            let state = self.context.runtime.state.clone();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         {
             let conf = &self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
@@ -446,11 +449,14 @@ impl Primitives for AdminSpace {
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
         #[cfg(feature = "unstable")]
-        crate::api::timestamp_stack::push_ts_interception(
-            &mut msg.ext_ts_stack,
-            Some(self.context.runtime.state.as_ref()),
-            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
-        );
+        {
+            let state = self.context.runtime.state.clone();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             RequestBody::Query(query) => {
                 let _span =

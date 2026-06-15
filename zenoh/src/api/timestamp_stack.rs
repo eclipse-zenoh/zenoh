@@ -234,17 +234,28 @@ impl TimestampStack {
 /// Push a timestamp interception record onto the stack if the corresponding
 /// `conf_flags` bit is set for this interception point.
 ///
-/// This is a no-op if `ext_ts_stack` is `None`, if the flag is not present, or if `runtime` is `None`.
+/// This is a no-op if `ext_ts_stack` is `None`, if the flag is not present,
+/// or if `get_runtime` returns `None`.
+///
+/// The `get_runtime` closure is only invoked when `ext_ts_stack` is `Some`
+/// and the relevant `conf_flags` bit is set, avoiding unnecessary work
+/// (e.g. upgrading a weak runtime reference) in the common no-op case.
 #[cfg(feature = "unstable")]
-pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized>(
+pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized, R, F>(
     ext_ts_stack: &mut Option<TsStackType<ID>>,
-    runtime: Option<&T>,
+    get_runtime: F,
     point: u8,
-) {
-    let (Some(runtime), Some(ts_stack)) = (runtime, ext_ts_stack) else {
+) where
+    R: std::ops::Deref<Target = T>,
+    F: FnOnce() -> Option<R>,
+{
+    let Some(ts_stack) = ext_ts_stack else {
         return;
     };
     if ts_stack.ts_stack.conf_flags & point != 0 {
+        let Some(runtime) = get_runtime() else {
+            return;
+        };
         let context = TsStackContext {
             zid: runtime.zid(),
             whatami: runtime.whatami(),

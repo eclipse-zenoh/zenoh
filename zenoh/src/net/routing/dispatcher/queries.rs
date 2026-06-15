@@ -326,11 +326,10 @@ impl Face {
 
                         #[cfg(feature = "unstable")]
                         {
-                            let rt = weak_runtime.clone().and_then(|r| r.upgrade());
-                            let rt_state = rt.as_ref().map(|r| r.state.as_ref());
+                            let weak = weak_runtime.clone();
                             crate::api::timestamp_stack::push_ts_interception(
                                 &mut msg.ext_ts_stack,
-                                rt_state,
+                                move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                                 zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                             );
                         }
@@ -604,11 +603,10 @@ pub(crate) fn route_send_response(
                     msg.ext_qos = query.src_qos;
                     #[cfg(feature = "unstable")]
                     {
-                        let rt = weak_runtime.and_then(|r| r.upgrade());
-                        let rt_state = rt.as_ref().map(|r| r.state.as_ref());
+                        let weak = weak_runtime.clone();
                         crate::api::timestamp_stack::push_ts_interception(
                             &mut msg.ext_ts_stack,
-                            rt_state,
+                            move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                             zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
                         );
                     }

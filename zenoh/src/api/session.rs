@@ -2567,11 +2567,14 @@ impl Session {
                     stack: vec![],
                 },
             });
-            crate::api::timestamp_stack::push_ts_interception(
-                &mut ext_ts_stack,
-                Some(self.0.runtime.as_ref()),
-                interception_point::SEND,
-            );
+            {
+                let rt = self.0.runtime.get_inner();
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut ext_ts_stack,
+                    || Some(rt),
+                    interception_point::SEND,
+                );
+            }
             push.ext_ts_stack = ext_ts_stack;
         }
         let has_local_callbacks = !callbacks.is_empty();
@@ -2608,9 +2611,10 @@ impl Session {
 
             #[cfg(feature = "unstable")]
             {
+                let rt = self.0.runtime.get_inner();
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut push.ext_ts_stack,
-                    Some(self.0.runtime.as_ref()),
+                    || Some(rt),
                     zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
                 );
             }
@@ -2796,11 +2800,14 @@ impl Session {
                     stack: vec![],
                 },
             });
-            crate::api::timestamp_stack::push_ts_interception(
-                &mut ext_ts_stack,
-                Some(self.0.runtime.as_ref()),
-                interception_point::SEND,
-            );
+            {
+                let rt = self.0.runtime.get_inner();
+                crate::api::timestamp_stack::push_ts_interception(
+                    &mut ext_ts_stack,
+                    || Some(rt),
+                    interception_point::SEND,
+                );
+            }
             ext_ts_stack
         });
         if destination != Locality::SessionLocal {
@@ -2837,9 +2844,10 @@ impl Session {
         if destination != Locality::Remote {
             #[cfg(feature = "unstable")]
             {
+                let rt = self.0.runtime.get_inner();
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut ext_ts_stack,
-                    Some(self.0.runtime.as_ref()),
+                    || Some(rt),
                     zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
                 );
             }
@@ -3340,11 +3348,14 @@ impl Primitives for WeakSession {
             state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
         drop(state);
         #[cfg(feature = "unstable")]
-        crate::api::timestamp_stack::push_ts_interception(
-            &mut msg.ext_ts_stack,
-            Some(self.0.runtime.as_ref()),
-            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
-        );
+        {
+            let rt = self.0.runtime.get_inner();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         callbacks.call(
             consume,
             msg.ext_qos,
@@ -3359,11 +3370,14 @@ impl Primitives for WeakSession {
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
         #[cfg(feature = "unstable")]
-        crate::api::timestamp_stack::push_ts_interception(
-            &mut msg.ext_ts_stack,
-            Some(self.0.runtime.as_ref()),
-            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
-        );
+        {
+            let rt = self.0.runtime.get_inner();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             RequestBody::Query(m) => {
                 let state = zread!(self.0.state);
@@ -3400,11 +3414,14 @@ impl Primitives for WeakSession {
     fn send_response(&self, msg: &mut Response) {
         trace!("recv Response {:?}", msg);
         #[cfg(feature = "unstable")]
-        crate::api::timestamp_stack::push_ts_interception(
-            &mut msg.ext_ts_stack,
-            Some(self.0.runtime.as_ref()),
-            zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
-        );
+        {
+            let rt = self.0.runtime.get_inner();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.0.state);

@@ -622,20 +622,20 @@ impl Query {
         };
         #[cfg(feature = "unstable")]
         {
-            let rt = self.inner.runtime.clone().and_then(|r| r.upgrade());
-            let irt = rt.as_deref().map(|r| r.deref());
+            let weak_rt = self.inner.runtime.clone();
             response.ext_ts_stack = self.inner.query_ts_stack.as_ref().and_then(|ts_stack| {
                 use zenoh_protocol::network::timestamp_stack::{interception_point, TsStackType};
                 let mut ext_ts_stack = Some(TsStackType {
                     ts_stack: ts_stack.into(),
                 });
+                let upgrade = weak_rt.clone();
                 crate::api::timestamp_stack::push_ts_interception(
                     &mut ext_ts_stack,
-                    irt,
+                    move || upgrade.and_then(|r| r.upgrade()).map(|dr| dr.get_inner()),
                     interception_point::SEND,
                 );
                 ext_ts_stack
-            })
+            });
         }
         self.inner.primitives.send_response(&mut response);
         Ok(())
