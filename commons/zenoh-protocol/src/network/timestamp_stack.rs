@@ -73,21 +73,20 @@ pub mod interception_point {
 /// A single interception record containing the interception point identifier,
 /// timestamp format flag, and raw timestamp bytes.
 ///
-/// Wire format:
-///
 /// ```text
+/// Flags:
+/// - U:     User-defined               If U==1 then the timestamp format is user-defined;
+///                                     otherwise it is a standard UHLC timestamp.
+/// - X:     Reserved                   Must be 0.
+/// - point: Interception point         0b001=SEND, 0b010=ROUTE, 0b100=RECEIVE.
+///
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |U|X|X|X|X|point|
 /// +---------------+
-/// | flags    | u8 |
-/// +---------------+
-/// % timestamp     % -- <u8;z16>
+/// ~   timestamp   ~
 /// +---------------+
 /// ```
-///
-/// `flags` bit layout:
-/// - Bit 7 (`IS_CUSTOM_TS`): set when the timestamp was produced by a user-defined callback,
-///   cleared when it is a standard UHLC timestamp.
-/// - Bits 0-2: interception point ID (`SEND`, `ROUTE`, `RECEIVE`).
-/// - Bits 3-6: reserved (must be 0).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Interception {
     /// Bitfield: interception point id + timestamp format.
@@ -98,15 +97,19 @@ pub struct Interception {
 
 /// A stack of interception timestamps carried as a message extension.
 ///
-/// Wire format (inside ZExtZBuf body):
-///
 /// ```text
+/// Flags:
+/// - S: Send            If S==1 then the send interception point is activated.
+/// - R: Route           If R==1 then the route interception point is activated.
+/// - E: Receive         If E==1 then the receive interception point is activated.
+/// - X: Reserved
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// |X|X|X|X|X|E|R|S|
 /// +---------------+
-/// | conf_flags|u8 |
+/// ~  count: zint   ~
 /// +---------------+
-/// % count: zint   %
-/// +---------------+
-/// ~ [Interception]~
+/// ~ [Interception] ~
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
