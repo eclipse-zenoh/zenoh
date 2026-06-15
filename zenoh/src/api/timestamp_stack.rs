@@ -245,6 +245,8 @@ impl TimestampInstrumentation {
 /// ```
 /// use zenoh::timestamp_stack::InstrumentationTimestamp;
 ///
+/// // InstrumentationTimestamp is usually constructed automatically.
+/// let ts = InstrumentationTimestamp::Custom(b"my_format".to_vec());
 /// // Pattern match to handle both variants:
 /// match &ts {
 ///     InstrumentationTimestamp::UHLC(uhlc_ts) => println!("UHLC: {:?}", uhlc_ts),
@@ -470,7 +472,7 @@ impl TryFrom<&zenoh_protocol::network::timestamp_stack::TimestampStack> for Time
                 Ok(p) => p,
                 Err(_) => {
                     // FIXME: find a way to hold unknown inteception points
-                    //        (required for Reply to inherit the full stack of its query)
+                    //        (required for forward-compatibility)
                     tracing::warn!("
                         Skipping instrumentation measurement with unknown or malformed instrumentation flags '{:b}'",
                         record.flags
