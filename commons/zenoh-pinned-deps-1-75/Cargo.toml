@@ -118,4 +118,5 @@ ignored = [
   "unzip-n",
   "uuid",
   "zerofrom",
+  "zeroize",
 ]
