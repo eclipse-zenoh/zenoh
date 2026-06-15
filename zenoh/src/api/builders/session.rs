@@ -115,8 +115,8 @@ where
     ///
     /// If no callback is provided, the default UHLC timestamp generation will be used.
     #[zenoh_macros::unstable]
-    pub fn with_timestamp_callback(mut self, cb: GetTimestampCallback) -> Self {
-        self.timestamp_callback = Some(cb);
+    pub fn with_timestamp_callback(mut self, cb: impl Into<GetTimestampCallback>) -> Self {
+        self.timestamp_callback = Some(cb.into());
         self
     }
 }
