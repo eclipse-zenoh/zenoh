@@ -289,9 +289,9 @@ impl IRuntime for RuntimeState {
 
         use zenoh_codec::{WCodec, Zenoh080};
         let mut buf = Vec::new();
-        Zenoh080
-            .write(&mut buf, &ts)
-            .expect("Failed to serialize timestamp");
+        if Zenoh080.write(&mut buf, &ts).is_err() {
+            return (Vec::new(), false);
+        }
         (buf, false)
     }
 

@@ -437,6 +437,10 @@ pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized, R, F>(
                 .expect("internal calls should provide valid interception point IDs"),
         };
         let (timestamp, is_custom) = runtime.get_ts_stack_timestamp(context);
+        if timestamp.is_empty() {
+            // Skip writing empty Vec
+            return;
+        }
         ts_stack.ts_stack.stack.push(Interception {
             flags: point
                 | if is_custom {
