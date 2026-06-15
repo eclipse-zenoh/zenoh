@@ -68,6 +68,7 @@ twox-hash = "=1.6.3"
 unzip-n = "=0.1.2"
 uuid = "=1.20.0"
 zerofrom = "=0.1.5"
+zeroize = "=1.8.2"
 
 # dependency for macos only
 [target.'cfg(target_os = "macos")'.dependencies]
