@@ -73,6 +73,7 @@
 //!         Capability{
 //!             persistence: Persistence::Volatile,
 //!             history: History::Latest,
+//!             read_only: false,
 //!         }
 //!     }
 //!
@@ -159,6 +160,8 @@ const FEATURES: &str =
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
+    /// Read-only storages serve reads (queries) but ignore incoming writes/samples.
+    pub read_only: bool,
 }
 
 /// Persistence is the guarantee expected from a storage in case of failures
@@ -263,4 +266,20 @@ pub trait Storage: Send + Sync {
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
     /// Remember to fetch the entry corresponding to the `None` key
     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Capability, History, Persistence};
+
+    #[test]
+    fn read_only_defaults_to_false_for_writable_backends() {
+        let capability = Capability {
+            persistence: Persistence::Volatile,
+            history: History::Latest,
+            read_only: false,
+        };
+
+        assert!(!capability.read_only);
+    }
 }
