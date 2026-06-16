@@ -83,6 +83,12 @@ pub(crate) async fn create_and_start_storage(
     let mut replication_log = None;
     let mut latest_updates = HashMap::default();
     if let Some(replica_config) = &config.replication {
+        if capability.read_only {
+            bail!(
+                "Replication was enabled for storage {name} but it is read-only: replication \
+                 alignment writes to the backend, which a read-only storage cannot accept"
+            );
+        }
         if capability.history != History::Latest {
             bail!(
                 "Replication was enabled for storage {name} but its history capability is not \
