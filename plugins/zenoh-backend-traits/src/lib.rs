@@ -156,7 +156,7 @@ const FEATURES: &str =
 
 /// Capability of a storage indicates the guarantees of the storage
 /// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
@@ -179,8 +179,9 @@ pub struct Capability {
 /// This will include also persisting the metadata that Zenoh stores for the updates.
 /// If a storage is marked Persistent::Volatile, the storage will not have any guarantees on its content after a crash.
 /// This option should be used only if the storage is considered to function as a cache.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Persistence {
+    #[default]
     Volatile, //default
     Durable,
 }
@@ -188,8 +189,9 @@ pub enum Persistence {
 /// History is the number of values that the backend is expected to save per key
 /// History::Latest saves only the latest value per key
 /// History::All saves all the values including historical values
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum History {
+    #[default]
     Latest, //default
     All,
 }
@@ -301,6 +303,18 @@ mod tests {
             read_only: false,
         };
 
+        assert!(!capability.read_only);
+    }
+
+    #[test]
+    fn capability_default_is_writable() {
+        // Backends can build a Capability from defaults and only override what
+        // they need (e.g. `Capability { read_only: true, ..Default::default() }`),
+        // which keeps adding capability fields source-compatible.
+        let capability = Capability::default();
+
+        assert_eq!(capability.persistence, Persistence::Volatile);
+        assert_eq!(capability.history, History::Latest);
         assert!(!capability.read_only);
     }
 }
