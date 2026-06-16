@@ -240,6 +240,17 @@ pub trait Storage: Send + Sync {
     /// on the administration space for this storage.
     fn get_admin_status(&self) -> JsonValue;
 
+    /// Returns capability overrides for this specific storage instance, if any.
+    ///
+    /// Returns `None` by default, meaning the storage inherits its volume's
+    /// [`Capability`] as reported by [`Volume::get_capability`]. Backends whose
+    /// capability depends on per-storage configuration (for example a read-only
+    /// flag set in the storage's volume config) can override this to report the
+    /// effective capability for the created storage.
+    fn capability(&self) -> Option<Capability> {
+        None
+    }
+
     /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.
     /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
