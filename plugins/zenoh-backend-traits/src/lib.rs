@@ -161,6 +161,16 @@ pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
     /// Read-only storages serve reads (queries) but ignore incoming writes/samples.
+    ///
+    /// When `true`, the storage manager does not declare a write subscriber for the
+    /// storage, so samples published on its key expression are never dispatched to the
+    /// backend (which would otherwise trigger a guaranteed-to-fail `put`). The queryable
+    /// is still declared, so reads keep working.
+    ///
+    /// Backends report this through [`Volume::get_capability`]. A backend whose
+    /// read-only mode is configured per-storage should determine the value when the
+    /// storage is created and reflect it here. Defaults to `false`, preserving the
+    /// previous write-subscribing behavior for existing backends.
     pub read_only: bool,
 }
 
