@@ -19,7 +19,7 @@ use zenoh_shm::{api::client_storage::GLOBAL_CLIENT_STORAGE, reader::ShmReader};
 
 use crate::{
     shm::{LazyShmProvider, MulticastTransportShmConfig, TransportShmConfig},
-    unicast::establishment::ext::shm::AuthUnicast,
+    unicast::establishment::ext::shm::auth::AuthUnicast,
 };
 
 #[derive(Clone)]

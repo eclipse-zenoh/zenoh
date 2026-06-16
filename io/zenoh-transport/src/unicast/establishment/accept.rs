@@ -35,7 +35,9 @@ use zenoh_result::ZResult;
 #[cfg(feature = "auth_usrpwd")]
 use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
-use super::ext::shm::AuthSegment;
+use super::ext::shm::shm_segment::TXAuthSegment;
+#[cfg(feature = "shared-memory")]
+use super::ext::shm::shm_segment::RXAuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::{
@@ -60,7 +62,7 @@ struct StateTransport {
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::StateAccept,
+    ext_shm: ext::shm::auth::StateAccept,
     ext_lowlatency: ext::lowlatency::StateAccept,
     ext_patch: ext::patch::StateAccept,
     ext_region_name: ext::region_name::StateAccept,
@@ -88,7 +90,7 @@ struct RecvInitSynOut {
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 
 // InitAck
@@ -99,12 +101,12 @@ struct SendInitAckIn {
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 struct SendInitAckOut {
     cookie_nonce: u64,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 
 // OpenSyn
@@ -142,7 +144,7 @@ struct AcceptLink<'a> {
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
     #[cfg(feature = "shared-memory")]
     // Will be None if SHM operation is disabled by Config
-    ext_shm: Option<ext::shm::ShmFsm<'a>>,
+    ext_shm: Option<ext::shm::auth::ShmFsm<'a>>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
@@ -758,7 +760,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             .state
             .shm_context
             .as_ref()
-            .map(|ctx| ext::shm::ShmFsm::new(&ctx.auth)),
+            .map(|ctx| ext::shm::auth::ShmFsm::new(&ctx.auth)),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "transport_auth")]
@@ -807,7 +809,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                         .multilink
                         .accept(manager.config.unicast.max_links > 1),
                     #[cfg(feature = "shared-memory")]
-                    ext_shm: ext::shm::StateAccept::new(),
+                    ext_shm: ext::shm::auth::StateAccept::new(),
                     ext_lowlatency: ext::lowlatency::StateAccept::new(
                         manager.config.unicast.is_lowlatency,
                     ),
@@ -872,9 +874,9 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: match state.transport.ext_shm.negotiated_to_use_shm() {
-            true => iack_out.ext_shm.map(TransportShmConfig::new),
-            false => None,
+        shm: match state.transport.ext_shm.tx_counter_lease() {
+            Some(_) => iack_out.ext_shm.map(TransportShmConfig::new),
+            None => None,
         },
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]

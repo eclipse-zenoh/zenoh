@@ -29,7 +29,9 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 #[cfg(feature = "shared-memory")]
-use super::ext::shm::AuthSegment;
+use super::ext::shm::shm_segment::TXAuthSegment;
+#[cfg(feature = "shared-memory")]
+use super::ext::shm::shm_segment::RXAuthSegment;
 #[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 #[cfg(feature = "auth_usrpwd")]
@@ -56,7 +58,7 @@ struct StateTransport {
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateOpen,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::StateOpen,
+    ext_shm: ext::shm::auth::StateOpen,
     ext_lowlatency: ext::lowlatency::StateOpen,
     ext_patch: ext::patch::StateOpen,
     ext_region_name: ext::region_name::StateOpen,
@@ -89,7 +91,7 @@ struct RecvInitAckOut {
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 
 // OpenSyn
@@ -100,13 +102,13 @@ struct SendOpenSynIn {
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 
 struct SendOpenSynOut {
     mine_initial_sn: TransportSn,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
+    ext_shm: Option<RXAuthSegment>,
 }
 
 // OpenAck
@@ -122,7 +124,7 @@ struct OpenLink<'a> {
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Option<ext::shm::ShmFsm<'a>>,
+    ext_shm: Option<ext::shm::auth::ShmFsm<'a>>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
@@ -645,7 +647,7 @@ pub(crate) async fn open_link(
             .state
             .shm_context
             .as_ref()
-            .map(|ctx| ext::shm::ShmFsm::new(&ctx.auth)),
+            .map(|ctx| ext::shm::auth::ShmFsm::new(&ctx.auth)),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
@@ -681,7 +683,7 @@ pub(crate) async fn open_link(
                     .multilink
                     .open(manager.config.unicast.max_links > 1),
                 #[cfg(feature = "shared-memory")]
-                ext_shm: ext::shm::StateOpen::new(),
+                ext_shm: ext::shm::auth::StateOpen::new(),
                 ext_lowlatency: ext::lowlatency::StateOpen::new(
                     manager.config.unicast.is_lowlatency,
                 ),

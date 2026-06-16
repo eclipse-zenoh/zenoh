@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2026 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
@@ -24,113 +24,24 @@ use zenoh_core::bail;
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError, ZResult};
-use zenoh_shm::{
-    api::common::types::ProtocolID, posix_shm::array::ArrayInSHM, version::SHM_VERSION,
+use zenoh_shm::api::common::types::ProtocolID;
+
+use crate::unicast::establishment::{
+    ext::shm::shm_segment::{
+        AuthChallenge, AuthSegmentID, RXAuthSegment, ShmCounterID, ShmTXCounterLease, TXAuthSegment,
+    },
+    AcceptFsm, OpenFsm,
 };
-
-use crate::unicast::establishment::{AcceptFsm, OpenFsm};
-
-/*************************************/
-/*             Segment               */
-/*************************************/
-pub(crate) type AuthSegmentID = u32;
-pub(crate) type AuthChallenge = u64;
-
-const LEN_INDEX: usize = 0;
-const CHALLENGE_INDEX: usize = 1;
-const VERSION_INDEX: usize = 2;
-const ID_START_INDEX: usize = 3;
-
-#[derive(Debug)]
-pub struct AuthSegment {
-    array: ArrayInSHM<AuthSegmentID, AuthChallenge, usize>,
-}
-
-impl AuthSegment {
-    pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
-        let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
-            (ID_START_INDEX + shm_protocols.len()).try_into()?,
-        )?;
-        unsafe {
-            (*array.elem_mut(LEN_INDEX)) = shm_protocols.len() as AuthChallenge;
-            // challenge field is inverted to prevent SHM probing between new versioned
-            // SHM implementation and the old one
-            (*array.elem_mut(CHALLENGE_INDEX)) = !challenge;
-            (*array.elem_mut(VERSION_INDEX)) = SHM_VERSION;
-            #[allow(clippy::needless_range_loop)]
-            for elem_index in 0..shm_protocols.len() {
-                (*array.elem_mut(ID_START_INDEX + elem_index)) = shm_protocols[elem_index] as u64;
-            }
-        };
-        Ok(Self { array })
-    }
-
-    pub fn open(id: AuthSegmentID) -> ZResult<Self> {
-        let array = ArrayInSHM::open(id)?;
-
-        // validate minimal array length
-        if array.elem_count().get() < ID_START_INDEX {
-            bail!("SHM auth segment is too small, maybe the other side is using an incompatible SHM version?")
-        }
-
-        Ok(Self { array })
-    }
-
-    pub fn challenge(&self) -> AuthChallenge {
-        // challenge field is inverted to prevent SHM probing between new versioned
-        // SHM implementation and the old one
-        unsafe { !(*self.array.elem(CHALLENGE_INDEX)) }
-    }
-
-    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
-        let challnge_in_shm = self.challenge();
-        if challnge_in_shm != expected_challenge {
-            tracing::debug!(
-                "{} Challenge mismatch: expected: {}, found in shm: {}.",
-                s,
-                expected_challenge,
-                challnge_in_shm
-            );
-            return false;
-        }
-
-        let version_in_shm = unsafe { *self.array.elem(VERSION_INDEX) };
-        if version_in_shm != SHM_VERSION {
-            tracing::debug!(
-                "{} Version mismatch: ours: {}, theirs: {}.",
-                s,
-                SHM_VERSION,
-                version_in_shm
-            );
-            return false;
-        }
-
-        true
-    }
-
-    pub fn protocols(&self) -> Vec<ProtocolID> {
-        let mut result = vec![];
-        let len = unsafe { (*self.array.elem(LEN_INDEX)) as usize };
-        for elem in ID_START_INDEX..ID_START_INDEX + len {
-            result.push(unsafe { *self.array.elem(elem) as ProtocolID });
-        }
-        result
-    }
-
-    pub fn id(&self) -> AuthSegmentID {
-        self.array.id()
-    }
-}
 
 /*************************************/
 /*          Authenticator            */
 /*************************************/
 pub(crate) struct AuthUnicast {
-    segment: AuthSegment,
+    segment: Arc<TXAuthSegment>,
 }
 
 impl Deref for AuthUnicast {
-    type Target = AuthSegment;
+    type Target = TXAuthSegment;
 
     fn deref(&self) -> &Self::Target {
         &self.segment
@@ -144,9 +55,25 @@ impl AuthUnicast {
         let nonce = prng.gen();
 
         // allocate SHM segment with challenge
-        let segment = AuthSegment::create(nonce, shm_protocols)?;
+        let segment = Arc::new(TXAuthSegment::create(nonce, shm_protocols)?);
 
         Ok(Self { segment })
+    }
+
+    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+        self.segment.validate_challenge(expected_challenge, s)
+    }
+
+    pub fn challenge(&self) -> AuthChallenge {
+        self.segment.challenge()
+    }
+
+    pub fn segment_id(&self) -> AuthSegmentID {
+        self.segment.segment_id()
+    }
+
+    pub fn lease_tx_counter(&self) -> ZResult<ShmTXCounterLease> {
+        ShmTXCounterLease::new(self.segment.clone())
     }
 }
 
@@ -233,6 +160,88 @@ where
     }
 }
 
+/*************************************/
+/*             OpenSyn               */
+/*************************************/
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~   challenge   ~
+/// +---------------+
+/// ~  Counter Id   ~
+/// +---------------+
+/// ```
+struct OpenSyn {
+    bob_challenge: u64,
+    alice_counter: ShmCounterID,
+}
+
+impl<W> WCodec<&OpenSyn, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
+        self.write(&mut *writer, x.bob_challenge)?;
+        self.write(&mut *writer, &x.alice_counter)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<OpenSyn, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
+        let bob_challenge: u64 = self.read(&mut *reader)?;
+        let alice_counter = self.read(&mut *reader)?;
+        Ok(OpenSyn {
+            bob_challenge,
+            alice_counter,
+        })
+    }
+}
+
+/*************************************/
+/*             OpenAck               */
+/*************************************/
+/// ```text
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~  Counter Id   ~
+/// +---------------+
+/// ```
+struct OpenAck {
+    bob_counter: ShmCounterID,
+}
+
+impl<W> WCodec<&OpenAck, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &OpenAck) -> Self::Output {
+        self.write(&mut *writer, &x.bob_counter)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<OpenAck, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
+        let bob_counter = self.read(&mut *reader)?;
+        Ok(OpenAck { bob_counter })
+    }
+}
+
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a AuthUnicast,
@@ -247,7 +256,7 @@ impl<'a> ShmFsm<'a> {
 /*************************************/
 /*              OPEN                 */
 /*************************************/
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
     // false by default, will be switched to true at the end of open_ack
     negotiated_to_use_shm: bool,
@@ -285,8 +294,9 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Send InitSyn.";
 
+        // Send Alice's SHM Segment ID to Bob
         let init_syn = InitSyn {
-            alice_segment: self.inner.id(),
+            alice_segment: self.inner.segment_id(),
         };
 
         let codec = Zenoh080::new();
@@ -300,7 +310,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     }
 
     type RecvInitAckIn = Option<init::ext::Shm>;
-    type RecvInitAckOut = Option<AuthSegment>;
+    type RecvInitAckOut = Option<(RXAuthSegment, ShmTXCounterLease)>;
     async fn recv_init_ack(
         self,
         mut input: Self::RecvInitAckIn,
@@ -325,7 +335,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         }
 
         // Read Bob's SHM Segment
-        let bob_segment = match AuthSegment::open(init_ack.bob_segment) {
+        let bob_segment = match RXAuthSegment::open(init_ack.bob_segment) {
             Ok(buff) => buff,
             Err(e) => {
                 tracing::trace!("{} {}", S, e);
@@ -333,7 +343,10 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             }
         };
 
-        Ok(Some(bob_segment))
+        // as long as Alice challenge correctly seen, allocate TX counter for this session
+        let tx_counter_lease = self.inner.lease_tx_counter()?;
+
+        Ok(Some((bob_segment, tx_counter_lease)))
     }
 
     type SendOpenSynIn = &'a Self::RecvInitAckOut;
@@ -344,13 +357,26 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         // const S: &str = "Shm extension - Send OpenSyn.";
 
-        Ok(input
-            .as_ref()
-            .map(|val| open::ext::Shm::new(val.challenge())))
+        Ok(input.as_ref().map(|(rx_segment, tx_counter)| {
+            let open_syn = OpenSyn {
+                bob_challenge: rx_segment.challenge(),
+                alice_counter: tx_counter.counter_id(),
+            };
+
+            // Encode the extension
+            let codec = Zenoh080::new();
+            let mut buff = vec![];
+            let mut writer = buff.writer();
+            codec
+                .write(&mut writer, &open_syn)
+                .map_err(|_| zerror!("{} Encoding error", S))?;
+
+            open::ext::Shm::new(buff.into())
+        }))
     }
 
     type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Shm>);
-    type RecvOpenAckOut = ();
+    type RecvOpenAckOut = Option<ShmCounterID>;
     async fn recv_open_ack(
         self,
         input: Self::RecvOpenAckIn,
@@ -359,17 +385,16 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
 
         let (state, mut ext) = input;
 
-        let Some(ext) = ext.take() else {
-            return Ok(());
+        // Decode the extension
+        let codec = Zenoh080::new();
+        let mut reader = ext.value.reader();
+        let Ok(open_ack): Result<OpenAck, _> = codec.read(&mut reader) else {
+            tracing::trace!("{} Decoding error.", S);
+            return Ok(None);
         };
 
-        if ext.value != 1 {
-            tracing::trace!("{} Invalid value.", S);
-            return Ok(());
-        }
-
         state.negotiated_to_use_shm = true;
-        Ok(())
+        Ok(Some(open_ack.shm_counter_id))
     }
 }
 
@@ -413,7 +438,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = Option<init::ext::Shm>;
-    type RecvInitSynOut = Option<AuthSegment>;
+    type RecvInitSynOut = Option<RXAuthSegment>;
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
@@ -433,7 +458,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Read Alice's SHM Segment
-        let alice_segment = match AuthSegment::open(init_syn.alice_segment) {
+        let alice_segment = match RXAuthSegment::open(init_syn.alice_segment) {
             Ok(buff) => buff,
             Err(e) => {
                 tracing::trace!("{} {}", S, e);
@@ -456,23 +481,23 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             return Ok(None);
         };
 
-        let init_syn = InitAck {
+        let init_ack = InitAck {
             alice_challenge: alice_segment.challenge(),
-            bob_segment: self.inner.id(),
+            bob_segment: self.inner.segment_id(),
         };
 
         let codec = Zenoh080::new();
         let mut buff = vec![];
         let mut writer = buff.writer();
         codec
-            .write(&mut writer, &init_syn)
+            .write(&mut writer, &init_ack)
             .map_err(|_| zerror!("{} Encoding error", S))?;
 
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Shm>);
-    type RecvOpenSynOut = ();
+    type RecvOpenSynOut = Option<(ShmTXCounterLease, ShmCounterID)>;
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
@@ -481,22 +506,32 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
 
         let (state, mut ext) = input;
 
-        let Some(ext) = ext.take() else {
-            return Ok(());
+        let Some(ext) = input.as_ref() else {
+            return Ok(None);
+        };
+
+        // Decode the extension
+        let codec = Zenoh080::new();
+        let mut reader = ext.value.reader();
+        let Ok(open_syn): Result<OpenSyn, _> = codec.read(&mut reader) else {
+            tracing::trace!("{} Decoding error.", S);
+            bail!("");
         };
 
         // Verify that Alice has correctly read Bob challenge
-        let bob_challnge = ext.value;
         if !self.inner.validate_challenge(bob_challnge, S) {
-            return Ok(());
+            return Ok(None);
         }
+
+        // as long as Bob challenge correctly seen, allocate TX counter for this session
+        let tx_counter_lease = self.inner.lease_tx_counter()?;
 
         state.negotiated_to_use_shm = true;
 
-        Ok(())
+        Ok(Some((tx_counter_lease, open_syn.alice_counter)))
     }
 
-    type SendOpenAckIn = &'a StateAccept;
+    type SendOpenAckIn = (&'a StateAccept, &'a ShmTXCounterLease);
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
@@ -504,9 +539,19 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         // const S: &str = "Shm extension - Send OpenAck.";
 
-        Ok(match input.negotiated_to_use_shm {
-            true => Some(open::ext::Shm::new(1)),
-            false => None,
-        })
+        let (state, lease) = input;
+
+        let open_ack = OpenAck {
+            bob_counter: lease.id()
+        };
+
+        let codec = Zenoh080::new();
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &open_ack)
+            .map_err(|_| zerror!("{} Encoding error", S))?;
+
+        Ok(Some(open::ext::Shm::new(buff.into())))
     }
 }

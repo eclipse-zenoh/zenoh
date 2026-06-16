@@ -44,7 +44,7 @@ use zenoh_shm::{
     ShmBufInfo, ShmBufInner,
 };
 
-use crate::unicast::establishment::ext::shm::AuthSegment;
+use crate::unicast::establishment::ext::shm::shm_segment::{ShmCounterID, RXAuthSegment, ShmRXCounterLease};
 
 #[derive(Debug)]
 struct ProviderInitCfg {
@@ -180,21 +180,24 @@ impl LazyShmProvider {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {
-    partner_protocols: Box<[ProtocolID]>,
+    partner_segment: Arc<RXAuthSegment>,
 }
 
 impl PartnerShmConfig for TransportShmConfig {
     fn supports_protocol(&self, protocol: ProtocolID) -> bool {
-        self.partner_protocols.contains(&protocol)
+        self.partner_segment.protocols().contains(&protocol)
     }
 }
 
 impl TransportShmConfig {
-    pub fn new(partner_segment: AuthSegment) -> Self {
-        let t: HashSet<ProtocolID> = partner_segment.protocols().iter().cloned().collect();
+    pub fn new(partner_segment: RXAuthSegment) -> Self {
         Self {
-            partner_protocols: t.iter().cloned().collect(),
+            partner_segment: Arc::new(partner_segment),
         }
+    }
+
+    fn lease_rx_counter(&self, id: ShmCounterID) -> ShmRXCounterLease {
+        ShmRXCounterLease::new(self.partner_segment.clone(), id)
     }
 }
 

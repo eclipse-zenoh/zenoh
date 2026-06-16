@@ -26,7 +26,7 @@ use super::segment::Segment;
 use crate::shm;
 
 /// An SHM segment that contains data structure
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,

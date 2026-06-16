@@ -43,7 +43,6 @@ use crate::{
     },
     TransportManager, TransportPeer, TransportPeerEventHandler,
 };
-// use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
 /*             TRANSPORT             */
