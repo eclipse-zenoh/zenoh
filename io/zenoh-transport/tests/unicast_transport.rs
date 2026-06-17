@@ -2993,8 +2993,6 @@ async fn test_multilink_max_links(
 async fn transport_unicast_with_zid_matching() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 16200).parse().unwrap();
-
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
 
@@ -3009,6 +3007,10 @@ async fn transport_unicast_with_zid_matching() {
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build_test(router_handler.clone())
+        .unwrap();
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
         .unwrap();
 
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
@@ -3048,8 +3050,6 @@ async fn transport_unicast_with_zid_matching() {
 async fn transport_unicast_with_zid_mismatch() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 16201).parse().unwrap();
-
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
     let wrong_zid = ZenohIdProto::try_from([99]).unwrap();
@@ -3065,6 +3065,10 @@ async fn transport_unicast_with_zid_mismatch() {
         .whatami(WhatAmI::Router)
         .unicast(unicast)
         .build_test(router_handler.clone())
+        .unwrap();
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
         .unwrap();
 
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
@@ -3102,11 +3106,6 @@ async fn transport_unicast_with_zid_mismatch() {
 async fn transport_unicast_with_zid_multilink() {
     zenoh_util::init_log_from_env_or("error");
 
-    let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 16202).parse().unwrap(),
-        format!("tcp/127.0.0.1:{}", 16203).parse().unwrap(),
-    ];
-
     let client_id = ZenohIdProto::try_from([1]).unwrap();
     let router_id = ZenohIdProto::try_from([2]).unwrap();
 
@@ -3118,6 +3117,15 @@ async fn transport_unicast_with_zid_multilink() {
         .unicast(unicast)
         .build_test(router_handler.clone())
         .unwrap();
+
+    let endpoints: Vec<EndPoint> = vec![
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap(),
+    ];
 
     for e in endpoints.iter() {
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
