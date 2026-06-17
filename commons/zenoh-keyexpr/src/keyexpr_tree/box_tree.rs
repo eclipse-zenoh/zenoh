@@ -36,6 +36,19 @@ pub struct KeBoxTree<
     wildness: Wildness,
 }
 
+impl<Weight, Wildness, Children> core::fmt::Debug for KeBoxTree<Weight, Wildness, Children>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeBoxTree")
+            .field("children", &"..")
+            .field("is_wild", &self.wildness.get())
+            .finish()
+    }
+}
+
 impl<Weight> KeBoxTree<Weight, bool, DefaultChildrenProvider>
 where
     DefaultChildrenProvider:
@@ -267,6 +280,21 @@ pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvi
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
+}
+
+impl<Weight, Wildness, Children> core::fmt::Debug for KeyExprTreeNode<Weight, Wildness, Children>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<Box<Self>>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeyExprTreeNode")
+            .field("has_parent", &self.parent.is_some())
+            .field("chunk", &self.chunk)
+            .field("children", &"..")
+            .field("has_weight", &self.weight.is_some())
+            .finish()
+    }
 }
 
 unsafe impl<Weight: Send, Wildness: IWildness + Send, Children: IChildrenProvider<Box<Self>> + Send>

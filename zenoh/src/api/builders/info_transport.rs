@@ -57,6 +57,13 @@ pub struct TransportsBuilder<'a> {
 }
 
 #[zenoh_macros::unstable]
+impl std::fmt::Debug for TransportsBuilder<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("TransportsBuilder").field(&"..").finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<'a> TransportsBuilder<'a> {
     pub(crate) fn new(runtime: &'a DynamicRuntime) -> Self {
         Self { runtime }
@@ -136,6 +143,17 @@ pub struct TransportEventsListener<Handler> {
     pub(crate) inner: TransportEventsListenerInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::fmt::Debug for TransportEventsListener<Handler> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransportEventsListener")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -239,6 +257,16 @@ pub struct TransportEventsListenerUndeclaration<Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<Handler> std::fmt::Debug for TransportEventsListenerUndeclaration<Handler> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransportEventsListenerUndeclaration")
+            .field("listener", &self.listener)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> TransportEventsListenerUndeclaration<Handler> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of transport events listener callback (if any) return.
@@ -304,6 +332,20 @@ pub struct TransportEventsListenerBuilder<'a, Handler, const BACKGROUND: bool = 
     session: &'a WeakSession,
     handler: Handler,
     history: bool,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> std::fmt::Debug
+    for TransportEventsListenerBuilder<'_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransportEventsListenerBuilder")
+            .field("session", &"..")
+            .field("handler", &"..")
+            .field("history", &self.history)
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

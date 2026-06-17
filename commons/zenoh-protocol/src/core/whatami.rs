@@ -315,6 +315,7 @@ impl serde::Serialize for WhatAmI {
     }
 }
 
+#[derive(Debug)]
 pub struct WhatAmIVisitor;
 
 impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
@@ -376,6 +377,7 @@ impl serde::Serialize for WhatAmIMatcher {
     }
 }
 
+#[derive(Debug)]
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;

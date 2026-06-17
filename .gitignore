@@ -23,9 +23,17 @@
 # Zed
 .zed
 
+# Helix
+.helix
+
 cargo-timing*.html
 
 ci/valgrind-check/*.log
 
 # Code coverage reports
 *.profraw
+
+# cargo-fuzz-related
+**/fuzz/artifacts
+**/fuzz/corpus
+**/fuzz/coverage

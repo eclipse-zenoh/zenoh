@@ -14,7 +14,6 @@
 
 #![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
-mod common;
 
 use std::time::Duration;
 
@@ -24,8 +23,7 @@ use zenoh::{
     Config, Session, Wait,
 };
 use zenoh_config::{WhatAmI as ConfigWhatAmI, ZenohId};
-
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const SLEEP: Duration = Duration::from_secs(1);
 

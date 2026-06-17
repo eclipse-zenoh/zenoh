@@ -35,6 +35,7 @@ use crate::{
         session::WeakSession,
     },
     handlers::Callback,
+    session::SessionClosedError,
 };
 
 #[cfg(feature = "internal")]
@@ -226,7 +227,9 @@ pub(crate) fn init(session: WeakSession) {
                 None,
                 None,
             ) {
-                tracing::error!("Unable to publish transport event: {}", e);
+                if e.downcast_ref::<SessionClosedError>().is_none() {
+                    tracing::error!("Unable to publish transport event: {}", e);
+                }
             }
         }
     });
@@ -280,7 +283,9 @@ pub(crate) fn init(session: WeakSession) {
                     None,
                     None,
                 ) {
-                    tracing::error!("Unable to publish link event: {}", e);
+                    if e.downcast_ref::<SessionClosedError>().is_none() {
+                        tracing::error!("Unable to publish link event: {}", e);
+                    }
                 }
             } else {
                 tracing::warn!("Unable to find transport for link event: {}", transport_zid);

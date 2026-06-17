@@ -77,7 +77,7 @@ zconfigurable! {
     static ref UDP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct UdpLocatorInspector;
 #[async_trait]
 impl LocatorInspector for UdpLocatorInspector {

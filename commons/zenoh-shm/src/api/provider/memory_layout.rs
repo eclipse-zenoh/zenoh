@@ -166,6 +166,7 @@ impl TryFrom<(usize, AllocAlignment)> for MemoryLayout {
 ///
 /// Statically-known layouts are always correct, zero-sized & zero-cost.
 #[zenoh_macros::unstable_doc]
+#[derive(Debug)]
 pub struct TypedLayout<T> {
     _phantom: PhantomData<T>,
 }

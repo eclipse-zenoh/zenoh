@@ -57,6 +57,12 @@ pub fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
 #[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct PinBoxFuture<T>(Pin<Box<dyn Future<Output = T> + Send>>);
 
+impl<T> std::fmt::Debug for PinBoxFuture<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("PinBoxFuture").field(&"..").finish()
+    }
+}
+
 impl<T> Future for PinBoxFuture<T> {
     type Output = T;
 

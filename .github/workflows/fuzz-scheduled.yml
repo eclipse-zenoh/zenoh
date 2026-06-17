@@ -1,0 +1,158 @@
+#
+# Copyright (c) 2026 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+name: Scheduled Fuzzing
+
+on:
+  schedule:
+    # Run the 1-hour campaign every day except Sunday.
+    - cron: "0 0 * * 1-6"
+    # Run the 5-hour campaign on Sunday instead of the daily run.
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        description: Fuzzing duration profile
+        required: true
+        default: daily
+        options:
+          - daily
+          - weekly
+
+env:
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  NIGHTLY_TOOLCHAIN: nightly
+
+jobs:
+  determine-profile:
+    name: Determine fuzzing profile
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.profile.outputs.label }}
+      max_total_time: ${{ steps.profile.outputs.max_total_time }}
+    steps:
+      - name: Select duration profile
+        id: profile
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            profile="${{ inputs.profile }}"
+          elif [[ "${{ github.event.schedule }}" == "0 0 * * 0" ]]; then
+            profile="weekly"
+          else
+            profile="daily"
+          fi
+
+          if [[ "$profile" == "weekly" ]]; then
+            echo "label=weekly" >> "$GITHUB_OUTPUT"
+            echo "max_total_time=18000" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=daily" >> "$GITHUB_OUTPUT"
+            echo "max_total_time=3600" >> "$GITHUB_OUTPUT"
+          fi
+
+  fuzz-codec:
+    name: Codec fuzz (${{ needs.determine-profile.outputs.label }}) - ${{ matrix.target }}
+    needs: determine-profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - transport_message
+          - network_message
+          - scouting_message
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+
+      - name: Install cargo-fuzz
+        run: cargo +stable install --locked cargo-fuzz
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+          workspaces: |
+            . -> target
+            commons/zenoh-codec/fuzz -> commons/zenoh-codec/fuzz/target
+
+      - name: Generate zenoh-codec seed corpora
+        run: cargo run --bin gen_all_corpora
+        working-directory: commons/zenoh-codec/fuzz
+
+      - name: Verify zenoh-codec seed corpora
+        run: cargo run --bin verify_all_corpora
+        working-directory: commons/zenoh-codec/fuzz
+
+      - name: Run codec fuzz target
+        run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run ${{ matrix.target }} -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
+        working-directory: commons/zenoh-codec/fuzz
+
+      - name: Upload codec fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
+          path: commons/zenoh-codec/fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 14
+
+  fuzz-protocol:
+    name: Protocol fuzz (${{ needs.determine-profile.outputs.label }}) - endpoint_from_str
+    needs: determine-profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Install latest Rust toolchain
+        run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+
+      - name: Install cargo-fuzz
+        run: cargo +stable install --locked cargo-fuzz
+
+      - name: Setup rust-cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: false
+          workspaces: |
+            . -> target
+            commons/zenoh-protocol/fuzz -> commons/zenoh-protocol/fuzz/target
+
+      - name: Generate endpoint_from_str seed corpus
+        run: cargo run --bin gen_endpoint_corpus
+        working-directory: commons/zenoh-protocol/fuzz
+
+      - name: Verify endpoint_from_str seed corpus
+        run: cargo run --bin verify_endpoint_corpus
+        working-directory: commons/zenoh-protocol/fuzz
+
+      - name: Run endpoint_from_str fuzz target
+        run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run endpoint_from_str -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
+        working-directory: commons/zenoh-protocol/fuzz
+
+      - name: Upload protocol fuzz artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
+          path: commons/zenoh-protocol/fuzz/artifacts/endpoint_from_str
+          if-no-files-found: ignore
+          retention-days: 14

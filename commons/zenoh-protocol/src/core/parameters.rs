@@ -56,7 +56,7 @@ where
     I: Iterator<Item = (&'s str, &'s str)>,
 {
     let mut from = iter.collect::<Vec<(&str, &str)>>();
-    from.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2));
+    from.sort_unstable_by_key(|(k1, _)| *k1);
     from.into_iter()
 }
 
@@ -109,6 +109,13 @@ pub fn values<'s>(s: &'s str, k: &str) -> impl DoubleEndedIterator<Item = &'s st
             i
         }
     }
+}
+
+/// Returns `true` if the parameter string contains at least one valid entry
+/// and none of its keys are empty.
+pub fn is_well_formed(s: &str) -> bool {
+    let mut iter = iter(s);
+    iter.clone().next().is_some() && iter.all(|(k, _)| !k.is_empty())
 }
 
 fn _insert<'s, I>(

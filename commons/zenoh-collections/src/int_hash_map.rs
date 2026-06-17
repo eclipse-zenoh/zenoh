@@ -193,6 +193,7 @@ impl<K, V> Default for IntHashMap<K, V> {
     }
 }
 
+#[derive(Debug)]
 pub enum Entry<'a, K, V> {
     Vec {
         key: K,
@@ -216,6 +217,7 @@ impl<'a, K, V> Entry<'a, K, V> {
     }
 }
 
+#[derive(Debug)]
 pub enum Iter<'a, K, V> {
     Vec(slice::Iter<'a, Option<(K, V)>>),
     Map(hash_map::Iter<'a, K, V>),
@@ -233,6 +235,7 @@ impl<'a, K, V> Iterator for Iter<'a, K, V> {
     }
 }
 
+#[derive(Debug)]
 pub enum IterMut<'a, K, V> {
     Vec(slice::IterMut<'a, Option<(K, V)>>),
     Map(hash_map::IterMut<'a, K, V>),
@@ -250,6 +253,7 @@ impl<'a, K, V> Iterator for IterMut<'a, K, V> {
     }
 }
 
+#[derive(Debug)]
 pub enum Values<'a, K, V> {
     Vec(slice::Iter<'a, Option<(K, V)>>),
     Map(hash_map::Values<'a, K, V>),
@@ -266,6 +270,7 @@ impl<'a, K, V> Iterator for Values<'a, K, V> {
     }
 }
 
+#[derive(Debug)]
 pub enum ValuesMut<'a, K, V> {
     Vec(slice::IterMut<'a, Option<(K, V)>>),
     Map(hash_map::ValuesMut<'a, K, V>),

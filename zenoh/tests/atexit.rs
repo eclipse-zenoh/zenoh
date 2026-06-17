@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
-use crate::common::TestSessions;
+
+use zenoh_test::TestSessions;
 
 fn run_in_separate_process(main_name: &str, must_panic: bool) {
     let output = std::process::Command::new(std::env::current_exe().unwrap())

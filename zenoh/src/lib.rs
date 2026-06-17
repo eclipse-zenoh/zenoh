@@ -1009,7 +1009,7 @@ pub mod time {
 /// let session = zenoh::open(config).await.unwrap();
 /// # }
 pub mod config {
-    pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
+    pub use zenoh_config::{EndPoint, EndPoints, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
     pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
@@ -1037,9 +1037,7 @@ pub mod internal {
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
         };
     }
-    pub use zenoh_core::{
-        zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
-    };
+    pub use zenoh_core::{zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture};
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};

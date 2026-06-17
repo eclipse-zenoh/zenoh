@@ -21,12 +21,15 @@ mod adminspace;
 pub mod orchestrator;
 mod region;
 
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use std::future::IntoFuture;
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
     collections::HashSet,
+    fmt,
     ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -45,6 +48,8 @@ use zenoh_config::{
 };
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -100,9 +105,10 @@ use crate::{
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub enum ShmProviderState {
     Disabled,
-    Initializing,
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
@@ -110,11 +116,48 @@ pub enum ShmProviderState {
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
 impl ShmProviderState {
-    pub fn into_option(self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+    pub fn into_option(self) -> <Self as Resolvable>::To {
         match self {
             ShmProviderState::Ready(provider) => Some(provider),
             _ => None,
         }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Resolvable for ShmProviderState {
+    type To = Option<Arc<ShmProvider<PosixShmProviderBackend>>>;
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Wait for ShmProviderState {
+    fn wait(self) -> <Self as Resolvable>::To {
+        match self {
+            ShmProviderState::Ready(provider) => Some(provider),
+            ShmProviderState::Initializing(receiver) => receiver.recv().ok().flatten(),
+            ShmProviderState::Disabled | ShmProviderState::Error => None,
+        }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl IntoFuture for ShmProviderState {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            match self {
+                ShmProviderState::Ready(provider) => Some(provider),
+                ShmProviderState::Initializing(receiver) => {
+                    receiver.recv_async().await.ok().flatten()
+                }
+                ShmProviderState::Disabled | ShmProviderState::Error => None,
+            }
+        })
     }
 }
 
@@ -383,7 +426,7 @@ impl IRuntime for RuntimeState {
         match &self.manager.get_shm_context() {
             Some(ctx) => match ctx.shm_provider() {
                 Some(provider) => match provider.try_get_provider() {
-                    ProviderInitState::Initializing => ShmProviderState::Initializing,
+                    ProviderInitState::Initializing(recv) => ShmProviderState::Initializing(recv),
                     ProviderInitState::Ready(provider) => ShmProviderState::Ready(provider),
                     ProviderInitState::Error => ShmProviderState::Error,
                 },
@@ -540,6 +583,14 @@ pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
 
+impl fmt::Debug for WeakRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakRuntime")
+            .field("is_live", &self.state.strong_count().gt(&0))
+            .finish()
+    }
+}
+
 impl WeakRuntime {
     pub fn upgrade(&self) -> Option<Runtime> {
         self.state.upgrade().map(|state| Runtime { state })
@@ -556,6 +607,28 @@ pub struct RuntimeBuilder {
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
     disable_async_tree_computation: bool,
+}
+
+impl fmt::Debug for RuntimeBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("RuntimeBuilder");
+        debug.field("config", &self.config);
+        #[cfg(feature = "plugins")]
+        debug.field(
+            "plugins_manager",
+            &self.plugins_manager.as_ref().map(|_| ".."),
+        );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        #[cfg(test)]
+        debug.field("subregions", &self.subregions);
+        #[cfg(test)]
+        debug.field(
+            "disable_async_tree_computation",
+            &self.disable_async_tree_computation,
+        );
+        debug.finish()
+    }
 }
 
 impl RuntimeBuilder {
@@ -732,8 +805,24 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
+impl fmt::Debug for Runtime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Runtime")
+            .field("zid", &self.state.zid)
+            .field("whatami", &self.state.whatami)
+            .field("namespace", &self.state.namespace)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl fmt::Debug for DynamicRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DynamicRuntime").field(&"..").finish()
+    }
+}
 
 impl Deref for DynamicRuntime {
     type Target = Arc<dyn IRuntime>;

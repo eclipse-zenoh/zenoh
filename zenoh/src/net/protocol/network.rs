@@ -1192,3 +1192,179 @@ pub(crate) struct SuccessorEntry {
     pub(crate) destination: ZenohIdProto,
     pub(crate) successor: ZenohIdProto,
 }
+
+#[cfg(all(test, feature = "test"))]
+mod tests {
+    use std::{
+        collections::{HashMap, HashSet},
+        mem,
+        sync::Arc,
+    };
+
+    use futures::executor::block_on;
+    use zenoh_config::Config;
+    use zenoh_protocol::core::{Bound, WhatAmI, WhatAmIMatcher, ZenohIdProto};
+
+    use super::Network;
+    use crate::net::{
+        common::AutoConnect,
+        protocol::linkstate::LinkState,
+        runtime::{Runtime, RuntimeBuilder},
+    };
+
+    /// Builds a minimal [`Runtime`] needed to construct a [`Network`].
+    fn minimal_runtime() -> Runtime {
+        let mut config = Config::default();
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.adminspace.set_enabled(false).unwrap();
+        config.plugins_loading.set_enabled(false).unwrap();
+        block_on(
+            RuntimeBuilder::new(crate::api::config::Config(config))
+                .subregions(vec![])
+                .disable_async_tree_computation(true)
+                .build(),
+        )
+        .unwrap()
+    }
+
+    /// Verifies that [`Network`] does **not** overwrite a node's existing
+    /// `links` when the incoming gossip linkstate has an empty `links` field, even if its sequence
+    /// number is strictly higher.
+    #[test]
+    fn test_gossip_singlehop_linkstate_empty_links_not_overwritten() {
+        use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
+
+        crate::try_init_log_from_env();
+
+        let gwy_zid = "a".parse::<ZenohIdProto>().unwrap();
+        let p1_zid = "b0".parse::<ZenohIdProto>().unwrap();
+        let p2_zid = "b1".parse::<ZenohIdProto>().unwrap();
+
+        let mut net = Network::new(
+            "[Test]".to_string(),
+            gwy_zid,
+            minimal_runtime(),
+            /* full_linkstate */ false,
+            /* gossip */ true,
+            /* gossip_multihop */ false,
+            WhatAmIMatcher::empty(),
+            AutoConnect::disabled(),
+            HashMap::new(),
+            Bound::South,
+        );
+
+        for p_zid in [p1_zid, p2_zid] {
+            let (transport, transport_guard) =
+                mock_transport_unicast(p_zid, WhatAmI::Peer, Arc::new(|_| {}));
+            mem::forget(transport_guard);
+            net.add_link(transport);
+        }
+
+        net.link_states(
+            vec![
+                LinkState {
+                    psid: 1,
+                    sn: 0,
+                    zid: Some(gwy_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 2,
+                    sn: 0,
+                    zid: Some(p2_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 0,
+                    sn: 0,
+                    zid: Some(p1_zid),
+                    whatami: Some(WhatAmI::Peer),
+                    locators: None,
+                    links: vec![1, 2],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+            ],
+            p1_zid,
+        );
+
+        net.link_states(
+            vec![
+                LinkState {
+                    psid: 1,
+                    sn: 1,
+                    zid: Some(gwy_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 2,
+                    sn: 1,
+                    zid: Some(p1_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 0,
+                    sn: 1,
+                    zid: Some(p2_zid),
+                    whatami: Some(WhatAmI::Peer),
+                    locators: None,
+                    links: vec![1, 2],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+            ],
+            p2_zid,
+        );
+
+        assert_eq!(
+            net.graph.node_count(),
+            3,
+            "there should be exactly three nodes in a's graph"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .map(|n| n.zid)
+                .collect::<HashSet<_>>(),
+            [gwy_zid, p1_zid, p2_zid].into_iter().collect(),
+            "a's graph should contain exactly the expected ZIDs"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .filter(|n| n.zid == p1_zid && !n.links.is_empty())
+                .count(),
+            1,
+            "b0's links info in a's graph should be non-empty"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .filter(|n| n.zid == p2_zid && !n.links.is_empty())
+                .count(),
+            1,
+            "b1's links info in a's graph should be non-empty"
+        );
+    }
+}

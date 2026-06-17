@@ -17,6 +17,7 @@ use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
+use zenoh_test::{get_free_tcp_port, get_free_udp_port};
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -524,7 +525,9 @@ async fn openclose_universal_transport_tls(
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport(&endpoint).await;
 }
 
@@ -532,7 +535,9 @@ async fn openclose_tcp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
 
@@ -540,7 +545,9 @@ async fn openclose_tcp_only_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport(&endpoint).await;
 }
 
@@ -548,7 +555,9 @@ async fn openclose_udp_only() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
 
@@ -557,7 +566,9 @@ async fn openclose_udp_only_with_lowlatency_transport() {
 #[ignore]
 async fn openclose_ws_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport(&endpoint).await;
 }
 
@@ -566,7 +577,9 @@ async fn openclose_ws_only() {
 #[ignore]
 async fn openclose_ws_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_lowlatency_transport(&endpoint).await;
 }
 
@@ -606,56 +619,72 @@ async fn openclose_unix_only() {
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only() {
-    let endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
+    let endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, false, false).await;
 }
 
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_with_mtls() {
-    let endpoint: EndPoint = format!("tls/localhost:{}", 13031).parse().unwrap();
+    let endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, false, true).await;
 }
 
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_with_no_common_name() {
-    let endpoint: EndPoint = format!("tls/localhost:{}", 13032).parse().unwrap();
+    let endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, true, false).await;
 }
 
 #[cfg(feature = "transport_tls")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tls_only_with_mtls_and_no_common_name() {
-    let endpoint: EndPoint = format!("tls/localhost:{}", 13033).parse().unwrap();
+    let endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, true, true).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only() {
-    let endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+    let endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, false, false).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_with_mtls() {
-    let endpoint: EndPoint = format!("quic/localhost:{}", 13041).parse().unwrap();
+    let endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, false, true).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_with_no_common_name() {
-    let endpoint: EndPoint = format!("quic/localhost:{}", 13042).parse().unwrap();
+    let endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, true, false).await;
 }
 
 #[cfg(feature = "transport_quic")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_quic_only_with_mtls_and_no_common_name() {
-    let endpoint: EndPoint = format!("quic/localhost:{}", 13043).parse().unwrap();
+    let endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     openclose_universal_transport_tls(endpoint, true, true).await;
 }
 
@@ -665,12 +694,13 @@ async fn openclose_quic_only_with_mtls_and_no_common_name() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_tcp_port();
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13001).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], port).parse().unwrap();
 
-    let connect_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13001)
+    let connect_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
@@ -684,14 +714,15 @@ async fn openclose_tcp_only_connect_with_interface_restriction() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_tcp_port();
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], 13002)
+    let listen_endpoint: EndPoint = format!("tcp/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], 13002).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("tcp/{}:{}", addrs[0], port).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -703,12 +734,13 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_udp_port();
 
     zenoh_util::init_log_from_env_or("error");
 
-    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13004).parse().unwrap();
+    let listen_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], port).parse().unwrap();
 
-    let connect_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13004)
+    let connect_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
@@ -722,13 +754,14 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_udp_port();
 
     zenoh_util::init_log_from_env_or("error");
-    let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], 13005)
+    let listen_endpoint: EndPoint = format!("udp/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], 13005).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], port).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -751,9 +784,10 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_udp_port();
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13006).parse().unwrap();
+    let mut listen_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], port).parse().unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
@@ -767,7 +801,7 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13006)
+    let connect_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
@@ -784,9 +818,10 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_udp_port();
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], 13007)
+    let mut listen_endpoint: EndPoint = format!("quic/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
     listen_endpoint
@@ -802,7 +837,7 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], 13007).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("quic/{}:{}", addrs[0], port).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
@@ -817,9 +852,10 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_tcp_port();
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13008).parse().unwrap();
+    let mut listen_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], port).parse().unwrap();
     listen_endpoint
         .config_mut()
         .extend_from_iter(
@@ -833,7 +869,7 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13008)
+    let connect_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
 
@@ -850,9 +886,10 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
 
     zenoh_util::init_log_from_env_or("error");
     let addrs = get_ipv4_ipaddrs(None);
+    let port = get_free_tcp_port();
     let (ca, cert, key) = get_tls_certs();
 
-    let mut listen_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], 13009)
+    let mut listen_endpoint: EndPoint = format!("tls/{}:{}#iface=lo", addrs[0], port)
         .parse()
         .unwrap();
     listen_endpoint
@@ -868,7 +905,7 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
         )
         .unwrap();
 
-    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], 13009).parse().unwrap();
+    let connect_endpoint: EndPoint = format!("tls/{}:{}", addrs[0], port).parse().unwrap();
 
     // should not connect to local interface and external address
     openclose_transport(&listen_endpoint, &connect_endpoint, false).await;

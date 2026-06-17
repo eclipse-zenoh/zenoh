@@ -42,6 +42,17 @@ pub struct SegmentImpl<ID: SegmentID> {
     id: ID,
 }
 
+impl<ID: SegmentID> std::fmt::Debug for SegmentImpl<ID> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SegmentImpl")
+            .field("lock_fd", &self.lock_fd)
+            .field("len", &self.len)
+            .field("data_ptr", &self.data_ptr)
+            .field("id", &self.id.into())
+            .finish()
+    }
+}
+
 // PUBLIC
 impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {

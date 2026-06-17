@@ -183,6 +183,18 @@ pub struct TlsServerConfig {
     pub tls_close_link_on_expiration: bool,
 }
 
+impl Debug for TlsServerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TlsServerConfig")
+            .field("server_config", &"..")
+            .field(
+                "tls_close_link_on_expiration",
+                &self.tls_close_link_on_expiration,
+            )
+            .finish()
+    }
+}
+
 impl TlsServerConfig {
     pub async fn new(config: &Config<'_>, secure: bool) -> ZResult<Self> {
         let tls_close_link_on_expiration: bool = match config.get(TLS_CLOSE_LINK_ON_EXPIRATION) {
@@ -315,6 +327,18 @@ impl TlsServerConfig {
 pub struct TlsClientConfig {
     pub client_config: ClientConfig,
     pub tls_close_link_on_expiration: bool,
+}
+
+impl Debug for TlsClientConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TlsClientConfig")
+            .field("client_config", &"..")
+            .field(
+                "tls_close_link_on_expiration",
+                &self.tls_close_link_on_expiration,
+            )
+            .finish()
+    }
 }
 
 impl TlsClientConfig {

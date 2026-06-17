@@ -49,6 +49,7 @@ fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
     }
 }
 
+#[derive(Debug)]
 pub struct KeyExprFuzzer<Rng: rand::Rng>(pub Rng);
 impl<Rng: rand::Rng> Iterator for KeyExprFuzzer<Rng> {
     type Item = OwnedKeyExpr;

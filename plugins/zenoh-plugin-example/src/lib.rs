@@ -66,6 +66,7 @@ fn spawn_runtime(task: impl Future<Output = ()> + Send + 'static) {
 }
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
+#[derive(Debug)]
 pub struct ExamplePlugin {}
 
 // declaration of the plugin's VTable for zenohd to find the plugin's functions to be called

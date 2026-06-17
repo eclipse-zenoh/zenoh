@@ -201,6 +201,12 @@ pub struct Notifier<T> {
     inner: Arc<NotifierInner<T>>,
 }
 
+impl<T> fmt::Debug for Notifier<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Notifier").field(&"..").finish()
+    }
+}
+
 impl<T> Clone for Notifier<T> {
     fn clone(&self) -> Self {
         Self {

@@ -81,7 +81,7 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 /*               ZSLICE              */
 /*************************************/
 #[cfg(feature = "shared-memory")]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ZSliceKind {
     Raw = 0,
@@ -310,7 +310,11 @@ impl Writer for ZSliceWriter<'_> {
     }
 
     fn write_exact(&mut self, bytes: &[u8]) -> Result<(), DidntWrite> {
-        self.write(bytes).map(|_| ())
+        if bytes.is_empty() {
+            Ok(())
+        } else {
+            self.write(bytes).map(|_| ())
+        }
     }
 
     fn remaining(&self) -> usize {

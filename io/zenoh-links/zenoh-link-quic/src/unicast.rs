@@ -217,6 +217,7 @@ impl fmt::Debug for LinkUnicastQuic {
     }
 }
 
+#[derive(Debug)]
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,

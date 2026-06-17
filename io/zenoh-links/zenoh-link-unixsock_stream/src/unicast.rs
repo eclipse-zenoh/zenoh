@@ -209,6 +209,15 @@ pub struct LinkManagerUnicastUnixSocketStream {
     listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastUnixSocketStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastUnixSocketStream")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastUnixSocketStream {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

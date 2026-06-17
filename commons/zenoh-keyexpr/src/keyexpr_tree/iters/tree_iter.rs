@@ -26,6 +26,19 @@ where
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for TreeIter<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TreeIter")
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     TreeIter<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -82,6 +95,19 @@ pub struct TreeIterMut<
     _marker: core::marker::PhantomData<Weight>,
 }
 
+impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight> core::fmt::Debug
+    for TreeIterMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+    <Children::Assoc as IChildren<Node>>::Node: 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TreeIterMut")
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
 impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
     TreeIterMut<'a, Children, Node, Weight>
 where
@@ -127,6 +153,12 @@ where
 }
 
 pub struct DepthInstrumented<T>(T);
+
+impl<T> core::fmt::Debug for DepthInstrumented<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("DepthInstrumented").field(&"..").finish()
+    }
+}
 impl<
         'a,
         Children: IChildrenProvider<Node>,

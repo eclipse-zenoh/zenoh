@@ -306,6 +306,15 @@ pub struct LinkManagerUnicastTls {
     listeners: ListenersUnicastIP,
 }
 
+impl fmt::Debug for LinkManagerUnicastTls {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastTls")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {

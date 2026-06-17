@@ -12,11 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
 
 use zenoh_core::ztimeout;
-
-use crate::common::{get_tcp_locator, TestSessions};
+use zenoh_test::{get_tcp_locator, TestSessions};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_liveliness_subscriber_clique() {
@@ -1237,7 +1235,7 @@ async fn test_liveliness_subscriber_double_router_before() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -1255,7 +1253,10 @@ async fn test_liveliness_subscriber_double_router_before() {
             .endpoints
             .set(vec![ROUTER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1338,7 +1339,7 @@ async fn test_liveliness_subscriber_double_router_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -1355,7 +1356,10 @@ async fn test_liveliness_subscriber_double_router_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1438,7 +1442,7 @@ async fn test_liveliness_subscriber_double_router_after() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -1460,7 +1464,10 @@ async fn test_liveliness_subscriber_double_router_after() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1536,7 +1543,7 @@ async fn test_liveliness_subscriber_double_router_history_before() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -1554,7 +1561,10 @@ async fn test_liveliness_subscriber_double_router_history_before() {
             .endpoints
             .set(vec![ROUTER_SUB_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1645,7 +1655,7 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -1663,7 +1673,10 @@ async fn test_liveliness_subscriber_double_router_history_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1750,7 +1763,7 @@ async fn test_liveliness_subscriber_double_router_history_after() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -1774,7 +1787,10 @@ async fn test_liveliness_subscriber_double_router_history_after() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1857,7 +1873,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1869,7 +1885,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1882,7 +1901,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_before() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1968,7 +1990,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1980,7 +2002,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -1996,7 +2021,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2080,7 +2108,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -2092,7 +2120,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2113,7 +2144,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_after() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2195,7 +2229,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -2207,7 +2241,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2220,7 +2257,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_before() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2313,7 +2353,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -2325,7 +2365,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2342,7 +2385,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2431,7 +2477,7 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -2443,7 +2489,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
 
     let client_sub = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![peer_dummy_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![peer_dummy_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -2466,7 +2515,10 @@ async fn test_liveliness_subscriber_double_clientviapeer_history_after() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -3104,7 +3156,7 @@ async fn test_liveliness_subget_router_before() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -3122,7 +3174,10 @@ async fn test_liveliness_subget_router_before() {
             .endpoints
             .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -3203,7 +3258,7 @@ async fn test_liveliness_subget_router_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -3222,7 +3277,10 @@ async fn test_liveliness_subget_router_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -3299,7 +3357,7 @@ async fn test_liveliness_subget_router_history_before() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -3317,7 +3375,10 @@ async fn test_liveliness_subget_router_history_before() {
             .endpoints
             .set(vec![ROUTER_SUBGET_ENDPOINT.parse::<EndPoint>().unwrap()])
             .unwrap();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -3402,7 +3463,7 @@ async fn test_liveliness_subget_router_history_middle() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -3422,7 +3483,10 @@ async fn test_liveliness_subget_router_history_middle() {
 
     let client_tok = {
         let mut c = zenoh_config::Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         let s = ztimeout!(zenoh::open(c)).unwrap();
@@ -3503,7 +3567,7 @@ async fn test_liveliness_regression_1() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3520,7 +3584,7 @@ async fn test_liveliness_regression_1() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint, peer_tok_endpoint])
+            .set(vec![router_endpoint.into(), peer_tok_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3589,7 +3653,7 @@ async fn test_liveliness_regression_2() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![peer_tok1_endpoint.clone()])
+            .set(vec![peer_tok1_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3608,7 +3672,7 @@ async fn test_liveliness_regression_2() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![peer_tok1_endpoint, peer_sub_endpoint])
+            .set(vec![peer_tok1_endpoint.into(), peer_sub_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3681,7 +3745,7 @@ async fn test_liveliness_regression_2_history() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![peer_tok1_endpoint.clone()])
+            .set(vec![peer_tok1_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3707,7 +3771,7 @@ async fn test_liveliness_regression_2_history() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![peer_tok1_endpoint, peer_sub_endpoint])
+            .set(vec![peer_tok1_endpoint.into(), peer_sub_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3777,7 +3841,7 @@ async fn test_liveliness_regression_3() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3794,7 +3858,7 @@ async fn test_liveliness_regression_3() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3810,7 +3874,7 @@ async fn test_liveliness_regression_3() {
         let mut c = zenoh_config::Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint, peer_tok_endpoint])
+            .set(vec![router_endpoint.into(), peer_tok_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3893,7 +3957,7 @@ async fn test_liveliness_issue_1470() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router0_endpoint.clone()])
+            .set(vec![router0_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -3916,7 +3980,7 @@ async fn test_liveliness_issue_1470() {
             .unwrap();
         c.connect
             .endpoints
-            .set(vec![router0_endpoint, router1_endpoint])
+            .set(vec![router0_endpoint.into(), router1_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -3932,7 +3996,7 @@ async fn test_liveliness_issue_1470() {
         c.set_id(Some(ZenohId::from_str("c0").unwrap())).unwrap();
         c.connect
             .endpoints
-            .set(vec![peer_endpoint.clone()])
+            .set(vec![peer_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
@@ -3976,7 +4040,7 @@ async fn test_liveliness_issue_1470() {
     let client1 = {
         let mut c = zenoh_config::Config::default();
         c.set_id(Some(ZenohId::from_str("c1").unwrap())).unwrap();
-        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Client));
         ztimeout!(zenoh::open(c)).unwrap()

@@ -13,6 +13,7 @@
 //
 
 use std::{
+    fmt,
     future::{Future, IntoFuture},
     pin::Pin,
     time::Duration,
@@ -35,6 +36,16 @@ pub struct CloseBuilder<TCloseable: Closeable> {
     closee: TCloseable::TClosee,
     timeout: Duration,
     close_args: <TCloseable::TClosee as Closee>::CloseArgs,
+}
+
+impl<TCloseable: Closeable> fmt::Debug for CloseBuilder<TCloseable> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CloseBuilder")
+            .field("closee", &"..")
+            .field("timeout", &self.timeout)
+            .field("close_args", &"..")
+            .finish()
+    }
 }
 
 // NOTE: `Closeable` is only pub(crate) because it is a zenoh-internal trait, so we don't
@@ -138,6 +149,15 @@ pub struct BackgroundCloseBuilder<TOutput: Send + 'static> {
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> fmt::Debug for BackgroundCloseBuilder<TOutput> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("BackgroundCloseBuilder")
+            .field(&"..")
+            .finish()
+    }
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
 #[doc(hidden)]
 impl<TOutput: Send + 'static> BackgroundCloseBuilder<TOutput> {
     fn new(inner: Pin<Box<dyn Future<Output = TOutput> + Send>>) -> Self {
@@ -182,6 +202,13 @@ impl<TOutput: Send + 'static> IntoFuture for BackgroundCloseBuilder<TOutput> {
 #[doc(hidden)]
 pub struct NolocalJoinHandle<TOutput: Send + 'static> {
     rx: Receiver<TOutput>,
+}
+
+#[cfg(all(feature = "unstable", feature = "internal"))]
+impl<TOutput: Send + 'static> fmt::Debug for NolocalJoinHandle<TOutput> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("NolocalJoinHandle").field(&"..").finish()
+    }
 }
 
 #[cfg(all(feature = "unstable", feature = "internal"))]

@@ -48,7 +48,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         } = x;
 
         // Header
@@ -61,7 +61,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (ext_south.is_some() as u8);
+            + (ext_remote_bound.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -108,7 +108,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
         }
-        if let Some(south) = ext_south.as_ref() {
+        if let Some(south) = ext_remote_bound.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (south, n_exts != 0))?;
         }
@@ -159,7 +159,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
-        let mut ext_south = None;
+        let mut ext_remote_bound = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -199,7 +199,7 @@ where
                 }
                 ext::RemoteBound::ID => {
                     let (q, ext): (ext::RemoteBound, bool) = eodec.read(&mut *reader)?;
-                    ext_south = Some(q);
+                    ext_remote_bound = Some(q);
                     has_ext = ext;
                 }
                 _ => {
@@ -219,7 +219,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         })
     }
 }
@@ -242,7 +242,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         } = x;
 
         // Header
@@ -257,7 +257,7 @@ where
             + (ext_mlink.is_some() as u8)
             + (ext_lowlatency.is_some() as u8)
             + (ext_compression.is_some() as u8)
-            + (ext_south.is_some() as u8);
+            + (ext_remote_bound.is_some() as u8);
 
         #[cfg(feature = "shared-memory")]
         {
@@ -303,7 +303,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (compression, n_exts != 0))?;
         }
-        if let Some(south) = ext_south.as_ref() {
+        if let Some(south) = ext_remote_bound.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (south, n_exts != 0))?;
         }
@@ -353,7 +353,7 @@ where
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
         let mut ext_compression = None;
-        let mut ext_south = None;
+        let mut ext_remote_bound = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -393,7 +393,7 @@ where
                 }
                 ext::RemoteBound::ID => {
                     let (q, ext): (ext::RemoteBound, bool) = eodec.read(&mut *reader)?;
-                    ext_south = Some(q);
+                    ext_remote_bound = Some(q);
                     has_ext = ext;
                 }
                 _ => {
@@ -412,7 +412,7 @@ where
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         })
     }
 }

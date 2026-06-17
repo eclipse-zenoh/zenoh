@@ -18,6 +18,7 @@ use zenoh_core::zasynclock;
 
 use crate::Condition;
 
+#[derive(Debug)]
 pub struct Mvar<T> {
     inner: Mutex<Option<T>>,
     cond_put: Condition,

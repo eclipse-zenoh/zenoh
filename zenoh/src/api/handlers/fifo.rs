@@ -31,6 +31,7 @@ use crate::api::handlers::{callback::Callback, IntoHandler, API_DATA_RECEPTION_C
 /// E.g., a slow subscriber could block the underlying Zenoh thread because it is not emptying the
 /// [`FifoChannel`] fast enough. In this case, you may want to look into [`handlers::RingChannel`](crate::api::handlers::RingChannel) that
 /// will drop samples when full.
+#[derive(Debug)]
 pub struct FifoChannel {
     capacity: usize,
 }
@@ -195,6 +196,7 @@ impl<T> IntoIterator for FifoChannelHandler<T> {
 }
 
 /// An iterator over the msgs received from a channel.
+#[derive(Debug)]
 pub struct Iter<'a, T>(flume::Iter<'a, T>);
 
 impl<T> Iterator for Iter<'_, T> {
@@ -206,6 +208,7 @@ impl<T> Iterator for Iter<'_, T> {
 }
 
 /// A non-blocking iterator over the msgs received from a channel.
+#[derive(Debug)]
 pub struct TryIter<'a, T>(flume::TryIter<'a, T>);
 
 impl<T> Iterator for TryIter<'_, T> {
@@ -235,6 +238,7 @@ impl<T> ExactSizeIterator for Drain<'_, T> {
 }
 
 /// An owned iterator over the msgs received from a channel.
+#[derive(Debug)]
 pub struct IntoIter<T>(flume::IntoIter<T>);
 
 impl<T> Iterator for IntoIter<T> {
@@ -264,6 +268,7 @@ impl<T> FifoChannelHandler<T> {
 ///
 /// Can be created via [`FifoChannelHandler::recv_async`] or [`FifoChannelHandler::into_recv_async`].
 #[must_use = "futures/streams/sinks do nothing unless you `.await` or poll them"]
+#[derive(Debug)]
 pub struct RecvFut<'a, T>(flume::r#async::RecvFut<'a, T>);
 
 impl<T> Future for RecvFut<'_, T> {
@@ -297,7 +302,7 @@ impl<T> FifoChannelHandler<T> {
 /// A stream which allows asynchronously receiving messages.
 ///
 /// Can be created via [`FifoChannelHandler::stream`] or [`FifoChannelHandler::into_stream`].
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct RecvStream<'a, T>(flume::r#async::RecvStream<'a, T>);
 
 impl<T> RecvStream<'_, T> {

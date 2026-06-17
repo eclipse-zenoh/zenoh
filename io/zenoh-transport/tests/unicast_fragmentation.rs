@@ -30,6 +30,7 @@ use zenoh_protocol::{
     network::{push::ext::QoSType, NetworkMessage, NetworkMessageExt, NetworkMessageMut, Push},
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
@@ -90,6 +91,7 @@ impl TransportEventHandler for SHRouter {
 }
 
 // Transport Callback for the router
+#[derive(Debug)]
 pub struct SCRouter {
     count: Arc<AtomicUsize>,
 }
@@ -139,7 +141,7 @@ impl TransportEventHandler for SHClient {
 }
 
 // Transport Callback for the client
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
@@ -306,7 +308,9 @@ async fn fragmentation_unicast_tcp_only() {
     zenoh_util::init_log_from_env_or("error");
 
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16800).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap()];
     // Run
     run_single(&endpoints, &endpoints).await;
 }

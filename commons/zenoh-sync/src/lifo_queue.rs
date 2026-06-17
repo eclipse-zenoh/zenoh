@@ -16,6 +16,7 @@ use std::sync::{Condvar, Mutex};
 use zenoh_collections::StackBuffer;
 use zenoh_core::zlock;
 
+#[derive(Debug)]
 pub struct LifoQueue<T> {
     not_empty: Condvar,
     not_full: Condvar,

@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #![cfg(feature = "unstable")]
-mod common;
 
 use std::{
     sync::{
@@ -29,8 +28,7 @@ use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_result::bail;
-
-use crate::common::{get_free_port, get_tcp_locator};
+use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -474,7 +472,7 @@ impl Recipe {
 async fn gossip() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    let locator = format!("tcp/127.0.0.1:{}", get_free_port());
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprGossip");
     let msg_size = 8;
 
@@ -561,7 +559,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -578,7 +576,10 @@ async fn gossip_regression_1() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.listen
             .endpoints
             .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
@@ -599,7 +600,7 @@ async fn gossip_regression_1() -> Result<()> {
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -652,7 +653,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -670,7 +671,10 @@ async fn gossip_regression_2() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -726,7 +730,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -745,7 +749,10 @@ async fn gossip_regression_3() -> Result<()> {
 
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.listen
             .endpoints
             .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
@@ -767,7 +774,7 @@ async fn gossip_regression_3() -> Result<()> {
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![peer_endpoint]).unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -811,7 +818,7 @@ async fn gossip_regression_3() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
     zenoh::init_log_from_env_or("error");
-    let locator = format!("tcp/127.0.0.1:{}", get_free_port());
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
 
@@ -895,7 +902,7 @@ async fn three_node_combination() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let locator = format!("tcp/127.0.0.1:{}", get_free_port());
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
                 let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("three_node_combination_keyexpr_getqueryable_{idx}");
@@ -1071,7 +1078,7 @@ async fn two_node_combination() -> Result<()> {
             let ke_getliveliness = format!("two_node_combination_keyexpr_getliveliness_{idx}");
 
             let (node1_listen_connect, node2_listen_connect) = {
-                let locator = format!("tcp/127.0.0.1:{}", get_free_port());
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
                 let listen = vec![locator];
                 let connect = vec![];
 
@@ -1219,7 +1226,7 @@ async fn three_node_combination_multicast() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let port = get_free_port();
+                let port = get_free_tcp_port();
                 let unicast_locator = format!("tcp/127.0.0.1:{}", port);
                 let multicast_locator = format!("udp/224.0.0.1:{}", port);
 
@@ -1332,9 +1339,9 @@ async fn router_linkstate() -> Result<()> {
         .map(|d| (1024, d))
         .map(|(msg_size, (delay1, delay2, delay3))| {
             idx += 1;
-            let locator1 = format!("tcp/127.0.0.1:{}", get_free_port());
-            let locator2 = format!("tcp/127.0.0.1:{}", get_free_port());
-            let locator3 = format!("tcp/127.0.0.1:{}", get_free_port());
+            let locator1 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator2 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator3 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
             let ke_pubsub = format!("router_linkstate_keyexpr_pubsub_{idx}");
             let ke_getqueryable = format!("router_linkstate_keyexpr_getqueryable_{idx}");
@@ -1532,7 +1539,7 @@ async fn scouting_delay_regression() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![router_endpoint.clone()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1547,7 +1554,10 @@ async fn scouting_delay_regression() -> Result<()> {
     let start = std::time::Instant::now();
     let peer2 = {
         let mut c = Config::default();
-        c.connect.endpoints.set(vec![router_endpoint]).unwrap();
+        c.connect
+            .endpoints
+            .set(vec![router_endpoint.into()])
+            .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
         ztimeout!(zenoh::open(c)).unwrap()

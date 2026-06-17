@@ -28,6 +28,7 @@ use crate::api::buffer::{
 };
 
 /// Wrapper for SHM buffer types that is used for safe typed access to SHM data
+#[derive(Debug)]
 pub struct Typed<T, Buf> {
     buf: Buf,
     _phantom: PhantomData<T>,

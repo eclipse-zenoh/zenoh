@@ -207,6 +207,11 @@ impl FaceStateBuilder {
     }
 
     pub(crate) fn build(self) -> FaceState {
+        #[cfg(feature = "stats")]
+        debug_assert!(
+            self.0.is_local || self.0.stats.is_some(),
+            "non-local faces must be built with transport stats"
+        );
         self.0
     }
 }

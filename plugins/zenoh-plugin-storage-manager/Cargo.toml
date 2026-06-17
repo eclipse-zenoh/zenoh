@@ -63,12 +63,11 @@ serde_json = { workspace = true }
 zenoh_backend_traits = { workspace = true }
 
 [dev-dependencies]
-async-global-executor = { workspace = true }
 uhlc = { workspace = true }
 
 [package.metadata.deb]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.8.0)"
+depends = "zenohd (=1.9.0)"
 license-file = ["../../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 name = "zenoh-plugin-storage-manager"

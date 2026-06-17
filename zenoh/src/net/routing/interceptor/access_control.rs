@@ -776,9 +776,9 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
         for ((((username, interface), cert_common_name), link_protocol), zid) in
             iter::once(username)
-                .cartesian_product(interfaces.into_iter())
-                .cartesian_product(cert_common_names.into_iter())
-                .cartesian_product(link_protocols.into_iter())
+                .cartesian_product(interfaces)
+                .cartesian_product(cert_common_names)
+                .cartesian_product(link_protocols)
                 .cartesian_product(iter::once(Some(zid)))
         {
             let query = SubjectQuery {
