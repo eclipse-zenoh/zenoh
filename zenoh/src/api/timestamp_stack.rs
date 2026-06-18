@@ -443,6 +443,10 @@ pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized, R, F>(
             // Skip writing empty Vec
             return;
         }
+        if ts_stack.ts_stack.stack.len() >= zenoh_protocol::network::timestamp_stack::MAX_STACK_SIZE {
+            // Avoid producing an invalid frame that will be rejected by the codec decoder.
+            return;
+        }
         ts_stack.ts_stack.stack.push(Interception {
             flags: point
                 | if is_custom {
@@ -467,14 +471,14 @@ impl TryFrom<&zenoh_protocol::network::timestamp_stack::TimestampStack> for Time
             records: Vec::new(),
         };
         for record in &ts.stack {
-            // Skip unknonw/malformed measurement configs
+            // Skip unknown/malformed measurement configs
             let point: InterceptionPoint = match record.flags.try_into() {
                 Ok(p) => p,
                 Err(_) => {
-                    // FIXME: find a way to hold unknown inteception points
+                    // FIXME: find a way to hold unknown interception points
                     //        (required for forward-compatibility)
-                    tracing::warn!("
-                        Skipping instrumentation measurement with unknown or malformed instrumentation flags '{:b}'",
+                    tracing::warn!(
+                        "Skipping instrumentation measurement with unknown or malformed instrumentation flags '{:b}'",
                         record.flags
                     );
                     continue;

@@ -177,7 +177,7 @@ pub(crate) struct RuntimeState {
     hlc: Option<Arc<HLC>>,
     // TODO: lazy_hlc is added for timestamp instrumentation feature, in order to avoid breaking
     // existing logic that relies on state of hlc Option to check if timestamping is enabled or
-    // not. Once ts_instrumetnation is stabilized, hlc should be changed to use OnceLock instead.
+    // not. Once ts_instrumentation is stabilized, hlc should be changed to use OnceLock instead.
     #[cfg(feature = "unstable")]
     lazy_hlc: OnceLock<Arc<HLC>>,
     #[cfg(feature = "unstable")]
@@ -201,8 +201,8 @@ pub trait IRuntime: Send + Sync {
     fn next_id(&self) -> u32;
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
-    /// Returns a timestamp for timestamp instrumentation. The boolean indicates if the timsetamp
-    /// is the result of a custom user-callback or Zenoh UHLC
+    /// Returns a timestamp for timestamp instrumentation. The boolean indicates whether the timestamp
+    /// is the result of a custom user-callback or a Zenoh UHLC timestamp.
     #[cfg(feature = "unstable")]
     fn get_ts_stack_timestamp(&self, context: TsStackContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
