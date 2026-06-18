@@ -1144,8 +1144,7 @@ pub mod shm {
 /// # Timestamp Sources
 ///
 /// By default, each interception point records a Zenoh [UHLC] timestamp.
-/// Alternatively, you can register a [custom callback](crate::timestamp_stack::GetTimestampCallback) on
-/// the session via
+/// Alternatively, you can register a custom callback on the session via
 /// [`OpenBuilder::with_timestamp_callback`](crate::api::builders::session::OpenBuilder::with_timestamp_callback)
 /// to produce arbitrary timestamp formats.
 ///

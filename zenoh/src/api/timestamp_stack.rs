@@ -20,8 +20,7 @@ use crate::{net::runtime::IRuntime, session::ZenohId};
 
 /// Context passed to the user-defined timestamp callback.
 ///
-/// This struct provides the callback with information about the current Zenoh node
-/// and the interception point at which the timestamp is being generated.
+/// This struct provides the callback with information about the current Zenoh node.
 ///
 /// The struct is `#[non_exhaustive]` to allow adding new fields in the future.
 #[non_exhaustive]
@@ -226,7 +225,8 @@ impl TimestampInstrumentation {
 
 /// A timestamp measurement, either UHLC or the result of a custom user-defined callback.
 ///
-/// The semantics depend on whether a [custom timestamp callback](GetTimestampCallback)
+/// The semantics depend on whether a [custom timestamp
+/// callback](crate::api::builders::session::OpenBuilder::with_timestamp_callback)
 /// was registered on the session that performed the measurement:
 ///
 /// - **UHLC**: the default — a Zenoh UHLC hybrid logical clock timestamp.
@@ -252,8 +252,8 @@ pub enum InstrumentationTimestamp {
     ///
     /// [UHLC]: https://github.com/eclipse-zenoh/uhlc-rs
     UHLC(uhlc::Timestamp),
-    /// A timestamp in a format defined by the user's
-    /// [custom timestamp callback](GetTimestampCallback).
+    /// A timestamp in a format defined by the user's [custom timestamp
+    /// callback](crate::api::builders::session::OpenBuilder::with_timestamp_callback).
     Custom(Vec<u8>),
 }
 
