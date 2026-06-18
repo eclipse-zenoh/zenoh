@@ -389,7 +389,7 @@ impl TimestampStack {
         &self.records
     }
 
-    /// Create a new empty `TimestampStackView` with the given instrumentation config.
+    /// Create a new empty [`TimestampStack`](Self) with the given instrumentation config.
     pub(crate) fn new(instrumentation: TimestampInstrumentation) -> Self {
         Self {
             instrumentation,
