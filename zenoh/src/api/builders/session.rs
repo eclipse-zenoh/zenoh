@@ -27,10 +27,10 @@ use zenoh_result::ZResult;
 use zenoh_shm::api::client_storage::ShmClientStorage;
 
 use crate::api::session::Session;
-#[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::GetTimestampCallback;
 #[cfg(feature = "internal")]
 use crate::net::runtime::DynamicRuntime;
+#[cfg(feature = "unstable")]
+use crate::{api::timestamp_stack::GetTimestampCallback, timestamp_stack::TimestampContext};
 
 /// A builder returned by [`crate::open`] used to open a zenoh [`Session`].
 ///
@@ -115,8 +115,11 @@ where
     ///
     /// If no callback is provided, the default UHLC timestamp generation will be used.
     #[zenoh_macros::unstable]
-    pub fn with_timestamp_callback(mut self, cb: impl Into<GetTimestampCallback>) -> Self {
-        self.timestamp_callback = Some(cb.into());
+    pub fn with_timestamp_callback<F: Fn(TimestampContext) -> Vec<u8> + Send + Sync + 'static>(
+        mut self,
+        cb: F,
+    ) -> Self {
+        self.timestamp_callback = Some(Box::new(cb));
         self
     }
 }

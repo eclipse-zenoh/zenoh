@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
-
 use zenoh_protocol::{
     core::WhatAmI,
     network::timestamp_stack::{interception_point, Interception, TsStackType},
@@ -28,21 +26,15 @@ use crate::{net::runtime::IRuntime, session::ZenohId};
 /// The struct is `#[non_exhaustive]` to allow adding new fields in the future.
 #[non_exhaustive]
 #[zenoh_macros::unstable]
-pub struct TsStackContext {
+pub struct TimestampContext {
     /// The Zenoh ID of the current node.
     pub zid: ZenohId,
     /// The mode of the current node (router, peer, or client).
     pub whatami: WhatAmI,
-    /// The interception point identifier (e.g., `zenoh_protocol::network::timestamp_stack::interception_point::SEND`).
-    pub interception_point: InterceptionPoint,
 }
 
-/// Type alias for the user-defined timestamp callback.
-///
-/// The callback receives a [`TsStackContext`] and returns the raw timestamp bytes
-/// to be pushed onto the timestamp stack.
 #[zenoh_macros::unstable]
-pub type GetTimestampCallback = Arc<dyn Fn(TsStackContext) -> Vec<u8> + Send + Sync>;
+pub(crate) type GetTimestampCallback = Box<dyn Fn(TimestampContext) -> Vec<u8> + Send + Sync>;
 
 /// Identifies which interception point a timestamp record was captured at.
 ///
@@ -431,19 +423,17 @@ pub(crate) fn push_ts_interception<const ID: u8, T: IRuntime + ?Sized, R, F>(
         let Some(runtime) = get_runtime() else {
             return;
         };
-        let context = TsStackContext {
+        let context = TimestampContext {
             zid: runtime.zid(),
             whatami: runtime.whatami(),
-            interception_point: point
-                .try_into()
-                .expect("internal calls should provide valid interception point IDs"),
         };
         let (timestamp, is_custom) = runtime.get_ts_stack_timestamp(context);
         if timestamp.is_empty() {
             // Skip writing empty Vec
             return;
         }
-        if ts_stack.ts_stack.stack.len() >= zenoh_protocol::network::timestamp_stack::MAX_STACK_SIZE {
+        if ts_stack.ts_stack.stack.len() >= zenoh_protocol::network::timestamp_stack::MAX_STACK_SIZE
+        {
             // Avoid producing an invalid frame that will be rejected by the codec decoder.
             return;
         }

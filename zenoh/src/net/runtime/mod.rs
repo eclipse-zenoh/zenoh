@@ -90,7 +90,7 @@ use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
 #[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::{GetTimestampCallback, TsStackContext};
+use crate::api::timestamp_stack::{GetTimestampCallback, TimestampContext};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -204,7 +204,7 @@ pub trait IRuntime: Send + Sync {
     /// Returns a timestamp for timestamp instrumentation. The boolean indicates whether the timestamp
     /// is the result of a custom user-callback or a Zenoh UHLC timestamp.
     #[cfg(feature = "unstable")]
-    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> (Vec<u8>, bool);
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
@@ -274,7 +274,7 @@ impl IRuntime for RuntimeState {
     }
 
     #[cfg(feature = "unstable")]
-    fn get_ts_stack_timestamp(&self, context: TsStackContext) -> (Vec<u8>, bool) {
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool) {
         if let Some(cb) = &self.timestamp_callback {
             return (cb(context), true);
         }

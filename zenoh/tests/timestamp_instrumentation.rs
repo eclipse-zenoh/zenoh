@@ -20,8 +20,8 @@ use zenoh::{
     config::WhatAmI,
     query::ConsolidationMode,
     timestamp_stack::{
-        GetTimestampCallback, InstrumentationTimestamp, InterceptionPoint,
-        TimestampInstrumentation, TimestampInstrumentationBuilder,
+        InstrumentationTimestamp, InterceptionPoint, TimestampContext, TimestampInstrumentation,
+        TimestampInstrumentationBuilder,
     },
 };
 use zenoh_core::ztimeout;
@@ -1380,7 +1380,7 @@ async fn custom_callback_pub_sub() {
     zenoh_util::init_log_from_env_or("error");
     let ke = "test/ts_instr/custom_callback/pub_sub";
     let custom_bytes = b"custom_ts_123".to_vec();
-    let cb: GetTimestampCallback = Arc::new(move |_ctx| custom_bytes.clone());
+    let cb = move |_ctx| custom_bytes.clone();
 
     let instr = make_instrumentation(true, false, false);
 
@@ -1415,8 +1415,8 @@ async fn custom_callback_query_reply() {
     let custom_bytes_query = b"custom_query_ts".to_vec();
     let custom_bytes_reply = b"custom_reply_ts".to_vec();
 
-    let cb_query: GetTimestampCallback = Arc::new(move |_ctx| custom_bytes_query.clone());
-    let cb_reply: GetTimestampCallback = Arc::new(move |_ctx| custom_bytes_reply.clone());
+    let cb_query = move |_ctx| custom_bytes_query.clone();
+    let cb_reply = move |_ctx| custom_bytes_reply.clone();
 
     let instr = make_instrumentation(true, false, true);
 
@@ -1497,21 +1497,21 @@ async fn custom_callback_context() {
     use std::sync::Mutex;
     #[derive(Clone)]
     struct ContextCapture {
-        contexts: Arc<Mutex<Vec<(zenoh::session::ZenohId, WhatAmI, InterceptionPoint)>>>,
+        contexts: Arc<Mutex<Vec<(zenoh::session::ZenohId, WhatAmI)>>>,
     }
     let capture = ContextCapture {
         contexts: Arc::new(Mutex::new(Vec::new())),
     };
     let capture_clone = capture.clone();
 
-    let cb: GetTimestampCallback = Arc::new(move |ctx| {
+    let cb = move |ctx: TimestampContext| {
         capture_clone
             .contexts
             .lock()
             .unwrap()
-            .push((ctx.zid, ctx.whatami, ctx.interception_point));
+            .push((ctx.zid, ctx.whatami));
         b"ctx_ts".to_vec()
-    });
+    };
 
     let instr = make_instrumentation(true, false, true);
 
@@ -1536,12 +1536,10 @@ async fn custom_callback_context() {
         // SEND context
         assert_eq!(contexts[0].0, expected_zid);
         assert_eq!(contexts[0].1, WhatAmI::Peer);
-        assert_eq!(contexts[0].2, InterceptionPoint::Send);
 
         // RECEIVE context
         assert_eq!(contexts[1].0, expected_zid);
         assert_eq!(contexts[1].1, WhatAmI::Peer);
-        assert_eq!(contexts[1].2, InterceptionPoint::Receive);
     }
     session.close().await.unwrap();
 }
