@@ -176,15 +176,6 @@ fn recv_with_dst_inner(
                     local_port,
                 ));
             }
-            #[cfg(not(target_os = "freebsd"))]
-            (libc::IPPROTO_IPV6, libc::IPV6_RECVPKTINFO) => {
-                let pktinfo = unsafe { ptr::read_unaligned(p as *const libc::in6_pktinfo) };
-                addr_dst = Some(SocketAddr::new(
-                    IpAddr::V6(Ipv6Addr::from(pktinfo.ipi6_addr.s6_addr)),
-                    local_port,
-                ));
-            }
-            #[cfg(target_os = "freebsd")]
             (libc::IPPROTO_IPV6, libc::IPV6_PKTINFO) => {
                 let pktinfo = unsafe { ptr::read_unaligned(p as *const libc::in6_pktinfo) };
                 addr_dst = Some(SocketAddr::new(
