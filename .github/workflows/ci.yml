@@ -522,6 +522,23 @@ jobs:
         run: |
           find . -name "*.profraw" -type f -delete
 
+  freebsd:
+    name: FreeBSD VM tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
+      - name: Run checks on FreeBSD VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          run: |
+            pkg install -y rust
+            cargo install --locked cargo-nextest
+            cargo check --workspace
+            cargo nextest run -p zenoh -F test
+
   # NOTE: In GitHub repository settings, the "Require status checks to pass
   # before merging" branch protection rule ensures that commits are only merged
   # from branches where specific status checks have passed. These checks are
@@ -543,6 +560,7 @@ jobs:
         markdown_lint,
         doc,
         coverage,
+        freebsd,
       ]
     if: always()
     steps:
