@@ -408,7 +408,18 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = self.context.runtime.state.config.insert_json5(key, json) {
+                        let config = &self.context.runtime.state.config;
+                        if let Err(e) =
+                            config
+                                .try_insert_json5_array_item(key, json)
+                                .and_then(|applied| {
+                                    if applied {
+                                        Ok(())
+                                    } else {
+                                        config.insert_json5(key, json)
+                                    }
+                                })
+                        {
                             error!(
                                 "Error inserting conf value @/{}/{}/config/{} : {} - {}",
                                 self.context.runtime.state.zid,
@@ -431,7 +442,14 @@ impl Primitives for AdminSpace {
                         self.context.runtime.state.whatami,
                         key
                     );
-                    if let Err(e) = self.context.runtime.state.config.remove(key) {
+                    let config = &self.context.runtime.state.config;
+                    if let Err(e) = config.try_remove_json5_array_item(key).and_then(|applied| {
+                        if applied {
+                            Ok(())
+                        } else {
+                            config.remove(key)
+                        }
+                    }) {
                         tracing::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
                     }
                 }
