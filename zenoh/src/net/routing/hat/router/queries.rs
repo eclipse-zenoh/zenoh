@@ -11,13 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
 
-use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
@@ -248,33 +243,6 @@ impl Hat {
             ),
         }
     }
-
-    pub(super) fn unregister_node_queryables(
-        &mut self,
-        zid: &ZenohIdProto,
-    ) -> HashSet<Arc<Resource>> {
-        let removed_routers = self
-            .net_mut()
-            .find_disconnected_nodes_after_removing_link(zid)
-            .into_iter()
-            .map(|(_, zid)| zid)
-            .collect::<HashSet<_>>();
-
-        let mut resources = HashSet::new();
-
-        for mut res in self.router_qabls.iter().cloned().collect_vec() {
-            self.res_hat_mut(&mut res)
-                .router_qabls
-                .retain(|router, _| !removed_routers.contains(router));
-
-            if self.res_hat(&res).router_qabls.is_empty() {
-                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
-                resources.insert(res);
-            }
-        }
-
-        resources
-    }
 }
 
 impl HatQueriesTrait for Hat {
@@ -491,13 +459,6 @@ impl HatQueriesTrait for Hat {
             }
             None => LastUnregistered { res },
         }
-    }
-
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
-        debug_assert!(self.owns(ctx.src_face));
-
-        self.unregister_node_queryables(&ctx.src_face.zid)
     }
 
     #[allow(clippy::incompatible_msrv)]

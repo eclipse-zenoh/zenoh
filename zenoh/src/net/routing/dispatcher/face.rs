@@ -51,7 +51,7 @@ use crate::net::{
             region::RegionMap,
             tables::Tables,
         },
-        hat::{self, DispatcherContext},
+        hat::{DispatcherContext, UnregisterFaceEntitiesResult},
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -720,7 +720,13 @@ impl Primitives for Face {
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
 
-        for mut res in hats[region].unregister_face_subscribers(ctx.reborrow()) {
+        let UnregisterFaceEntitiesResult {
+            removed_subscribers,
+            removed_queryables,
+            removed_tokens,
+        } = hats[region].unregister_face_entities(ctx.reborrow());
+
+        for mut res in removed_subscribers {
             hats[region].disable_data_routes(&mut res);
 
             let mut remaining = hats
@@ -739,7 +745,7 @@ impl Primitives for Face {
             }
         }
 
-        for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
+        for mut res in removed_queryables {
             hats[region].disable_query_routes(&mut res);
 
             let remaining = hats
@@ -773,7 +779,7 @@ impl Primitives for Face {
             }
         }
 
-        for mut res in hats[region].unregister_face_tokens(ctx.reborrow()) {
+        for mut res in removed_tokens {
             let mut remaining = hats
                 .values_mut()
                 .filter(|hat| hat.remote_tokens_of(ctx.tables, &res))
@@ -787,14 +793,6 @@ impl Primitives for Face {
                 Resource::clean(&mut res);
             } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
-            }
-        }
-
-        for hat in hats.values_mut() {
-            if let Some(hat) = hat.as_any_mut().downcast_mut::<hat::router::Hat>() {
-                // this cleanup code could reasonably be in hat::router::Hat::unregister_face_tokens to avoid the downcast
-                // but then the ordering of unregister_face_tokens etc. would be very sensitive in a surprising fashion
-                hat.net_mut().remove_link(&ctx.src_face.zid);
             }
         }
 
