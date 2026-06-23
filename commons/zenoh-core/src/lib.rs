@@ -85,6 +85,16 @@ where
     To: Sized + Send,
     C: FnOnce() -> To + Send;
 
+impl<C, To> std::fmt::Debug for ResolveClosure<C, To>
+where
+    To: Sized + Send,
+    C: FnOnce() -> To + Send,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ResolveClosure").field(&"..").finish()
+    }
+}
+
 impl<C, To> ResolveClosure<C, To>
 where
     To: Sized + Send,
@@ -133,6 +143,16 @@ where
     To: Sized + Send,
     F: Future<Output = To> + Send;
 
+impl<F, To> std::fmt::Debug for ResolveFuture<F, To>
+where
+    To: Sized + Send,
+    F: Future<Output = To> + Send,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ResolveFuture").field(&"..").finish()
+    }
+}
+
 impl<F, To> ResolveFuture<F, To>
 where
     To: Sized + Send,
@@ -175,3 +195,48 @@ where
 }
 
 pub use zenoh_result::{likely, unlikely};
+
+/// Re-definitions of inaccessible [`std`] items for MSRV compatibility.
+///
+/// These definitions are likely to cause `incompatible_msrv` warnings from clippy,
+/// see <https://github.com/rust-lang/rust-clippy/issues/12280>.
+pub mod polyfill {
+    // TODO: use rustversion?
+
+    // NOTE: `Option::is_none_or` was stabilized in 1.82.0 > 1.75.0
+    #[allow(clippy::wrong_self_convention)]
+    pub trait OptionExt<T>: Sized {
+        fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool;
+    }
+
+    impl<T> OptionExt<T> for Option<T> {
+        fn is_none_or(self, f: impl FnOnce(T) -> bool) -> bool {
+            match self {
+                None => true,
+                Some(x) => f(x),
+            }
+        }
+    }
+}
+
+/// Asserts that the LHS expression implies the RHS expression.
+///
+/// Note that in logic, `p ⟹ q` is equivalent to `¬p ∨ q` (i.e. `!p || q`).
+#[macro_export]
+macro_rules! debug_assert_implies {
+    ($lhs:expr, $rhs:expr) => {
+        debug_assert!(!$lhs || $rhs)
+    };
+}
+
+/// Panics with the given message in debug mode or logs an error otherwise.
+#[macro_export]
+macro_rules! bug {
+    ($msg:literal) => {
+        if cfg!(debug_assertions) {
+            assert!(false, $msg);
+        } else {
+            tracing::error!(target: "zenoh::bug", $msg);
+        }
+    };
+}

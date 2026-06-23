@@ -22,7 +22,7 @@ use zenoh_collections::RingBuffer;
 use zenoh_result::ZResult;
 
 use crate::api::{
-    handlers::{callback::Callback, CallbackParameter, IntoHandler},
+    handlers::{callback::Callback, IntoHandler},
     session::API_DATA_RECEPTION_CHANNEL_SIZE,
 };
 
@@ -30,6 +30,7 @@ use crate::api::{
 ///
 /// [`RingChannel`] implements FIFO semantics with a dropping strategy when full.
 /// The oldest elements will be dropped when newer ones arrive.
+#[derive(Debug)]
 pub struct RingChannel {
     capacity: usize,
 }
@@ -47,11 +48,13 @@ impl Default for RingChannel {
     }
 }
 
+#[derive(Debug)]
 struct RingChannelInner<T> {
     ring: std::sync::Mutex<RingBuffer<T>>,
     not_empty: flume::Receiver<()>,
 }
 
+#[derive(Debug)]
 pub struct RingChannelHandler<T> {
     ring: Weak<RingChannelInner<T>>,
 }
@@ -145,7 +148,7 @@ impl<T> RingChannelHandler<T> {
     }
 }
 
-impl<T: CallbackParameter + Send + 'static> IntoHandler<T> for RingChannel {
+impl<T: Send + 'static> IntoHandler<T> for RingChannel {
     type Handler = RingChannelHandler<T>;
 
     fn into_handler(self) -> (Callback<T>, Self::Handler) {

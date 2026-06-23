@@ -47,7 +47,7 @@ macro_rules! run_write {
 
         writer.write_exact(&WBS4).unwrap();
 
-        // SAFETY: callback returns the length of the buffer
+        // SAFETY: callback returns the length of the buffer, which is guaranteed to be 4.
         unsafe {
             writer.with_slot(4, |mut buffer| {
                 let w = buffer.write(&WBS5).unwrap();
@@ -216,6 +216,29 @@ fn buffer_zslice() {
 
     let mut zslice = ZSlice::from(vec![]);
     run_empty!(zslice);
+}
+
+#[test]
+fn read_zslice_oversized_length_fails_without_consuming() {
+    // This test targets the reader-layer contract directly.
+    // In real packet decoding, a length is first decoded from the wire and then
+    // passed into `read_zslice(len)`. Here we inject the oversized `len`
+    // directly to verify the readers reject it before trying to allocate.
+    let bytes = [1_u8];
+
+    let mut slice_reader = bytes.as_slice().reader();
+    assert!(slice_reader.read_zslice(2).is_err());
+    assert_eq!(slice_reader.remaining(), 1);
+
+    let mut zslice_reader = ZSlice::from(bytes.to_vec());
+    assert!(zslice_reader.read_zslice(2).is_err());
+    assert_eq!(zslice_reader.remaining(), 1);
+
+    let mut zbuf = ZBuf::empty();
+    zbuf.push_zslice(bytes.to_vec().into());
+    let mut zbuf_reader = zbuf.reader();
+    assert!(zbuf_reader.read_zslice(2).is_err());
+    assert_eq!(zbuf_reader.remaining(), 1);
 }
 
 #[test]

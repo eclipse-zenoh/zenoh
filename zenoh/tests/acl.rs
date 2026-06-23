@@ -12,124 +12,128 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(all(feature = "unstable", feature = "internal_config"))]
+#![cfg(feature = "unstable")]
 #![cfg(target_family = "unix")]
+
 use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
     time::Duration,
 };
 
 use tokio::runtime::Handle;
-use zenoh::{config::WhatAmI, sample::SampleKind, Config, Session};
+use zenoh::{config::WhatAmI, sample::SampleKind};
+use zenoh_config::Config;
 use zenoh_core::{zlock, ztimeout};
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 const KEY_EXPR: &str = "test/demo";
+const KEY_EXPR2: &str = "test/demo2";
 const VALUE: &str = "zenoh";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_config() {
     zenoh::init_log_from_env_or("error");
-    test_acl_config_format(27446).await;
+    test_acl_config_format().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_pub_sub() {
     zenoh::init_log_from_env_or("error");
-    test_pub_sub_deny(27447).await;
-    test_pub_sub_allow(27447).await;
-    test_pub_sub_deny_then_allow(27447).await;
-    test_pub_sub_allow_then_deny(27447).await;
+    test_pub_sub_deny().await;
+    test_pub_sub_allow().await;
+    test_pub_sub_deny_then_allow().await;
+    test_pub_sub_allow_then_deny().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_get_queryable() {
     zenoh::init_log_from_env_or("error");
-    test_get_qbl_deny(27448).await;
-    test_get_qbl_allow(27448).await;
-    test_get_qbl_allow_then_deny(27448).await;
-    test_get_qbl_deny_then_allow(27448).await;
+    test_get_qbl_deny().await;
+    test_get_qbl_allow().await;
+    test_get_qbl_allow_then_deny().await;
+    test_get_qbl_deny_then_allow().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_queryable_reply() {
     zenoh::init_log_from_env_or("error");
     // Only test cases not covered by `test_acl_get_queryable`
-    test_reply_deny(27449).await;
-    test_reply_allow_then_deny(27449).await;
+    test_reply_deny().await;
+    test_reply_allow_then_deny().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness() {
     zenoh::init_log_from_env_or("error");
 
-    test_liveliness_allow(27450).await;
-    test_liveliness_deny(27450).await;
+    test_liveliness_allow().await;
+    test_liveliness_deny().await;
 
-    test_liveliness_allow_deny_token(27450).await;
-    test_liveliness_deny_allow_token(27450).await;
+    test_liveliness_allow_deny_token().await;
+    test_liveliness_deny_allow_token().await;
 
-    test_liveliness_allow_deny_sub(27450).await;
-    test_liveliness_deny_allow_sub(27450).await;
+    test_liveliness_allow_deny_sub().await;
+    test_liveliness_deny_allow_sub().await;
 
-    test_liveliness_allow_deny_query(27450).await;
-    test_liveliness_deny_allow_query(27450).await;
+    test_liveliness_allow_deny_query().await;
+    test_liveliness_deny_allow_query().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_interface_names() {
     zenoh::init_log_from_env_or("error");
 
-    test_pub_sub_network_interface(27451).await;
+    test_pub_sub_network_interface().await;
 }
 
-async fn get_basic_router_config(port: u16) -> Config {
+async fn get_basic_router_config() -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Router)).unwrap();
     config
         .listen
         .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
+        .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
         .unwrap();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     config
 }
 
-async fn get_basic_client_config(port: u16) -> Config {
-    let mut config = Config::default();
+fn get_basic_client_config(test_context: &TestSessions) -> Config {
+    let mut config = test_context.get_connector_config();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
-        .connect
-        .endpoints
-        .set(vec![format!("tcp/127.0.0.1:{port}").parse().unwrap()])
-        .unwrap();
-    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+}
+
+fn get_loopback_client_config(test_context: &TestSessions) -> Config {
+    let loopback_locators = test_context
+        .locators()
+        .into_iter()
+        .filter_map(|locator| {
+            let port = locator.address().as_str().rsplit(':').next()?;
+            format!("tcp/127.0.0.1:{port}").parse().ok()
+        })
+        .collect();
+    let mut config = test_context.get_connector_config_with_endpoint(loopback_locators);
+    config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
 }
 
-async fn close_router_session(s: Session) {
-    println!("Closing router session");
-    ztimeout!(s.close()).unwrap();
-}
-
-async fn get_client_sessions(port: u16) -> (Session, Session) {
+async fn get_client_sessions(test_context: &mut TestSessions) -> (zenoh::Session, zenoh::Session) {
     println!("Opening client sessions");
-
-    let s01 = ztimeout!(zenoh::open(get_basic_client_config(port).await)).unwrap();
-    let s02 = ztimeout!(zenoh::open(get_basic_client_config(port).await)).unwrap();
+    let s01 = test_context
+        .open_connector_with_cfg(get_basic_client_config(test_context))
+        .await;
+    let s02 = test_context
+        .open_connector_with_cfg(get_basic_client_config(test_context))
+        .await;
     (s01, s02)
 }
 
-async fn close_sessions(s01: Session, s02: Session) {
-    println!("Closing client sessions");
-    ztimeout!(s01.close()).unwrap();
-    ztimeout!(s02.close()).unwrap();
-}
-
-async fn test_acl_config_format(port: u16) {
+async fn test_acl_config_format() {
     println!("test_acl_config_format");
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
 
     // missing lists
     config_router
@@ -378,10 +382,11 @@ async fn test_acl_config_format(port: u16) {
         .is_err());
 }
 
-async fn test_pub_sub_deny(port: u16) {
+async fn test_pub_sub_deny() {
     println!("test_pub_sub_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -396,9 +401,14 @@ async fn test_pub_sub_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    println!("Opening client sessions");
+    let sub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
+    let pub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
     {
         let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -430,13 +440,13 @@ async fn test_pub_sub_deny(port: u16) {
         assert!(!(*zlock!(deleted)));
         ztimeout!(subscriber.undeclare()).unwrap();
     }
-    close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_pub_sub_allow(port: u16) {
+async fn test_pub_sub_allow() {
     println!("test_pub_sub_allow");
-    let mut config_router = get_basic_router_config(port).await;
+    let mut test_context = TestSessions::new();
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -451,8 +461,14 @@ async fn test_pub_sub_allow(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    println!("Opening client sessions");
+    let sub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
+    let pub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -485,14 +501,14 @@ async fn test_pub_sub_allow(port: u16) {
         ztimeout!(subscriber.undeclare()).unwrap();
     }
 
-    close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_pub_sub_allow_then_deny(port: u16) {
+async fn test_pub_sub_allow_then_deny() {
     println!("test_pub_sub_allow_then_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -533,8 +549,14 @@ async fn test_pub_sub_allow_then_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    println!("Opening client sessions");
+    let sub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
+    let pub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -566,14 +588,14 @@ async fn test_pub_sub_allow_then_deny(port: u16) {
         assert!(!(*zlock!(deleted)));
         ztimeout!(subscriber.undeclare()).unwrap();
     }
-    close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_pub_sub_deny_then_allow(port: u16) {
+async fn test_pub_sub_deny_then_allow() {
     println!("test_pub_sub_deny_then_allow");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -614,8 +636,8 @@ async fn test_pub_sub_deny_then_allow(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (sub_session, pub_session) = get_client_sessions(&mut test_context).await;
     {
         let publisher = ztimeout!(pub_session.declare_publisher(KEY_EXPR)).unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -647,14 +669,14 @@ async fn test_pub_sub_deny_then_allow(port: u16) {
         assert!(*zlock!(deleted));
         ztimeout!(subscriber.undeclare()).unwrap();
     }
-    close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_get_qbl_deny(port: u16) {
+async fn test_get_qbl_deny() {
     println!("test_get_qbl_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -684,9 +706,8 @@ async fn test_get_qbl_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -715,14 +736,14 @@ async fn test_get_qbl_deny(port: u16) {
         assert_ne!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_get_qbl_allow(port: u16) {
+async fn test_get_qbl_allow() {
     println!("test_get_qbl_allow");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -737,9 +758,8 @@ async fn test_get_qbl_allow(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -768,14 +788,14 @@ async fn test_get_qbl_allow(port: u16) {
         assert_eq!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_get_qbl_deny_then_allow(port: u16) {
+async fn test_get_qbl_deny_then_allow() {
     println!("test_get_qbl_deny_then_allow");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -817,9 +837,8 @@ async fn test_get_qbl_deny_then_allow(port: u16) {
 
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -848,14 +867,14 @@ async fn test_get_qbl_deny_then_allow(port: u16) {
         assert_eq!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_get_qbl_allow_then_deny(port: u16) {
+async fn test_get_qbl_allow_then_deny() {
     println!("test_get_qbl_allow_then_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -895,9 +914,8 @@ async fn test_get_qbl_allow_then_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -926,14 +944,14 @@ async fn test_get_qbl_allow_then_deny(port: u16) {
         assert_ne!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_reply_deny(port: u16) {
+async fn test_reply_deny() {
     println!("test_reply_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -962,9 +980,8 @@ async fn test_reply_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -993,14 +1010,14 @@ async fn test_reply_deny(port: u16) {
         assert_ne!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_reply_allow_then_deny(port: u16) {
+async fn test_reply_allow_then_deny() {
     println!("test_reply_allow_then_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1035,9 +1052,8 @@ async fn test_reply_allow_then_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (get_session, qbl_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (get_session, qbl_session) = get_client_sessions(&mut test_context).await;
     {
         let mut received_value = String::new();
 
@@ -1066,14 +1082,14 @@ async fn test_reply_allow_then_deny(port: u16) {
         assert_ne!(received_value, VALUE);
         ztimeout!(qbl.undeclare()).unwrap();
     }
-    close_sessions(get_session, qbl_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_deny(port: u16) {
+async fn test_liveliness_deny() {
     println!("test_liveliness_deny");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1088,8 +1104,8 @@ async fn test_liveliness_deny(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1144,14 +1160,14 @@ async fn test_liveliness_deny(port: u16) {
     assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_allow(port: u16) {
+async fn test_liveliness_allow() {
     println!("test_liveliness_allow");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1166,8 +1182,8 @@ async fn test_liveliness_allow(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1222,14 +1238,14 @@ async fn test_liveliness_allow(port: u16) {
     assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_allow_deny_token(port: u16) {
+async fn test_liveliness_allow_deny_token() {
     println!("test_liveliness_allow_deny_token");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1259,8 +1275,8 @@ async fn test_liveliness_allow_deny_token(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1315,14 +1331,14 @@ async fn test_liveliness_allow_deny_token(port: u16) {
     assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_deny_allow_token(port: u16) {
+async fn test_liveliness_deny_allow_token() {
     println!("test_liveliness_deny_allow_token");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1352,8 +1368,8 @@ async fn test_liveliness_deny_allow_token(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1408,14 +1424,14 @@ async fn test_liveliness_deny_allow_token(port: u16) {
     assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_allow_deny_sub(port: u16) {
+async fn test_liveliness_allow_deny_sub() {
     println!("test_liveliness_allow_deny_sub");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1445,8 +1461,8 @@ async fn test_liveliness_allow_deny_sub(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1501,14 +1517,14 @@ async fn test_liveliness_allow_deny_sub(port: u16) {
     assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_deny_allow_sub(port: u16) {
+async fn test_liveliness_deny_allow_sub() {
     println!("test_liveliness_deny_allow_sub");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1538,8 +1554,8 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1572,10 +1588,20 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
     tokio::time::sleep(SLEEP).await;
     assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
 
+    // NOTE(fuzzypixelz): had this query been on KEY_EXPR, it would've returned the token above.
+    // This is because the client gateway registers tokens received for the future interest.
+
     // test if query receives token reply
+    let _liveliness2 = writer_session
+        .liveliness()
+        .declare_token(KEY_EXPR2)
+        .await
+        .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
     reader_session
         .liveliness()
-        .get(KEY_EXPR)
+        .get(KEY_EXPR2)
         .timeout(TIMEOUT)
         .callback(move |reply| match reply.result() {
             Ok(_) => {
@@ -1594,14 +1620,14 @@ async fn test_liveliness_deny_allow_sub(port: u16) {
     assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_allow_deny_query(port: u16) {
+async fn test_liveliness_allow_deny_query() {
     println!("test_liveliness_allow_deny_query");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1614,7 +1640,7 @@ async fn test_liveliness_allow_deny_query(port: u16) {
                             permission: "deny",
                             messages: ["liveliness_query"],
                             flows: ["ingress", "egress"],
-                            key_exprs: ["test/demo"],
+                            key_exprs: ["test/demo2"],
                         },
                     ],
                     "subjects": [
@@ -1631,8 +1657,8 @@ async fn test_liveliness_allow_deny_query(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1665,10 +1691,20 @@ async fn test_liveliness_allow_deny_query(port: u16) {
     tokio::time::sleep(SLEEP).await;
     assert!(received_token.load(std::sync::atomic::Ordering::Relaxed));
 
+    // NOTE(fuzzypixelz): had this query been on KEY_EXPR, it would've returned the token above.
+    // This is because the client gateway registers tokens received for the future interest.
+
     // test if query receives token reply
+    let _liveliness2 = writer_session
+        .liveliness()
+        .declare_token(KEY_EXPR2)
+        .await
+        .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
     reader_session
         .liveliness()
-        .get(KEY_EXPR)
+        .get(KEY_EXPR2)
         .timeout(TIMEOUT)
         .callback(move |reply| match reply.result() {
             Ok(_) => {
@@ -1687,14 +1723,14 @@ async fn test_liveliness_allow_deny_query(port: u16) {
     assert!(dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
-async fn test_liveliness_deny_allow_query(port: u16) {
+async fn test_liveliness_deny_allow_query() {
     println!("test_liveliness_deny_allow_query");
+    let mut test_context = TestSessions::new();
 
-    let mut config_router = get_basic_router_config(port).await;
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1724,8 +1760,8 @@ async fn test_liveliness_deny_allow_query(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (reader_session, writer_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    let (reader_session, writer_session) = get_client_sessions(&mut test_context).await;
 
     let received_token = Arc::new(AtomicBool::new(false));
     let dropped_token = Arc::new(AtomicBool::new(false));
@@ -1780,14 +1816,14 @@ async fn test_liveliness_deny_allow_query(port: u16) {
     assert!(!dropped_token.load(std::sync::atomic::Ordering::Relaxed));
 
     ztimeout!(subscriber.undeclare()).unwrap();
-    close_sessions(reader_session, writer_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_query_ingress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27501).await;
+    let mut test_context = TestSessions::new();
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1816,8 +1852,8 @@ async fn test_acl_query_ingress_deny() {
         )
         .unwrap();
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (session1, session2) = get_client_sessions(27501).await;
+    let _router = test_context.open_listener_with_cfg(config_router).await;
+    let (session1, session2) = get_client_sessions(&mut test_context).await;
     tokio::time::sleep(SLEEP).await;
 
     let _qbl = session1.declare_queryable("test/ingress").await.unwrap();
@@ -1826,12 +1862,14 @@ async fn test_acl_query_ingress_deny() {
     let replies = session2.get("test/ingress").await.unwrap();
 
     assert!(replies.recv_async().await.is_err());
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_query_egress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27502).await;
+    let mut test_context = TestSessions::new();
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1860,8 +1898,8 @@ async fn test_acl_query_egress_deny() {
         )
         .unwrap();
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
-    let (session1, session2) = get_client_sessions(27502).await;
+    let _router = test_context.open_listener_with_cfg(config_router).await;
+    let (session1, session2) = get_client_sessions(&mut test_context).await;
     tokio::time::sleep(SLEEP).await;
 
     let _qbl = session1.declare_queryable("test/egress").await.unwrap();
@@ -1869,12 +1907,14 @@ async fn test_acl_query_egress_deny() {
     let replies = session2.get("test/egress").await.unwrap();
 
     assert!(replies.recv_async().await.is_err());
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness_query_ingress_deny() {
     zenoh::init_log_from_env_or("error");
-    let mut config_router = get_basic_router_config(27503).await;
+    let mut test_context = TestSessions::new();
+    let mut config_router = get_basic_router_config().await;
     config_router
         .insert_json5(
             "access_control",
@@ -1903,9 +1943,9 @@ async fn test_acl_liveliness_query_ingress_deny() {
         )
         .unwrap();
 
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
+    let _router = test_context.open_listener_with_cfg(config_router).await;
     tokio::time::sleep(SLEEP).await;
-    let (session1, session2) = get_client_sessions(27503).await;
+    let (session1, session2) = get_client_sessions(&mut test_context).await;
     tokio::time::sleep(SLEEP).await;
 
     let _token = session1
@@ -1923,14 +1963,17 @@ async fn test_acl_liveliness_query_ingress_deny() {
         .unwrap();
 
     assert!(replies.recv_timeout(Duration::from_secs(1)).is_err());
+    test_context.close().await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_acl_liveliness_query_egress_deny() {
     zenoh::init_log_from_env_or("error");
-    let config_router = get_basic_router_config(27504).await;
-    let mut config_client1 = get_basic_client_config(27504).await;
-    let config_client2 = get_basic_client_config(27504).await;
+    let mut test_context = TestSessions::new();
+    let config_router = get_basic_router_config().await;
+    let _router = test_context.open_listener_with_cfg(config_router).await;
+    tokio::time::sleep(SLEEP).await;
+    let mut config_client1 = get_basic_client_config(&test_context);
     config_client1
         .insert_json5(
             "access_control",
@@ -1958,11 +2001,10 @@ async fn test_acl_liveliness_query_egress_deny() {
           }"#,
         )
         .unwrap();
-
-    let _router = ztimeout!(zenoh::open(config_router)).unwrap();
-    tokio::time::sleep(SLEEP).await;
-    let session1 = ztimeout!(zenoh::open(config_client1)).unwrap();
-    let session2 = ztimeout!(zenoh::open(config_client2)).unwrap();
+    let session1 = test_context.open_connector_with_cfg(config_client1).await;
+    let session2 = test_context
+        .open_connector_with_cfg(get_basic_client_config(&test_context))
+        .await;
     tokio::time::sleep(SLEEP).await;
 
     let _token = session2
@@ -1979,17 +2021,19 @@ async fn test_acl_liveliness_query_egress_deny() {
         .unwrap();
 
     assert!(replies.recv_timeout(Duration::from_secs(1)).is_err());
+    test_context.close().await;
 }
 
-async fn test_pub_sub_network_interface(port: u16) {
+async fn test_pub_sub_network_interface() {
     println!("test_pub_sub_network_interface");
+    let mut test_context = TestSessions::new();
 
     let mut config_router = Config::default();
     config_router.set_mode(Some(WhatAmI::Router)).unwrap();
     config_router
         .listen
         .endpoints
-        .set(vec![format!("tcp/[::]:{port}").parse().unwrap()])
+        .set(vec!["tcp/[::]:0".parse().unwrap()])
         .unwrap();
     config_router
         .scouting
@@ -2029,9 +2073,14 @@ async fn test_pub_sub_network_interface(port: u16) {
         .unwrap();
     println!("Opening router session");
 
-    let session = ztimeout!(zenoh::open(config_router)).unwrap();
-
-    let (sub_session, pub_session) = get_client_sessions(port).await;
+    let _session = test_context.open_listener_with_cfg(config_router).await;
+    println!("Opening client sessions");
+    let sub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
+    let pub_session = test_context
+        .open_connector_with_cfg(get_loopback_client_config(&test_context))
+        .await;
     {
         let publisher = pub_session.declare_publisher(KEY_EXPR).await.unwrap();
         let received_value = Arc::new(Mutex::new(String::new()));
@@ -2063,6 +2112,5 @@ async fn test_pub_sub_network_interface(port: u16) {
         assert!(*zlock!(deleted));
         ztimeout!(subscriber.undeclare()).unwrap();
     }
-    close_sessions(sub_session, pub_session).await;
-    close_router_session(session).await;
+    test_context.close().await;
 }

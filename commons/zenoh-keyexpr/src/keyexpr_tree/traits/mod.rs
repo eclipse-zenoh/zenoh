@@ -55,6 +55,7 @@ pub trait IKeyExprTree<'a, Weight> {
         Self::TreeIterItem: AsNode<Box<Self::Node>>,
     {
         self.tree_iter().filter_map(|node| {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe {
                 core::mem::transmute::<Option<&Weight>, Option<&Weight>>(node.as_node().weight())
             }
@@ -350,6 +351,7 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
 pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
     /// Access the parent node if it exists (the node isn't the first chunk of a key-expression).
     fn parent(&self) -> Option<&Self::Parent> {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { self.__parent() }
     }
     /// Compute this node's full key expression.
@@ -358,6 +360,7 @@ pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
     /// If you need to repeatedly access a node's full key expression, it is suggested
     /// to store that key expression as part of the node's `Weight` (it's optional value).
     fn keyexpr(&self) -> OwnedKeyExpr {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { self.__keyexpr() }
     }
 
@@ -369,11 +372,13 @@ pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
     /// - The node is a parent to other nodes, but was never assigned a weight itself (or that weight has been removed).
     /// - The node is a leaf of the KeTree whose value was [`IKeyExprTreeMut::remove`]d, but [`IKeyExprTreeMut::prune`] hasn't been called yet.
     fn weight(&self) -> Option<&Weight> {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { self.__weight() }
     }
 
     /// Access a node's children.
     fn children(&self) -> &Self::Children {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { self.__children() }
     }
 }
@@ -381,11 +386,23 @@ pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
 #[doc(hidden)]
 pub trait UIKeyExprTreeNode<Weight> {
     type Parent;
+    /// # Safety
+    /// Implementations may return references derived from internal raw pointers or token-guarded state.
+    /// Callers must uphold the implementation-specific aliasing and lifetime guarantees.
     unsafe fn __parent(&self) -> Option<&Self::Parent>;
+    /// # Safety
+    /// Implementations may reconstruct the full key expression from internal state that must remain valid.
+    /// Callers must ensure the node is in a readable, non-invalidated state.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr;
+    /// # Safety
+    /// Implementations may expose internal references whose validity depends on external synchronization/token rules.
+    /// Callers must uphold those rules.
     unsafe fn __weight(&self) -> Option<&Weight>;
     type Child;
     type Children: IChildren<Self::Child>;
+    /// # Safety
+    /// Implementations may expose references to internal child collections that require external synchronization/token rules.
+    /// Callers must uphold those rules.
     unsafe fn __children(&self) -> &Self::Children;
 }
 

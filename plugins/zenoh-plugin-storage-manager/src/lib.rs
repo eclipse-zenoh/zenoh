@@ -69,6 +69,7 @@ lazy_static::lazy_static! {
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 
+#[derive(Debug)]
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
@@ -227,7 +228,7 @@ impl StorageRuntimeInner {
             volume_id,
             backend_name
         );
-        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(backend_name) {
+        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
             declared
         } else if let Some(paths) = config.paths() {
             self.plugins_manager.declare_dynamic_plugin_by_paths(

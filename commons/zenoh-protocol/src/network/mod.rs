@@ -471,19 +471,14 @@ pub mod ext {
 
         pub const DECLARE: Self =
             Self::new(Priority::Control, CongestionControl::DEFAULT_DECLARE, false);
+        pub const INTEREST: Self = Self::new(
+            Priority::Control,
+            CongestionControl::DEFAULT_INTEREST,
+            false,
+        );
         pub const PUSH: Self = Self::new(Priority::DEFAULT, CongestionControl::DEFAULT_PUSH, false);
         pub const REQUEST: Self =
             Self::new(Priority::DEFAULT, CongestionControl::DEFAULT_REQUEST, false);
-        pub const RESPONSE: Self = Self::new(
-            Priority::DEFAULT,
-            CongestionControl::DEFAULT_RESPONSE,
-            false,
-        );
-        pub const RESPONSE_FINAL: Self = Self::new(
-            Priority::DEFAULT,
-            CongestionControl::DEFAULT_RESPONSE,
-            false,
-        );
         pub const OAM: Self = Self::new(Priority::Control, CongestionControl::DEFAULT_OAM, false);
 
         pub const fn new(

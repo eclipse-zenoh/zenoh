@@ -46,7 +46,7 @@ where
         if consolidation != &ConsolidationMode::DEFAULT {
             header |= flag::C;
         }
-        let mut n_exts = ext_unknown.len() as u8;
+        let mut n_exts = ext_unknown.len();
         if n_exts != 0 {
             header |= flag::Z;
         }

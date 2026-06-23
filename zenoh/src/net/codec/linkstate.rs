@@ -52,6 +52,9 @@ where
         if x.link_weights.is_some() {
             options |= linkstate::WGT;
         }
+        if x.is_gateway {
+            options |= linkstate::GWY;
+        }
         codec.write(&mut *writer, options)?;
 
         // Body
@@ -130,6 +133,8 @@ where
             None
         };
 
+        let is_gateway = imsg::has_option(options, linkstate::GWY);
+
         Ok(LinkState {
             psid,
             sn,
@@ -138,6 +143,7 @@ where
             locators,
             links,
             link_weights,
+            is_gateway,
         })
     }
 }

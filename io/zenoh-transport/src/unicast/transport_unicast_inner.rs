@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohIdProto},
+    core::{Bound, RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
     transport::TransportSn,
 };
@@ -30,7 +30,12 @@ use crate::{
     TransportPeerEventHandler,
 };
 
-pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
+pub(crate) type LinkError = (
+    zenoh_result::Error,
+    TransportLinkUnicast,
+    Option<TransportLinkUnicast>,
+    u8,
+);
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
 pub(crate) enum InitTransportError {
     Link(LinkError),
@@ -42,11 +47,17 @@ pub(crate) type AddLinkResult<'a> = Result<
         Box<dyn FnOnce() + Send + Sync + 'a>,
         Box<dyn FnOnce() + Send + Sync + 'a>,
         MaybeOpenAck,
-        Option<AsyncMutexGuard<'a, ()>>,
+        AsyncMutexGuard<'a, TransportStatus>,
     ),
     LinkError,
 >;
 pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
+
+pub(crate) enum TransportStatus {
+    Uninitialized,
+    Alive,
+    Closed,
+}
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -58,7 +69,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
-    async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
+    async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus>;
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
@@ -67,6 +78,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
+    fn region_name(&self) -> Option<RegionName>;
+    fn get_bound(&self) -> Option<Bound>;
     fn get_config(&self) -> &TransportConfigUnicast;
     #[cfg(feature = "stats")]
     fn stats(&self) -> zenoh_stats::TransportStats;

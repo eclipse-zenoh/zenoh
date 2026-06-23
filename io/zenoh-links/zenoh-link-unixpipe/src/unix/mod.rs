@@ -33,7 +33,7 @@ pub const UNIXPIPE_LOCATOR_PREFIX: &str = "unixpipe";
 
 const IS_RELIABLE: bool = true;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct UnixPipeLocatorInspector;
 #[async_trait]
 impl LocatorInspector for UnixPipeLocatorInspector {

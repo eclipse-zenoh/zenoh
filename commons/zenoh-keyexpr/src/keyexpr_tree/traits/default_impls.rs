@@ -40,6 +40,7 @@ impl<T: HasChunk> HasChunk for Arc<T> {
 }
 impl<T: HasChunk, Token: TokenTrait> HasChunk for TokenCell<T, Token> {
     fn chunk(&self) -> &keyexpr {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         T::chunk(unsafe { &*self.get() })
     }
 }
@@ -71,61 +72,85 @@ impl<T> AsNodeMut<T> for &mut T {
 impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for &T {}
 impl<T: IKeyExprTreeNode<Weight>, Weight> UIKeyExprTreeNode<Weight> for &T {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
-        T::__parent(self)
+        T::parent(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
-        T::__keyexpr(self)
+        T::keyexpr(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
-        T::__weight(self)
+        T::weight(self)
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
-        T::__children(self)
+        T::children(self)
     }
 }
 impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for &mut T {}
 impl<T: IKeyExprTreeNode<Weight>, Weight> UIKeyExprTreeNode<Weight> for &mut T {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
-        T::__parent(self)
+        T::parent(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
-        T::__keyexpr(self)
+        T::keyexpr(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
-        T::__weight(self)
+        T::weight(self)
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
-        T::__children(self)
+        T::children(self)
     }
 }
 impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {}
 impl<T: IKeyExprTreeNode<Weight>, Weight> UIKeyExprTreeNode<Weight> for Box<T> {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
-        T::__parent(self)
+        T::parent(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
-        T::__keyexpr(self)
+        T::keyexpr(self)
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
-        T::__weight(self)
+        T::weight(self)
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
-        T::__children(self)
+        T::children(self)
     }
 }
 
@@ -175,33 +200,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for (&TokenCell<T, Token>, &Token)
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -213,33 +246,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for (&TokenCell<T, Token>, &mut Token)
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -287,33 +328,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for (&Arc<TokenCell<T, Token>>, &Token)
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -325,33 +374,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for (&Arc<TokenCell<T, Token>>, &mut Token)
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -400,33 +457,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for Tokenized<&TokenCell<T, Token>, &Token>
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -438,33 +503,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for Tokenized<&TokenCell<T, Token>, &mut Token>
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -512,33 +585,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for Tokenized<&Arc<TokenCell<T, Token>>, &Token>
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 
@@ -550,33 +631,41 @@ impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> UIKeyExprTreeNode<W
     for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token>
 {
     type Parent = T::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__parent()
+            .parent()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__keyexpr()
+            .keyexpr()
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__weight()
+            .weight()
     }
 
     type Child = T::Child;
     type Children = T::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         self.0
             .try_borrow(self.1)
             .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
-            .__children()
+            .children()
     }
 }
 

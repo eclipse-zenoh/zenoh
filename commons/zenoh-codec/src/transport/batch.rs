@@ -118,6 +118,7 @@ where
 {
     type Output = Result<(), BatchError>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: NetworkMessageRef) -> Self::Output {
         // Eventually update the current frame and sn based on the current status
         if let (CurrentFrame::Reliable, false)

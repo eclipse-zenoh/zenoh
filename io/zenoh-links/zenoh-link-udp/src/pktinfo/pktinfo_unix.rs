@@ -25,6 +25,12 @@ use std::{
 use socket2::SockAddr;
 use tokio::{io::Interest, net::UdpSocket};
 
+/// # Safety
+/// The caller must ensure that:
+/// - `socket` is a valid file descriptor for a socket.
+/// - The combination of `level`, `name`, and the type `T` of `value` is a valid
+///   socket option. The underlying C function `setsockopt` will read
+///   `mem::size_of::<T>()` bytes from `value`.
 unsafe fn setsockopt<T>(
     socket: libc::c_int,
     level: libc::c_int,
@@ -35,13 +41,16 @@ where
     T: Copy,
 {
     let value = &value as *const T as *const libc::c_void;
-    if libc::setsockopt(
-        socket,
-        level,
-        name,
-        value,
-        mem::size_of::<T>() as libc::socklen_t,
-    ) == 0
+    // SAFETY: Call the underlying C function `setsockopt`.
+    if unsafe {
+        libc::setsockopt(
+            socket,
+            level,
+            name,
+            value,
+            mem::size_of::<T>() as libc::socklen_t,
+        )
+    } == 0
     {
         Ok(())
     } else {

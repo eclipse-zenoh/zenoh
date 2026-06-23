@@ -38,6 +38,20 @@ where
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for Inclusion<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Inclusion")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     Inclusion<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -108,6 +122,7 @@ where
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
                                 let subkey =
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                 if unlikely(subkey == "**") {
                                     if !chunk_is_verbatim {
@@ -117,6 +132,7 @@ where
                                     let post_key = &key[kec_end + 1..];
                                     match post_key.iter().position(|&c| c == b'/') {
                                         Some(sec_end) => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             let post_key = unsafe {
                                                 keyexpr::from_slice_unchecked(&post_key[..sec_end])
                                             };
@@ -125,6 +141,7 @@ where
                                             }
                                         }
                                         None => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             if unsafe { keyexpr::from_slice_unchecked(post_key) }
                                                 .includes(chunk)
                                             {
@@ -137,6 +154,7 @@ where
                                 }
                             }
                             None => {
+                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                 if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
@@ -155,6 +173,7 @@ where
                                 break;
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
@@ -198,6 +217,20 @@ pub struct InclusionMut<
     key: &'a keyexpr,
     ke_indices: Vec<usize>,
     iterators: Vec<StackFrameMut<'a, Children, Node, Weight>>,
+}
+
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
+    core::fmt::Debug for InclusionMut<'a, Children, Node, Weight>
+where
+    Children::Assoc: IChildren<Node> + 'a,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("InclusionMut")
+            .field("key", &self.key)
+            .field("ke_indices_len", &self.ke_indices.len())
+            .field("depth", &self.iterators.len())
+            .finish()
+    }
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
@@ -271,6 +304,7 @@ where
                         match key.iter().position(|&c| c == b'/') {
                             Some(kec_end) => {
                                 let subkey =
+                                    // SAFETY: upheld by the surrounding invariants and prior validation.
                                     unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
                                 if unlikely(subkey == "**") {
                                     if !chunk_is_verbatim {
@@ -280,6 +314,7 @@ where
                                     let post_key = &key[kec_end + 1..];
                                     match post_key.iter().position(|&c| c == b'/') {
                                         Some(sec_end) => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             let post_key = unsafe {
                                                 keyexpr::from_slice_unchecked(&post_key[..sec_end])
                                             };
@@ -288,6 +323,7 @@ where
                                             }
                                         }
                                         None => {
+                                            // SAFETY: upheld by the surrounding invariants and prior validation.
                                             if unsafe { keyexpr::from_slice_unchecked(post_key) }
                                                 .includes(chunk)
                                             {
@@ -300,6 +336,7 @@ where
                                 }
                             }
                             None => {
+                                // SAFETY: upheld by the surrounding invariants and prior validation.
                                 let key = unsafe { keyexpr::from_slice_unchecked(key) };
                                 if unlikely(key == "**") && chunk.first_byte() != b'@' {
                                     push!(kec_start);
@@ -318,6 +355,7 @@ where
                                 break;
                             }
                         }
+                        // SAFETY: upheld by the surrounding invariants and prior validation.
                         let iterator = unsafe { &mut *(node.as_node_mut() as *mut Node) }
                             .children_mut()
                             .children_mut();

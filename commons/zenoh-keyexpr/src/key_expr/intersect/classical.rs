@@ -89,7 +89,7 @@ fn it_intersect<const STAR_DSL: bool>(mut it1: &[u8], mut it2: &[u8]) -> bool {
                 if advanced1.is_empty() {
                     return !it2.has_verbatim();
                 }
-                return (!unsafe { current2.has_direct_verbatim_non_empty() }
+                return (!current2.has_direct_verbatim_non_empty()
                     && it_intersect::<STAR_DSL>(it1, advanced2))
                     || it_intersect::<STAR_DSL>(advanced1, it2);
             }
@@ -97,7 +97,7 @@ fn it_intersect<const STAR_DSL: bool>(mut it1: &[u8], mut it2: &[u8]) -> bool {
                 if advanced2.is_empty() {
                     return !it1.has_verbatim();
                 }
-                return (!unsafe { current1.has_direct_verbatim_non_empty() }
+                return (!current1.has_direct_verbatim_non_empty()
                     && it_intersect::<STAR_DSL>(advanced1, it2))
                     || it_intersect::<STAR_DSL>(it1, advanced2);
             }
@@ -121,6 +121,7 @@ pub fn intersect<const STAR_DSL: bool>(s1: &[u8], s2: &[u8]) -> bool {
 
 use super::{restriction::NoSubWilds, Intersector, MayHaveVerbatim};
 
+#[derive(Debug)]
 pub struct ClassicIntersector;
 impl Intersector<NoSubWilds<&[u8]>, NoSubWilds<&[u8]>> for ClassicIntersector {
     fn intersect(&self, left: NoSubWilds<&[u8]>, right: NoSubWilds<&[u8]>) -> bool {

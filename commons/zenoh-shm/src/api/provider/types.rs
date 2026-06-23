@@ -107,6 +107,7 @@ impl AllocAlignment {
     }
 
     /// Align size according to inner alignment.
+    ///
     /// This call may extend the size (see the example)
     /// # Examples
     ///

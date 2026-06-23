@@ -21,7 +21,7 @@ use std::{
 
 use zenoh_protocol::network::interest::InterestId;
 
-use crate::net::routing::router::Resource;
+use crate::net::routing::gateway::Resource;
 
 pub(crate) trait LocalResourceTrait: Hash + Clone + Eq {
     fn matches(&self, other: &Self) -> bool;
@@ -118,10 +118,6 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
 
     pub(crate) fn contains_simple_resource(&self, key: &Res) -> bool {
         self.simple_resources.contains_key(key)
-    }
-
-    pub(crate) fn simple_resources(&self) -> impl Iterator<Item = &Res> {
-        self.simple_resources.keys()
     }
 
     // Returns Id of newly inserted resource and the list of resources that were enabled/changed info by this operation

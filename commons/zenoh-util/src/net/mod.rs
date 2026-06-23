@@ -34,6 +34,9 @@ lazy_static! {
 }
 
 #[cfg(windows)]
+/// # Safety
+/// The caller must ensure the `af_spec`` is valid, which will be used by
+/// `winapi::um::iphlpapi::GetAdaptersAddresses`.
 unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
     use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
@@ -43,13 +46,16 @@ unsafe fn get_adapters_addresses(af_spec: i32) -> ZResult<Vec<u8>> {
     let mut buffer: Vec<u8>;
     loop {
         buffer = Vec::with_capacity(size as usize);
-        ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-            af_spec.try_into().unwrap(),
-            0,
-            std::ptr::null_mut(),
-            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
-            &mut size,
-        );
+        // SAFETY: Call the unsafe function `GetAdaptersAddresses`.
+        ret = unsafe {
+            winapi::um::iphlpapi::GetAdaptersAddresses(
+                af_spec.try_into().unwrap(),
+                0,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+                &mut size,
+            )
+        };
         if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
             break;
         }
@@ -449,14 +455,14 @@ pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult
     Ok(())
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult<()> {
-    tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS and Windows");
+    tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS, iOS, and Windows");
     Ok(())
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "windows"))]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
-    tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS and Windows");
+    tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS, iOS, and Windows");
     Ok(())
 }

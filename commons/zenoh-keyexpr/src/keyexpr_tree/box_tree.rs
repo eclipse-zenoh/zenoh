@@ -36,6 +36,19 @@ pub struct KeBoxTree<
     wildness: Wildness,
 }
 
+impl<Weight, Wildness, Children> core::fmt::Debug for KeBoxTree<Weight, Wildness, Children>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeBoxTree")
+            .field("children", &"..")
+            .field("is_wild", &self.wildness.get())
+            .finish()
+    }
+}
+
 impl<Weight> KeBoxTree<Weight, bool, DefaultChildrenProvider>
 where
     DefaultChildrenProvider:
@@ -158,9 +171,11 @@ where
         if !node.children.is_empty() {
             node.weight.take()
         } else {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             let chunk = unsafe { core::mem::transmute::<&keyexpr, &keyexpr>(node.chunk()) };
             match node.parent {
                 None => &mut self.children,
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 Some(parent) => unsafe { &mut (*parent.as_ptr()).children },
             }
             .remove(chunk)
@@ -267,6 +282,21 @@ pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvi
     weight: Option<Weight>,
 }
 
+impl<Weight, Wildness, Children> core::fmt::Debug for KeyExprTreeNode<Weight, Wildness, Children>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<Box<Self>>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeyExprTreeNode")
+            .field("has_parent", &self.parent.is_some())
+            .field("chunk", &self.chunk)
+            .field("children", &"..")
+            .field("has_weight", &self.weight.is_some())
+            .finish()
+    }
+}
+
 unsafe impl<Weight: Send, Wildness: IWildness + Send, Children: IChildrenProvider<Box<Self>> + Send>
     Send for KeyExprTreeNode<Weight, Wildness, Children>
 {
@@ -288,24 +318,34 @@ where
     Children::Assoc: IChildren<Box<Self>>,
 {
     type Parent = Self;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self> {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         self.parent.as_ref().map(|node| unsafe {
             // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
             node.as_ref()
         })
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe {
             // self._keyexpr is guaranteed to return a valid KE, so no checks are necessary
             OwnedKeyExpr::from_string_unchecked(self._keyexpr(0))
         }
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.weight.as_ref()
     }
     type Child = Box<Self>;
     type Children = Children::Assoc;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         &self.children
     }
@@ -318,6 +358,7 @@ where
     fn parent_mut(&mut self) -> Option<&mut Self> {
         match &mut self.parent {
             None => None,
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             Some(node) => Some(unsafe {
                 // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
                 node.as_mut()

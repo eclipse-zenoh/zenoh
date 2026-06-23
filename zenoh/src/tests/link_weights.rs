@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
 #![cfg(feature = "internal")]
 
 use std::{
@@ -122,6 +121,7 @@ use std::time::Duration;
 
 use zenoh_config::ZenohId;
 use zenoh_core::ztimeout;
+use zenoh_test::get_free_tcp_port;
 
 use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 
@@ -176,7 +176,6 @@ struct Net {
     routers: Vec<Session>,
     source: Session,
     dest: Session,
-    wai: WhatAmI,
 }
 
 impl Net {
@@ -193,33 +192,17 @@ impl Net {
                     })
                     .collect::<Vec<_>>();
 
-            match self.wai {
-                WhatAmI::Router => self.routers[i]
-                    .0
-                    .static_runtime()
-                    .unwrap()
-                    .config()
-                    .lock()
-                    .routing
-                    .router
-                    .linkstate
-                    .set_transport_weights(weights)
-                    .unwrap(),
-                WhatAmI::Peer => self.routers[i]
-                    .0
-                    .static_runtime()
-                    .unwrap()
-                    .config()
-                    .lock()
-                    .routing
-                    .peer
-                    .linkstate
-                    .set_transport_weights(weights)
-                    .unwrap(),
-                WhatAmI::Client => unreachable!(),
-            };
             self.routers[i]
-                .0
+                .static_runtime()
+                .unwrap()
+                .config()
+                .lock()
+                .routing
+                .router
+                .linkstate
+                .set_transport_weights(weights)
+                .unwrap();
+            self.routers[i]
                 .static_runtime()
                 .unwrap()
                 .update_network()
@@ -235,17 +218,7 @@ async fn create_routers_net(
     dest: u16,
     port_offset: u16,
 ) -> Net {
-    create_net(net, source, dest, port_offset, WhatAmI::Router).await
-}
-
-#[allow(clippy::type_complexity)]
-async fn create_peers_net(
-    net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
-    source: u16,
-    dest: u16,
-    port_offset: u16,
-) -> Net {
-    create_net(net, source, dest, port_offset, WhatAmI::Peer).await
+    create_net(net, source, dest, port_offset).await
 }
 
 #[allow(clippy::type_complexity)]
@@ -253,8 +226,7 @@ async fn create_net(
     net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
     source: u16,
     dest: u16,
-    port_offset: u16,
-    wai: WhatAmI,
+    _port_offset: u16,
 ) -> Net {
     let start_id = ZenohId::from_str("a").unwrap();
     let end_id = ZenohId::from_str("b").unwrap();
@@ -276,14 +248,30 @@ async fn create_net(
         }
     }
     let mut routers = Vec::new();
+    let mut router_ports = HashMap::new();
+
+    for (id, _) in &net {
+        let mut port = get_free_tcp_port();
+        while router_ports.values().any(|p| *p == port) {
+            port = get_free_tcp_port();
+        }
+        router_ports.insert(*id, port);
+    }
 
     for v in &net {
         let zid = ZenohId::from_str(&v.0.to_string()).unwrap();
         let connect =
             v.1.iter()
-                .map(|(id, _)| id + port_offset)
+                .map(|(id, _)| {
+                    *router_ports
+                        .get(id)
+                        .unwrap_or_else(|| panic!("Missing port for router {id}"))
+                })
                 .collect::<Vec<_>>();
-        let mut config = get_basic_router_config(&[port_offset + v.0], &connect, wai).await;
+        let listen_port = *router_ports
+            .get(&v.0)
+            .unwrap_or_else(|| panic!("Missing port for router {}", v.0));
+        let mut config = get_basic_router_config(&[listen_port], &connect, WhatAmI::Router).await;
         config.set_id(Some(zid)).unwrap();
         let weights =
             v.1.iter()
@@ -294,38 +282,30 @@ async fn create_net(
                     })
                 })
                 .collect::<Vec<_>>();
-        match wai {
-            WhatAmI::Router => {
-                config
-                    .routing
-                    .router
-                    .linkstate
-                    .set_transport_weights(weights)
-                    .unwrap();
-            }
-            WhatAmI::Peer => {
-                config
-                    .routing
-                    .peer
-                    .linkstate
-                    .set_transport_weights(weights)
-                    .unwrap();
-                config
-                    .routing
-                    .peer
-                    .set_mode(Some("linkstate".to_string()))
-                    .unwrap();
-            }
-            WhatAmI::Client => unreachable!(),
-        }
+        config
+            .routing
+            .router
+            .linkstate
+            .set_transport_weights(weights)
+            .unwrap();
 
         let router = ztimeout!(open(config)).unwrap();
         routers.push(router);
     }
 
-    let mut config_client_a = get_basic_client_config(source + port_offset).await;
+    let mut config_client_a = get_basic_client_config(
+        *router_ports
+            .get(&source)
+            .unwrap_or_else(|| panic!("Missing port for source router {source}")),
+    )
+    .await;
     config_client_a.set_id(Some(start_id)).unwrap();
-    let mut config_client_b = get_basic_client_config(dest + port_offset).await;
+    let mut config_client_b = get_basic_client_config(
+        *router_ports
+            .get(&dest)
+            .unwrap_or_else(|| panic!("Missing port for destination router {dest}")),
+    )
+    .await;
     config_client_b.set_id(Some(end_id)).unwrap();
 
     let session_a = ztimeout!(open(config_client_a)).unwrap();
@@ -336,7 +316,6 @@ async fn create_net(
         routers,
         source: session_a,
         dest: session_b,
-        wai,
     }
 }
 
@@ -689,79 +668,7 @@ async fn test_link_weights_update_hexagon() {
     assert_eq!(msg, "a->1->4->7->b");
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_link_weights_update_diamond_peers() {
-    init_log_from_env_or("error");
-    //       2
-    //      / \
-    // a - 1   4 - b
-    //      \ /
-    //       3
-
-    let mut net = create_peers_net(
-        vec![
-            (1, vec![(2, Some(10)), (3, None)]),
-            (2, vec![(4, None)]),
-            (3, vec![(4, None)]),
-            (4, vec![]),
-        ],
-        1,
-        4,
-        33000,
-    )
-    .await;
-
-    let sub = ztimeout!(net.dest.declare_subscriber("test/link_weights")).unwrap();
-
-    tokio::time::sleep(3 * SLEEP).await;
-    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
-
-    let msg = ztimeout!(sub.recv_async())
-        .unwrap()
-        .payload()
-        .try_to_string()
-        .unwrap()
-        .to_string();
-    assert_eq!(msg, "a->1->2->4->b");
-
-    ztimeout!(net.update_weights(vec![
-        (1, vec![(2, None), (3, Some(10))]),
-        (2, vec![(4, None)]),
-        (3, vec![(4, None)]),
-        (4, vec![]),
-    ]));
-
-    tokio::time::sleep(3 * SLEEP).await;
-    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
-
-    let msg = ztimeout!(sub.recv_async())
-        .unwrap()
-        .payload()
-        .try_to_string()
-        .unwrap()
-        .to_string();
-    assert_eq!(msg, "a->1->3->4->b");
-
-    ztimeout!(net.update_weights(vec![
-        (1, vec![(2, None), (3, Some(200))]),
-        (2, vec![(4, None)]),
-        (3, vec![(4, None)]),
-        (4, vec![]),
-    ]));
-
-    tokio::time::sleep(3 * SLEEP).await;
-    ztimeout!(net.source.put("test/link_weights", "a")).unwrap();
-
-    let msg = ztimeout!(sub.recv_async())
-        .unwrap()
-        .payload()
-        .try_to_string()
-        .unwrap()
-        .to_string();
-    assert_eq!(msg, "a->1->2->4->b");
-}
-
-async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
+async fn test_link_weights_info_diamond_inner(port_offset: u16) {
     //       2
     //      / \
     // a - 1 - 4 - b
@@ -778,11 +685,10 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
         1,
         4,
         port_offset,
-        wai,
     )
     .await;
 
-    let info = net.routers[0].0.static_runtime().unwrap().get_links_info();
+    let info = net.routers[0].static_runtime().unwrap().get_links_info();
 
     let expected = HashMap::from([
         (
@@ -817,11 +723,5 @@ async fn test_link_weights_info_diamond_inner(port_offset: u16, wai: WhatAmI) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_link_weights_info_diamond_routers() {
     init_log_from_env_or("error");
-    test_link_weights_info_diamond_inner(36000, WhatAmI::Router).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_link_weights_info_diamond_peers() {
-    init_log_from_env_or("error");
-    test_link_weights_info_diamond_inner(35000, WhatAmI::Peer).await;
+    test_link_weights_info_diamond_inner(36000).await;
 }

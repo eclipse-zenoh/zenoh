@@ -22,7 +22,7 @@ use zenoh_protocol::{
     },
     core::WireExpr,
     network::{
-        declare, id,
+        id,
         interest::{self, Interest, InterestMode, InterestOptions},
         Mapping,
     },
@@ -56,11 +56,11 @@ where
             InterestMode::Future => 0b10,
             InterestMode::CurrentFuture => 0b11,
         } << HEADER_BITS;
-        let mut n_exts = ((ext_qos != &declare::ext::QoSType::DEFAULT) as u8)
+        let mut n_exts = ((ext_qos != &interest::ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_nodeid != &declare::ext::NodeIdType::DEFAULT) as u8);
+            + ((ext_nodeid != &interest::ext::NodeIdType::DEFAULT) as u8);
         if n_exts != 0 {
-            header |= declare::flag::Z;
+            header |= interest::flag::Z;
         }
         self.write(&mut *writer, header)?;
 
@@ -74,7 +74,7 @@ where
         }
 
         // Extensions
-        if ext_qos != &declare::ext::QoSType::DEFAULT {
+        if ext_qos != &interest::ext::QoSType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -82,7 +82,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_nodeid != &declare::ext::NodeIdType::DEFAULT {
+        if ext_nodeid != &interest::ext::NodeIdType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
@@ -143,33 +143,34 @@ where
         }
 
         // Extensions
-        let mut ext_qos = declare::ext::QoSType::DEFAULT;
+        let mut ext_qos = interest::ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
-        let mut ext_nodeid = declare::ext::NodeIdType::DEFAULT;
+        let mut ext_nodeid = interest::ext::NodeIdType::DEFAULT;
 
-        let mut has_ext = imsg::has_flag(self.header, declare::flag::Z);
+        let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match iext::eid(ext) {
-                declare::ext::QoS::ID => {
+                interest::ext::QoS::ID => {
                     let (q, ext): (interest::ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     ext_qos = q;
                     has_ext = ext;
                 }
-                declare::ext::Timestamp::ID => {
+                interest::ext::Timestamp::ID => {
                     let (t, ext): (interest::ext::TimestampType, bool) =
                         eodec.read(&mut *reader)?;
                     ext_tstamp = Some(t);
                     has_ext = ext;
                 }
-                declare::ext::NodeId::ID => {
+                interest::ext::NodeId::ID => {
                     let (nid, ext): (interest::ext::NodeIdType, bool) = eodec.read(&mut *reader)?;
                     ext_nodeid = nid;
                     has_ext = ext;
                 }
+
                 _ => {
-                    has_ext = extension::skip(reader, "Declare", ext)?;
+                    has_ext = extension::skip(reader, "Interest", ext)?;
                 }
             }
         }

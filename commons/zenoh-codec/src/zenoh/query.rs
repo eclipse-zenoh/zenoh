@@ -88,10 +88,10 @@ where
         if !parameters.is_empty() {
             header |= flag::P;
         }
-        let mut n_exts = (ext_sinfo.is_some() as u8)
-            + (ext_body.is_some() as u8)
-            + (ext_attachment.is_some() as u8)
-            + (ext_unknown.len() as u8);
+        let mut n_exts = usize::from(ext_sinfo.is_some())
+            + usize::from(ext_body.is_some())
+            + usize::from(ext_attachment.is_some())
+            + ext_unknown.len();
         if n_exts != 0 {
             header |= flag::Z;
         }

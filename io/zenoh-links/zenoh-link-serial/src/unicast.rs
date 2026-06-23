@@ -36,7 +36,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -138,7 +138,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         Ok(())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_lock);
         self.get_port_mut()?.write(buffer).await.map_err(|e| {
             let e = zerror!("Unable to write on Serial link {}: {}", self, e);
@@ -148,15 +148,15 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         Ok(buffer.len())
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
         let mut written: usize = 0;
         while written < buffer.len() {
-            written += self.write(&buffer[written..]).await?;
+            written += self.write(&buffer[written..], priority).await?;
         }
         Ok(())
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_lock);
         match self.get_port_mut()?.read_msg(buffer).await {
             Ok(read) => return Ok(read),
@@ -169,10 +169,10 @@ impl LinkUnicastTrait for LinkUnicastSerial {
         }
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()> {
         let mut read: usize = 0;
         while read < buffer.len() {
-            let n = self.read(&mut buffer[read..]).await?;
+            let n = self.read(&mut buffer[read..], priority).await?;
             read += n;
         }
         Ok(())
@@ -269,6 +269,15 @@ pub struct LinkManagerUnicastSerial {
     listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnicastSerial>>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastSerial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastSerial")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastSerial {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
@@ -315,7 +324,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             release_on_close,
         ));
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -473,7 +482,10 @@ async fn accept_read_task(
                     match res {
                         Ok(link) => {
                             // Communicate the new link to the initial transport manager
-                            if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                            if let Err(e) = manager
+                                .send_async(LinkUnicast::from(link.clone() as Arc<dyn LinkUnicastTrait>))
+                                .await
+                            {
                                 tracing::debug!("{}-{}: {}", file!(), line!(), e)
                             }
 

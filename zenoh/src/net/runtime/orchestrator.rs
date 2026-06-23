@@ -37,7 +37,10 @@ use zenoh_config::{
 };
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto},
+    core::{
+        whatami::WhatAmIMatcher, EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange,
+        WhatAmI, ZenohIdProto,
+    },
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -50,6 +53,7 @@ const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
 
+#[derive(Debug)]
 pub enum Loop {
     Continue,
     Break,
@@ -100,7 +104,7 @@ impl StartConditions {
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
@@ -115,13 +119,24 @@ impl StartConditions {
                 terminated: true,
             })
         }
-        if !peer_connectors.iter().any(|pc| !pc.terminated) {
+        if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
         }
     }
 }
 
 impl Runtime {
+    fn warn_if_oneof(peer_group: &EndPoints) {
+        if let EndPoints::Locators(group) = peer_group {
+            if matches!(group.strategy, LocatorsStrategy::OneOf) {
+                tracing::warn!(
+                    "connect.endpoints locator groups with strategy=oneOf are not implemented yet; \
+                     falling back to current allOf behavior"
+                );
+            }
+        }
+    }
+
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
@@ -131,9 +146,15 @@ impl Runtime {
     }
 
     async fn start_client(&self) -> ZResult<()> {
-        let (peers, scouting, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, timeout, multicast_ttl) = {
+            let guard = &self.state.config.lock();
             (
+                guard
+                    .listen()
+                    .endpoints()
+                    .client()
+                    .unwrap_or(&vec![])
+                    .clone(),
                 guard
                     .connect()
                     .endpoints()
@@ -141,6 +162,7 @@ impl Runtime {
                     .unwrap_or(&vec![])
                     .clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
+                *unwrap_or_default!(guard.scouting().multicast().listen().client()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().client()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
@@ -148,47 +170,55 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().ttl()),
             )
         };
-        match peers.len() {
-            0 => {
-                if scouting {
-                    tracing::info!("Scouting...");
-                    let ifaces = Runtime::get_interfaces(&ifaces);
-                    if ifaces.is_empty() {
-                        bail!("Unable to find multicast interface!")
+
+        self.bind_listeners(&listeners).await?;
+
+        if scouting {
+            if listen || peers.is_empty() {
+                let ifaces = Runtime::get_interfaces(&ifaces);
+                let mcast_socket = if listen {
+                    Some(Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?)
+                } else {
+                    None
+                };
+                if ifaces.is_empty() {
+                    bail!("Unable to find multicast interface!")
+                } else {
+                    let sockets: Vec<UdpSocket> = ifaces
+                        .into_iter()
+                        .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
+                        .collect();
+                    if sockets.is_empty() {
+                        bail!("Unable to bind UDP port to any multicast interface!")
                     } else {
-                        let sockets: Vec<UdpSocket> = ifaces
-                            .into_iter()
-                            .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                            .collect();
-                        if sockets.is_empty() {
-                            bail!("Unable to bind UDP port to any multicast interface!")
-                        } else {
+                        if peers.is_empty() {
                             self.connect_first(&sockets, autoconnect, &addr, timeout)
-                                .await
+                                .await?
+                        }
+                        if let Some(mcast_socket) = mcast_socket {
+                            let this = self.clone();
+                            self.spawn_abortable(async move {
+                                this.responder(&mcast_socket, &sockets).await;
+                            });
                         }
                     }
-                } else {
-                    bail!("No peer specified and multicast scouting deactivated!")
                 }
             }
-            _ => self.connect_peers(&peers, true).await,
+            if !peers.is_empty() {
+                self.connect_peers(&peers, true).await
+            } else {
+                Ok(())
+            }
+        } else if peers.is_empty() {
+            bail!("No peer specified and multicast scouting deactivated!")
+        } else {
+            self.connect_peers(&peers, true).await
         }
     }
 
     async fn start_peer(&self) -> ZResult<()> {
-        let (
-            listeners,
-            peers,
-            scouting,
-            wait_scouting,
-            listen,
-            autoconnect,
-            addr,
-            ifaces,
-            delay,
-            linkstate,
-        ) = {
-            let guard = &self.state.config.lock().0;
+        let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
+            let guard = &self.state.config.lock();
             (
                 guard.listen().endpoints().peer().unwrap_or(&vec![]).clone(),
                 guard
@@ -204,7 +234,6 @@ impl Runtime {
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
                 Duration::from_millis(unwrap_or_default!(guard.scouting().delay())),
-                unwrap_or_default!(guard.routing().peer().mode()) == *"linkstate",
             )
         };
 
@@ -216,9 +245,7 @@ impl Runtime {
             self.start_scout(listen, autoconnect, addr, ifaces).await?;
         }
 
-        if linkstate {
-            tokio::time::sleep(delay).await;
-        } else if wait_scouting
+        if wait_scouting
             && (scouting || !peers.is_empty())
             && tokio::time::timeout(delay, self.state.start_conditions.notified())
                 .await
@@ -232,7 +259,7 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.state.config.lock().0;
+            let guard = &self.state.config.lock();
             (
                 guard
                     .listen()
@@ -276,7 +303,7 @@ impl Runtime {
     ) -> ZResult<()> {
         let multicast_ttl = {
             let config_guard = self.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
         let ifaces = Runtime::get_interfaces(&ifaces);
@@ -318,7 +345,7 @@ impl Runtime {
         Ok(())
     }
 
-    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers(&self, peers: &[EndPoints], single_link: bool) -> ZResult<()> {
         let timeout = self.get_global_connect_timeout();
         if timeout.is_zero() {
             self.connect_peers_impl(peers, single_link).await
@@ -338,7 +365,7 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers_impl(&self, peers: &[EndPoints], single_link: bool) -> ZResult<()> {
         if single_link {
             self.connect_peers_single_link(peers).await
         } else {
@@ -346,63 +373,83 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_single_link(&self, peers: &[EndPoint]) -> ZResult<()> {
-        let mut peers_to_retry = Vec::new();
-        for peer in peers {
-            let endpoint = peer.clone();
-            let retry_config = self.get_connect_retry_config(&endpoint);
-            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+    async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
+        let mut success_flag = false;
+        for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
+            // try to connect to each peer in the group
+            let mut peers_to_retry = Vec::new();
+            for peer in peer_group.as_vec() {
+                let endpoint = peer.clone();
+                let retry_config = self.get_connect_retry_config(&endpoint);
+                if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                    tracing::debug!(
+                        "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                        endpoint,
+                        self.get_global_connect_timeout(),
+                        retry_config
+                    );
+                    // try to connect directly when there is no timeout configuration
+                    if self.peer_connector(endpoint).await.is_ok() {
+                        success_flag = true;
+                    }
+                } else {
+                    peers_to_retry.push(endpoint);
+                }
+            }
+            // sequentially try to connect to one of the remaining peers
+            // respecting connection retry delays
+            if self
+                .peers_connector_retry(peers_to_retry, false)
+                .await
+                .is_ok()
+            {
+                success_flag = true;
+            }
+            // any endpoint in the group is available, it's marked as success and break
+            if success_flag {
+                break;
+            }
+        }
+
+        // return error if none of them succeeded
+        if success_flag {
+            Ok(())
+        } else {
+            let e = zerror!("Unable to connect to any of {:?}! ", peers);
+            tracing::warn!("{}", &e);
+            Err(e.into())
+        }
+    }
+
+    async fn connect_peers_multiply_links(&self, peers: &[EndPoints]) -> ZResult<()> {
+        for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
+            for peer in peer_group.as_vec() {
+                let endpoint = peer.clone();
+                let retry_config = self.get_connect_retry_config(&endpoint);
                 tracing::debug!(
                     "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
                     endpoint,
                     self.get_global_connect_timeout(),
                     retry_config
                 );
-                // try to connect and exit immediately without retry
-                if self.peer_connector(endpoint).await.is_ok() {
-                    return Ok(());
-                }
-            } else {
-                peers_to_retry.push(endpoint);
-            }
-        }
-        // sequentially try to connect to one of the remaining peers
-        // respecting connection retry delays
-        match self.peers_connector_retry(peers_to_retry, true).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                tracing::warn!("{}", &e);
-                Err(e.into())
-            }
-        }
-    }
-
-    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
-        for peer in peers {
-            let endpoint = peer.clone();
-            let retry_config = self.get_connect_retry_config(&endpoint);
-            tracing::debug!(
-                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
-                endpoint,
-                self.get_global_connect_timeout(),
-                retry_config
-            );
-            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
-                // try to connect and exit immediately without retry
-                if let Err(e) = self.peer_connector(endpoint).await {
-                    if retry_config.exit_on_failure {
+                if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                    // try to connect and exit immediately without retry
+                    if let Err(e) = self.peer_connector(endpoint).await {
+                        if retry_config.exit_on_failure {
+                            return Err(e);
+                        }
+                    }
+                } else if retry_config.exit_on_failure {
+                    // try to connect with retry waiting
+                    let _ = self.peer_connector_retry(endpoint).await;
+                } else {
+                    // try to connect in background
+                    if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
+                        tracing::warn!("Error connecting to {}: {}", endpoint, e);
                         return Err(e);
                     }
-                }
-            } else if retry_config.exit_on_failure {
-                // try to connect with retry waiting
-                let _ = self.peer_connector_retry(endpoint).await;
-            } else {
-                // try to connect in background
-                if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
-                    tracing::warn!("Error connecting to {}: {}", endpoint, e);
-                    return Err(e);
                 }
             }
         }
@@ -410,48 +457,51 @@ impl Runtime {
     }
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
-        match self.manager().open_transport_unicast(peer.clone()).await {
-            Ok(transport) => {
-                if let Ok(Some(orch_transport)) = transport.get_callback() {
-                    if let Some(orch_transport) = orch_transport
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        zwrite!(orch_transport.endpoints).insert(peer);
-                    }
-                }
+        let result = self
+            .manager()
+            .open_transport_unicast(peer.clone())
+            .await
+            .and_then(|transport| -> ZResult<_> {
+                let cb = transport
+                    .get_callback()?
+                    .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                let session = cb
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                    .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                zwrite!(session.endpoints).insert(peer.clone());
                 Ok(())
-            }
-            Err(e) => {
-                tracing::warn!("Unable to connect to {}! {}", peer, e);
-                Err(e)
-            }
+            });
+
+        if let Err(e) = &result {
+            tracing::warn!("Unable to connect to {}! {}", peer, e);
         }
+        result
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), true)
     }
 
     fn get_connect_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         zenoh_config::get_retry_config(guard, Some(endpoint), false)
     }
 
     fn get_global_listener_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_listener_timeout(guard)
     }
 
     fn get_global_connect_timeout(&self) -> std::time::Duration {
-        let guard = &self.state.config.lock().0;
+        let guard = &self.state.config.lock();
         get_global_connect_timeout(guard)
     }
 
     async fn bind_listeners(&self, listeners: &[EndPoint]) -> ZResult<()> {
         if listeners.is_empty() {
-            tracing::warn!("Starting with no listener endpoints!");
+            tracing::debug!("Starting with no listener endpoints!");
             return Ok(());
         }
         let timeout = self.get_global_listener_timeout();
@@ -653,7 +703,7 @@ impl Runtime {
                 }
             }
         }
-        tracing::info!("zenohd listening scout messages on {}", sockaddr);
+        tracing::info!("Listening scout messages on {}", sockaddr);
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
@@ -714,7 +764,7 @@ impl Runtime {
             let this = self.clone();
             let idx = self.state.start_conditions.add_peer_connector().await;
             let config_guard = this.config().lock();
-            let config = &config_guard.0;
+            let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
@@ -783,20 +833,27 @@ impl Runtime {
                     self.get_global_connect_timeout(),
                     self.get_connect_retry_config(&peer)
                 );
-                match self.manager().open_transport_unicast(peer.clone()).await {
-                    Ok(transport) => {
+                let result = self
+                    .manager()
+                    .open_transport_unicast(peer.clone())
+                    .await
+                    .and_then(|transport| -> ZResult<_> {
+                        let zid = transport.get_zid()?;
+                        let cb = transport
+                            .get_callback()?
+                            .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                        let session = cb
+                            .as_any()
+                            .downcast_ref::<super::RuntimeSession>()
+                            .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                        zwrite!(session.endpoints).insert(peer.clone());
+                        Ok(zid)
+                    });
+
+                match result {
+                    Ok(zid) => {
                         tracing::debug!("Successfully connected to configured peer {}", peer);
-                        if let Ok(Some(orch_transport)) = transport.get_callback() {
-                            if let Some(orch_transport) = orch_transport
-                                .as_any()
-                                .downcast_ref::<super::RuntimeSession>()
-                            {
-                                zwrite!(orch_transport.endpoints).insert(peer);
-                            }
-                        }
-                        if let Ok(zid) = transport.get_zid() {
-                            connected_peers.push(zid);
-                        }
+                        connected_peers.push(zid);
                         if stop_after_first_connection {
                             break;
                         }
@@ -942,12 +999,13 @@ impl Runtime {
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(self.whatami())
+            .unwrap_or(&vec![])
             .iter()
-            .flat_map(|e| e.iter().map(EndPoint::to_locator))
+            .flat_map(|e| e.as_vec())
+            .map(|e| e.to_locator())
             .collect::<HashSet<_>>();
 
         let locators = scouted_locators
@@ -1005,7 +1063,7 @@ impl Runtime {
                         Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
                 } else {
-                    match manager.open_transport_unicast(endpoint).await {
+                    match manager.open_transport_unicast_with_zid(endpoint, zid).await {
                         Ok(transport) => {
                             tracing::debug!(
                                 "Successfully connected to newly scouted peer: {:?}",
@@ -1081,7 +1139,7 @@ impl Runtime {
                         return Loop::Break;
                     }
                 } else {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -1110,7 +1168,7 @@ impl Runtime {
             addr,
             move |hello| async move {
                 if hello.locators.is_empty() {
-                    tracing::warn!("Received Hello with no locators: {:?}", hello);
+                    tracing::debug!("Received Hello with no locators: {:?}", hello);
                 } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
                     self.connect_peer(&hello.zid, &hello.locators).await;
                 }
@@ -1210,17 +1268,20 @@ impl Runtime {
         if zread!(session.endpoints).is_empty() {
             return;
         }
-        let mut peers = session
+        let endpoints = session
             .runtime
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let mut peers = vec![];
+        for peer in endpoints {
+            peers.extend(peer.flatten());
+        }
 
         if session.runtime.whatami() != WhatAmI::Client {
             let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
@@ -1246,17 +1307,20 @@ impl Runtime {
         if session.runtime.is_closed() {
             return;
         }
-        let peers = session
+        let endpoints = session
             .runtime
             .state
             .config
             .lock()
-            .0
             .connect()
             .endpoints()
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let mut peers = vec![];
+        for peer in endpoints {
+            peers.extend(peer.flatten());
+        }
 
         if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
             let runtime = session.runtime.clone();
@@ -1270,16 +1334,21 @@ impl Runtime {
     pub(crate) fn update_network(&self) -> ZResult<()> {
         let router = self.router();
         let _ctrl_lock = zlock!(router.tables.ctrl_lock);
-        let mut tables = zwrite!(router.tables.tables);
-        router
-            .tables
-            .hat_code
-            .update_from_config(&mut tables, &router.tables, self)
+        let mut wtables = zwrite!(router.tables.tables);
+        let tables = &mut *wtables;
+        for hat in tables.hats.values_mut() {
+            hat.update_from_config(&router.tables, self)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn get_links_info(&self) -> HashMap<ZenohIdProto, LinkInfo> {
         let router = self.router();
         let tables = zread!(router.tables.tables);
-        router.tables.hat_code.links_info(&tables)
+        tables
+            .hats
+            .values()
+            .flat_map(|hat| hat.links_info().into_iter())
+            .collect()
     }
 }

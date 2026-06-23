@@ -75,6 +75,15 @@ pub struct CpuLoad {
     flag: Arc<AtomicBool>,
 }
 
+impl Debug for CpuLoad {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CpuLoad")
+            .field("has_handle", &self.handle.is_some())
+            .field("flag", &self.flag)
+            .finish()
+    }
+}
+
 impl Drop for CpuLoad {
     fn drop(&mut self) {
         self.flag.store(false, std::sync::atomic::Ordering::SeqCst);

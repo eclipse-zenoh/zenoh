@@ -32,7 +32,8 @@ tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-link-commons = { workspace = true }
+zenoh-link-commons = { workspace = true, features = ["unsecure_quic"] }
+zenoh-link-quic_datagram = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }

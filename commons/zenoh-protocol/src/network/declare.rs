@@ -20,7 +20,6 @@ pub use subscriber::*;
 pub use token::*;
 
 use crate::{
-    common::{ZExtZ64, ZExtZBuf},
     core::{ExprId, WireExpr},
     network::Mapping,
     zextz64, zextzbuf,
@@ -59,10 +58,7 @@ pub struct Declare {
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
@@ -214,7 +210,7 @@ pub mod common {
             }
 
             pub fn is_null(&self) -> bool {
-                self.wire_expr.is_empty()
+                self == &Self::null()
             }
 
             #[cfg(feature = "test")]

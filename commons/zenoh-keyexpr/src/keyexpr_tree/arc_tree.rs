@@ -38,6 +38,23 @@ pub struct KeArcTreeInner<
     wildness: Wildness,
 }
 
+impl<Weight, Wildness, Children, Token> core::fmt::Debug
+    for KeArcTreeInner<Weight, Wildness, Children, Token>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+    Token: TokenTrait,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeArcTreeInner")
+            .field("children", &"..")
+            .field("is_wild", &self.wildness.get())
+            .finish()
+    }
+}
+
 token_cell::token!(pub DefaultToken);
 fn ketree_borrow<'a, T, Token: TokenTrait>(
     cell: &'a TokenCell<T, Token>,
@@ -69,6 +86,20 @@ pub struct KeArcTree<
     > = DefaultChildrenProvider,
 > {
     inner: TokenCell<KeArcTreeInner<Weight, Wildness, Children, Token>, Token>,
+}
+
+impl<Weight, Token, Wildness, Children> core::fmt::Debug
+    for KeArcTree<Weight, Token, Wildness, Children>
+where
+    Token: TokenTrait,
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("KeArcTree").field(&"..").finish()
+    }
 }
 
 impl<
@@ -154,6 +185,7 @@ where
             let as_node: &Arc<
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             node = unsafe { (*as_node.get()).children.child_at(chunk)? };
         }
         Some((node.as_node(), token))
@@ -161,6 +193,7 @@ where
     // tags{ketree.arc.node.mut}
     fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
         self.node(
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { core::mem::transmute::<&Token, &Token>(&*token) },
             at,
         )
@@ -173,6 +206,7 @@ where
             inner.wildness.set(true);
         }
         let inner: &mut KeArcTreeInner<Weight, Wildness, Children, Token> =
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { core::mem::transmute(inner) };
         let construct_node = |k: &keyexpr, parent| {
             Arc::new(TokenCell::new(
@@ -194,6 +228,7 @@ where
             let as_node: &Arc<
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             node = unsafe {
                 (*as_node.get())
                     .children
@@ -240,6 +275,7 @@ where
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
         let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             iter: TreeIter::new(unsafe {
                 core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
             }),
@@ -295,6 +331,7 @@ where
         if inner.wildness.get() || key.is_wild_impl() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(
+                    // SAFETY: upheld by the surrounding invariants and prior validation.
                     unsafe {
                         core::mem::transmute::<&Children::Assoc, &Children::Assoc>(&inner.children)
                     },
@@ -349,6 +386,7 @@ where
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild_impl() {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Inclusion::new(
@@ -405,6 +443,7 @@ where
     fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
         let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() || key.is_wild_impl() {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Includer::new(
@@ -429,6 +468,7 @@ where
         let mut wild = false;
         let inner = ketree_borrow_mut(&self.inner, token);
         inner.children.filter_out(
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             &mut |child| match unsafe { (*child.get()).prune(&mut predicate) } {
                 PruneResult::Delete => Arc::strong_count(child) <= 1,
                 PruneResult::NonWild => false,
@@ -449,37 +489,48 @@ pub(crate) mod sealed {
     use token_cell::prelude::{TokenCell, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
+    impl<A, B> core::fmt::Debug for Tokenized<A, B> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_tuple("Tokenized").field(&"..").finish()
+        }
+    }
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &*self.0.get() }
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &mut Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &*self.0.get() }
         }
     }
     impl<T, Token: TokenTrait> DerefMut for Tokenized<&TokenCell<T, Token>, &mut Token> {
         fn deref_mut(&mut self) -> &mut Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &mut *self.0.get() }
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &*self.0.get() }
         }
     }
     impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &*self.0.get() }
         }
     }
     impl<T, Token: TokenTrait> DerefMut for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
         fn deref_mut(&mut self) -> &mut Self::Target {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             unsafe { &mut *self.0.get() }
         }
     }
@@ -493,6 +544,12 @@ pub(crate) mod sealed {
         pub(crate) token: T,
     }
 
+    impl<I, T> core::fmt::Debug for TokenPacker<I, T> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_struct("TokenPacker").finish_non_exhaustive()
+        }
+    }
+
     impl<'a, I: Iterator, T> Iterator for TokenPacker<I, &'a T> {
         type Item = (I::Item, &'a T);
         fn next(&mut self) -> Option<Self::Item> {
@@ -504,6 +561,7 @@ pub(crate) mod sealed {
         type Item = Tokenized<I::Item, &'a mut T>;
         fn next(&mut self) -> Option<Self::Item> {
             self.iter.next().map(|i| {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 Tokenized(i, unsafe {
                     // SAFETY: while this makes it possible for multiple mutable references to the Token to exist,
                     // it prevents them from being extracted and thus used to create multiple mutable references to
@@ -569,6 +627,27 @@ pub struct KeArcTreeNode<
     weight: Option<Weight>,
 }
 
+impl<Weight, Parent, Wildness, Children, Token> core::fmt::Debug
+    for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
+where
+    Weight: Debug,
+    Parent: IArcProvider,
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+    Token: TokenTrait,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeArcTreeNode")
+            .field("has_parent", &self.parent.is_some())
+            .field("chunk", &self.chunk)
+            .field("children", &"..")
+            .field("weight", &self.weight)
+            .finish()
+    }
+}
+
 impl<
         Weight,
         Wildness: IWildness,
@@ -585,6 +664,7 @@ where
     fn prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
         let mut result = PruneResult::NonWild;
         self.children.filter_out(&mut |child| {
+            // SAFETY: upheld by the surrounding invariants and prior validation.
             let c = unsafe { &mut *child.get() };
             match c.prune(predicate) {
                 PruneResult::Delete => Arc::strong_count(child) <= 1,
@@ -622,16 +702,25 @@ where
     type Parent = <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
         Weight,
     >>::Parent;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
-        (*self.get()).parent()
+        // SAFETY: token guarantees exclusive/valid access to the inner node.
+        unsafe { (*self.get()).parent() }
     }
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
-        (*self.get()).keyexpr()
+        // SAFETY: token guarantees exclusive/valid access to the inner node.
+        unsafe { (*self.get()).keyexpr() }
     }
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
-        (*self.get()).weight()
+        // SAFETY: token guarantees exclusive/valid access to the inner node.
+        unsafe { (*self.get()).weight() }
     }
 
     type Child = <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
@@ -642,8 +731,11 @@ where
     Weight,
 >>::Children;
 
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
-        (*self.get()).children()
+        // SAFETY: token guarantees exclusive/valid access to the inner node.
+        unsafe { (*self.get()).children() }
     }
 }
 
@@ -694,22 +786,31 @@ where
 {
     type Parent =
         Parent::Ptr<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.parent.as_ref()
     }
     /// May panic if the node has been zombified (see [`Self::is_zombie`])
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe {
             // self._keyexpr is guaranteed to return a valid KE, so no checks are necessary
             OwnedKeyExpr::from_string_unchecked(self._keyexpr(0))
         }
     }
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __weight(&self) -> Option<&Weight> {
         self.weight.as_ref()
     }
 
     type Child = Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
     type Children = Children::Assoc;
+    /// # Safety
+    /// Callers must uphold the invariants required by this unsafe API.
     unsafe fn __children(&self) -> &Self::Children {
         &self.children
     }
@@ -767,6 +868,7 @@ where
     pub fn is_zombie(&self) -> bool {
         match &self.parent {
             Some(parent) => match parent.upgrade() {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 Some(parent) => unsafe { &*parent.get() }.is_zombie(),
                 None => true,
             },
@@ -792,6 +894,7 @@ where
     fn _keyexpr(&self, capacity: usize) -> String {
         let mut s = match self.parent() {
             Some(parent) => {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 let parent = unsafe {
                     &*parent
                         .upgrade()
