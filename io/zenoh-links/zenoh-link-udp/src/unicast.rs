@@ -70,7 +70,7 @@ impl LinkUnicastUdpConnected {
 }
 
 struct LinkUnicastUdpUnconnected {
-    socket: Weak<UdpSocket>,
+    socket: Weak<pktinfo::PktInfoUdpSocket>,
     links: LinkHashMap,
     input: Mvar<LinkInput>,
     leftover: AsyncMutex<Option<LinkLeftOver>>,
@@ -105,10 +105,15 @@ impl LinkUnicastUdpUnconnected {
         Ok(len_min)
     }
 
-    async fn write(&self, buffer: &[u8], dst_addr: SocketAddr) -> ZResult<usize> {
+    async fn write(
+        &self,
+        buffer: &[u8],
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+    ) -> ZResult<usize> {
         match self.socket.upgrade() {
             Some(socket) => socket
-                .send_to(buffer, &dst_addr)
+                .send_to(buffer, &dst_addr, &src_addr)
                 .await
                 .map_err(|e| zerror!(e).into()),
             None => bail!("UDP listener has been dropped"),
@@ -175,7 +180,9 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize> {
         match &self.variant {
             LinkUnicastUdpVariant::Connected(link) => link.write(buffer).await,
-            LinkUnicastUdpVariant::Unconnected(link) => link.write(buffer, self.dst_addr).await,
+            LinkUnicastUdpVariant::Unconnected(link) => {
+                link.write(buffer, self.src_addr, self.dst_addr).await
+            }
             LinkUnicastUdpVariant::Reliable(link) => link.write(buffer, priority).await,
         }
     }
@@ -654,7 +661,7 @@ async fn accept_read_task(
                                     // A new peers has sent data to this socket
                                     tracing::debug!("Accepted UDP connection on {}: {}", src_addr, dst_addr);
                                     let unconnected = Arc::new(LinkUnicastUdpUnconnected {
-                                        socket: Arc::downgrade(&socket.socket),
+                                        socket: Arc::downgrade(&socket),
                                         links: links.clone(),
                                         input: Mvar::new(),
                                         leftover: AsyncMutex::new(None),
