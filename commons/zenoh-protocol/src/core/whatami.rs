@@ -36,7 +36,7 @@ use zenoh_result::{bail, ZError};
 ///
 /// A more detailed explanation of each mode is at [Zenoh Documentation](https://zenoh.io/docs/getting-started/deployment/)
 #[repr(u8)]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum WhatAmI {
     Router = 0b001,
     #[default]
@@ -70,6 +70,18 @@ impl WhatAmI {
         *[Self::Router, Self::Peer, Self::Client]
             .choose(&mut rng)
             .unwrap()
+    }
+
+    pub const fn is_client(self) -> bool {
+        matches!(self, WhatAmI::Client)
+    }
+
+    pub const fn is_peer(self) -> bool {
+        matches!(self, WhatAmI::Peer)
+    }
+
+    pub const fn is_router(self) -> bool {
+        matches!(self, WhatAmI::Router)
     }
 }
 
@@ -303,6 +315,7 @@ impl serde::Serialize for WhatAmI {
     }
 }
 
+#[derive(Debug)]
 pub struct WhatAmIVisitor;
 
 impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
@@ -364,6 +377,7 @@ impl serde::Serialize for WhatAmIMatcher {
     }
 }
 
+#[derive(Debug)]
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;

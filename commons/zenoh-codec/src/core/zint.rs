@@ -88,6 +88,7 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
+    #[inline(always)]
     fn write(self, writer: &mut W, x: u8) -> Self::Output {
         writer.write_u8(x)
     }
@@ -99,6 +100,7 @@ where
 {
     type Error = DidntRead;
 
+    #[inline(always)]
     fn read(self, reader: &mut R) -> Result<u8, Self::Error> {
         reader.read_u8()
     }
@@ -245,6 +247,7 @@ macro_rules! zint_impl_codec {
         {
             type Error = DidntRead;
 
+            #[inline(always)]
             fn read(self, reader: &mut R) -> Result<$zint, Self::Error> {
                 let x: u64 = Zenoh080.read(reader)?;
                 if (x & !(<$bound>::MAX as u64)) != 0 {

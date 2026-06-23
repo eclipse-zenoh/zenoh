@@ -20,6 +20,7 @@ use zenoh_protocol::{
     network::NetworkMessageMut,
 };
 use zenoh_result::ZResult;
+use zenoh_test::{get_free_tcp_port, get_free_udp_port};
 use zenoh_transport::{
     multicast::TransportMulticast,
     unicast::{establishment::ext::auth::Auth, TransportUnicast},
@@ -593,7 +594,9 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     run_with_universal_transport(&endpoint).await;
 }
 
@@ -601,7 +604,9 @@ async fn authenticator_tcp() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_tcp_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
 
@@ -609,7 +614,9 @@ async fn authenticator_tcp_with_lowlatency_transport() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     run_with_universal_transport(&endpoint).await;
 }
 
@@ -617,7 +624,9 @@ async fn authenticator_udp() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn authenticator_udp_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
 
@@ -646,7 +655,9 @@ async fn authenticator_unixpipe_with_lowlatency_transport() {
 #[ignore]
 async fn authenticator_ws() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     run_with_universal_transport(&endpoint).await;
 }
 
@@ -655,7 +666,9 @@ async fn authenticator_ws() {
 #[ignore]
 async fn authenticator_ws_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     run_with_lowlatency_transport(&endpoint).await;
 }
 
@@ -754,7 +767,9 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 8030).parse().unwrap();
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -854,7 +869,9 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 8041).parse().unwrap();
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(

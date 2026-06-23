@@ -116,10 +116,7 @@ pub mod ext {
     use alloc::boxed::Box;
 
     use super::{Priority, PrioritySn};
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     /// # QoS extension
     /// Used to announce next sn when QoS is enabled

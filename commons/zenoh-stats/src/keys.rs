@@ -30,6 +30,14 @@ pub struct StatsKeyCache {
     mutex: Mutex<()>,
 }
 
+impl fmt::Debug for StatsKeyCache {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StatsKeyCache")
+            .field("generation", &self.generation.load(Ordering::Acquire))
+            .finish_non_exhaustive()
+    }
+}
+
 unsafe impl Send for StatsKeyCache {}
 unsafe impl Sync for StatsKeyCache {}
 
@@ -37,6 +45,15 @@ unsafe impl Sync for StatsKeyCache {}
 pub struct StatsKeysTree {
     generation: u64,
     tree: Option<KeBoxTree<usize>>,
+}
+
+impl fmt::Debug for StatsKeysTree {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StatsKeysTree")
+            .field("generation", &self.generation)
+            .field("has_tree", &self.tree.is_some())
+            .finish()
+    }
 }
 
 impl StatsKeysTree {
@@ -56,6 +73,7 @@ impl StatsKeysTree {
             if cache.generation.load(Ordering::Acquire) != self.generation {
                 self.update_cache(cache, keyexpr);
             }
+            // SAFETY: Dereference the raw pointer.
             return unsafe { &*cache.keys.get() }.clone();
         }
         self.compute_keys(keyexpr)

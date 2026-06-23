@@ -30,7 +30,12 @@ pub trait Primitives: Send + Sync {
 
     fn send_declare(&self, msg: &mut Declare);
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability);
+    fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool);
+
+    #[inline(always)]
+    fn send_push(&self, msg: &mut Push, reliability: Reliability) {
+        self.send_push_consume(msg, reliability, true)
+    }
 
     fn send_request(&self, msg: &mut Request);
 
@@ -68,7 +73,7 @@ impl Primitives for DummyPrimitives {
 
     fn send_declare(&self, _msg: &mut Declare) {}
 
-    fn send_push(&self, _msg: &mut Push, _reliability: Reliability) {}
+    fn send_push_consume(&self, _msg: &mut Push, _reliability: Reliability, _consume: bool) {}
 
     fn send_request(&self, _msg: &mut Request) {}
 

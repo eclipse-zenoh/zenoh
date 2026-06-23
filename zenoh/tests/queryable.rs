@@ -17,7 +17,7 @@ use std::{time::Duration, vec};
 use futures::StreamExt;
 use zenoh::{
     handlers::DefaultHandler,
-    query::{ConsolidationMode, Query, QueryTarget, QueryableBuilder, Reply},
+    query::{ConsolidationMode, Query, QueryTarget, QueryableBuilder, Reply, ReplyKeyExpr},
     sample::SampleKind,
     session::SessionGetBuilder,
     Session,
@@ -310,4 +310,170 @@ async fn test_queryable_same_session() {
     test_queryable_impl(&s1, &s1, "same session", "test/queryable/same_session").await;
 
     ztimeout!(s1.close()).expect("Failed to close session s1");
+}
+
+/// Tests for `Session::get` builder `accept_replies` setter.
+///
+/// `accept_replies(ReplyKeyExpr::MatchingQuery)` (the default) means the queryable's
+/// reply is silently dropped if its key expression does not intersect with the query key expression.
+/// `accept_replies(ReplyKeyExpr::Any)` lifts that restriction.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_accept_replies() {
+    zenoh::init_log_from_env_or("error");
+
+    let s1 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s1");
+    let s2 = ztimeout!(zenoh::open(zenoh::Config::default())).expect("Failed to open session s2");
+    tokio::time::sleep(SLEEP).await;
+    // -----------------------------------------------------------------------
+    // 1. Default (MatchingQuery): queryable replies on the *same* key expression
+    //    -> reply is accepted.
+    // -----------------------------------------------------------------------
+    {
+        let queryable = ztimeout!(s1.declare_queryable("test/accept_replies/matching"))
+            .expect("Failed to declare queryable");
+        tokio::time::sleep(SLEEP).await;
+
+        let replies = ztimeout!(s2
+            .get("test/accept_replies/matching")
+            .consolidation(ConsolidationMode::None))
+        .expect("get failed");
+
+        // Receive and answer the query via the channel.
+        let query = ztimeout!(queryable.recv_async()).expect("queryable did not receive query");
+        ztimeout!(query.reply("test/accept_replies/matching", "value")).expect("reply failed");
+        assert_eq!(
+            query.accepts_replies(),
+            ReplyKeyExpr::MatchingQuery,
+            "Query::accepts_replies() should return MatchingQuery by default"
+        );
+        drop(query);
+
+        let received: Vec<RKind> = replies
+            .into_stream()
+            .then(|r| async move { RKind::from(r) })
+            .collect()
+            .await;
+
+        assert_eq!(
+            received,
+            vec![RKind::Reply],
+            "Default accept_replies: expected reply on matching key expr to be received"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. Default (MatchingQuery): queryable replies on a *disjoint* key expression
+    //    -> reply is silently dropped, getter receives nothing.
+    // -----------------------------------------------------------------------
+    {
+        let queryable = ztimeout!(s1.declare_queryable("test/accept_replies/query_key"))
+            .expect("Failed to declare queryable");
+        tokio::time::sleep(SLEEP).await;
+
+        let replies = ztimeout!(s2
+            .get("test/accept_replies/query_key")
+            .consolidation(ConsolidationMode::None))
+        .expect("get failed");
+
+        // Reply on a key that does NOT intersect the query key expression.
+        // This should be silently rejected by the session.
+        let query = ztimeout!(queryable.recv_async()).expect("queryable did not receive query");
+        let _ = ztimeout!(query.reply("test/accept_replies/disjoint_key", "value"));
+        assert_eq!(
+            query.accepts_replies(),
+            ReplyKeyExpr::MatchingQuery,
+            "Query::accepts_replies() should return MatchingQuery by default"
+        );
+        drop(query);
+
+        let received: Vec<RKind> = replies
+            .into_stream()
+            .then(|r| async move { RKind::from(r) })
+            .collect()
+            .await;
+
+        assert_eq!(
+            received,
+            vec![],
+            "Default accept_replies (MatchingQuery): reply on disjoint key expr should be dropped"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. Explicit MatchingQuery: same as default, reply on disjoint key is dropped.
+    // -----------------------------------------------------------------------
+    {
+        let queryable = ztimeout!(s1.declare_queryable("test/accept_replies/explicit_matching"))
+            .expect("Failed to declare queryable");
+        tokio::time::sleep(SLEEP).await;
+
+        let replies = ztimeout!(s2
+            .get("test/accept_replies/explicit_matching")
+            .accept_replies(ReplyKeyExpr::MatchingQuery)
+            .consolidation(ConsolidationMode::None))
+        .expect("get failed");
+
+        let query = ztimeout!(queryable.recv_async()).expect("queryable did not receive query");
+        assert_eq!(
+            query.accepts_replies(),
+            ReplyKeyExpr::MatchingQuery,
+            "Query::accepts_replies() should return MatchingQuery if set explicitly"
+        );
+        let _ = ztimeout!(query.reply("test/accept_replies/disjoint_key", "value"));
+        drop(query);
+
+        let received: Vec<RKind> = replies
+            .into_stream()
+            .then(|r| async move { RKind::from(r) })
+            .collect()
+            .await;
+
+        assert_eq!(
+            received,
+            vec![],
+            "Explicit MatchingQuery: reply on disjoint key expr should be dropped"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. accept_replies(Any): queryable replies on a *disjoint* key expression
+    //    -> reply IS accepted because the getter opted in to any key expression.
+    // -----------------------------------------------------------------------
+    {
+        let queryable = ztimeout!(s1.declare_queryable("test/accept_replies/any_key"))
+            .expect("Failed to declare queryable");
+        tokio::time::sleep(SLEEP).await;
+
+        let replies = ztimeout!(s2
+            .get("test/accept_replies/any_key")
+            .accept_replies(ReplyKeyExpr::Any)
+            .consolidation(ConsolidationMode::None))
+        .expect("get failed");
+
+        // The query was sent with ReplyKeyExpr::Any, so the reply on a disjoint
+        // key expression goes through.
+        let query = ztimeout!(queryable.recv_async()).expect("queryable did not receive query");
+        assert_eq!(
+            query.accepts_replies(),
+            ReplyKeyExpr::Any,
+            "Query::accepts_replies() should return Any when get was called with accept_replies(Any)"
+        );
+        ztimeout!(query.reply("test/accept_replies/disjoint_key", "value")).expect("reply failed");
+        drop(query);
+
+        let received: Vec<RKind> = replies
+            .into_stream()
+            .then(|r| async move { RKind::from(r) })
+            .collect()
+            .await;
+
+        assert_eq!(
+            received,
+            vec![RKind::Reply],
+            "accept_replies(Any): reply on disjoint key expr should be received"
+        );
+    }
+
+    ztimeout!(s1.close()).expect("Failed to close session");
+    ztimeout!(s2.close()).expect("Failed to close session");
 }

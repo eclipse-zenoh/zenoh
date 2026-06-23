@@ -49,7 +49,7 @@ pub struct Del {
 }
 
 pub mod ext {
-    use crate::{common::ZExtZBuf, zextzbuf};
+    use crate::zextzbuf;
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data

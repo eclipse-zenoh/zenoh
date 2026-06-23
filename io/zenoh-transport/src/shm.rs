@@ -46,12 +46,14 @@ use zenoh_shm::{
 
 use crate::unicast::establishment::ext::shm::AuthSegment;
 
+#[derive(Debug)]
 struct ProviderInitCfg {
     shm_size: NonZeroUsize,
 }
 
+#[derive(Debug)]
 pub enum ProviderInitState {
-    Initializing,
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
@@ -63,9 +65,29 @@ enum ProviderInitStateInner {
     Error,
 }
 
+impl std::fmt::Debug for ProviderInitStateInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Enabled(cfg) => f.debug_tuple("Enabled").field(cfg).finish(),
+            Self::Initializing(_) => f.debug_tuple("Initializing").field(&"..").finish(),
+            Self::Ready(provider) => f.debug_tuple("Ready").field(provider).finish(),
+            Self::Error => f.debug_tuple("Error").finish(),
+        }
+    }
+}
+
 pub struct LazyShmProvider {
     message_size_threshold: usize,
     state: Mutex<ProviderInitStateInner>,
+}
+
+impl std::fmt::Debug for LazyShmProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LazyShmProvider")
+            .field("message_size_threshold", &self.message_size_threshold)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 impl LazyShmProvider {
@@ -106,8 +128,8 @@ impl LazyShmProvider {
                         });
                 });
 
-                *lock = ProviderInitStateInner::Initializing(receiver);
-                ProviderInitState::Initializing
+                *lock = ProviderInitStateInner::Initializing(receiver.clone());
+                ProviderInitState::Initializing(receiver)
             }
             ProviderInitStateInner::Initializing(join_handle) => match join_handle.try_recv() {
                 Ok(Some(shm_provider)) => {
@@ -118,7 +140,7 @@ impl LazyShmProvider {
                     *lock = ProviderInitStateInner::Error;
                     ProviderInitState::Error
                 }
-                Err(_) => ProviderInitState::Initializing,
+                Err(_) => ProviderInitState::Initializing(join_handle.clone()),
             },
             ProviderInitStateInner::Ready(shm_provider) => {
                 ProviderInitState::Ready(shm_provider.clone())
@@ -176,7 +198,7 @@ impl TransportShmConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MulticastTransportShmConfig;
 
 impl PartnerShmConfig for MulticastTransportShmConfig {

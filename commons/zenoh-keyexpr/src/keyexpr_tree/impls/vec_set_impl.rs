@@ -18,6 +18,7 @@ use zenoh_result::unlikely;
 
 use crate::keyexpr_tree::*;
 
+#[derive(Debug)]
 pub struct VecSetProvider;
 impl<T: 'static> IChildrenProvider<T> for VecSetProvider {
     type Assoc = Vec<T>;
@@ -35,6 +36,7 @@ impl<'a, 'b, T: HasChunk> IEntry<'a, 'b, T> for Entry<'a, 'b, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum Entry<'a, 'b, T> {
     Vacant(&'a mut Vec<T>, &'b keyexpr),
     Occupied(&'a mut T),
@@ -73,6 +75,7 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> IChildren<T> for Vec<T> {
         'a: 'b,
         T: 'b,
     {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         let this = unsafe { &mut *(self as *mut Self) };
         match self.child_at_mut(chunk) {
             Some(entry) => Entry::Occupied(entry),

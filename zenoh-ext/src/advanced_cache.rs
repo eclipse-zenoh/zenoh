@@ -14,12 +14,13 @@
 use std::{
     collections::VecDeque,
     future::{IntoFuture, Ready},
+    num::NonZeroUsize,
     ops::{Bound, RangeBounds},
     sync::{Arc, RwLock},
 };
 
 use zenoh::{
-    internal::{bail, traits::QoSBuilderTrait},
+    internal::{bail, traits::QoSBuilderTrait, zerror},
     key_expr::{
         format::{ke, kedefine},
         keyexpr, KeyExpr,
@@ -64,6 +65,7 @@ impl Default for RepliesConfig {
 impl QoSBuilderTrait for RepliesConfig {
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`CongestionControl`] to apply when routing the data.
     fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
         self
@@ -71,6 +73,7 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the [`Priority`] to apply when routing the data.
     fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
         self
@@ -78,6 +81,10 @@ impl QoSBuilderTrait for RepliesConfig {
 
     #[allow(unused_mut)]
     #[zenoh_macros::unstable]
+    /// Changes the Express policy to apply when routing the data.
+    ///
+    /// When express is set to `true`, then the message will not be batched.
+    /// This usually has a positive impact on latency but a negative impact on throughput.
     fn express(mut self, is_express: bool) -> Self {
         self.is_express = is_express;
         self
@@ -105,6 +112,8 @@ impl Default for CacheConfig {
 #[zenoh_macros::unstable]
 impl CacheConfig {
     /// Specify how many samples to keep for each resource.
+    ///
+    /// Builder will fail if `max_samples` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = depth;
@@ -212,7 +221,7 @@ fn decode_sn_range(range: &str) -> (Bound<WrappingSn>, Bound<WrappingSn>) {
 #[zenoh_macros::unstable]
 pub struct AdvancedCache {
     cache: Arc<RwLock<VecDeque<Sample>>>,
-    max_samples: usize,
+    max_samples: NonZeroUsize,
     _queryable: Queryable<()>,
     _token: Option<LivelinessToken>,
 }
@@ -356,9 +365,14 @@ impl AdvancedCache {
             None
         };
 
+        let max_samples = conf
+            .history
+            .max_samples
+            .try_into()
+            .map_err(|_| zerror!("max_samples must not be zero"))?;
         Ok(AdvancedCache {
             cache,
-            max_samples: conf.history.max_samples,
+            max_samples,
             _queryable: queryable,
             _token: token,
         })
@@ -367,7 +381,7 @@ impl AdvancedCache {
     #[zenoh_macros::unstable]
     pub(crate) fn cache_sample(&self, sample: Sample) {
         if let Ok(mut queue) = self.cache.write() {
-            if queue.len() >= self.max_samples {
+            if queue.len() >= self.max_samples.get() {
                 queue.pop_front();
             }
             queue.push_back(sample);

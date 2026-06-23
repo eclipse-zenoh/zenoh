@@ -47,8 +47,13 @@ impl ShmBuf<[u8]> for ZShmMut {
 }
 
 impl ShmBufUnsafeMut<[u8]> for ZShmMut {
+    /// # Safety
+    ///
+    /// The caller must ensure that the `ShmBufInner` is valid and can be uniquely accessed.
     unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
-        self.inner.as_mut_slice_inner()
+        // SAFETY: The internal buffer is assumed to be valid and uniquely accessible
+        // as per the safety contract of this function.
+        unsafe { self.inner.as_mut_slice_inner() }
     }
 }
 
@@ -64,14 +69,14 @@ impl ShmBufMut<[u8]> for ZShmMut {}
 
 impl OwnedShmBuf<[u8]> for ZShmMut {
     fn try_resize(&mut self, new_size: NonZeroUsize) -> Option<()> {
-        // Safety: this is safe because ZShmMut is an owned representation of SHM buffer and thus
-        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
+        // SAFETY: this is safe because ZShmMut is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment).
         unsafe { self.inner.try_resize(new_size) }
     }
 
     fn try_relayout(&mut self, new_layout: MemoryLayout) -> Result<(), BufferRelayoutError> {
-        // Safety: this is safe because ZShmMut is an owned representation of SHM buffer and thus
-        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment)
+        // SAFETY: this is safe because ZShmMut is an owned representation of SHM buffer and thus
+        // is guaranteed not to be wrapped into ZSlice (see ShmBufInner::try_resize comment).
         unsafe { self.inner.try_relayout(new_layout) }
     }
 }
@@ -85,7 +90,7 @@ impl PartialEq<zshmmut> for &ZShmMut {
 impl Borrow<zshm> for ZShmMut {
     fn borrow(&self) -> &zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -93,7 +98,7 @@ impl Borrow<zshm> for ZShmMut {
 impl BorrowMut<zshm> for ZShmMut {
     fn borrow_mut(&mut self) -> &mut zshm {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -101,7 +106,7 @@ impl BorrowMut<zshm> for ZShmMut {
 impl Borrow<zshmmut> for ZShmMut {
     fn borrow(&self) -> &zshmmut {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -109,7 +114,7 @@ impl Borrow<zshmmut> for ZShmMut {
 impl BorrowMut<zshmmut> for ZShmMut {
     fn borrow_mut(&mut self) -> &mut zshmmut {
         // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-        // to ShmBufInner type, so it is safe to transmute them in any direction
+        // to ShmBufInner type, so it is safe to transmute them in any direction.
         unsafe { core::mem::transmute(self) }
     }
 }
@@ -186,8 +191,13 @@ impl ShmBuf<[u8]> for &mut zshmmut {
 }
 
 impl ShmBufUnsafeMut<[u8]> for &mut zshmmut {
+    /// # Safety
+    ///
+    /// The caller must ensure that the `ShmBufInner` is valid and can be uniquely accessed.
     unsafe fn as_mut_unchecked(&mut self) -> &mut [u8] {
-        self.inner.as_mut_slice_inner()
+        // SAFETY: The internal buffer is assumed to be valid and uniquely accessible
+        // as per the safety contract of this function.
+        unsafe { self.inner.as_mut_slice_inner() }
     }
 }
 
@@ -242,7 +252,7 @@ impl TryFrom<&zshm> for &zshmmut {
         match value.inner.is_unique() && value.inner.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-                // to ShmBufInner type, so it is safe to transmute them in any direction
+                // to ShmBufInner type, so it is safe to transmute them in any direction.
                 Ok(unsafe { core::mem::transmute::<&zshm, &zshmmut>(value) })
             }
             false => Err(()),
@@ -257,7 +267,7 @@ impl TryFrom<&mut zshm> for &mut zshmmut {
         match value.inner.is_unique() && value.inner.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-                // to ShmBufInner type, so it is safe to transmute them in any direction
+                // to ShmBufInner type, so it is safe to transmute them in any direction.
                 Ok(unsafe { core::mem::transmute::<&mut zshm, &mut zshmmut>(value) })
             }
             false => Err(()),
@@ -272,7 +282,7 @@ impl TryFrom<&mut ZShm> for &mut zshmmut {
         match value.inner.is_unique() && value.inner.is_valid() {
             true => {
                 // SAFETY: ZShm, ZShmMut, zshm and zshmmut are #[repr(transparent)]
-                // to ShmBufInner type, so it is safe to transmute them in any direction
+                // to ShmBufInner type, so it is safe to transmute them in any direction.
                 Ok(unsafe { core::mem::transmute::<&mut ZShm, &mut zshmmut>(value) })
             }
             false => Err(()),

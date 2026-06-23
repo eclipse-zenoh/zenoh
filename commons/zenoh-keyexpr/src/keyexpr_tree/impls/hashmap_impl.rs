@@ -32,6 +32,7 @@ use hashbrown::{
 use crate::keyexpr_tree::*;
 
 #[cfg_attr(not(feature = "std"), allow(deprecated))]
+#[derive(Debug)]
 pub struct HashMapProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
     core::marker::PhantomData<Hash>,
 );
@@ -46,6 +47,7 @@ impl<'a: 'b, 'b, T: HasChunk, S: core::hash::BuildHasher> IEntry<'a, 'b, T>
     fn get_or_insert_with<F: FnOnce(&'b keyexpr) -> T>(self, f: F) -> &'a mut T {
         match self {
             Entry::Vacant(entry) => {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 let value = unsafe { f(core::mem::transmute::<&keyexpr, &keyexpr>(entry.key())) };
                 entry.insert(value)
             }
@@ -58,6 +60,7 @@ impl<'a: 'b, 'b, T: HasChunk> IEntry<'a, 'b, T> for Entry<'a, OwnedKeyExpr, T> {
     fn get_or_insert_with<F: FnOnce(&'b keyexpr) -> T>(self, f: F) -> &'a mut T {
         match self {
             Entry::Vacant(entry) => {
+                // SAFETY: upheld by the surrounding invariants and prior validation.
                 let value = unsafe { f(core::mem::transmute::<&keyexpr, &keyexpr>(entry.key())) };
                 entry.insert(value)
             }

@@ -71,8 +71,10 @@ impl OwnedKeyExpr {
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
     pub unsafe fn from_string_unchecked(s: String) -> Self {
-        Self::from_boxed_str_unchecked(s.into_boxed_str())
+        // SAFETY: caller upholds key expression invariants for `s`.
+        unsafe { Self::from_boxed_str_unchecked(s.into_boxed_str()) }
     }
+
     /// Constructs an OwnedKeyExpr without checking [`keyexpr`]'s invariants
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
@@ -122,6 +124,7 @@ impl fmt::Display for OwnedKeyExpr {
 impl Deref for OwnedKeyExpr {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { keyexpr::from_str_unchecked(&self.0) }
     }
 }
@@ -199,6 +202,7 @@ impl<'a> From<&'a nonwild_keyexpr> for OwnedNonWildKeyExpr {
 impl Deref for OwnedNonWildKeyExpr {
     type Target = nonwild_keyexpr;
     fn deref(&self) -> &Self::Target {
+        // SAFETY: upheld by the surrounding invariants and prior validation.
         unsafe { nonwild_keyexpr::from_str_unchecked(&self.0) }
     }
 }

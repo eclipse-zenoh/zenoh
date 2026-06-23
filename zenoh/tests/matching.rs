@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![cfg(feature = "internal_config")]
+#![cfg(feature = "unstable")]
 
 use std::time::Duration;
 
@@ -21,8 +21,9 @@ use zenoh::{
     sample::Locality,
     Result as ZResult, Session,
 };
-use zenoh_config::{ModeDependentValue, WhatAmI};
+use zenoh_config::WhatAmI;
 use zenoh_core::ztimeout;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
@@ -38,62 +39,57 @@ enum TestType {
     RouterClient,
 }
 
-async fn create_session_pair(locator: &str, modes: (WhatAmI, WhatAmI)) -> (Session, Session) {
-    let mut config1 = zenoh::Config::default();
-    config1.set_mode(Some(modes.0)).unwrap();
-    config1.scouting.multicast.set_enabled(Some(false)).unwrap();
-
-    let mut config2 = zenoh::Config::default();
-    config2.set_mode(Some(modes.1)).unwrap();
-    config2.scouting.multicast.set_enabled(Some(false)).unwrap();
+async fn create_direct_session_pair(modes: (WhatAmI, WhatAmI)) -> (Session, Session) {
+    let mut test_context = TestSessions::new();
 
     match modes {
         (WhatAmI::Peer, WhatAmI::Peer)
         | (WhatAmI::Router, WhatAmI::Router)
         | (WhatAmI::Peer, WhatAmI::Client)
         | (WhatAmI::Router, WhatAmI::Client) => {
-            config1
-                .listen
-                .endpoints
-                .set(vec![locator.parse().unwrap()])
-                .unwrap();
-            config2
-                .connect
-                .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-                .unwrap();
-            let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-            let session2 = ztimeout!(zenoh::open(config2)).unwrap();
+            let mut listener_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+            listener_config.set_mode(Some(modes.0)).unwrap();
+            let session1 = test_context.open_listener_with_cfg(listener_config).await;
+
+            let mut connector_config = test_context.get_connector_config();
+            connector_config.set_mode(Some(modes.1)).unwrap();
+            // We need to clear the listen endpoints if both of them are routers. Router mode will bind tcp/[::]:7447 automatically.
+            if modes.0 == WhatAmI::Router && modes.1 == WhatAmI::Router {
+                connector_config.listen.endpoints.set(vec![]).unwrap();
+            }
+            let session2 = test_context.open_connector_with_cfg(connector_config).await;
             (session1, session2)
         }
         (WhatAmI::Client, WhatAmI::Peer) => {
-            config2
-                .listen
-                .endpoints
-                .set(vec![locator.parse().unwrap()])
-                .unwrap();
-            config1
-                .connect
-                .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-                .unwrap();
-            let session2 = ztimeout!(zenoh::open(config2)).unwrap();
-            let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-            (session1, session2)
-        }
-        (WhatAmI::Client, WhatAmI::Client) => {
-            config2
-                .connect
-                .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-                .unwrap();
-            config1
-                .connect
-                .set_endpoints(ModeDependentValue::Unique(vec![locator.parse().unwrap()]))
-                .unwrap();
-            let session1 = ztimeout!(zenoh::open(config1)).unwrap();
-            let session2 = ztimeout!(zenoh::open(config2)).unwrap();
+            let mut listener_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+            listener_config.set_mode(Some(modes.1)).unwrap();
+            let session2 = test_context.open_listener_with_cfg(listener_config).await;
+
+            let mut connector_config = test_context.get_connector_config();
+            connector_config.set_mode(Some(modes.0)).unwrap();
+            let session1 = test_context.open_connector_with_cfg(connector_config).await;
             (session1, session2)
         }
         _ => unreachable!(),
     }
+}
+
+async fn create_routed_client_pair() -> (Session, Session, Session) {
+    let mut test_context = TestSessions::new();
+
+    let mut router_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+    router_config.set_mode(Some(WhatAmI::Router)).unwrap();
+    let router = test_context.open_listener_with_cfg(router_config).await;
+
+    let mut client1_config = test_context.get_connector_config();
+    client1_config.set_mode(Some(WhatAmI::Client)).unwrap();
+    let session1 = test_context.open_connector_with_cfg(client1_config).await;
+
+    let mut client2_config = test_context.get_connector_config();
+    client2_config.set_mode(Some(WhatAmI::Client)).unwrap();
+    let session2 = test_context.open_connector_with_cfg(client2_config).await;
+
+    (session1, session2, router)
 }
 
 fn get_matching_listener_status(
@@ -111,7 +107,17 @@ fn is_locality_compatible(locality: Locality, same_session: bool) -> bool {
     }
 }
 
-async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_type: TestType) {
+#[test_case::test_matrix(
+    [Locality::SessionLocal, Locality::Remote, Locality::Any],
+    [
+        TestType::SameSession,
+        TestType::ClientPeer, TestType::PeerClient, TestType::PeerPeer,
+        TestType::ClientRouterClient, TestType::RouterClient, TestType::RouterRouter
+    ]
+)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn zenoh_querier_matching_status(querier_locality: Locality, test_type: TestType) {
+    zenoh_util::init_log_from_env_or("error");
     println!("Querier origin :{querier_locality:?}, test type: {test_type:?}");
     let same_session = test_type == TestType::SameSession;
     let key_expr = match querier_locality {
@@ -122,38 +128,26 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
 
     let mut _router;
     let (session1, session2) = match test_type {
-        TestType::ClientPeer => {
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Client, WhatAmI::Peer)).await
-        }
-        TestType::PeerClient => {
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Peer, WhatAmI::Client)).await
-        }
-        TestType::PeerPeer => {
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Peer, WhatAmI::Peer)).await
-        }
+        TestType::ClientPeer => create_direct_session_pair((WhatAmI::Client, WhatAmI::Peer)).await,
+        TestType::PeerClient => create_direct_session_pair((WhatAmI::Peer, WhatAmI::Client)).await,
+        TestType::PeerPeer => create_direct_session_pair((WhatAmI::Peer, WhatAmI::Peer)).await,
         TestType::SameSession => {
-            let mut config = zenoh::Config::default();
+            let mut config = zenoh_config::Config::default();
             config.scouting.multicast.set_enabled(Some(false)).unwrap();
             let s1 = ztimeout!(zenoh::open(config)).unwrap();
             let s2 = s1.clone();
             (s1, s2)
         }
         TestType::ClientRouterClient => {
-            let mut c = zenoh::Config::default();
-            c.set_mode(Some(WhatAmI::Router)).unwrap();
-            c.listen
-                .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:18002"
-                    .parse()
-                    .unwrap()]))
-                .unwrap();
-            _router = Some(ztimeout!(zenoh::open(c)).unwrap());
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Client, WhatAmI::Client)).await
+            let (s1, s2, router) = create_routed_client_pair().await;
+            _router = Some(router);
+            (s1, s2)
         }
         TestType::RouterRouter => {
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Router, WhatAmI::Router)).await
+            create_direct_session_pair((WhatAmI::Router, WhatAmI::Router)).await
         }
         TestType::RouterClient => {
-            create_session_pair("tcp/127.0.0.1:18002", (WhatAmI::Router, WhatAmI::Client)).await
+            create_direct_session_pair((WhatAmI::Router, WhatAmI::Client)).await
         }
     };
     let locality_compatible = is_locality_compatible(querier_locality, same_session);
@@ -199,6 +193,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
     );
     assert_eq!(get_matching_listener_status(&matching_listener2), None);
 
+    // NOTE: _qbl3 is complete, but its keyexpr doesn't include the AllComplete querier's
     assert_eq!(
         ztimeout!(querier1.matching_status()).unwrap().matching(),
         locality_compatible
@@ -209,6 +204,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
         .declare_queryable(format!("{key_expr}/*"))
         .complete(true))
     .unwrap();
+    // NOTE: now there is a complete queryable whose keyexpr includes that of the AllComplete querier
     assert_eq!(
         get_matching_listener_status(&matching_listener2),
         locality_compatible.then_some(true)
@@ -220,6 +216,7 @@ async fn zenoh_querier_matching_status_inner(querier_locality: Locality, test_ty
 
     ztimeout!(qbl4.undeclare()).unwrap();
 
+    // NOTE: undeclaring qbl4 should not change the state of the BestMatching querier
     assert_eq!(get_matching_listener_status(&matching_listener1), None);
     assert_eq!(
         get_matching_listener_status(&matching_listener2),
@@ -259,9 +256,9 @@ async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, sam
     };
 
     let (session1, session2) = match same_session {
-        false => create_session_pair("tcp/127.0.0.1:18001", (WhatAmI::Peer, WhatAmI::Client)).await,
+        false => create_direct_session_pair((WhatAmI::Peer, WhatAmI::Client)).await,
         true => {
-            let mut config = zenoh::Config::default();
+            let mut config = zenoh_config::Config::default();
             config.scouting.multicast.set_enabled(Some(false)).unwrap();
             let s1 = ztimeout!(zenoh::open(config)).unwrap();
             let s2 = s1.clone();
@@ -299,26 +296,6 @@ async fn zenoh_publisher_matching_status_inner(publisher_locality: Locality, sam
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn zenoh_querier_matching_status() -> ZResult<()> {
-    zenoh_util::init_log_from_env_or("error");
-    let test_types = [
-        TestType::SameSession,
-        TestType::ClientPeer,
-        TestType::PeerClient,
-        TestType::PeerPeer,
-        TestType::ClientRouterClient,
-        TestType::RouterRouter,
-        TestType::RouterClient,
-    ];
-    for tt in test_types {
-        zenoh_querier_matching_status_inner(Locality::Any, tt).await;
-        zenoh_querier_matching_status_inner(Locality::Remote, tt).await;
-        zenoh_querier_matching_status_inner(Locality::SessionLocal, tt).await;
-    }
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_publisher_matching_status() -> ZResult<()> {
     zenoh_util::init_log_from_env_or("error");
     zenoh_publisher_matching_status_inner(Locality::Any, true).await;
@@ -334,7 +311,7 @@ async fn zenoh_publisher_matching_status() -> ZResult<()> {
 async fn zenoh_matching_listener_drop_deadlock() {
     zenoh_util::init_log_from_env_or("error");
 
-    let mut config = zenoh::Config::default();
+    let mut config = zenoh_config::Config::default();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
     let session = ztimeout!(zenoh::open(config)).unwrap();
 
@@ -363,25 +340,13 @@ async fn zenoh_querier_matching_status_session_drop_inner(test_type: TestType) {
 
     let mut router = None;
     let (session1, session2) = match test_type {
-        TestType::ClientPeer => {
-            create_session_pair("tcp/127.0.0.1:18003", (WhatAmI::Client, WhatAmI::Peer)).await
-        }
-        TestType::PeerClient => {
-            create_session_pair("tcp/127.0.0.1:18003", (WhatAmI::Peer, WhatAmI::Client)).await
-        }
-        TestType::PeerPeer => {
-            create_session_pair("tcp/127.0.0.1:18003", (WhatAmI::Peer, WhatAmI::Peer)).await
-        }
+        TestType::ClientPeer => create_direct_session_pair((WhatAmI::Client, WhatAmI::Peer)).await,
+        TestType::PeerClient => create_direct_session_pair((WhatAmI::Peer, WhatAmI::Client)).await,
+        TestType::PeerPeer => create_direct_session_pair((WhatAmI::Peer, WhatAmI::Peer)).await,
         TestType::ClientRouterClient => {
-            let mut c = zenoh::Config::default();
-            c.set_mode(Some(WhatAmI::Router)).unwrap();
-            c.listen
-                .set_endpoints(ModeDependentValue::Unique(vec!["tcp/127.0.0.1:18003"
-                    .parse()
-                    .unwrap()]))
-                .unwrap();
-            router = Some(ztimeout!(zenoh::open(c)).unwrap());
-            create_session_pair("tcp/127.0.0.1:18003", (WhatAmI::Client, WhatAmI::Client)).await
+            let (s1, s2, routed_router) = create_routed_client_pair().await;
+            router = Some(routed_router);
+            (s1, s2)
         }
         _ => unreachable!(),
     };

@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#![cfg(feature = "internal_config")]
+#![cfg(feature = "unstable")]
 #![allow(unused)]
+
 use std::{
     future::IntoFuture,
     time::{Duration, Instant},
@@ -22,6 +23,7 @@ use std::{
 use zenoh_config::Config;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::WhatAmI;
+use zenoh_test::{get_locators_from_session, TestSessions};
 
 const TIMEOUT_EXPECTED: Duration = Duration::from_secs(5);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -32,20 +34,45 @@ macro_rules! ztimeout_expected {
     };
 }
 
+fn endpoint_with_address(template: &EndPoint, address: &str) -> EndPoint {
+    EndPoint::new(
+        template.protocol().as_str(),
+        address,
+        template.metadata().as_str(),
+        template.config().as_str(),
+    )
+    .unwrap()
+}
+
+// Preserve the original connect host/config and only replace the port with the
+// actual bound listener port. This is important for transports like TLS/QUIC,
+// where connecting to the discovered listener locator directly may break host-
+// based expectations such as certificates issued for `localhost`.
+fn endpoint_with_listener_port(template: &EndPoint, listener_endpoint: &EndPoint) -> EndPoint {
+    let template_address = template.address().as_str();
+    let listener_address = listener_endpoint.address().as_str();
+
+    let Some((template_host, _)) = template_address.rsplit_once(':') else {
+        return template.clone();
+    };
+    let Some((_, listener_port)) = listener_address.rsplit_once(':') else {
+        return template.clone();
+    };
+
+    endpoint_with_address(template, &format!("{template_host}:{listener_port}"))
+}
+
 async fn time_open(
     listen_endpoint: &EndPoint,
     connect_endpoint: &EndPoint,
     connect_mode: WhatAmI,
     lowlatency: bool,
 ) {
+    let mut test_context = TestSessions::new();
+
     /* [ROUTER] */
-    let mut router_config = zenoh::Config::default();
+    let mut router_config = test_context.get_listener_config(&listen_endpoint.to_string(), 1);
     router_config.set_mode(Some(WhatAmI::Router)).unwrap();
-    router_config
-        .listen
-        .endpoints
-        .set(vec![listen_endpoint.clone()])
-        .unwrap();
     router_config
         .transport
         .unicast
@@ -59,23 +86,25 @@ async fn time_open(
         .unwrap();
 
     let start = Instant::now();
-    let router = ztimeout_expected!(zenoh::open(router_config).into_future()).unwrap();
+    let router = ztimeout_expected!(test_context.open_listener_with_cfg(router_config));
+    let listener_endpoint = get_locators_from_session(&router)
+        .await
+        .into_iter()
+        .find(|endpoint| endpoint.protocol().as_str() == listen_endpoint.protocol().as_str())
+        .unwrap();
+    let connect_endpoint = endpoint_with_listener_port(connect_endpoint, &listener_endpoint);
     println!(
         "open(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
-        listen_endpoint.as_str().split('#').next().unwrap(),
+        listener_endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
 
     /* [APP] */
-    let mut app_config = zenoh::Config::default();
+    let mut app_config =
+        test_context.get_connector_config_with_endpoint(vec![connect_endpoint.clone()]);
     app_config.set_mode(Some(connect_mode)).unwrap();
-    app_config
-        .connect
-        .endpoints
-        .set(vec![connect_endpoint.clone()])
-        .unwrap();
     app_config
         .transport
         .unicast
@@ -91,7 +120,7 @@ async fn time_open(
     /* [1] */
     // Open a transport from the app to the router
     let start = Instant::now();
-    let app = ztimeout_expected!(zenoh::open(app_config).into_future()).unwrap();
+    let app = ztimeout_expected!(test_context.open_connector_with_cfg(app_config));
     println!(
         "open(mode:{}, connect_endpoint:{}, lowlatency:{}): {:#?}",
         connect_mode,
@@ -119,7 +148,7 @@ async fn time_open(
     println!(
         "close(mode:{}, listen_endpoint:{}, lowlatency:{}): {:#?}",
         WhatAmI::Router,
-        listen_endpoint.as_str().split('#').next().unwrap(),
+        listener_endpoint.as_str().split('#').next().unwrap(),
         lowlatency,
         start.elapsed()
     );
@@ -141,7 +170,7 @@ async fn time_lowlatency_open(endpoint: &EndPoint, mode: WhatAmI) {
 #[ignore]
 async fn time_tcp_only_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:0".parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -150,7 +179,7 @@ async fn time_tcp_only_open() {
 #[ignore]
 async fn time_tcp_only_with_lowlatency_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14100).parse().unwrap();
+    let endpoint: EndPoint = "tcp/127.0.0.1:0".parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -159,7 +188,7 @@ async fn time_tcp_only_with_lowlatency_open() {
 #[ignore]
 async fn time_udp_only_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14010).parse().unwrap();
+    let endpoint: EndPoint = "udp/127.0.0.1:0".parse().unwrap();
     time_universal_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -168,7 +197,7 @@ async fn time_udp_only_open() {
 #[ignore]
 async fn time_udp_only_with_lowlatency_open() {
     zenoh::init_log_from_env_or("error");
-    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 14110).parse().unwrap();
+    let endpoint: EndPoint = "udp/127.0.0.1:0".parse().unwrap();
     time_lowlatency_open(&endpoint, WhatAmI::Client).await;
 }
 
@@ -305,7 +334,7 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-    let mut endpoint: EndPoint = format!("tls/localhost:{}", 14030).parse().unwrap();
+    let mut endpoint: EndPoint = "tls/localhost:0".parse().unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(
@@ -404,7 +433,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = format!("quic/localhost:{}", 14040).parse().unwrap();
+    let mut endpoint: EndPoint = "quic/localhost:0".parse().unwrap();
     endpoint
         .config_mut()
         .extend_from_iter(

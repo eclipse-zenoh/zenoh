@@ -228,6 +228,7 @@ impl<'a, R: BacktrackableReader> RCodec<FrameReader<'a, R>, &'a mut R> for Zenoh
 impl<R: BacktrackableReader> Iterator for FrameReader<'_, R> {
     type Item = NetworkMessage;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         let mark = self.reader.mark();
         let msg = Zenoh080Reliability::new(self.reliability).read(self.reader);

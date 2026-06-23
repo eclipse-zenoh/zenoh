@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use core::{
-    fmt::{self, Debug},
+    fmt::{self, Debug, Display},
+    hash::{Hash, Hasher},
     ops::{Add, AddAssign, Sub, SubAssign},
     sync::atomic::AtomicU32,
 };
@@ -153,7 +154,7 @@ pub struct Interest {
 pub type DeclareRequestId = u32;
 pub type AtomicDeclareRequestId = AtomicU32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InterestMode {
     Final,
     Current,
@@ -177,13 +178,18 @@ impl InterestMode {
             _ => unreachable!(),
         }
     }
+
+    pub fn is_future(&self) -> bool {
+        self == &InterestMode::Future || self == &InterestMode::CurrentFuture
+    }
+
+    pub fn is_current(&self) -> bool {
+        self == &InterestMode::Current || self == &InterestMode::CurrentFuture
+    }
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtZ64, ZExtZBuf},
-        zextz64, zextzbuf,
-    };
+    use crate::{zextz64, zextzbuf};
 
     pub type QoS = zextz64!(0x1, false);
     pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
@@ -342,6 +348,16 @@ impl PartialEq for InterestOptions {
     }
 }
 
+impl Hash for InterestOptions {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.keyexprs().hash(state);
+        self.subscribers().hash(state);
+        self.queryables().hash(state);
+        self.tokens().hash(state);
+        self.aggregate().hash(state);
+    }
+}
+
 impl Debug for InterestOptions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Interest {{ ")?;
@@ -372,6 +388,34 @@ impl Debug for InterestOptions {
         }
         write!(f, " }}")?;
         Ok(())
+    }
+}
+
+impl Display for InterestOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut option_strs = alloc::vec::Vec::with_capacity(5);
+
+        if self.keyexprs() {
+            option_strs.push("K");
+        }
+
+        if self.subscribers() {
+            option_strs.push("S");
+        }
+
+        if self.queryables() {
+            option_strs.push("Q");
+        }
+
+        if self.tokens() {
+            option_strs.push("T");
+        }
+
+        if self.aggregate() {
+            option_strs.push("A");
+        }
+
+        write!(f, "{{{}}}", option_strs.join(" "))
     }
 }
 

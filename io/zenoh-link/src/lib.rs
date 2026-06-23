@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use zenoh_config::Config;
 pub use zenoh_link_commons::*;
@@ -110,7 +110,7 @@ impl LinkKind {
                 #[cfg(all(feature = "transport_quic_datagram", not(feature = "transport_quic")))]
                 QUIC_DATAGRAM_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
                 #[cfg(all(feature = "transport_quic", not(feature = "transport_quic_datagram")))]
-                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::QuicDatagram),
+                QUIC_LOCATOR_PREFIX => supported_links.push(LinkKind::Quic),
                 #[cfg(all(feature = "transport_quic", feature = "transport_quic_datagram"))]
                 QUIC_LOCATOR_PREFIX => {
                     supported_links.push(LinkKind::Quic);
@@ -242,6 +242,13 @@ pub struct LocatorInspector {
     #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
     vsock_inspector: VsockLocatorInspector,
 }
+
+impl fmt::Debug for LocatorInspector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocatorInspector").finish_non_exhaustive()
+    }
+}
+
 impl LocatorInspector {
     pub fn is_reliable(&self, locator: &Locator) -> ZResult<bool> {
         #[allow(unused_imports)]
@@ -315,6 +322,12 @@ pub struct LinkConfigurator {
     unixpipe_inspector: UnixPipeConfigurator,
 }
 
+impl fmt::Debug for LinkConfigurator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkConfigurator").finish_non_exhaustive()
+    }
+}
+
 impl LinkConfigurator {
     #[allow(unused_variables, unused_mut)]
     pub fn configurations(
@@ -368,6 +381,7 @@ impl LinkConfigurator {
 /*             UNICAST               */
 /*************************************/
 
+#[derive(Debug)]
 pub struct LinkManagerBuilderUnicast;
 
 impl LinkManagerBuilderUnicast {
@@ -412,6 +426,7 @@ impl LinkManagerBuilderUnicast {
 /*            MULTICAST              */
 /*************************************/
 
+#[derive(Debug)]
 pub struct LinkManagerBuilderMulticast;
 
 impl LinkManagerBuilderMulticast {

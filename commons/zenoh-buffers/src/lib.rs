@@ -62,6 +62,7 @@ macro_rules! unsafe_slice {
     ($s:expr,$r:expr) => {{
         let slice = &*$s;
         let index = $r;
+        // SAFETY: the index is guaranteed to be valid by the caller of this macro.
         unsafe { slice.get_unchecked(index) }
     }};
 }
@@ -72,6 +73,7 @@ macro_rules! unsafe_slice_mut {
     ($s:expr,$r:expr) => {{
         let slice = &mut *$s;
         let index = $r;
+        // SAFETY: the index is guaranteed to be valid by the caller of this macro.
         unsafe { slice.get_unchecked_mut(index) }
     }};
 }
@@ -98,7 +100,7 @@ pub mod buffer {
         /// Gets all the slices of this buffer.
         fn slices(&self) -> Self::Slices<'_>;
 
-        /// Returns all the bytes of this buffer in a conitguous slice.
+        /// Returns all the bytes of this buffer in a contiguous slice.
         /// This may require allocation and copy if the original buffer
         /// is not contiguous.
         fn contiguous(&self) -> Cow<'_, [u8]> {
@@ -107,7 +109,7 @@ pub mod buffer {
                 0 => Cow::Borrowed(b""),
                 1 => {
                     // SAFETY: unwrap here is safe because we have explicitly checked
-                    //         the iterator has 1 element.
+                    // the iterator has 1 element.
                     Cow::Borrowed(unsafe { slices.next().unwrap_unchecked() })
                 }
                 _ => Cow::Owned(slices.fold(Vec::with_capacity(self.len()), |mut acc, it| {
@@ -135,6 +137,7 @@ pub mod writer {
         fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
             self.write_exact(core::slice::from_ref(&byte))
         }
+        #[inline(always)]
         fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
             self.write_exact(slice.as_slice())
         }
@@ -147,7 +150,7 @@ pub mod writer {
         /// # Safety
         ///
         /// Caller must ensure that `write` return an integer lesser than or equal to the length of
-        /// the slice passed in argument
+        /// the slice passed in argument.
         unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
@@ -172,11 +175,15 @@ pub mod writer {
         fn can_write(&self) -> bool {
             (**self).can_write()
         }
+        /// # Safety
+        ///
+        /// Caller must ensure that `write` return an integer lesser than or equal to the length of
+        /// the slice passed in argument.
         unsafe fn with_slot<F>(&mut self, len: usize, write: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize,
         {
-            // SAFETY: same precondition
+            // SAFETY: same precondition as the trait method.
             unsafe { (**self).with_slot(len, write) }
         }
     }
@@ -207,17 +214,32 @@ pub mod writer {
 }
 
 pub mod reader {
-    use core::num::NonZeroUsize;
+    use core::{fmt::Display, num::NonZeroUsize};
 
-    use crate::ZSlice;
+    use crate::{ZBuf, ZSlice};
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
+
+    impl Display for DidntRead {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str("Didn't read")
+        }
+    }
+
+    #[cfg(feature = "std")]
+    impl std::error::Error for DidntRead {}
 
     pub trait Reader {
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead>;
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
+
+        fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+            let mut buf = ZBuf::empty();
+            self.read_zslices(len, |s| buf.push_zslice(s))?;
+            Ok(buf)
+        }
 
         /// Returns an iterator of `ZSlices` such that the sum of their length is _exactly_ `len`.
         fn read_zslices<F: FnMut(ZSlice)>(
@@ -245,15 +267,23 @@ pub mod reader {
     }
 
     impl<R: Reader + ?Sized> Reader for &mut R {
+        #[inline(always)]
         fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
             (**self).read(into)
         }
+        #[inline(always)]
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead> {
             (**self).read_exact(into)
         }
+        #[inline(always)]
         fn remaining(&self) -> usize {
             (**self).remaining()
         }
+        #[inline(always)]
+        fn read_zbuf(&mut self, len: usize) -> Result<ZBuf, DidntRead> {
+            (**self).read_zbuf(len)
+        }
+        #[inline(always)]
         fn read_zslices<F: FnMut(ZSlice)>(
             &mut self,
             len: usize,
@@ -261,12 +291,15 @@ pub mod reader {
         ) -> Result<(), DidntRead> {
             (**self).read_zslices(len, for_each_slice)
         }
+        #[inline(always)]
         fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
             (**self).read_zslice(len)
         }
+        #[inline(always)]
         fn read_u8(&mut self) -> Result<u8, DidntRead> {
             (**self).read_u8()
         }
+        #[inline(always)]
         fn can_read(&self) -> bool {
             (**self).can_read()
         }

@@ -12,9 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::future::{IntoFuture, Ready};
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+};
 
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "internal")]
@@ -46,6 +49,20 @@ where
     config: TryIntoConfig,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+}
+
+impl<TryIntoConfig> fmt::Debug for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("OpenBuilder");
+        debug.field("config", &"..");
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        debug.finish()
+    }
 }
 
 impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
@@ -133,6 +150,17 @@ pub struct InitBuilder {
     runtime: DynamicRuntime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
+}
+
+#[zenoh_macros::internal]
+impl fmt::Debug for InitBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InitBuilder")
+            .field("runtime", &"..")
+            .field("aggregated_subscribers", &self.aggregated_subscribers)
+            .field("aggregated_publishers", &self.aggregated_publishers)
+            .finish()
+    }
 }
 
 #[zenoh_macros::internal]

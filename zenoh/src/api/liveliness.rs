@@ -14,8 +14,8 @@
 
 use std::{
     convert::TryInto,
+    fmt,
     future::{IntoFuture, Ready},
-    time::Duration,
 };
 
 use tracing::error;
@@ -90,6 +90,12 @@ use crate::api::{
 /// ```
 pub struct Liveliness<'a> {
     pub(crate) session: &'a Session,
+}
+
+impl fmt::Debug for Liveliness<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Liveliness").field(&"..").finish()
+    }
 }
 
 impl<'a> Liveliness<'a> {
@@ -193,19 +199,10 @@ impl<'a> Liveliness<'a> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
-        let timeout = {
-            Duration::from_millis(
-                self.session
-                    .0
-                    .runtime
-                    .get_config()
-                    .queries_default_timeout_ms(),
-            )
-        };
         LivelinessGetBuilder {
             session: self.session,
             key_expr,
-            timeout,
+            timeout: self.session.queries_default_timeout(),
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             cancellation_token: None,
@@ -263,6 +260,7 @@ pub struct LivelinessToken {
 /// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
+#[derive(Debug)]
 pub struct LivelinessTokenUndeclaration(LivelinessToken);
 
 impl Resolvable for LivelinessTokenUndeclaration {

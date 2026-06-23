@@ -18,10 +18,10 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 pub mod dispatcher;
+pub mod gateway;
 pub mod hat;
 pub mod interceptor;
 pub mod namespace;
-pub mod router;
 
 use std::{any::Any, cell::OnceCell};
 

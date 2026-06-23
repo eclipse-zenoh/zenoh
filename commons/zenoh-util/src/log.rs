@@ -67,6 +67,7 @@ fn init_env_filter(env_filter: EnvFilter) {
     let _ = tracing::subscriber::set_global_default(subscriber);
 }
 
+#[derive(Debug)]
 pub struct LogRecord {
     pub target: String,
     pub level: tracing::Level,
@@ -160,8 +161,8 @@ pub fn init_log_with_callback(
 pub fn init_log_test() {
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
-        .with_thread_ids(true)
-        .with_thread_names(true)
+        .with_thread_ids(false) // Disable thread ids and name because
+        .with_thread_names(false) // there is a memory leak in tracing_subscriber crate with these enabled.
         .with_level(true)
         .with_target(true);
 

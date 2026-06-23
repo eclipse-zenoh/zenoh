@@ -83,7 +83,6 @@ impl QosOverwriteFactory {
                 QosOverwriteMessage::Put => filter.put = true,
                 QosOverwriteMessage::Delete => filter.delete = true,
                 QosOverwriteMessage::Query => filter.query = true,
-                QosOverwriteMessage::Reply => filter.reply = true,
             }
         }
         filter.qos = conf.qos;
@@ -210,9 +209,9 @@ struct Cache {
 
 impl QosInterceptor {
     #[inline]
-    fn is_ke_affected(&self, ke: &keyexpr) -> bool {
+    fn is_ke_affected(&self, token: &keyexpr) -> bool {
         match &self.keys {
-            Some(keys) => keys.nodes_including(ke).any(|n| n.weight().is_some()),
+            Some(keys) => keys.nodes_including(token).any(|n| n.weight().is_some()),
             None => true,
         }
     }
@@ -267,7 +266,7 @@ impl QosInterceptor {
             || cache.map(|v| v.is_ke_affected).unwrap_or_else(|| {
                 ctx.full_keyexpr(msg)
                     .as_ref()
-                    .map(|ke| self.is_ke_affected(ke))
+                    .map(|token| self.is_ke_affected(token))
                     .unwrap_or(false)
             })
     }
@@ -379,9 +378,6 @@ impl InterceptorTrait for QosInterceptor {
             NetworkBodyMut::Request(Request { ext_qos, .. }) => {
                 self.overwrite_qos(QosOverwriteMessage::Query, ext_qos);
             }
-            NetworkBodyMut::Response(Response { ext_qos, .. }) => {
-                self.overwrite_qos(QosOverwriteMessage::Reply, ext_qos);
-            }
             NetworkBodyMut::Push(Push {
                 payload: PushBody::Put(_),
                 ext_qos,
@@ -397,6 +393,7 @@ impl InterceptorTrait for QosInterceptor {
                 self.overwrite_qos(QosOverwriteMessage::Delete, ext_qos);
             }
             // unaffected message types
+            NetworkBodyMut::Response(_) => {}
             NetworkBodyMut::ResponseFinal(_) => {}
             NetworkBodyMut::Declare(_) => {}
             NetworkBodyMut::Interest(_) => {}

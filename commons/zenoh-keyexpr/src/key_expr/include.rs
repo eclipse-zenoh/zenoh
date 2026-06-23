@@ -31,6 +31,7 @@ impl<T: for<'a> Includer<&'a [u8], &'a [u8]>> Includer<&keyexpr, &keyexpr> for T
     }
 }
 
+#[derive(Debug)]
 pub struct LTRIncluder;
 impl Includer<&[u8], &[u8]> for LTRIncluder {
     fn includes(&self, mut left: &[u8], mut right: &[u8]) -> bool {
@@ -71,9 +72,7 @@ impl LTRIncluder {
     fn non_double_wild_chunk_includes(&self, lchunk: &[u8], rchunk: &[u8]) -> bool {
         if lchunk == rchunk {
             true
-        } else if unsafe {
-            lchunk.has_direct_verbatim_non_empty() || rchunk.has_direct_verbatim_non_empty()
-        } {
+        } else if lchunk.has_direct_verbatim_non_empty() || rchunk.has_direct_verbatim_non_empty() {
             false
         } else if lchunk == b"*" {
             true
