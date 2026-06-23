@@ -16,6 +16,7 @@ use std::{collections::BTreeMap, fmt, future::IntoFuture, str::FromStr};
 use zenoh::{
     config::ZenohId,
     handlers::{Callback, CallbackDrop, CallbackParameter, IntoHandler},
+    internal::bail,
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::{SubscriberBuilder, SubscriberUndeclaration},
@@ -56,8 +57,8 @@ use crate::{
 #[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
-    sample_depth: Option<usize>,
-    age: Option<f64>,
+    max_samples: Option<usize>,
+    max_age: Option<f64>,
 }
 
 #[zenoh_macros::unstable]
@@ -74,16 +75,20 @@ impl HistoryConfig {
     }
 
     /// Specify how many samples to query for each resource.
+    ///
+    /// Builder will fail if `max_samples` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
-        self.sample_depth = Some(depth);
+        self.max_samples = Some(depth);
         self
     }
 
     /// Specify the maximum age of samples to query.
+    ///
+    /// Builder will fail if `max_age` is set to zero.
     #[zenoh_macros::unstable]
     pub fn max_age(mut self, seconds: f64) -> Self {
-        self.age = Some(seconds);
+        self.max_age = Some(seconds);
         self
     }
 }
@@ -424,7 +429,7 @@ struct State {
     key_expr: KeyExpr<'static>,
     retransmission: bool,
     period: Option<Period>,
-    history_depth: usize,
+    max_history_depth: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
     // Callback must be dropped when the underlying subscriber is undeclared
@@ -610,14 +615,14 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.is_none() && states.global_pending_queries != 0 {
             // Avoid going through the Map if history_depth == 1
-            if states.history_depth == 1 {
+            if states.max_history_depth == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());
                 callback.call(sample);
             } else {
                 state
                     .pending_samples
                     .insert(source_info.source_sn().into(), sample);
-                if state.pending_samples.len() >= states.history_depth {
+                if state.pending_samples.len() >= states.max_history_depth {
                     if let Some((sn, sample)) = state.pending_samples.pop_first() {
                         deliver_and_flush(sample, sn, callback, state);
                     }
@@ -660,13 +665,13 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
         });
         if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
             if (states.global_pending_queries == 0 && state.pending_queries == 0)
-                || states.history_depth == 1
+                || states.max_history_depth == 1
             {
                 state.last_delivered = Some(*timestamp);
                 callback.call(sample);
             } else {
                 state.pending_samples.entry(*timestamp).or_insert(sample);
-                if state.pending_samples.len() >= states.history_depth {
+                if state.pending_samples.len() >= states.max_history_depth {
                     flush_timestamped_source(state, Some(callback));
                 }
             }
@@ -761,6 +766,15 @@ impl<Handler> AdvancedSubscriber<Handler> {
     where
         H: IntoHandler<Sample, Handler = Handler> + Send,
     {
+        // Check config
+        if let Some(history) = conf.history.as_ref() {
+            if history.max_samples.is_some_and(|d| d == 0) {
+                bail!("max_samples must not be zero")
+            }
+            if history.max_age.is_some_and(|a| a == 0.0) {
+                bail!("max_age must not be zero")
+            }
+        }
         let (callback, receiver) = conf.handler.into_handler();
         let key_expr = conf.key_expr?;
         let meta = match conf.meta_key_expr {
@@ -770,6 +784,12 @@ impl<Handler> AdvancedSubscriber<Handler> {
         let retransmission = conf.retransmission;
         let query_target = conf.query_target;
         let query_timeout = conf.query_timeout;
+        let max_history_depth = conf
+            .history
+            .as_ref()
+            .and_then(|h| h.max_samples)
+            // If the query is not bounded with `_max`, then it can receive unbounded number of responses
+            .unwrap_or(usize::MAX);
         let statesref = Arc::new(Mutex::new(State {
             next_id: 0,
             sequenced_states: HashMap::new(),
@@ -785,11 +805,7 @@ impl<Handler> AdvancedSubscriber<Handler> {
             }),
             key_expr: key_expr.clone().into_owned(),
             retransmission: retransmission.is_some(),
-            history_depth: conf
-                .history
-                .as_ref()
-                .and_then(|h| h.sample_depth)
-                .unwrap_or_default(),
+            max_history_depth,
             query_target: conf.query_target,
             query_timeout: conf.query_timeout,
             callback: Some(callback),
@@ -890,10 +906,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 statesref: statesref.clone(),
             };
             let mut params = Parameters::empty();
-            if let Some(max) = historyconf.sample_depth {
+            if let Some(max) = historyconf.max_samples {
                 params.insert("_max", max.to_string());
             }
-            if let Some(age) = historyconf.age {
+            if let Some(age) = historyconf.max_age {
                 params.set_time_range(TimeRange {
                     start: TimeBound::Inclusive(TimeExpr::Now { offset_secs: -age }),
                     end: TimeBound::Unbounded,
@@ -965,10 +981,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         state.pending_queries += 1;
 
                                         let mut params = Parameters::empty();
-                                        if let Some(max) = historyconf.sample_depth {
+                                        if let Some(max) = historyconf.max_samples {
                                             params.insert("_max", max.to_string());
                                         }
-                                        if let Some(age) = historyconf.age {
+                                        if let Some(age) = historyconf.max_age {
                                             params.set_time_range(TimeRange {
                                                 start: TimeBound::Inclusive(TimeExpr::Now {
                                                     offset_secs: -age,
@@ -1029,10 +1045,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                         state.pending_queries += 1;
 
                                         let mut params = Parameters::empty();
-                                        if let Some(max) = historyconf.sample_depth {
+                                        if let Some(max) = historyconf.max_samples {
                                             params.insert("_max", max.to_string());
                                         }
-                                        if let Some(age) = historyconf.age {
+                                        if let Some(age) = historyconf.max_age {
                                             params.set_time_range(TimeRange {
                                                 start: TimeBound::Inclusive(TimeExpr::Now {
                                                     offset_secs: -age,
@@ -1092,10 +1108,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
                                     states.global_pending_queries += 1;
 
                                     let mut params = Parameters::empty();
-                                    if let Some(max) = historyconf.sample_depth {
+                                    if let Some(max) = historyconf.max_samples {
                                         params.insert("_max", max.to_string());
                                     }
-                                    if let Some(age) = historyconf.age {
+                                    if let Some(age) = historyconf.max_age {
                                         params.set_time_range(TimeRange {
                                             start: TimeBound::Inclusive(TimeExpr::Now {
                                                 offset_secs: -age,
@@ -1444,9 +1460,7 @@ fn flush_timestamped_source(
         return;
     };
     if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        let mut pending_samples = BTreeMap::new();
-        std::mem::swap(&mut state.pending_samples, &mut pending_samples);
-        for (timestamp, sample) in pending_samples {
+        for (timestamp, sample) in std::mem::take(&mut state.pending_samples) {
             if state
                 .last_delivered
                 .map(|last| timestamp > last)
