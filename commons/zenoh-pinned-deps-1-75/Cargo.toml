@@ -97,6 +97,7 @@ ignored = [
   "potential_utf",
   "prost",
   "prost-derive",
+  "quinn-proto",
   "rcgen",
   "rustc-hash",
   "security-framework",
