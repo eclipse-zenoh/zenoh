@@ -472,7 +472,7 @@ where
     fn split_uring(&mut self) -> ZResult<Option<BatchHeader>> {
         if self.config.has_header() {
             let h = self.buffer.read_u8()?;
-            return Ok(Some(BatchHeader::new(h)));
+            return Ok(Some(BatchHeader(h)));
         }
         Ok(None)
     }

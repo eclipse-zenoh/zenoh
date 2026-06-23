@@ -371,7 +371,7 @@ async fn rx_task(
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
     #[cfg(all(feature = "uring", target_os = "linux"))]
-    if link.link.get_fd().is_ok() {
+    if transport.manager.state.uring.is_some() && link.link.get_fd().is_ok() {
         return rx_task_uring(
             link,
             transport.clone(),
@@ -575,8 +575,7 @@ impl Drop for TimeoutTracker {
 async fn rx_task_uring(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
-    // TODO: implement timeout
-    _lease: Duration,
+    lease: Duration,
     rx_buffer_size: usize,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
     cancellation_token: CancellationToken,
@@ -599,10 +598,16 @@ async fn rx_task_uring(
 
     let batch_config = link.config.batch;
 
-    ///////
-    //let r = zenoh_uring::reader::Reader::new(65537, 16)?;
+    let r = transport
+        .manager
+        .state
+        .uring
+        .as_ref()
+        .expect("uring is Some: checked by caller")
+        .reader
+        .clone();
 
-    let r = transport.manager.state.uring.reader.clone();
+    let lease_tracker = TimeoutTracker::new(lease);
 
     fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
         transport: &TransportUnicastUniversal,
@@ -626,38 +631,43 @@ async fn rx_task_uring(
     let mut uring_read_task = {
         match link.link.is_streamed() {
             true => {
-                let ring_cb = move |data: FragmentedBatch| match data.defragment()? {
-                    DefragmentationState::Single(slice) => {
-                        let mut batch = RBatch::new(batch_config, slice);
-                        batch
-                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
-                        read_batch(
-                            &transport,
-                            &l,
-                            batch,
-                            #[cfg(feature = "stats")]
-                            &stats,
-                        )
-                    }
-                    DefragmentationState::Fragmented(buf) => {
-                        let mut batch = RBatch::new(batch_config, buf.reader());
-                        match batch
-                            .initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?
-                        {
-                            Some(decompressed_batch) => read_batch(
-                                &transport,
-                                &l,
-                                decompressed_batch,
-                                #[cfg(feature = "stats")]
-                                &stats,
-                            ),
-                            None => read_batch(
+                let lt = lease_tracker.clone();
+                let ring_cb = move |data: FragmentedBatch| {
+                    lt.reset();
+                    match data.defragment()? {
+                        DefragmentationState::Single(slice) => {
+                            let mut batch = RBatch::new(batch_config, slice);
+                            batch.initialize_uring(
+                                || pool.try_take().unwrap_or_else(|| pool.alloc()),
+                            )?;
+                            read_batch(
                                 &transport,
                                 &l,
                                 batch,
                                 #[cfg(feature = "stats")]
                                 &stats,
-                            ),
+                            )
+                        }
+                        DefragmentationState::Fragmented(buf) => {
+                            let mut batch = RBatch::new(batch_config, buf.reader());
+                            match batch.initialize_uring(
+                                || pool.try_take().unwrap_or_else(|| pool.alloc()),
+                            )? {
+                                Some(decompressed_batch) => read_batch(
+                                    &transport,
+                                    &l,
+                                    decompressed_batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                                None => read_batch(
+                                    &transport,
+                                    &l,
+                                    batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                            }
                         }
                     }
                 };
@@ -666,7 +676,9 @@ async fn rx_task_uring(
                     .await?
             }
             false => {
+                let lt = lease_tracker.clone();
                 let ring_cb = move |data: Arc<RxBuffer>| {
+                    lt.reset();
                     let slice: ZSlice = data.into();
                     let mut batch = RBatch::new(batch_config, slice);
                     batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
@@ -691,9 +703,13 @@ async fn rx_task_uring(
             Err(e)
         },
         finished = r.wait_finished() => {
-                        tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
-                        finished
-                    }
+            tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
+            finished
+        }
+        _ = lease_tracker.wait_if(true) => {
+            tracing::debug!("Uring RX task stopped by lease timeout");
+            bail!("{link}: expired after {} milliseconds", lease.as_millis());
+        }
         _ = cancellation_token.cancelled() => {
             tracing::debug!("Uring RX task stopped by cancellation event");
             Ok(())

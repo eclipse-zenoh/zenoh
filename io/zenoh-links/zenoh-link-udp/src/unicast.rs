@@ -279,16 +279,12 @@ impl LinkUnicastTrait for LinkUnicastUdp {
             LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
                 link_unicast_udp_connected.socket.as_raw_fd()
             }
-            LinkUnicastUdpVariant::Unconnected(link_unicast_udp_unconnected) => {
-                link_unicast_udp_unconnected
-                    .socket
-                    .upgrade()
-                    .ok_or_else(|| zerror!("FD unavailable"))?
-                    .as_raw_fd()
-            }
-            LinkUnicastUdpVariant::Reliable(_link_unicast_quic_unsecure) => {
-                bail!("FD unavailable")
-            }
+            // Unconnected UDP sockets are shared across multiple peers and demultiplexed
+            // by source address in the tokio read path. Handing the raw fd to io_uring
+            // RecvMulti would bypass that demux and deliver datagrams from any peer to
+            // this link. Always fall back to tokio for the unconnected case.
+            LinkUnicastUdpVariant::Unconnected(_) => bail!("FD unavailable for unconnected UDP"),
+            LinkUnicastUdpVariant::Reliable(_) => bail!("FD unavailable"),
         };
 
         match fd {
