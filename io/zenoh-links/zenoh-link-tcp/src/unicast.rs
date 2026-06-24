@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{cell::UnsafeCell, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use tokio::{
@@ -31,7 +31,7 @@ use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use crate::{
     get_tcp_addrs, utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU,
-    TCP_LINGER_TIMEOUT, TCP_LOCATOR_PREFIX,
+    TCP_LOCATOR_PREFIX,
 };
 
 pub struct LinkUnicastTcp {
@@ -55,19 +55,6 @@ impl LinkUnicastTcp {
         if let Err(err) = socket.set_nodelay(true) {
             tracing::warn!(
                 "Unable to set NODEALY option on TCP link {} => {}: {}",
-                src_addr,
-                dst_addr,
-                err
-            );
-        }
-
-        // Set the TCP linger option
-        #[allow(deprecated)]
-        if let Err(err) = socket.set_linger(Some(Duration::from_secs(
-            (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
-        ))) {
-            tracing::warn!(
-                "Unable to set LINGER option on TCP link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err

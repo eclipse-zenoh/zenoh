@@ -73,11 +73,6 @@ impl LocatorInspector for TlsLocatorInspector {
 zconfigurable! {
     // Default MTU (TLS PDU) in bytes.
     static ref TLS_DEFAULT_MTU: BatchSize = TLS_MAX_MTU;
-    // The LINGER option causes the shutdown() call to block until (1) all application data is delivered
-    // to the remote end or (2) a timeout expires. The timeout is expressed in seconds.
-    // More info on the LINGER option and its dynamics can be found at:
-    // https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable
-    static ref TLS_LINGER_TIMEOUT: i32 = 10;
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref TLS_ACCEPT_THROTTLE_TIME: u64 = 100_000;
