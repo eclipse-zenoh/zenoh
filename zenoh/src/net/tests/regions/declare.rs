@@ -16,7 +16,11 @@
 
 use zenoh_protocol::{
     core::{Bound, Region, WhatAmI, WireExpr},
-    network::{declare::queryable::ext::QueryableInfoType, Mapping},
+    network::{
+        declare::queryable::ext::QueryableInfoType,
+        interest::{InterestMode, InterestOptions},
+        Mapping,
+    },
 };
 
 use super::{
@@ -331,4 +335,137 @@ fn test_duplicate_queryable_undeclaration() {
     c1.query(1, "k");
 
     assert_eq!(c0.recorder().requests().len(), 1);
+}
+
+#[test]
+fn test_router_disconnect_undeclares_subscriber() {
+    const KEY_EXPR: &str = "k";
+
+    try_init_tracing_subscriber();
+
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+
+    let r1s = r1.new_session();
+    let r2s = r2.new_session();
+
+    let mut r1_r2 = Connection {
+        a: &r1,
+        b: &r2,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+    r1_r2.bi_fwd();
+
+    r2s.interest(
+        1,
+        InterestMode::Future,
+        InterestOptions::SUBSCRIBERS,
+        KEY_EXPR,
+    );
+    r1_r2.bi_fwd();
+
+    r1s.declare_subscriber(None, 1, KEY_EXPR);
+    r1_r2.bi_fwd();
+
+    assert_eq!(r2s.recorder().subscribers().len(), 1);
+    r2s.recorder().clear();
+
+    r1_r2.disconnect();
+
+    assert_eq!(r2s.recorder().undeclared_subscribers().len(), 1);
+}
+
+#[test]
+fn test_router_disconnect_undeclares_queryable() {
+    const KEY_EXPR: &str = "k";
+
+    try_init_tracing_subscriber();
+
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+
+    let r1s = r1.new_session();
+    let r2s = r2.new_session();
+
+    let mut r1_r2 = Connection {
+        a: &r1,
+        b: &r2,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+    r1_r2.bi_fwd();
+
+    r2s.interest(
+        1,
+        InterestMode::Future,
+        InterestOptions::QUERYABLES,
+        KEY_EXPR,
+    );
+    r1_r2.bi_fwd();
+
+    r1s.declare_queryable(None, 1, KEY_EXPR);
+    r1_r2.bi_fwd();
+
+    assert_eq!(r2s.recorder().queryables().len(), 1);
+    r2s.recorder().clear();
+
+    r1_r2.disconnect();
+
+    assert_eq!(r2s.recorder().undeclared_queryables().len(), 1);
+}
+
+#[test]
+fn test_router_disconnect_undeclares_token() {
+    const KEY_EXPR: &str = "k";
+
+    try_init_tracing_subscriber();
+
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let r2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+
+    let r1s = r1.new_session();
+    let r2s = r2.new_session();
+
+    let mut r1_r2 = Connection {
+        a: &r1,
+        b: &r2,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+    r1_r2.bi_fwd();
+
+    r2s.interest(1, InterestMode::Future, InterestOptions::TOKENS, KEY_EXPR);
+    r1_r2.bi_fwd();
+
+    r1s.declare_token(None, 1, KEY_EXPR);
+    r1_r2.bi_fwd();
+
+    assert_eq!(r2s.recorder().tokens().len(), 1);
+    r2s.recorder().clear();
+
+    r1_r2.disconnect();
+
+    assert_eq!(r2s.recorder().undeclared_tokens().len(), 1);
 }
