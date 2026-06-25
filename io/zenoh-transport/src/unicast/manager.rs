@@ -554,7 +554,7 @@ impl TransportManager {
         Ok(())
     }
 
-    fn notify_new_transport_unicast(
+    async fn notify_new_transport_unicast(
         &self,
         transport: &Arc<dyn TransportUnicastTrait>,
     ) -> ZResult<()> {
@@ -562,7 +562,7 @@ impl TransportManager {
         let peer = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            links: transport.get_links(),
+            links: transport.get_links().await,
             is_qos: transport.get_config().is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
@@ -690,7 +690,7 @@ impl TransportManager {
                     shm_context,
                     #[cfg(feature = "stats")]
                     stats
-                ),
+                ).await,
                 close::reason::INVALID
             )
         };
@@ -728,7 +728,7 @@ impl TransportManager {
 
         // Notify manager's interface that there is a new transport
         transport_error!(
-            self.notify_new_transport_unicast(&t),
+            self.notify_new_transport_unicast(&t).await,
             close::reason::GENERIC
         );
 

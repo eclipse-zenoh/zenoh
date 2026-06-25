@@ -102,7 +102,7 @@ pub(crate) struct TransportMulticastInner {
 }
 
 impl TransportMulticastInner {
-    pub(super) fn make(
+    pub(super) async fn make(
         manager: TransportManager,
         config: TransportConfigMulticast,
 
@@ -112,7 +112,7 @@ impl TransportMulticastInner {
         if (config.initial_sns.len() != 1) != (config.initial_sns.len() != Priority::NUM) {
             for sn in config.initial_sns.iter() {
                 let tct = TransportPriorityTx::make(config.sn_resolution)?;
-                tct.sync(*sn)?;
+                tct.sync(*sn).await?;
                 priority_tx.push(tct);
             }
         } else {
@@ -225,7 +225,7 @@ impl TransportMulticastInner {
                         session: false,
                     }
                     .into();
-                    pipeline.push_transport_message(msg, Priority::Background);
+                    pipeline.push_transport_message(msg, Priority::Background).await;
                 }
             }
         }
@@ -237,7 +237,7 @@ impl TransportMulticastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn start_tx(&self) -> ZResult<()> {
+    pub(super) async fn start_tx(&self) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
@@ -258,7 +258,7 @@ impl TransportMulticastInner {
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
                     batch_size,
                 };
-                l.start_tx(config, self.priority_tx.clone());
+                l.start_tx(config, self.priority_tx.clone()).await;
                 Ok(())
             }
             None => {
@@ -271,11 +271,11 @@ impl TransportMulticastInner {
         }
     }
 
-    pub(super) fn stop_tx(&self) -> ZResult<()> {
+    pub(super) async fn stop_tx(&self) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l.stop_tx();
+                l.stop_tx().await;
                 Ok(())
             }
             None => {

@@ -73,8 +73,8 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
-    fn get_links(&self) -> Vec<Link>;
-    fn get_auth_ids(&self) -> super::authentication::TransportAuthId;
+    async fn get_links(&self) -> Vec<Link>;
+    async fn get_auth_ids(&self) -> super::authentication::TransportAuthId;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
@@ -98,7 +98,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*                TX                 */
     /*************************************/
     /// Returns if the message has successfully been sent.
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool>;
+    async fn schedule<'a>(&self, msg: NetworkMessageMut<'a>) -> ZResult<bool>;
 
     /*************************************/
     /*            TERMINATION            */

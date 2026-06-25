@@ -21,14 +21,14 @@ use crate::shm::map_zmsg_to_partner;
 
 //noinspection ALL
 impl TransportMulticastInner {
-    fn schedule_on_link(&self, msg: NetworkMessageRef) -> ZResult<bool> {
+    async fn schedule_on_link<'a>(&self, msg: NetworkMessageRef<'a>) -> ZResult<bool> {
         let guard = zread!(self.link);
         match guard.as_ref() {
             Some(l) => {
                 if let Some(pl) = l.pipeline.as_ref() {
                     let pl = pl.clone();
                     drop(guard);
-                    return Ok(pl.push_network_message(msg)?);
+                    return Ok(pl.push_network_message(msg).await?);
                 }
             }
             None => {
@@ -45,13 +45,13 @@ impl TransportMulticastInner {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(super) fn schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
+    pub(super) async fn schedule<'a>(&self, mut msg: NetworkMessageMut<'a>) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
 
-        let res = self.schedule_on_link(msg.as_ref())?;
+        let res = self.schedule_on_link(msg.as_ref()).await?;
 
         #[cfg(feature = "stats")]
         if res {

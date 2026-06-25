@@ -80,11 +80,11 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
         unimplemented!("MockTransportUnicastInner::get_callback")
     }
 
-    fn get_links(&self) -> Vec<Link> {
+    async fn get_links(&self) -> Vec<Link> {
         vec![]
     }
 
-    fn get_auth_ids(&self) -> TransportAuthId {
+    async fn get_auth_ids(&self) -> TransportAuthId {
         unimplemented!("MockTransportUnicastInner::get_auth_ids")
     }
 
@@ -123,7 +123,7 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
         unimplemented!("MockTransportUnicastInner::add_link")
     }
 
-    fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
+    async fn schedule<'a>(&self, msg: NetworkMessageMut<'a>) -> ZResult<bool> {
         let body = match msg.body {
             NetworkBodyMut::Push(p) => NetworkBody::Push(p.clone()),
             NetworkBodyMut::Request(r) => NetworkBody::Request(r.clone()),

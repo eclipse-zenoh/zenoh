@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use zenoh_core::zasyncread;
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
@@ -107,16 +108,16 @@ impl TransportUnicastUniversal {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
+    pub(crate) async fn internal_schedule<'a>(
+        &self,
+        mut msg: NetworkMessageMut<'a>,
+    ) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
             map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
         }
         let msg = msg.as_ref();
-        let transport_links = self
-            .links
-            .read()
-            .expect("reading `TransportUnicastUniversal::links` should not fail");
+        let transport_links = zasyncread!(self.links);
 
         let Some(transport_link_index) = Self::select(
             transport_links.get_links().iter().map(|tl| {
@@ -162,6 +163,7 @@ impl TransportUnicastUniversal {
             let priority = msg.priority();
             if transport_link.block_first_waiters[priority as usize]
                 .wait_timeout(self.manager.config.wait_before_drop)
+                .await
                 .is_err()
             {
                 #[cfg(feature = "stats")]
@@ -172,9 +174,9 @@ impl TransportUnicastUniversal {
             let block_first_notifier =
                 transport_link.block_first_notifiers[priority as usize].clone();
             let msg = NetworkMessageExt::to_owned(&msg);
-            zenoh_runtime::ZRuntime::Net.spawn_blocking(move || {
+            zenoh_runtime::ZRuntime::Net.spawn(async move {
                 let msg = msg.as_ref();
-                if let Ok(pushed) = pipeline.push_network_message(msg) {
+                if let Ok(pushed) = pipeline.push_network_message(msg).await {
                     transport.handle_push_result(
                         msg,
                         pushed,
@@ -193,7 +195,7 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
 
-        let pushed = pipeline.push_network_message(msg)?;
+        let pushed = pipeline.push_network_message(msg).await?;
         self.handle_push_result(
             msg,
             pushed,

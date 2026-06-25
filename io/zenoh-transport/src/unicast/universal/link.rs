@@ -219,7 +219,7 @@ impl TransportLinkUnicastUniversal {
     pub(super) async fn close(self) -> ZResult<()> {
         tracing::trace!("{}: closing", self.link);
         self.task_controller.terminate_all_async().await;
-        self.pipeline.disable();
+        self.pipeline.disable().await;
 
         self.link.close(None).await
     }
@@ -326,7 +326,7 @@ async fn write_loop(
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
-    let mut batches = pipeline.drain();
+    let mut batches = pipeline.drain().await;
     for (mut b, _) in batches.drain(..) {
         tokio::time::timeout(
             keep_alive_tracker.timeout(),

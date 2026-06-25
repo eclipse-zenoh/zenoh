@@ -17,6 +17,8 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use async_trait::async_trait;
+
 use arc_swap::ArcSwapOption;
 use zenoh_protocol::{
     core::Reliability,
@@ -69,8 +71,8 @@ impl Mux {
     }
 
     #[inline(always)]
-    fn schedule(&self, mut msg: NetworkMessageMut) -> bool {
-        self.can_schedule(&mut msg) && self.handler.schedule(msg).unwrap_or(false)
+    async fn schedule<'a>(&self, mut msg: NetworkMessageMut<'a>) -> bool {
+        self.can_schedule(&mut msg) && self.handler.schedule(msg).await.unwrap_or(false)
     }
 }
 
@@ -137,8 +139,9 @@ impl InterceptorContext for MuxContext<'_> {
     }
 }
 
+#[async_trait]
 impl EPrimitives for Mux {
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
+    async fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
         let interest_id = ctx.msg.id;
 
         let mut msg = NetworkMessageMut {
@@ -151,7 +154,7 @@ impl EPrimitives for Mux {
         };
 
         if self.interceptor.load().intercept(&mut msg, &mut ctx) {
-            self.handler.schedule(msg).unwrap_or(false)
+            self.handler.schedule(msg).await.unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
             if let Some(face) = self.face.get().and_then(|f| f.upgrade()) {
@@ -161,7 +164,7 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
+    async fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
@@ -172,18 +175,18 @@ impl EPrimitives for Mux {
         };
 
         self.interceptor.load().intercept(&mut msg, &mut ctx)
-            && self.handler.schedule(msg).unwrap_or(false)
+            && self.handler.schedule(msg).await.unwrap_or(false)
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
+    async fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
-    fn send_request(&self, msg: &mut Request) -> bool {
+    async fn send_request(&self, msg: &mut Request) -> bool {
         let qos = msg.ext_qos;
         let request_id = msg.id;
         let mut msg = NetworkMessageMut {
@@ -191,7 +194,7 @@ impl EPrimitives for Mux {
             reliability: Reliability::Reliable,
         };
         if self.can_schedule(&mut msg) {
-            self.handler.schedule(msg).unwrap_or(false)
+            self.handler.schedule(msg).await.unwrap_or(false)
         } else {
             match self.face.get().and_then(|f| f.upgrade()) {
                 Some(face) => face.send_response_final(&mut ResponseFinal {
@@ -205,20 +208,20 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_response(&self, msg: &mut Response) -> bool {
+    async fn send_response(&self, msg: &mut Response) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+    async fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -257,8 +260,8 @@ impl McastMux {
     }
 
     #[inline(always)]
-    fn schedule(&self, mut msg: NetworkMessageMut) -> bool {
-        self.can_schedule(&mut msg) && self.handler.schedule(msg).unwrap_or(false)
+    async fn schedule<'a>(&self, mut msg: NetworkMessageMut<'a>) -> bool {
+        self.can_schedule(&mut msg) && self.handler.schedule(msg).await.unwrap_or(false)
     }
 }
 
@@ -326,8 +329,9 @@ impl InterceptorContext for McastMuxContext<'_> {
     }
 }
 
+#[async_trait]
 impl EPrimitives for McastMux {
-    fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
+    async fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
         let interest_id = ctx.msg.id;
 
         let mut msg = NetworkMessageMut {
@@ -340,7 +344,7 @@ impl EPrimitives for McastMux {
         };
 
         if self.interceptor.load().intercept(&mut msg, &mut ctx) {
-            self.handler.schedule(msg).unwrap_or(false)
+            self.handler.schedule(msg).await.unwrap_or(false)
         } else {
             // send declare final to avoid timeout on blocked interest
             if let Some(face) = self.face.get() {
@@ -350,7 +354,7 @@ impl EPrimitives for McastMux {
         }
     }
 
-    fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
+    async fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
         let mut msg = NetworkMessageMut {
             body: NetworkBodyMut::Declare(ctx.msg),
             reliability: Reliability::Reliable,
@@ -361,21 +365,21 @@ impl EPrimitives for McastMux {
         };
 
         if self.interceptor.load().intercept(&mut msg, &mut ctx) {
-            self.handler.schedule(msg).unwrap_or(false)
+            self.handler.schedule(msg).await.unwrap_or(false)
         } else {
             false
         }
     }
 
-    fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
+    async fn send_push(&self, msg: &mut Push, reliability: Reliability) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Push(msg),
             reliability,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
-    fn send_request(&self, msg: &mut Request) -> bool {
+    async fn send_request(&self, msg: &mut Request) -> bool {
         let request_id = msg.id;
         let qos = msg.ext_qos;
         let mut msg = NetworkMessageMut {
@@ -383,7 +387,7 @@ impl EPrimitives for McastMux {
             reliability: Reliability::Reliable,
         };
         if self.can_schedule(&mut msg) {
-            self.handler.schedule(msg).unwrap_or(false)
+            self.handler.schedule(msg).await.unwrap_or(false)
         } else {
             match self.face.get() {
                 Some(face) => face.send_response_final(&mut ResponseFinal {
@@ -397,20 +401,20 @@ impl EPrimitives for McastMux {
         }
     }
 
-    fn send_response(&self, msg: &mut Response) -> bool {
+    async fn send_response(&self, msg: &mut Response) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::Response(msg),
             reliability: Reliability::Reliable,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
-    fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+    async fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
         let msg = NetworkMessageMut {
             body: NetworkBodyMut::ResponseFinal(msg),
             reliability: Reliability::Reliable,
         };
-        self.schedule(msg)
+        self.schedule(msg).await
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

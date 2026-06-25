@@ -16,7 +16,7 @@ use std::{
     ops::Add,
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
-        Arc, Mutex, MutexGuard,
+        Arc,
     },
     time::{Duration, Instant},
 };
@@ -30,7 +30,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
-use zenoh_core::zlock;
+use zenoh_core::zasynclock;
 use zenoh_protocol::{
     core::Priority,
     network::{NetworkMessageExt, NetworkMessageRef},
@@ -84,12 +84,12 @@ impl StageInRefill {
         }
     }
 
-    fn wait(&self) -> bool {
-        self.n_ref_r.wait().is_ok()
+    async fn wait(&self) -> bool {
+        self.n_ref_r.wait().await.is_ok()
     }
 
-    fn wait_deadline(&self, instant: Instant) -> Result<bool, TransportClosed> {
-        match self.n_ref_r.wait_deadline(instant) {
+    async fn wait_deadline(&self, instant: Instant) -> Result<bool, TransportClosed> {
+        match self.n_ref_r.wait_deadline(instant).await {
             Ok(()) => Ok(true),
             Err(WaitDeadlineError::Deadline) => Ok(false),
             Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
@@ -156,17 +156,17 @@ impl Current {
 
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Current>>,
+    current: Arc<tokio::sync::Mutex<Current>>,
     priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
     #[inline]
-    fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
+    async fn channel(&self, is_reliable: bool) -> tokio::sync::MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
-            zlock!(self.priority.reliable)
+            zasynclock!(self.priority.reliable)
         } else {
-            zlock!(self.priority.best_effort)
+            zasynclock!(self.priority.best_effort)
         }
     }
 }
@@ -266,10 +266,10 @@ impl Deadline {
     }
 
     #[inline]
-    fn wait(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
+    async fn wait(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
         match self.lazy_deadline.deadline() {
             DeadlineSetting::Immediate => Ok(false),
-            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
+            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant).await,
         }
     }
 
@@ -290,14 +290,14 @@ struct StageIn {
 }
 
 impl StageIn {
-    fn push_network_message(
+    async fn push_network_message<'a>(
         &mut self,
-        msg: NetworkMessageRef,
+        msg: NetworkMessageRef<'a>,
         priority: Priority,
         deadline: &mut Deadline,
     ) -> Result<bool, TransportClosed> {
         // Lock the current serialization batch.
-        let mut c_guard = zlock!(self.mutex.current);
+        let mut c_guard = zasynclock!(self.mutex.current);
         c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
@@ -316,7 +316,7 @@ impl StageIn {
                             }
                             None => {
                                 // Wait for an available batch until deadline
-                                if !deadline.wait(&self.s_ref)? {
+                                if !deadline.wait(&self.s_ref).await? {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
@@ -358,7 +358,7 @@ impl StageIn {
         };
 
         // Lock the channel. We are the only one that will be writing on it.
-        let mut tch = self.mutex.channel(msg.is_reliable());
+        let mut tch = self.mutex.channel(msg.is_reliable()).await;
 
         // Retrieve the next SN
         let sn = tch.sn.get();
@@ -396,9 +396,11 @@ impl StageIn {
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
 
-        let mut writer = self.fragbuf.writer();
-        let codec = Zenoh080::new();
-        codec.write(&mut writer, msg).unwrap();
+        {
+            let mut writer = self.fragbuf.writer();
+            let codec = Zenoh080::new();
+            codec.write(&mut writer, msg).unwrap();
+        }
 
         // Fragment the whole message
         let mut fragment = FragmentHeader {
@@ -459,9 +461,9 @@ impl StageIn {
     }
 
     #[inline]
-    fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
+    async fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
         // Lock the current serialization batch.
-        let mut c_guard = zlock!(self.mutex.current);
+        let mut c_guard = zasynclock!(self.mutex.current);
         c_guard.notify_pending();
 
         macro_rules! zgetbatch_rets {
@@ -479,7 +481,7 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                if !self.s_ref.wait() {
+                                if !self.s_ref.wait().await {
                                     return false;
                                 }
                             }
@@ -554,7 +556,7 @@ impl Backoff {
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
     s_out_r: RingBufferReader<BoxedWBatch, RBLEN>,
-    current: Arc<Mutex<Current>>,
+    current: Arc<tokio::sync::Mutex<Current>>,
     backoff: Backoff,
 }
 
@@ -657,7 +659,7 @@ impl StageOut {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
+    fn drain(&mut self, guard: &mut tokio::sync::MutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
@@ -745,7 +747,7 @@ impl TransmissionPipeline {
             // Create the refill ring buffer
             // This is a SPSC ring buffer
             let (s_out_w, s_out_r) = RingBuffer::<BoxedWBatch, RBLEN>::init();
-            let current = Arc::new(Mutex::new(Current {
+            let current = Arc::new(tokio::sync::Mutex::new(Current {
                 batch: None,
                 status: status.clone(),
                 prioflag: 1 << (prio as u8),
@@ -758,7 +760,7 @@ impl TransmissionPipeline {
                 )),
             });
 
-            stage_in.push(Mutex::new(StageIn {
+            stage_in.push(tokio::sync::Mutex::new(StageIn {
                 s_ref: StageInRefill {
                     n_ref_r,
                     s_ref_r,
@@ -862,15 +864,15 @@ struct Waits {
 #[derive(Clone)]
 pub(crate) struct TransmissionPipelineProducer {
     // Each priority queue has its own Mutex
-    stage_in: Arc<[Mutex<StageIn>]>,
+    stage_in: Arc<[tokio::sync::Mutex<StageIn>]>,
     status: Arc<TransmissionPipelineStatus>,
 }
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_network_message(
+    pub(crate) async fn push_network_message<'a>(
         &self,
-        msg: NetworkMessageRef,
+        msg: NetworkMessageRef<'a>,
     ) -> Result<bool, TransportClosed> {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
@@ -895,19 +897,23 @@ impl TransmissionPipelineProducer {
         };
         let mut deadline = Deadline::new(wait_time, max_wait_time);
         // Lock the channel. We are the only one that will be writing on it.
-        let mut queue = zlock!(self.stage_in[idx]);
+        let mut queue = zasynclock!(self.stage_in[idx]);
         // Check again for congestion in case it happens when blocking on the mutex.
         if msg.is_droppable() && self.status.is_congested(priority) {
             return Ok(false);
         }
-        let mut sent = queue.push_network_message(msg, priority, &mut deadline)?;
+        let mut sent = queue
+            .push_network_message(msg, priority, &mut deadline)
+            .await?;
         // If the message cannot be sent, mark the pipeline as congested.
         if !sent {
             self.status.set_congested(priority, true);
             // During the time between deadline wakeup and setting the congested flag,
             // all batches could have been refilled (especially if there is a single one),
             // so try again with the same already expired deadline.
-            sent = queue.push_network_message(msg, priority, &mut deadline)?;
+            sent = queue
+                .push_network_message(msg, priority, &mut deadline)
+                .await?;
             // If the message is sent in the end, reset the status.
             // Setting the status to `true` is only done with the stage_in mutex acquired,
             // so it is not possible that further messages see the congestion flag set
@@ -926,7 +932,11 @@ impl TransmissionPipelineProducer {
     }
 
     #[inline]
-    pub(crate) fn push_transport_message(&self, msg: TransportMessage, priority: Priority) -> bool {
+    pub(crate) async fn push_transport_message(
+        &self,
+        msg: TransportMessage,
+        priority: Priority,
+    ) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let priority = if self.stage_in.len() > 1 {
             priority as usize
@@ -934,17 +944,20 @@ impl TransmissionPipelineProducer {
             0
         };
         // Lock the channel. We are the only one that will be writing on it.
-        let mut queue = zlock!(self.stage_in[priority]);
-        queue.push_transport_message(msg)
+        let mut queue = zasynclock!(self.stage_in[priority]);
+        queue.push_transport_message(msg).await
     }
 
-    pub(crate) fn disable(&self) {
+    pub(crate) async fn disable(&self) {
         self.status.set_disabled(true);
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
-        let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
-            self.stage_in.iter().map(|x| zlock!(x)).collect();
+        let mut in_guards: Vec<tokio::sync::MutexGuard<'_, StageIn>> =
+            Vec::with_capacity(self.stage_in.len());
+        for stage_in in self.stage_in.iter() {
+            in_guards.push(zasynclock!(stage_in));
+        }
 
         // Unblock waiting pullers
         for ig in in_guards.iter_mut() {
@@ -1005,7 +1018,7 @@ pub(crate) trait PipelineConsumer {
         None
     }
     fn refill(&mut self, batch: BoxedWBatch, priority: Priority);
-    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)>;
+    async fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)>;
 }
 
 impl PipelineConsumer for TransmissionPipelineConsumer {
@@ -1037,7 +1050,7 @@ impl PipelineConsumer for TransmissionPipelineConsumer {
         }
     }
 
-    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
+    async fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -1048,7 +1061,11 @@ impl PipelineConsumer for TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<_> = locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
+
+        let mut currents: Vec<_> = Vec::with_capacity(locks.len());
+        for lock in locks.iter() {
+            currents.push(zasynclock!(lock));
+        }
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
             let mut bs = s_out.drain(&mut currents[prio]);
@@ -1115,9 +1132,10 @@ impl PipelineConsumer for SplitTransmissionPipelineConsumer {
         }
     }
 
-    fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
+    async fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
         let current = self.stage_out.s_in.current.clone();
-        let batches = self.stage_out.drain(&mut current.lock().unwrap());
+        let mut guard = zasynclock!(current);
+        let batches = self.stage_out.drain(&mut guard);
         batches.into_iter().map(|b| (b, self.priority)).collect()
     }
 }

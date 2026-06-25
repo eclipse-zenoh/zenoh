@@ -20,7 +20,7 @@ use std::{
 
 use tokio::task::JoinHandle;
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
-use zenoh_core::{zcondfeat, zlock};
+use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohIdProto},
@@ -277,16 +277,17 @@ impl TransportLinkMulticastUniversal {
 }
 
 impl TransportLinkMulticastUniversal {
-    pub(super) fn start_tx(
+    pub(super) async fn start_tx(
         &mut self,
         config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
     ) {
-        let initial_sns: Vec<PrioritySn> = priority_tx
-            .iter()
-            .map(|x| PrioritySn {
+        let mut initial_sns: Vec<PrioritySn> = Vec::with_capacity(priority_tx.len());
+        for x in priority_tx.iter() 
+        {
+             let sn = PrioritySn {
                 reliable: {
-                    let sn = zlock!(x.reliable).sn.now();
+                    let sn = zasynclock!(x.reliable).sn.now();
                     if sn == 0 {
                         config.sn_resolution.mask() as TransportSn
                     } else {
@@ -294,15 +295,16 @@ impl TransportLinkMulticastUniversal {
                     }
                 },
                 best_effort: {
-                    let sn = zlock!(x.best_effort).sn.now();
+                    let sn = zasynclock!(x.best_effort).sn.now();
                     if sn == 0 {
                         config.sn_resolution.mask() as TransportSn
                     } else {
                         sn - 1
                     }
                 },
-            })
-            .collect();
+            };
+            initial_sns.push(sn);
+        }
 
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
@@ -348,9 +350,9 @@ impl TransportLinkMulticastUniversal {
         }
     }
 
-    pub(super) fn stop_tx(&mut self) {
+    pub(super) async fn stop_tx(&mut self) {
         if let Some(pipeline) = self.pipeline.as_ref() {
-            pipeline.disable();
+            pipeline.disable().await;
         }
     }
 
@@ -397,7 +399,7 @@ impl TransportLinkMulticastUniversal {
             handle_rx.await?;
         }
 
-        self.stop_tx();
+        self.stop_tx().await;
         if let Some(handle) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
@@ -452,7 +454,7 @@ async fn tx_task(
                     }
                     None => {
                         // Drain the transmission pipeline and write remaining bytes on the wire
-                        let mut batches = pipeline.drain();
+                        let mut batches = pipeline.drain().await;
                         for (mut b, _) in batches.drain(..) {
                             tokio::time::timeout(config.join_interval, link.send_batch(&mut b))
                                 .await

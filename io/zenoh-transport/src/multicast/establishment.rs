@@ -92,10 +92,10 @@ pub(crate) async fn open_link(
         config,
         #[cfg(feature = "shared-memory")]
         shm_context,
-    )?);
+    ).await?);
 
     // Add the link
-    ti.start_tx()?;
+    ti.start_tx().await?;
 
     // Store the active transport
     let mut w_guard = zasynclock!(manager.state.multicast.transports);
