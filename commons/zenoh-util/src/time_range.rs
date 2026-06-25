@@ -431,8 +431,7 @@ fn parse_duration(s: &str) -> Result<f64, ZError> {
             Some((i, b'm')) => s[..i].parse::<f64>().map(|ms| MS_TO_SECS * ms),
             Some((i, _)) => s[..i + 1].parse::<f64>(),
             // A bare "s" with no preceding value: behave like the other unit-only
-            // inputs ("u", "m", ...) and return an error instead of panicking on the
-            // exhausted iterator.
+            // inputs ("u", "m", ...) and return an error.
             None => "".parse::<f64>(),
         },
         (i, b'm') => s[..i].parse::<f64>().map(|m| M_TO_SECS * m),
