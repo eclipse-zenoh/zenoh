@@ -316,6 +316,7 @@ impl HatBaseTrait for Hat {
     fn close_face(&mut self, ctx: DispatcherContext) {
         debug_assert!(self.owns(ctx.src_face));
 
+        self.net_mut().remove_link(&ctx.src_face.zid);
         self.compute_trees(ctx);
     }
 
@@ -575,7 +576,7 @@ impl HatTrait for Hat {
     fn unregister_face_entities(&mut self, ctx: DispatcherContext) -> UnregisterFaceEntitiesResult {
         let zid = &ctx.src_face.zid;
         let removed_routers = self
-            // doesnt need to be mut anymore
+            // NOTE: a &mut is not taken here and the link graph is not yet modified.
             .net()
             .find_disconnected_nodes_after_removing_link(zid)
             .into_iter()
@@ -617,8 +618,6 @@ impl HatTrait for Hat {
                 removed_tokens.insert(res);
             }
         }
-
-        self.net_mut().remove_link(zid);
 
         UnregisterFaceEntitiesResult {
             removed_queryables,

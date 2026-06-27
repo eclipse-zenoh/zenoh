@@ -954,7 +954,7 @@ impl Network {
         zid: &ZenohIdProto,
     ) -> Vec<(NodeIndex, ZenohIdProto)> {
         if self.full_linkstate || self.gossip_multihop {
-            self.disconnected_nodes_after_removing(Some(zid))
+            self.disconnected_nodes_when_removing(Some(zid))
         } else {
             vec![]
         }
@@ -998,7 +998,7 @@ impl Network {
         }
     }
 
-    fn disconnected_nodes_after_removing(
+    fn disconnected_nodes_when_removing(
         &self,
         dropped_zid: Option<&ZenohIdProto>,
     ) -> Vec<(NodeIndex, ZenohIdProto)> {
@@ -1008,7 +1008,11 @@ impl Network {
             if visit_map.visit(node) {
                 for succzid in self.graph[node].links.keys() {
                     if node == self.idx && dropped_zid.is_some_and(|it| it == succzid) {
-                        // skip the edge from us to dropped_zid.
+                        // NOTE: Don't branch out to `dropped_zid` from self.
+                        // Either (1) there is no path between self and `dropped_zid` other than this one,
+                        // in which case `dropped_zid` will never visited and thus considered a detached node.
+                        // Or, (2) there is a path between self and `dropped_zid` that goes through another node,
+                        // in which case self (even though present in `dropped_zid`'s links) will not be revisited thanks to `visit_map`.
                         continue;
                     }
                     if let Some(succ) = self.get_idx(succzid) {
@@ -1028,7 +1032,7 @@ impl Network {
     }
 
     fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
-        let disconnected = self.disconnected_nodes_after_removing(None);
+        let disconnected = self.disconnected_nodes_when_removing(None);
         for (idx, _) in &disconnected {
             tracing::debug!("Remove node {}", &self.graph[*idx].zid);
             self.graph.remove_node(*idx).unwrap();
