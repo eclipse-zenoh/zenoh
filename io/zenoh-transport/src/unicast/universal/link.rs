@@ -637,9 +637,9 @@ async fn rx_task_uring(
                     match data.defragment()? {
                         DefragmentationState::Single(slice) => {
                             let mut batch = RBatch::new(batch_config, slice);
-                            batch.initialize_uring(
-                                || pool.try_take().unwrap_or_else(|| pool.alloc()),
-                            )?;
+                            batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })?;
                             read_batch(
                                 &transport,
                                 &l,
@@ -650,9 +650,9 @@ async fn rx_task_uring(
                         }
                         DefragmentationState::Fragmented(buf) => {
                             let mut batch = RBatch::new(batch_config, buf.reader());
-                            match batch.initialize_uring(
-                                || pool.try_take().unwrap_or_else(|| pool.alloc()),
-                            )? {
+                            match batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })? {
                                 Some(decompressed_batch) => read_batch(
                                     &transport,
                                     &l,

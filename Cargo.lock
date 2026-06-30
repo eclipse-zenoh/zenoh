@@ -5696,7 +5696,6 @@ dependencies = [
  "nix 0.29.0",
  "rand 0.8.5",
  "test-case",
- "thread-priority",
  "tokio",
  "tracing",
  "zenoh-buffers",

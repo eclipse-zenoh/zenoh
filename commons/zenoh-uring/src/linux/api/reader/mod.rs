@@ -329,45 +329,37 @@ impl Reader {
                 }
             }
         } else {
-            match io_uring::cqueue::buffer_select(e.flags()) {
-                Some(buf_id) => {
-                    #[cfg(feature = "uring_trace")]
-                    tracing::trace!("Read multishot entry: {:?}", e);
+            if let Some(buf_id) = io_uring::cqueue::buffer_select(e.flags()) {
+                #[cfg(feature = "uring_trace")]
+                tracing::trace!("Read multishot entry: {:?}", e);
 
-                    if !io_uring::cqueue::more(e.flags()) {
-                        tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
+                if !io_uring::cqueue::more(e.flags()) {
+                    tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
 
-                        let recv = opcode::RecvMulti::new(
-                            types::Fd(context.fd),
-                            context.buffer_group().id(),
-                        )
-                        .build()
-                        .flags(io_uring::squeue::Flags::ASYNC)
-                        .user_data(index.into());
+                    let recv =
+                        opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
+                            .build()
+                            .flags(io_uring::squeue::Flags::ASYNC)
+                            .user_data(index.into());
 
-                        unsafe { sq.push(&recv)? };
-                        need_submit = true;
-                    }
-
-                    let buf_len = e.result() as usize;
-                    let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
-                    context.run_callback(buffer);
+                    unsafe { sq.push(&recv)? };
+                    need_submit = true;
                 }
-                None => {}
-            };
+
+                let buf_len = e.result() as usize;
+                let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
+                context.run_callback(buffer);
+            }
         }
         Ok(need_submit)
     }
 
     fn utilize_multi(e: &io_uring::cqueue::Entry, arena: &GroupedArena) -> bool {
         if e.result() >= 0 {
-            match io_uring::cqueue::buffer_select(e.flags()) {
-                Some(buf_id) => {
-                    tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
-                    arena.recycle_batch(buf_id);
-                    return true;
-                }
-                None => {}
+            if let Some(buf_id) = io_uring::cqueue::buffer_select(e.flags()) {
+                tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
+                arena.recycle_batch(buf_id);
+                return true;
             }
         }
         false

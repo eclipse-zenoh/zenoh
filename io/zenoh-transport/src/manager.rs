@@ -506,9 +506,7 @@ impl TransportManagerBuilder {
             #[cfg(all(feature = "uring", target_os = "linux"))]
             uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)
                 .map_err(|e| {
-                    tracing::warn!(
-                        "io_uring reactor init failed, falling back to tokio RX: {e}"
-                    );
+                    tracing::warn!("io_uring reactor init failed, falling back to tokio RX: {e}");
                     e
                 })
                 .ok(),

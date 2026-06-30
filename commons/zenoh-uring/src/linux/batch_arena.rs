@@ -104,35 +104,10 @@ impl BatchArena {
         })
     }
 
-    pub(crate) fn batch_count(&self) -> usize {
-        self.arena.size.load(std::sync::atomic::Ordering::Relaxed) / self.batch_size
-    }
-
     pub(crate) unsafe fn index_mut_unchecked(&self, index: usize) -> &'static mut [u8] {
         let start = index * self.batch_size;
         let end = start + self.batch_size;
         &mut self.arena.as_slice_mut_unchecked()[start..end]
-    }
-
-    pub(crate) fn register_buffers(&self) -> Vec<libc::iovec> {
-        let batch_count = self.batch_count();
-
-        let mut batches = Vec::with_capacity(batch_count);
-
-        for i in 0..batch_count {
-            let ptr = unsafe {
-                self.arena
-                    .memory
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                    .add(i * self.batch_size)
-            };
-            batches.push(libc::iovec {
-                iov_base: ptr as *mut libc::c_void,
-                iov_len: self.batch_size,
-            });
-        }
-
-        batches
     }
 
     pub(crate) fn batch_size(&self) -> usize {
