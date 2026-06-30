@@ -81,7 +81,7 @@ pub(crate) async fn open_link(
 
     #[cfg(feature = "shared-memory")]
     let shm_context = manager.state.shm_context.as_ref().map(|context| {
-        crate::shm_context::MulticastTransportShmContext::new(
+        crate::common::shm::shm_context::MulticastTransportShmContext::new(
             context.shm_reader.clone(),
             context.shm_provider.clone(),
         )

@@ -146,10 +146,6 @@ impl TXAuthSegment {
         self.segment.data.validate_challenge(expected_challenge, s)
     }
 
-    pub fn challenge(&self) -> AuthChallenge {
-        self.segment.data.challenge
-    }
-
     pub fn segment_id(&self) -> AuthSegmentID {
         self.segment.data.id()
     }
@@ -247,7 +243,7 @@ impl ShmRXCounterLease {
         self.segment.segment.data.shm_counters[self.counter_index as usize]
             .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
-    
+
     pub fn segment(&self) -> &RXAuthSegment {
         &self.segment
     }

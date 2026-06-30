@@ -29,7 +29,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 #[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use crate::common::shm::interop::TransportShmConfig;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
@@ -752,8 +752,7 @@ pub(crate) async fn open_link(
         shm: fsm
             .ext_shm
             .take()
-            .map(|shm| shm.shm_init_result())
-            .flatten()
+            .and_then(|shm| shm.shm_init_result())
             .map(|(rx, tx)| TransportShmConfig::new(rx, tx)),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]

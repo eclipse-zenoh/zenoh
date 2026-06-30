@@ -35,7 +35,7 @@ use zenoh_result::ZResult;
 #[cfg(feature = "auth_usrpwd")]
 use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use crate::common::shm::interop::TransportShmConfig;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -233,13 +233,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        match &self.ext_shm {
-            Some(my_shm) => my_shm
+        if let Some(my_shm) = &self.ext_shm {
+            my_shm
                 .recv_init_syn(init_syn.ext_shm)
                 .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            _ => (),
-        };
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        }
 
         // Extension Auth
         #[cfg(feature = "transport_auth")]
@@ -859,8 +858,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         shm: fsm
             .ext_shm
             .take()
-            .map(|shm| shm.shm_init_result())
-            .flatten()
+            .and_then(|shm| shm.shm_init_result())
             .map(|(rx, tx)| TransportShmConfig::new(rx, tx)),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]

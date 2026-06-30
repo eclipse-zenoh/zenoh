@@ -19,7 +19,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::common::shm::interop::map_zmsg_to_partner;
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled

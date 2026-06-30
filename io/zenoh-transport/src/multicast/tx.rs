@@ -17,7 +17,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::common::shm::interop::map_zmsg_to_partner;
 
 //noinspection ALL
 impl TransportMulticastInner {

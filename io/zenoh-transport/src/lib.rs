@@ -22,11 +22,6 @@ pub mod manager;
 pub mod multicast;
 pub mod unicast;
 
-#[cfg(feature = "shared-memory")]
-pub mod shm;
-#[cfg(feature = "shared-memory")]
-mod shm_context;
-
 use std::{any::Any, sync::Arc};
 
 pub use manager::*;

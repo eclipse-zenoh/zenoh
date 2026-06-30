@@ -18,7 +18,11 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_shm::{
-    ShmBufInfo, api::provider::chunk::ChunkDescriptor, metadata::descriptor::MetadataDescriptor, posix_shm::{segment::Segment, struct_in_shm::StructInSHM}, shm::SegmentID,
+    api::provider::chunk::ChunkDescriptor,
+    metadata::descriptor::MetadataDescriptor,
+    posix_shm::{segment::Segment, struct_in_shm::StructInSHM},
+    shm::SegmentID,
+    ShmBufInfo,
 };
 
 use crate::{RCodec, WCodec, Zenoh080};
