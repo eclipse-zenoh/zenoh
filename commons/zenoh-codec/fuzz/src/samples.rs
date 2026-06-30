@@ -90,6 +90,7 @@ pub(crate) fn sample_request_network_message() -> NetworkMessage {
         ext_target: QueryTarget::DEFAULT,
         ext_budget: None,
         ext_timeout: None,
+        ext_ts_stack: None,
         payload: RequestBody::from(Query::default()),
     };
     NetworkBody::Request(request).into()
@@ -112,6 +113,7 @@ pub(crate) fn sample_response_network_message() -> NetworkMessage {
         ext_qos: zenoh_protocol::network::response::ext::QoSType::DEFAULT,
         ext_tstamp: None,
         ext_respid: None,
+        ext_ts_stack: None,
     };
     NetworkBody::Response(response).into()
 }

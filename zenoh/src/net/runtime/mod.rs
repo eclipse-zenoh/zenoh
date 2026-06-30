@@ -24,6 +24,8 @@ mod region;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
 #[cfg(feature = "unstable")]
+use std::sync::OnceLock;
+#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
@@ -87,6 +89,8 @@ use super::{
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::{GetTimestampCallback, TimestampContext};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -171,6 +175,13 @@ pub(crate) struct RuntimeState {
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
+    // TODO: lazy_hlc is added for timestamp instrumentation feature, in order to avoid breaking
+    // existing logic that relies on state of hlc Option to check if timestamping is enabled or
+    // not. Once ts_instrumentation is stabilized, hlc should be changed to use OnceLock instead.
+    #[cfg(feature = "unstable")]
+    lazy_hlc: OnceLock<Arc<HLC>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     task_controller: TaskController,
     #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
@@ -190,6 +201,10 @@ pub trait IRuntime: Send + Sync {
     fn next_id(&self) -> u32;
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
+    /// Returns a timestamp for timestamp instrumentation. The boolean indicates whether the timestamp
+    /// is the result of a custom user-callback or a Zenoh UHLC timestamp.
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
@@ -256,6 +271,28 @@ impl IRuntime for RuntimeState {
 
     fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
+    }
+
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool) {
+        if let Some(cb) = &self.timestamp_callback {
+            return (cb(context), true);
+        }
+
+        let hlc = self.hlc.as_ref().unwrap_or_else(|| {
+            self.lazy_hlc.get_or_init(|| {
+                Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(self.zid)).build())
+            })
+        });
+
+        let ts = hlc.new_timestamp();
+
+        use zenoh_codec::{WCodec, Zenoh080};
+        let mut buf = Vec::new();
+        if Zenoh080.write(&mut buf, &ts).is_err() {
+            return (Vec::new(), false);
+        }
+        (buf, false)
     }
 
     fn get_locators(&self) -> Vec<Locator> {
@@ -579,6 +616,7 @@ impl RuntimeState {
     }
 }
 
+#[derive(Clone)]
 pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
@@ -603,6 +641,8 @@ pub struct RuntimeBuilder {
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
@@ -639,6 +679,8 @@ impl RuntimeBuilder {
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(feature = "unstable")]
+            timestamp_callback: None,
             #[cfg(test)]
             subregions: None,
             #[cfg(test)]
@@ -655,6 +697,12 @@ impl RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
     pub fn shm_clients(mut self, shm_clients: Option<Arc<ShmClientStorage>>) -> Self {
         self.shm_clients = shm_clients;
+        self
+    }
+
+    #[cfg(feature = "unstable")]
+    pub fn timestamp_callback(mut self, cb: Option<GetTimestampCallback>) -> Self {
+        self.timestamp_callback = cb;
         self
     }
 
@@ -679,6 +727,8 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(feature = "unstable")]
+            timestamp_callback,
             #[cfg(test)]
             subregions,
             #[cfg(test)]
@@ -767,6 +817,10 @@ impl RuntimeBuilder {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
+                #[cfg(feature = "unstable")]
+                lazy_hlc: OnceLock::new(),
+                #[cfg(feature = "unstable")]
+                timestamp_callback,
                 task_controller: TaskController::default(),
                 #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
@@ -802,7 +856,7 @@ impl RuntimeBuilder {
 
 #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RuntimeState>,
+    pub(crate) state: Arc<RuntimeState>,
 }
 
 impl fmt::Debug for Runtime {
@@ -817,6 +871,16 @@ impl fmt::Debug for Runtime {
 
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl DynamicRuntime {
+    pub(crate) fn downgrade(&self) -> WeakDynamicRuntime {
+        WeakDynamicRuntime(Arc::downgrade(&self.0))
+    }
+
+    pub(crate) fn get_inner(&self) -> Arc<dyn IRuntime> {
+        self.0.clone()
+    }
+}
 
 impl fmt::Debug for DynamicRuntime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -842,6 +906,15 @@ impl StructVersion for DynamicRuntime {
 }
 
 impl PluginStartArgs for DynamicRuntime {}
+
+#[derive(Clone)]
+pub struct WeakDynamicRuntime(pub(crate) Weak<dyn IRuntime>);
+
+impl WeakDynamicRuntime {
+    pub(crate) fn upgrade(&self) -> Option<DynamicRuntime> {
+        self.0.upgrade().map(DynamicRuntime)
+    }
+}
 
 impl Runtime {
     #[inline(always)]

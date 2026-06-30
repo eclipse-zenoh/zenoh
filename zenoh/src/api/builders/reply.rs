@@ -267,7 +267,7 @@ impl Resolvable for ReplyErrBuilder<'_> {
 
 impl Wait for ReplyErrBuilder<'_> {
     fn wait(self) -> <Self as Resolvable>::To {
-        self.query.inner.primitives.send_response(&mut Response {
+        let mut response = Response {
             rid: self.query.inner.qid,
             wire_expr: WireExpr {
                 scope: 0,
@@ -288,7 +288,33 @@ impl Wait for ReplyErrBuilder<'_> {
                 zid: self.query.inner.zid,
                 eid: self.query.eid,
             }),
-        });
+            ext_ts_stack: None,
+        };
+        #[cfg(feature = "unstable")]
+        {
+            let weak_rt = self.query.inner.runtime.clone();
+            response.ext_ts_stack = self
+                .query
+                .inner
+                .query_ts_stack
+                .as_ref()
+                .and_then(|ts_stack| {
+                    use zenoh_protocol::network::timestamp_stack::{
+                        interception_point, TsStackType,
+                    };
+                    let mut ext_ts_stack = Some(TsStackType {
+                        ts_stack: (ts_stack).into(),
+                    });
+                    let upgrade = weak_rt.clone();
+                    crate::api::timestamp_stack::push_ts_interception(
+                        &mut ext_ts_stack,
+                        move || upgrade.and_then(|r| r.upgrade()).map(|dr| dr.get_inner()),
+                        interception_point::SEND,
+                    );
+                    ext_ts_stack
+                });
+        }
+        self.query.inner.primitives.send_response(&mut response);
         Ok(())
     }
 }

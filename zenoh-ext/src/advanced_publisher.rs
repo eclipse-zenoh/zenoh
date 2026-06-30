@@ -26,7 +26,10 @@ use zenoh::{
     internal::{
         bail,
         runtime::ZRuntime,
-        traits::{EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait},
+        traits::{
+            EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
+        },
         TerminatableTask,
     },
     key_expr::{keyexpr, KeyExpr},
@@ -765,6 +768,23 @@ impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             builder: self.builder.timestamp(timestamp),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
+impl<P> TimestampInstrumentationBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    #[zenoh_macros::unstable]
+    fn timestamp_instrumentation<
+        TS: Into<Option<zenoh::timestamp_stack::TimestampInstrumentation>>,
+    >(
+        self,
+        instrumentation: TS,
+    ) -> Self {
+        Self {
+            builder: self.builder.timestamp_instrumentation(instrumentation),
             ..self
         }
     }

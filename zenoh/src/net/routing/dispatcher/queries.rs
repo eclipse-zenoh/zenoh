@@ -49,7 +49,6 @@ use crate::net::routing::{
     gateway::{get_or_set_route, node_id_as_source, QueryDirection, QueryTargetQabl, RouteBuilder},
     hat::{DispatcherContext, SendDeclare, UnregisterEntityResult},
 };
-
 #[derive(Clone)]
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
@@ -268,6 +267,9 @@ impl Face {
                     .ext_timeout
                     .unwrap_or(rtables.data.queries_default_timeout);
 
+                #[cfg(feature = "unstable")]
+                let weak_runtime = rtables.data.runtime.clone();
+
                 drop(queries_lock);
                 drop(rtables);
 
@@ -318,9 +320,19 @@ impl Face {
                             ext_target: msg.ext_target,
                             ext_budget: msg.ext_budget,
                             ext_timeout: msg.ext_timeout,
+                            ext_ts_stack: msg.ext_ts_stack.clone(),
                             payload: msg.payload.clone(),
                         };
 
+                        #[cfg(feature = "unstable")]
+                        {
+                            let weak = weak_runtime.clone();
+                            crate::api::timestamp_stack::push_ts_interception(
+                                &mut msg.ext_ts_stack,
+                                move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
+                                zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                            );
+                        }
                         if dir.dst_face.primitives.send_request(msg) {
                             #[cfg(feature = "stats")]
                             payload_observer.observe_payload(zenoh_stats::Tx, &dir.dst_face, msg);
@@ -480,6 +492,8 @@ impl Timed for QueryCleanup {
                     ext_qos: self.qos,
                     ext_tstamp: None,
                     ext_respid,
+                    // TODO: Maybe this should be set?
+                    ext_ts_stack: None,
                 },
             );
             let queries_lock = zwrite!(self.tables.queries_lock);
@@ -536,6 +550,8 @@ pub(crate) fn route_send_response(
     msg: &mut Response,
 ) {
     let tables = zread!(tables_ref.tables);
+    #[cfg(feature = "unstable")]
+    let weak_runtime = tables.data.runtime.clone();
     match tables
         .data
         .get_mapping(face, &msg.wire_expr.scope, msg.wire_expr.mapping)
@@ -585,6 +601,15 @@ pub(crate) fn route_send_response(
 
                     msg.rid = query.src_qid;
                     msg.ext_qos = query.src_qos;
+                    #[cfg(feature = "unstable")]
+                    {
+                        let weak = weak_runtime.clone();
+                        crate::api::timestamp_stack::push_ts_interception(
+                            &mut msg.ext_ts_stack,
+                            move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
+                            zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                        );
+                    }
                     if query.src_face.primitives.send_response(msg) {
                         #[cfg(feature = "stats")]
                         payload_observer.observe_payload(zenoh_stats::Tx, &query.src_face, msg);
