@@ -48,6 +48,7 @@ pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
 prost = "=0.14.1"
 prost-derive = "=0.14.1"
+quinn-proto = "=0.11.14"
 rcgen = "=0.14.7"
 rustc-hash = "=2.1.1"
 serde_spanned = "=1.0.1"
@@ -67,6 +68,7 @@ twox-hash = "=1.6.3"
 unzip-n = "=0.1.2"
 uuid = "=1.20.0"
 zerofrom = "=0.1.5"
+zeroize = "=1.8.2"
 
 # dependency for macos only
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -95,6 +97,7 @@ ignored = [
   "potential_utf",
   "prost",
   "prost-derive",
+  "quinn-proto",
   "rcgen",
   "rustc-hash",
   "security-framework",
@@ -115,4 +118,5 @@ ignored = [
   "unzip-n",
   "uuid",
   "zerofrom",
+  "zeroize",
 ]
