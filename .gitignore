@@ -23,6 +23,9 @@
 # Zed
 .zed
 
+# Helix
+.helix
+
 cargo-timing*.html
 
 ci/valgrind-check/*.log

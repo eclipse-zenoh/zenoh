@@ -1009,7 +1009,7 @@ pub mod time {
 /// let session = zenoh::open(config).await.unwrap();
 /// # }
 pub mod config {
-    pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
+    pub use zenoh_config::{EndPoint, EndPoints, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
     pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
