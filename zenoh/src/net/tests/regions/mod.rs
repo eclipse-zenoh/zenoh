@@ -729,6 +729,8 @@ pub(crate) struct HarnessBuilder {
     subregions: Vec<Region>,
     start_runtime: bool,
     start_adminspace: bool,
+    agg_upstream_subscribers: Vec<String>,
+    agg_upstream_queryables: Vec<String>,
 }
 
 impl HarnessBuilder {
@@ -739,7 +741,27 @@ impl HarnessBuilder {
             subregions: Vec::new(),
             start_runtime: true,
             start_adminspace: false,
+            agg_upstream_subscribers: Vec::new(),
+            agg_upstream_queryables: Vec::new(),
         }
+    }
+
+    /// Configure `aggregation.upstream.subscribers` prefixes (northbound fold) for this router harness.
+    pub(crate) fn aggregation_upstream_subscribers<'a>(
+        mut self,
+        prefixes: impl IntoIterator<Item = &'a str>,
+    ) -> Self {
+        self.agg_upstream_subscribers = prefixes.into_iter().map(str::to_string).collect();
+        self
+    }
+
+    /// Configure `aggregation.upstream.queryables` prefixes (northbound fold) for this router harness.
+    pub(crate) fn aggregation_upstream_queryables<'a>(
+        mut self,
+        prefixes: impl IntoIterator<Item = &'a str>,
+    ) -> Self {
+        self.agg_upstream_queryables = prefixes.into_iter().map(str::to_string).collect();
+        self
     }
 
     /// Set the [`WhatAmI`] mode of this harness.
@@ -795,6 +817,32 @@ impl HarnessBuilder {
                 .set_enabled(self.start_adminspace)
                 .unwrap();
             config.plugins_loading.set_enabled(false).unwrap();
+
+            let to_arr = |v: &[String]| {
+                format!(
+                    "[{}]",
+                    v.iter()
+                        .map(|p| format!("\"{p}\""))
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            };
+            if !self.agg_upstream_subscribers.is_empty() {
+                config
+                    .insert_json5(
+                        "aggregation/upstream/subscribers",
+                        &to_arr(&self.agg_upstream_subscribers),
+                    )
+                    .unwrap();
+            }
+            if !self.agg_upstream_queryables.is_empty() {
+                config
+                    .insert_json5(
+                        "aggregation/upstream/queryables",
+                        &to_arr(&self.agg_upstream_queryables),
+                    )
+                    .unwrap();
+            }
 
             let runtime = block_on(
                 RuntimeBuilder::new(crate::api::config::Config(config))

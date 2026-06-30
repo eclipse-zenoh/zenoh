@@ -277,6 +277,144 @@ impl Hat {
     }
 }
 
+impl Hat {
+    // ===== Northbound declaration aggregation (queryables) ====================================
+
+    /// See `matching_agg_sub_prefix`. North-bound HATs only; a child equal to the prefix folds too.
+    fn matching_agg_qabl_prefix(&self, tables: &TablesData, res: &Arc<Resource>) -> Option<usize> {
+        if !self.region().bound().is_north() || tables.agg_qabl_prefixes.is_empty() {
+            return None;
+        }
+        let child_ke = res.keyexpr()?;
+        tables
+            .agg_qabl_prefixes
+            .iter()
+            .position(|prefix| prefix.includes(child_ke))
+    }
+
+    /// The aggregate's advertised info. An aggregate advertises the *presence* of queryables under
+    /// the prefix, NOT a completeness claim over the whole prefix: asserting `complete` would require
+    /// a single sole authority for the entire prefix and is prone to staleness as owners come and go
+    /// (the single-remaining-owner undeclare path does not refresh folded state). It is therefore
+    /// always advertised **`complete=false`**, so `BestMatching` fans out to it (the router that
+    /// performed the fold), which routes on to the real per-key queryable, and a distinct complete
+    /// source is never shadowed. (When the prefix has a single owner this is behaviourally identical
+    /// to asserting complete, since that router is the only matching source.) `distance` is the
+    /// minimum over the folded children.
+    fn aggregate_qabl_info(&self, idx: usize) -> QueryableInfoType {
+        let distance = self
+            .north_agg_qabls
+            .get(&idx)
+            .into_iter()
+            .flat_map(|children| children.values().map(|i| i.distance))
+            .min()
+            .unwrap_or(0);
+        QueryableInfoType {
+            complete: false,
+            distance,
+        }
+    }
+
+    fn fold_queryable_upstream(
+        &mut self,
+        ctx: DispatcherContext,
+        idx: usize,
+        child: &Arc<Resource>,
+        child_info: &QueryableInfoType,
+    ) {
+        let Some(mut aggregate) = ctx.tables.agg_qabl_resources.get(idx).cloned() else {
+            return; // defensive: precreate keeps resources parallel to prefixes
+        };
+        self.north_agg_qabls
+            .entry(idx)
+            .or_default()
+            .insert(child.clone(), *child_info);
+        let agg_info = self.aggregate_qabl_info(idx);
+        if self.res_hat(&aggregate).router_qabls.get(&ctx.tables.zid) != Some(&agg_info) {
+            self.res_hat_mut(&mut aggregate)
+                .router_qabls
+                .insert(ctx.tables.zid, agg_info);
+            self.router_qabls.insert(aggregate.clone());
+            self.disable_query_routes(&mut aggregate);
+            self.propagate_sourced_queryable(
+                ctx.tables,
+                &aggregate,
+                &agg_info,
+                None,
+                &ctx.tables.zid,
+            );
+        }
+    }
+
+    /// If `res` is a child folded into some northbound aggregate, remove it; refresh the aggregate's
+    /// merged info when children remain, or withdraw it on the last child. Returns `true` iff `res`
+    /// was a folded child. The aggregate `Resource` persists (pre-created).
+    fn remove_queryable_from_aggregate(
+        &mut self,
+        ctx: DispatcherContext,
+        res: &Arc<Resource>,
+    ) -> bool {
+        let mut hit: Option<usize> = None;
+        for (idx, children) in self.north_agg_qabls.iter_mut() {
+            if children.remove(res).is_some() {
+                hit = Some(*idx);
+                break;
+            }
+        }
+        let Some(idx) = hit else {
+            return false;
+        };
+        let Some(mut aggregate) = ctx.tables.agg_qabl_resources.get(idx).cloned() else {
+            return true;
+        };
+        if self
+            .north_agg_qabls
+            .get(&idx)
+            .map_or(true, |c| c.is_empty())
+        {
+            // Last child gone: withdraw the aggregate.
+            self.north_agg_qabls.remove(&idx);
+            if self
+                .res_hat(&aggregate)
+                .router_qabls
+                .contains_key(&ctx.tables.zid)
+            {
+                self.res_hat_mut(&mut aggregate)
+                    .router_qabls
+                    .remove(&ctx.tables.zid);
+                if self.res_hat(&aggregate).router_qabls.is_empty() {
+                    self.router_qabls.retain(|r| !Arc::ptr_eq(r, &aggregate));
+                }
+                self.disable_query_routes(&mut aggregate);
+                self.propagate_forget_sourced_queryable(
+                    ctx.tables,
+                    &aggregate,
+                    None,
+                    &ctx.tables.zid,
+                );
+            }
+        } else {
+            // Children remain: refresh the aggregate's merged info if it changed.
+            let agg_info = self.aggregate_qabl_info(idx);
+            if self.res_hat(&aggregate).router_qabls.get(&ctx.tables.zid) != Some(&agg_info) {
+                self.res_hat_mut(&mut aggregate)
+                    .router_qabls
+                    .insert(ctx.tables.zid, agg_info);
+                self.router_qabls.insert(aggregate.clone());
+                self.disable_query_routes(&mut aggregate);
+                self.propagate_sourced_queryable(
+                    ctx.tables,
+                    &aggregate,
+                    &agg_info,
+                    None,
+                    &ctx.tables.zid,
+                );
+            }
+        }
+        true
+    }
+}
+
 impl HatQueriesTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
     fn sourced_queryables(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
@@ -366,6 +504,13 @@ impl HatQueriesTrait for Hat {
                                                         as u16,
                                                 }),
                                                 region: this.region,
+                                                // Transparent forwarder (B-A2): a non-complete entry
+                                                // whose matched resource covers the query (e.g. a
+                                                // northbound aggregate suppressing complete children).
+                                                // `complete` here = resource-includes-query; the dst
+                                                // is intrinsically a router (routers_net), so an
+                                                // AllComplete query is safely re-filtered downstream.
+                                                forwarder: complete && !qabl_info.complete,
                                             });
                                         }
                                     }
@@ -514,6 +659,16 @@ impl HatQueriesTrait for Hat {
             return;
         };
 
+        // Northbound aggregation (symmetric to subscribers): fold a downstream queryable included by
+        // a configured `aggregation.upstream.queryables` prefix into the pre-created `${prefix}`
+        // aggregate and suppress the per-key child upstream. The aggregate is advertised
+        // non-complete (a presence advertisement, not a completeness authority over the prefix), so
+        // `BestMatching` fans out to it and never shadows a distinct source sharing the prefix.
+        if let Some(idx) = self.matching_agg_qabl_prefix(ctx.tables, &res) {
+            self.fold_queryable_upstream(ctx, idx, &res, &other_info);
+            return;
+        }
+
         if self
             .res_hat(&res)
             .router_qabls
@@ -530,9 +685,16 @@ impl HatQueriesTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unpropagate_queryable(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
+    fn unpropagate_queryable(&mut self, mut ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_queryable
+            return;
+        }
+
+        // Northbound aggregation: a folded child was never propagated per-key. Remove it from its
+        // aggregate (refreshing the aggregate's merged info, or withdrawing it on the last child)
+        // and skip the stock path (the `debug_assert!(was_propagated)` would not hold for it).
+        if self.remove_queryable_from_aggregate(ctx.reborrow(), &res) {
             return;
         }
 

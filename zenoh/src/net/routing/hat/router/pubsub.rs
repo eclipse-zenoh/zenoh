@@ -273,6 +273,109 @@ impl Hat {
     }
 }
 
+impl Hat {
+    // ===== Northbound declaration aggregation (subscribers) ===================================
+
+    /// Index into `TablesData::agg_sub_prefixes` of the first configured prefix that *includes*
+    /// `res`'s key-expr — only on a north-bound HAT. `None` ⇒ stock per-key propagation. A child
+    /// whose key-expr *equals* the prefix folds too: it becomes a child of its own aggregate (which
+    /// advertises the same `${prefix}`), keeping a real exact-prefix declaration and the synthetic
+    /// aggregate on ONE refcounted path so neither can spuriously withdraw the other.
+    fn matching_agg_sub_prefix(&self, tables: &TablesData, res: &Arc<Resource>) -> Option<usize> {
+        if !self.region().bound().is_north() || tables.agg_sub_prefixes.is_empty() {
+            return None;
+        }
+        let child_ke = res.keyexpr()?;
+        tables
+            .agg_sub_prefixes
+            .iter()
+            .position(|prefix| prefix.includes(child_ke))
+    }
+
+    /// Fold a downstream subscriber into the pre-created `${prefix}` aggregate for `idx`: record the
+    /// child and, on the first child, declare the aggregate northbound (idempotent on `router_subs`).
+    fn fold_subscriber_upstream(
+        &mut self,
+        ctx: DispatcherContext,
+        idx: usize,
+        child: &Arc<Resource>,
+        sub_info: &SubscriberInfo,
+    ) {
+        let Some(mut aggregate) = ctx.tables.agg_sub_resources.get(idx).cloned() else {
+            return; // precreate keeps resources parallel to prefixes; defensive
+        };
+        self.north_agg_subs
+            .entry(idx)
+            .or_default()
+            .insert(child.clone());
+        if !self
+            .res_hat(&aggregate)
+            .router_subs
+            .contains(&ctx.tables.zid)
+        {
+            self.res_hat_mut(&mut aggregate)
+                .router_subs
+                .insert(ctx.tables.zid);
+            self.router_subs.insert(aggregate.clone());
+            self.disable_data_routes(&mut aggregate);
+            self.propagate_sourced_subscriber(
+                ctx.tables,
+                &aggregate,
+                sub_info,
+                None,
+                &ctx.tables.zid,
+            );
+        }
+    }
+
+    /// If `res` is a child folded into some northbound aggregate, remove it and — when the aggregate
+    /// has no remaining children — withdraw the aggregate. Returns `true` iff `res` was a folded
+    /// child (caller must then skip the stock per-key undeclare path). The aggregate `Resource`
+    /// itself persists (pre-created), so its match-set is never rebuilt.
+    fn remove_subscriber_from_aggregate(
+        &mut self,
+        ctx: DispatcherContext,
+        res: &Arc<Resource>,
+    ) -> bool {
+        let mut hit: Option<usize> = None;
+        for (idx, children) in self.north_agg_subs.iter_mut() {
+            if children.remove(res) {
+                hit = Some(*idx);
+                break;
+            }
+        }
+        let Some(idx) = hit else {
+            return false;
+        };
+        let empty = self.north_agg_subs.get(&idx).map_or(true, |c| c.is_empty());
+        if empty {
+            self.north_agg_subs.remove(&idx);
+            if let Some(mut aggregate) = ctx.tables.agg_sub_resources.get(idx).cloned() {
+                if self
+                    .res_hat(&aggregate)
+                    .router_subs
+                    .contains(&ctx.tables.zid)
+                {
+                    self.res_hat_mut(&mut aggregate)
+                        .router_subs
+                        .remove(&ctx.tables.zid);
+                    if self.res_hat(&aggregate).router_subs.is_empty() {
+                        self.router_subs.retain(|r| !Arc::ptr_eq(r, &aggregate));
+                    }
+                    self.disable_data_routes(&mut aggregate);
+                    self.propagate_forget_sourced_subscriber(
+                        ctx.tables,
+                        &aggregate,
+                        None,
+                        &ctx.tables.zid,
+                    );
+                }
+            }
+        }
+        true
+    }
+}
+
 impl HatPubSubTrait for Hat {
     #[tracing::instrument(level = "debug", skip(tables), ret)]
     fn sourced_subscribers(&self, tables: &TablesData) -> HashMap<Arc<Resource>, Sources> {
@@ -470,6 +573,17 @@ impl HatPubSubTrait for Hat {
             return;
         };
 
+        // Northbound aggregation: if this north-bound router HAT forwards a downstream subscriber
+        // whose key-expr is included by a configured `aggregation.upstream.subscribers` prefix, fold
+        // it into the pre-created `${prefix}` aggregate and suppress the per-key child upstream. The
+        // child is intentionally NOT inserted into `router_subs`, so `pubsub_tree_change` /
+        // `sourced_subscribers` cannot re-leak it; downward routing is unaffected (the child stays
+        // registered in the source region's HAT).
+        if let Some(idx) = self.matching_agg_sub_prefix(ctx.tables, &res) {
+            self.fold_subscriber_upstream(ctx, idx, &res, &other_info);
+            return;
+        }
+
         if !self.res_hat(&res).router_subs.contains(&ctx.tables.zid) {
             self.res_hat_mut(&mut res)
                 .router_subs
@@ -481,9 +595,16 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unpropagate_subscriber(&mut self, ctx: DispatcherContext, mut res: Arc<Resource>) {
+    fn unpropagate_subscriber(&mut self, mut ctx: DispatcherContext, mut res: Arc<Resource>) {
         if self.owns(ctx.src_face) {
             // NOTE(regions): see Hat::unregister_subscriber
+            return;
+        }
+
+        // Northbound aggregation: a folded child was never propagated per-key (so the
+        // `debug_assert!(was_propagated)` below would not hold for it). Remove it from its aggregate
+        // — withdrawing the aggregate when its last child is gone — and skip the stock path.
+        if self.remove_subscriber_from_aggregate(ctx.reborrow(), &res) {
             return;
         }
 
