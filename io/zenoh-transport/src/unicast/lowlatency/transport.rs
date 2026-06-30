@@ -13,6 +13,8 @@
 //
 #[cfg(feature = "stats")]
 use std::sync::OnceLock;
+#[cfg(feature = "shared-memory")]
+use std::{collections::HashMap, sync::Mutex};
 use std::{
     sync::{Arc, RwLock as SyncRwLock},
     time::Duration,
@@ -31,7 +33,11 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::{zerror, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::metadata::descriptor::MetadataDescriptor;
 
+#[cfg(feature = "shared-memory")]
+use crate::shm::PendingShmBuf;
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::UnicastTransportShmContext;
 use crate::{
@@ -71,6 +77,9 @@ pub(crate) struct TransportUnicastLowlatency {
 
     #[cfg(feature = "shared-memory")]
     pub(super) shm_context: Option<UnicastTransportShmContext>,
+    // Per-connection SHM lease set: keyed by MetadataDescriptor for O(1) rx_ack early release.
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm_pending: Arc<Mutex<HashMap<MetadataDescriptor, PendingShmBuf>>>,
 }
 
 impl TransportUnicastLowlatency {
@@ -94,6 +103,8 @@ impl TransportUnicastLowlatency {
             tracker: TaskTracker::new(),
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(feature = "shared-memory")]
+            shm_pending: Arc::new(Mutex::new(HashMap::new())),
         }) as Arc<dyn TransportUnicastTrait>
     }
 
@@ -130,6 +141,10 @@ impl TransportUnicastLowlatency {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
+        // Release all in-flight SHM leases so ConfirmedDescriptors drop and the
+        // watchdog validator can reclaim chunks within ≤100 ms.
+        #[cfg(feature = "shared-memory")]
+        self.shm_pending.lock().expect("shm_pending lock").clear();
 
         // Close and drop the link
         self.token.cancel();
