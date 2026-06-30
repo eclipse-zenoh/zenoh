@@ -151,8 +151,7 @@ impl JSONSample {
         }
         let base64_encode = |data: &[u8]| base64::engine::general_purpose::STANDARD.encode(data);
         match encoding {
-            // If it is a JSON try to deserialize as json, if it fails fallback to base64
-            &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON | &Encoding::TEXT_JSON5 => {
+            &Encoding::APPLICATION_JSON | &Encoding::TEXT_JSON => {
                 let bytes = payload.to_bytes();
                 serde_json::from_slice(&bytes).unwrap_or_else(|e| {
                     tracing::warn!(
@@ -160,6 +159,23 @@ impl JSONSample {
                     );
                     serde_json::Value::String(base64_encode(&bytes))
                 })
+            }
+            &Encoding::TEXT_JSON5 => {
+                let bytes = payload.to_bytes();
+                match std::str::from_utf8(&bytes) {
+                    Ok(text) => json5::from_str::<serde_json::Value>(text).unwrap_or_else(|e| {
+                        tracing::warn!(
+                            "Encoding is JSON5 but failed to parse, returning as string, Error: {e:?}"
+                        );
+                        serde_json::Value::String(text.to_owned())
+                    }),
+                    Err(e) => {
+                        tracing::warn!(
+                            "Encoding is JSON5 but data is not valid UTF-8, converting to base64, Error: {e:?}"
+                        );
+                        serde_json::Value::String(base64_encode(&bytes))
+                    }
+                }
             }
             &Encoding::TEXT_PLAIN | &Encoding::ZENOH_STRING => serde_json::Value::String(
                 String::from_utf8(payload.to_bytes().into_owned()).unwrap_or_else(|e| {
@@ -169,7 +185,6 @@ impl JSONSample {
                     base64_encode(e.as_bytes())
                 }),
             ),
-            // otherwise convert to JSON string
             _ => serde_json::Value::String(base64_encode(&payload.to_bytes())),
         }
     }
@@ -737,5 +752,32 @@ mod tests {
         }
 
         test_sessions.close().await;
+    }
+
+    #[test]
+    fn payload_to_json_json5_valid() {
+        use crate::JSONSample;
+
+        let payload = ZBytes::from("{a: 1, b: 'hello'}");
+        let value = JSONSample::payload_to_json(&payload, &Encoding::TEXT_JSON5);
+        assert_eq!(value, serde_json::json!({"a": 1, "b": "hello"}));
+    }
+
+    #[test]
+    fn payload_to_json_json5_strict_json() {
+        use crate::JSONSample;
+
+        let payload = ZBytes::from(r#"{"a": 1, "b": "hello"}"#);
+        let value = JSONSample::payload_to_json(&payload, &Encoding::TEXT_JSON5);
+        assert_eq!(value, serde_json::json!({"a": 1, "b": "hello"}));
+    }
+
+    #[test]
+    fn payload_to_json_json5_unparseable() {
+        use crate::JSONSample;
+
+        let payload = ZBytes::from("this is not json5 at all");
+        let value = JSONSample::payload_to_json(&payload, &Encoding::TEXT_JSON5);
+        assert_eq!(value, serde_json::Value::String("this is not json5 at all".to_owned()));
     }
 }
