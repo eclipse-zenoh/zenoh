@@ -768,19 +768,36 @@ where
     F: Fn(&Tables) -> HashMap<Arc<Resource>, Sources>,
 {
     let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-    for res in f(&rtables) {
-        let key = prefix / keyexpr::new(res.0.expr()).unwrap();
-        if query.key_expr().intersects(&key) {
-            let payload =
-                ZBytes::from(serde_json::to_string(&res.1).unwrap_or_else(|_| "{}".to_string()));
-            if let Err(e) = query
-                .reply(key, payload)
-                .encoding(Encoding::APPLICATION_JSON)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
+    // BUGFIX(routing deadlock): collect replies while holding the routing-tables
+    // read lock, then DROP the guard before replying. `query.reply().wait()` routes
+    // the response via `route_send_response`, which re-acquires `zread!(tables.tables)`;
+    // holding the guard across the reply is a re-entrant read that deadlocks against
+    // a concurrent `register_expr` writer (std::sync::RwLock is writer-preferring).
+    let to_reply: Vec<_> = {
+        let rtables = zread!(tables.tables);
+        f(&rtables)
+            .into_iter()
+            .filter_map(|res| {
+                // BUGFIX(panic): stock 1.9.0 `.unwrap()`s here; a resource caught
+                // transiently under declare churn can have an expr that is not a
+                // valid keyexpr (e.g. empty) -> panic -> process abort. Skip it.
+                let key = prefix / keyexpr::new(res.0.expr()).ok()?;
+                query.key_expr().intersects(&key).then(|| {
+                    let payload = ZBytes::from(
+                        serde_json::to_string(&res.1).unwrap_or_else(|_| "{}".to_string()),
+                    );
+                    (key, payload)
+                })
+            })
+            .collect()
+    };
+    for (key, payload) in to_reply {
+        if let Err(e) = query
+            .reply(key, payload)
+            .encoding(Encoding::APPLICATION_JSON)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
         }
     }
 }
@@ -815,23 +832,29 @@ fn tokens_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 #[tracing::instrument(level = "trace", skip_all)]
 fn linkstate_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
-
-    for (region, hat) in rtables
-        .hats
-        .iter()
-        .filter(|(_, hat)| hat.mode().is_peer() || hat.mode().is_router())
-    {
-        let reply_key = prefix / &KeyExpr::try_from(format!("{region}")).unwrap();
-
-        if query.key_expr().intersects(&reply_key) {
-            if let Err(e) = query
-                .reply(reply_key, hat.info())
-                .encoding(Encoding::TEXT_PLAIN)
-                .wait()
-            {
-                tracing::error!("Error sending AdminSpace reply: {:?}", e);
-            }
+    // BUGFIX(routing deadlock): collect under the lock, drop the guard, then reply.
+    let to_reply: Vec<_> = {
+        let rtables = zread!(tables.tables);
+        rtables
+            .hats
+            .iter()
+            .filter(|(_, hat)| hat.mode().is_peer() || hat.mode().is_router())
+            .filter_map(|(region, hat)| {
+                let reply_key = prefix / &KeyExpr::try_from(format!("{region}")).unwrap();
+                query
+                    .key_expr()
+                    .intersects(&reply_key)
+                    .then(|| (reply_key, hat.info()))
+            })
+            .collect()
+    };
+    for (reply_key, info) in to_reply {
+        if let Err(e) = query
+            .reply(reply_key, info)
+            .encoding(Encoding::TEXT_PLAIN)
+            .wait()
+        {
+            tracing::error!("Error sending AdminSpace reply: {:?}", e);
         }
     }
 }
@@ -848,29 +871,36 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
         }
     };
     let tables = &context.runtime.state.router.tables;
-    let rtables = zread!(tables.tables);
+    // BUGFIX(routing deadlock): collect everything that needs the routing-tables
+    // read lock, drop the guard, then reply. `reply` -> `route_send_response`
+    // re-acquires `zread!(tables.tables)`; replying under the guard is a re-entrant
+    // read that deadlocks against a concurrent `register_expr` writer.
 
     // Try to shortcut full successor retrieval if suffix matches 'src/<zid>/dst/<zid>' pattern.
-
     let suffix = query.key_expr().as_str().strip_prefix(prefix.as_str());
-    if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
-        if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
-            for hat in rtables.hats.values().filter(|hat| hat.mode().is_router()) {
-                if let Some(successor) = hat.route_successor(src_zid, dst_zid) {
-                    reply(query.key_expr(), successor);
+    let (shortcut, successors) = {
+        let rtables = zread!(tables.tables);
+        let mut shortcut: Vec<ZenohIdProto> = Vec::new();
+        if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
+            if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
+                for hat in rtables.hats.values().filter(|hat| hat.mode().is_router()) {
+                    if let Some(successor) = hat.route_successor(src_zid, dst_zid) {
+                        shortcut.push(successor);
+                    }
                 }
             }
         }
+        let successors = rtables
+            .hats
+            .values()
+            .filter(|hat| hat.mode().is_router())
+            .flat_map(|hat| hat.route_successors())
+            .collect_vec();
+        (shortcut, successors)
+    };
+    for successor in shortcut {
+        reply(query.key_expr(), successor);
     }
-
-    // Reply with every successor suffix matching the keyexpr.
-    let successors = rtables
-        .hats
-        .values()
-        .filter(|hat| hat.mode().is_router())
-        .flat_map(|hat| hat.route_successors())
-        .collect_vec();
-    drop(rtables);
     for entry in successors {
         let ke = KeyExpr::new(format!(
             "{prefix}/src/{src}/dst/{dst}",
