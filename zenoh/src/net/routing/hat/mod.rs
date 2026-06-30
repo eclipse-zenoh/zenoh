@@ -110,6 +110,7 @@ pub(crate) type SendDeclare<'a> = dyn FnMut(&Arc<dyn crate::net::primitives::EPr
 pub(crate) trait HatTrait:
     HatBaseTrait + HatInterestTrait + HatPubSubTrait + HatQueriesTrait + HatTokenTrait
 {
+    fn unregister_face_entities(&mut self, ctx: DispatcherContext) -> UnregisterFaceEntitiesResult;
 }
 
 pub(crate) struct DispatcherContext<'ctx> {
@@ -449,6 +450,14 @@ pub(crate) enum UnregisterEntityResult {
     LastUnregistered { res: Arc<Resource> },
 }
 
+/// Return value of face entity unregistration.
+#[derive(Debug, Default)]
+pub(crate) struct UnregisterFaceEntitiesResult {
+    pub(crate) removed_subscribers: HashSet<Arc<Resource>>,
+    pub(crate) removed_queryables: HashSet<Arc<Resource>>,
+    pub(crate) removed_tokens: HashSet<Arc<Resource>>,
+}
+
 pub(crate) trait HatPubSubTrait {
     /// Register a subscriber entity.
     ///
@@ -472,8 +481,6 @@ pub(crate) trait HatPubSubTrait {
         res: Option<Arc<Resource>>,
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
-
-    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a subscriber entity.
     ///
@@ -564,8 +571,6 @@ pub(crate) trait HatQueriesTrait {
         nid: NodeId,
     ) -> UnregisterEntityResult;
 
-    fn unregister_face_queryables(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
-
     /// Propagate a queryable entity.
     ///
     /// The callee hat will only push the queryable if is the north hat.
@@ -649,8 +654,6 @@ pub(crate) trait HatTokenTrait {
         res: Option<Arc<Resource>>,
         nid: NodeId,
     ) -> Option<Arc<Resource>>;
-
-    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>>;
 
     /// Propagate a token entity.
     fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>);

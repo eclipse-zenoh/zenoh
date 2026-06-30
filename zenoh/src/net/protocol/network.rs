@@ -949,6 +949,17 @@ impl Network {
         free_index
     }
 
+    pub(crate) fn find_disconnected_nodes_after_removing_link(
+        &self,
+        zid: &ZenohIdProto,
+    ) -> Vec<(NodeIndex, ZenohIdProto)> {
+        if self.full_linkstate || self.gossip_multihop {
+            self.disconnected_nodes_when_removing(Some(zid))
+        } else {
+            vec![]
+        }
+    }
+
     pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
@@ -987,12 +998,23 @@ impl Network {
         }
     }
 
-    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
+    fn disconnected_nodes_when_removing(
+        &self,
+        dropped_zid: Option<&ZenohIdProto>,
+    ) -> Vec<(NodeIndex, ZenohIdProto)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
             if visit_map.visit(node) {
                 for succzid in self.graph[node].links.keys() {
+                    if node == self.idx && dropped_zid.is_some_and(|it| it == succzid) {
+                        // NOTE: Don't branch out to `dropped_zid` from self.
+                        // Either (1) there is no path between self and `dropped_zid` other than this one,
+                        // in which case `dropped_zid` will never visited and thus considered a detached node.
+                        // Or, (2) there is a path between self and `dropped_zid` that goes through another node,
+                        // in which case self (even though present in `dropped_zid`'s links) will not be revisited thanks to `visit_map`.
+                        continue;
+                    }
                     if let Some(succ) = self.get_idx(succzid) {
                         if !visit_map.is_visited(&succ) {
                             dfs_stack.push(succ);
@@ -1002,14 +1024,20 @@ impl Network {
             }
         }
 
-        let mut removed = vec![];
-        for idx in self.graph.node_indices().collect::<Vec<NodeIndex>>() {
-            if !visit_map.is_visited(&idx) {
-                tracing::debug!("Remove node {}", &self.graph[idx].zid);
-                removed.push((idx, self.graph.remove_node(idx).unwrap().zid));
-            }
+        self.graph
+            .node_indices()
+            .filter(|idx| !visit_map.is_visited(idx))
+            .map(|idx| (idx, self.graph.node_weight(idx).unwrap().zid))
+            .collect()
+    }
+
+    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
+        let disconnected = self.disconnected_nodes_when_removing(None);
+        for (idx, _) in &disconnected {
+            tracing::debug!("Remove node {}", &self.graph[*idx].zid);
+            self.graph.remove_node(*idx).unwrap();
         }
-        removed
+        disconnected
     }
 
     pub(crate) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
