@@ -14,5 +14,5 @@
 
 pub mod array;
 pub mod struct_in_shm;
-tested_crate_module!(segment);
+pub mod segment;
 pub(crate) mod cleanup;

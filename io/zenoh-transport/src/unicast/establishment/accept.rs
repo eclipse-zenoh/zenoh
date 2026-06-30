@@ -35,10 +35,6 @@ use zenoh_result::ZResult;
 #[cfg(feature = "auth_usrpwd")]
 use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
-use super::ext::shm::shm_segment::TXAuthSegment;
-#[cfg(feature = "shared-memory")]
-use super::ext::shm::shm_segment::RXAuthSegment;
-#[cfg(feature = "shared-memory")]
 use crate::shm::TransportShmConfig;
 use crate::{
     common::batch::BatchConfig,
@@ -89,8 +85,6 @@ struct RecvInitSynIn {
 struct RecvInitSynOut {
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<RXAuthSegment>,
 }
 
 // InitAck
@@ -100,13 +94,9 @@ struct SendInitAckIn {
     mine_whatami: WhatAmI,
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<RXAuthSegment>,
 }
 struct SendInitAckOut {
     cookie_nonce: u64,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<RXAuthSegment>,
 }
 
 // OpenSyn
@@ -243,12 +233,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        let ext_shm = match &self.ext_shm {
+        match &self.ext_shm {
             Some(my_shm) => my_shm
                 .recv_init_syn(init_syn.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            _ => None,
+            _ => (),
         };
 
         // Extension Auth
@@ -296,8 +286,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvInitSynOut {
             other_zid: init_syn.zid,
             other_whatami: init_syn.whatami,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
         };
         Ok(output)
     }
@@ -322,7 +310,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_init_ack(&input.ext_shm)
+                .send_init_ack(())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             _ => None,
@@ -453,11 +441,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             msg
         );
 
-        let output = SendInitAckOut {
-            cookie_nonce,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: input.ext_shm,
-        };
+        let output = SendInitAckOut { cookie_nonce };
         Ok(output)
     }
 
@@ -561,7 +545,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         if let Some(my_shm) = self.ext_shm.as_ref() {
             my_shm
-                .recv_open_syn((&mut state.transport.ext_shm, open_syn.ext_shm))
+                .recv_open_syn(open_syn.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?;
         }
@@ -639,7 +623,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_open_ack(&state.transport.ext_shm)
+                .send_open_ack(())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,
@@ -842,8 +826,6 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             mine_whatami: manager.config.whatami,
             other_zid: isyn_out.other_zid,
             other_whatami: isyn_out.other_whatami,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: isyn_out.ext_shm,
         };
         step!(fsm.send_init_ack((state, iack_in)).await)
     };
@@ -874,10 +856,12 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: match state.transport.ext_shm.tx_counter_lease() {
-            Some(_) => iack_out.ext_shm.map(TransportShmConfig::new),
-            None => None,
-        },
+        shm: fsm
+            .ext_shm
+            .take()
+            .map(|shm| shm.shm_init_result())
+            .flatten()
+            .map(|(rx, tx)| TransportShmConfig::new(rx, tx)),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,

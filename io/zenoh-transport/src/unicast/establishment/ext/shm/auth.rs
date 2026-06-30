@@ -28,7 +28,8 @@ use zenoh_shm::api::common::types::ProtocolID;
 
 use crate::unicast::establishment::{
     ext::shm::shm_segment::{
-        AuthChallenge, AuthSegmentID, RXAuthSegment, ShmCounterID, ShmTXCounterLease, TXAuthSegment,
+        AuthChallenge, AuthSegmentID, RXAuthSegment, ShmCounterID, ShmRXCounterLease,
+        ShmTXCounterLease, TXAuthSegment,
     },
     AcceptFsm, OpenFsm,
 };
@@ -62,10 +63,6 @@ impl AuthUnicast {
 
     pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
         self.segment.validate_challenge(expected_challenge, s)
-    }
-
-    pub fn challenge(&self) -> AuthChallenge {
-        self.segment.challenge()
     }
 
     pub fn segment_id(&self) -> AuthSegmentID {
@@ -245,11 +242,23 @@ where
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a AuthUnicast,
+    tx_lease: std::sync::OnceLock<Arc<ShmTXCounterLease>>,
+    rx_segment: std::sync::OnceLock<Arc<RXAuthSegment>>,
+    rx_lease: std::sync::OnceLock<Arc<ShmRXCounterLease>>,
 }
 
 impl<'a> ShmFsm<'a> {
     pub(crate) const fn new(inner: &'a AuthUnicast) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            tx_lease: std::sync::OnceLock::new(),
+            rx_segment: std::sync::OnceLock::new(),
+            rx_lease: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub fn shm_init_result(self) -> Option<(Arc<ShmRXCounterLease>, Arc<ShmTXCounterLease>)> {
+        self.rx_lease.into_inner().zip(self.tx_lease.into_inner())
     }
 }
 
@@ -257,28 +266,16 @@ impl<'a> ShmFsm<'a> {
 /*              OPEN                 */
 /*************************************/
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct StateOpen {
-    // false by default, will be switched to true at the end of open_ack
-    negotiated_to_use_shm: bool,
-}
+pub(crate) struct StateOpen {}
 
 impl StateOpen {
     pub(crate) const fn new() -> Self {
-        Self {
-            negotiated_to_use_shm: false,
-        }
-    }
-
-    pub(crate) const fn negotiated_to_use_shm(&self) -> bool {
-        self.negotiated_to_use_shm
+        Self {}
     }
 
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
-        let mut rng = rand::thread_rng();
-        Self {
-            negotiated_to_use_shm: rng.gen_bool(0.5),
-        }
+        Self {}
     }
 }
 
@@ -310,7 +307,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     }
 
     type RecvInitAckIn = Option<init::ext::Shm>;
-    type RecvInitAckOut = Option<(RXAuthSegment, ShmTXCounterLease)>;
+    type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         mut input: Self::RecvInitAckIn,
@@ -318,7 +315,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Recv InitAck.";
 
         let Some(ext) = input.take() else {
-            return Ok(None);
+            return Ok(());
         };
 
         // Decode the extension
@@ -326,12 +323,12 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let mut reader = ext.value.reader();
         let Ok(init_ack): Result<InitAck, _> = codec.read(&mut reader) else {
             tracing::trace!("{} Decoding error.", S);
-            return Ok(None);
+            return Ok(());
         };
 
         // Verify that Bob has correctly read Alice challenge
         if !self.inner.validate_challenge(init_ack.alice_challenge, S) {
-            return Ok(None);
+            return Ok(());
         }
 
         // Read Bob's SHM Segment
@@ -339,62 +336,84 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             Ok(buff) => buff,
             Err(e) => {
                 tracing::trace!("{} {}", S, e);
-                return Ok(None);
+                return Ok(());
             }
         };
 
-        // as long as Alice challenge correctly seen, allocate TX counter for this session
-        let tx_counter_lease = self.inner.lease_tx_counter()?;
+        self.rx_segment
+            .set(Arc::new(bob_segment))
+            .map_err(|_| zerror!("{} State machine error", S))?;
 
-        Ok(Some((bob_segment, tx_counter_lease)))
+        Ok(())
     }
 
-    type SendOpenSynIn = &'a Self::RecvInitAckOut;
+    type SendOpenSynIn = Self::RecvInitAckOut;
     type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
         self,
-        input: Self::SendOpenSynIn,
+        _input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        // const S: &str = "Shm extension - Send OpenSyn.";
+        const S: &str = "Shm extension - Send OpenSyn.";
 
-        Ok(input.as_ref().map(|(rx_segment, tx_counter)| {
-            let open_syn = OpenSyn {
-                bob_challenge: rx_segment.challenge(),
-                alice_counter: tx_counter.counter_id(),
-            };
+        // take RX segment from input
+        let Some(rx_segment) = self.rx_segment.get() else {
+            return Ok(None);
+        };
 
-            // Encode the extension
-            let codec = Zenoh080::new();
-            let mut buff = vec![];
-            let mut writer = buff.writer();
-            codec
-                .write(&mut writer, &open_syn)
-                .map_err(|_| zerror!("{} Encoding error", S))?;
+        // Allocate TX counter for this session
+        let tx_counter = self.inner.lease_tx_counter()?;
 
-            open::ext::Shm::new(buff.into())
-        }))
+        let open_syn = OpenSyn {
+            bob_challenge: rx_segment.challenge(),
+            alice_counter: tx_counter.id(),
+        };
+
+        // Encode the extension
+        let codec = Zenoh080::new();
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &open_syn)
+            .map_err(|_| zerror!("{} Encoding error", S))?;
+
+        self.tx_lease
+            .set(Arc::new(tx_counter))
+            .map_err(|_| zerror!("{} State machine error", S))?;
+
+        Ok(Some(open::ext::Shm::new(buff.into())))
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Shm>);
-    type RecvOpenAckOut = Option<ShmCounterID>;
+    type RecvOpenAckIn = Option<open::ext::Shm>;
+    type RecvOpenAckOut = ();
     async fn recv_open_ack(
         self,
-        input: Self::RecvOpenAckIn,
+        mut input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv OpenAck.";
 
-        let (state, mut ext) = input;
+        let Some(ext) = input.take() else {
+            return Ok(());
+        };
+
+        let Some(segment) = self.rx_segment.get() else {
+            return Ok(());
+        };
 
         // Decode the extension
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
         let Ok(open_ack): Result<OpenAck, _> = codec.read(&mut reader) else {
             tracing::trace!("{} Decoding error.", S);
-            return Ok(None);
+            return Ok(());
         };
 
-        state.negotiated_to_use_shm = true;
-        Ok(Some(open_ack.shm_counter_id))
+        let rx_counter = ShmRXCounterLease::new(segment.clone(), open_ack.bob_counter);
+
+        self.rx_lease
+            .set(Arc::new(rx_counter))
+            .map_err(|_| zerror!("{} State machine error", S))?;
+
+        Ok(())
     }
 }
 
@@ -411,9 +430,7 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let negotiated_to_use_shm = u8::from(x.negotiated_to_use_shm);
-        self.write(&mut *writer, negotiated_to_use_shm)?;
+    fn write(self, _writer: &mut W, _x: &StateAccept) -> Self::Output {
         Ok(())
     }
 }
@@ -424,12 +441,8 @@ where
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let negotiated_to_use_shm: u8 = self.read(&mut *reader)?;
-        let negotiated_to_use_shm: bool = negotiated_to_use_shm == 1;
-        Ok(StateAccept {
-            negotiated_to_use_shm,
-        })
+    fn read(self, _reader: &mut R) -> Result<StateAccept, Self::Error> {
+        Ok(StateAccept {})
     }
 }
 
@@ -438,7 +451,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = Option<init::ext::Shm>;
-    type RecvInitSynOut = Option<RXAuthSegment>;
+    type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
@@ -446,7 +459,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Recv InitSyn.";
 
         let Some(ext) = input.as_ref() else {
-            return Ok(None);
+            return Ok(());
         };
 
         // Decode the extension
@@ -454,7 +467,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let mut reader = ext.value.reader();
         let Ok(init_syn): Result<InitSyn, _> = codec.read(&mut reader) else {
             tracing::trace!("{} Decoding error.", S);
-            bail!("");
+            return Ok(());
         };
 
         // Read Alice's SHM Segment
@@ -462,22 +475,26 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             Ok(buff) => buff,
             Err(e) => {
                 tracing::trace!("{} {}", S, e);
-                return Ok(None);
+                return Ok(());
             }
         };
 
-        Ok(Some(alice_segment))
+        self.rx_segment
+            .set(Arc::new(alice_segment))
+            .map_err(|_| zerror!("{} State machine error", S))?;
+
+        Ok(())
     }
 
-    type SendInitAckIn = &'a Self::RecvInitSynOut;
+    type SendInitAckIn = ();
     type SendInitAckOut = Option<init::ext::Shm>;
     async fn send_init_ack(
         self,
-        input: Self::SendInitAckIn,
+        _input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Send InitAck.";
 
-        let Some(alice_segment) = input.as_ref() else {
+        let Some(alice_segment) = self.rx_segment.get() else {
             return Ok(None);
         };
 
@@ -496,18 +513,20 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Shm>);
-    type RecvOpenSynOut = Option<(ShmTXCounterLease, ShmCounterID)>;
+    type RecvOpenSynIn = Option<open::ext::Shm>;
+    type RecvOpenSynOut = ();
     async fn recv_open_syn(
         self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "Shm extension - Recv OpenSyn.";
 
-        let (state, mut ext) = input;
+        let Some(ext) = input else {
+            return Ok(());
+        };
 
-        let Some(ext) = input.as_ref() else {
-            return Ok(None);
+        let Some(segment) = self.rx_segment.get() else {
+            return Ok(());
         };
 
         // Decode the extension
@@ -519,30 +538,32 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Verify that Alice has correctly read Bob challenge
-        if !self.inner.validate_challenge(bob_challnge, S) {
-            return Ok(None);
+        if !self.inner.validate_challenge(open_syn.bob_challenge, S) {
+            return Ok(());
         }
 
-        // as long as Bob challenge correctly seen, allocate TX counter for this session
-        let tx_counter_lease = self.inner.lease_tx_counter()?;
+        // Allocate RX counter for this session
+        let rx_lease = ShmRXCounterLease::new(segment.clone(), open_syn.alice_counter);
 
-        state.negotiated_to_use_shm = true;
+        self.rx_lease
+            .set(Arc::new(rx_lease))
+            .map_err(|_| zerror!("{} State machine error", S))?;
 
-        Ok(Some((tx_counter_lease, open_syn.alice_counter)))
+        Ok(())
     }
 
-    type SendOpenAckIn = (&'a StateAccept, &'a ShmTXCounterLease);
+    type SendOpenAckIn = ();
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
-        input: Self::SendOpenAckIn,
+        _input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        // const S: &str = "Shm extension - Send OpenAck.";
+        const S: &str = "Shm extension - Send OpenAck.";
 
-        let (state, lease) = input;
+        let tx_lease = self.inner.lease_tx_counter()?;
 
         let open_ack = OpenAck {
-            bob_counter: lease.id()
+            bob_counter: tx_lease.id(),
         };
 
         let codec = Zenoh080::new();
@@ -551,6 +572,10 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         codec
             .write(&mut writer, &open_ack)
             .map_err(|_| zerror!("{} Encoding error", S))?;
+
+        self.tx_lease
+            .set(Arc::new(tx_lease))
+            .map_err(|_| zerror!("{} State machine error", S))?;
 
         Ok(Some(open::ext::Shm::new(buff.into())))
     }
