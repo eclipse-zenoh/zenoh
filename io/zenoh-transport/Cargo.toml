@@ -64,6 +64,7 @@ rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
+stabby = { workspace = true }
 sha3 = { workspace = true }
 tokio = { workspace = true, features = [
   "fs",

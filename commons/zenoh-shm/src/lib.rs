@@ -61,9 +61,9 @@ pub mod init;
 pub mod metadata;
 pub mod posix_shm;
 pub mod reader;
+pub mod shm;
 pub mod version;
 pub mod watchdog;
-tested_crate_module!(shm);
 
 /// Information about a [`ShmBufInner`].
 ///

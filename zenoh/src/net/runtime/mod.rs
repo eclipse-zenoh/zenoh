@@ -421,7 +421,7 @@ impl IRuntime for RuntimeState {
     #[cfg(feature = "shared-memory")]
     #[zenoh_macros::unstable]
     fn get_shm_provider(&self) -> ShmProviderState {
-        use zenoh_transport::shm::ProviderInitState;
+        use zenoh_transport::common::shm::ProviderInitState;
 
         match &self.manager.get_shm_context() {
             Some(ctx) => match ctx.shm_provider() {

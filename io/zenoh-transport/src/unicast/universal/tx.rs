@@ -23,7 +23,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::common::shm::interop::map_zmsg_to_partner;
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {

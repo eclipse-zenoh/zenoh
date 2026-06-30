@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashSet,
     fmt::Debug,
     num::NonZeroUsize,
     sync::{Arc, Mutex},
@@ -44,7 +43,7 @@ use zenoh_shm::{
     ShmBufInfo, ShmBufInner,
 };
 
-use crate::unicast::establishment::ext::shm::AuthSegment;
+use crate::unicast::establishment::ext::shm::shm_segment::{ShmRXCounterLease, ShmTXCounterLease};
 
 #[derive(Debug)]
 struct ProviderInitCfg {
@@ -180,21 +179,19 @@ impl LazyShmProvider {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {
-    partner_protocols: Box<[ProtocolID]>,
+    rx: Arc<ShmRXCounterLease>,
+    tx: Arc<ShmTXCounterLease>,
+}
+
+impl TransportShmConfig {
+    pub fn new(rx: Arc<ShmRXCounterLease>, tx: Arc<ShmTXCounterLease>) -> Self {
+        Self { rx, tx }
+    }
 }
 
 impl PartnerShmConfig for TransportShmConfig {
     fn supports_protocol(&self, protocol: ProtocolID) -> bool {
-        self.partner_protocols.contains(&protocol)
-    }
-}
-
-impl TransportShmConfig {
-    pub fn new(partner_segment: AuthSegment) -> Self {
-        let t: HashSet<ProtocolID> = partner_segment.protocols().iter().cloned().collect();
-        Self {
-            partner_protocols: t.iter().cloned().collect(),
-        }
+        self.rx.segment().protocols().contains(&protocol)
     }
 }
 

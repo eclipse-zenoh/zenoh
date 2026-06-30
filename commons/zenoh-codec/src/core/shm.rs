@@ -18,7 +18,11 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_shm::{
-    api::provider::chunk::ChunkDescriptor, metadata::descriptor::MetadataDescriptor, ShmBufInfo,
+    api::provider::chunk::ChunkDescriptor,
+    metadata::descriptor::MetadataDescriptor,
+    posix_shm::{segment::Segment, struct_in_shm::StructInSHM},
+    shm::SegmentID,
+    ShmBufInfo,
 };
 
 use crate::{RCodec, WCodec, Zenoh080};
@@ -141,5 +145,63 @@ where
 
         let shm_info = ShmBufInfo::new(data_len, metadata, generation);
         Ok(shm_info)
+    }
+}
+
+impl<'a, W, ID> WCodec<&'a Segment<ID>, &'a mut W> for Zenoh080
+where
+    W: Writer,
+    ID: SegmentID,
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    Zenoh080: WCodec<ID, &'a mut W>,
+{
+    type Output = <Zenoh080 as WCodec<ID, &'a mut W>>::Output;
+
+    fn write(self, writer: &'a mut W, x: &Segment<ID>) -> Self::Output {
+        self.write(&mut *writer, x.id())
+    }
+}
+
+impl<'a, R, ID> RCodec<Segment<ID>, &'a mut R> for Zenoh080
+where
+    R: Reader,
+    ID: SegmentID,
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    Zenoh080: RCodec<ID, &'a mut R>,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &'a mut R) -> Result<Segment<ID>, Self::Error> {
+        let id = self.read(&mut *reader).map_err(|_| DidntRead)?;
+        Segment::open(id).map_err(|_| DidntRead)
+    }
+}
+
+impl<'a, W, ID, Elem> WCodec<&'a StructInSHM<ID, Elem>, &'a mut W> for Zenoh080
+where
+    W: Writer,
+    ID: SegmentID,
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    Zenoh080: WCodec<ID, &'a mut W>,
+{
+    type Output = <Zenoh080 as WCodec<ID, &'a mut W>>::Output;
+
+    fn write(self, writer: &'a mut W, x: &StructInSHM<ID, Elem>) -> Self::Output {
+        self.write(&mut *writer, x.id())
+    }
+}
+
+impl<'a, R, ID, Elem> RCodec<StructInSHM<ID, Elem>, &'a mut R> for Zenoh080
+where
+    R: Reader,
+    ID: SegmentID,
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    Zenoh080: RCodec<ID, &'a mut R>,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &'a mut R) -> Result<StructInSHM<ID, Elem>, Self::Error> {
+        let id = self.read(&mut *reader).map_err(|_| DidntRead)?;
+        StructInSHM::open(id).map_err(|_| DidntRead)
     }
 }
