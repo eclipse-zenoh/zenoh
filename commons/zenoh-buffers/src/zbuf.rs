@@ -95,6 +95,17 @@ impl Buffer for ZBuf {
             .iter()
             .fold(0, |len, slice| len + slice.len())
     }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        // optimize compared to default implementation by avoiding the walkthouh
+        for slice in self.slices.as_ref() {
+            if !slice.is_empty() {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 // SplitBuffer
@@ -184,6 +195,16 @@ pub struct ZBufPos {
 pub struct ZBufReader<'a> {
     inner: &'a ZBuf,
     cursor: ZBufPos,
+}
+
+impl Buffer for ZBufReader<'_> {
+    fn len(&self) -> usize {
+        self.remaining()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.cursor.slice >= self.inner.slices.len()
+    }
 }
 
 impl<'a> HasReader for &'a ZBuf {

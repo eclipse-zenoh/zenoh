@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     collections::HashMap,
     fmt,
@@ -269,6 +271,26 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Udp
+    }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        let fd = match &self.variant {
+            LinkUnicastUdpVariant::Connected(link_unicast_udp_connected) => {
+                link_unicast_udp_connected.socket.as_raw_fd()
+            }
+            // Unconnected UDP sockets are shared across multiple peers and demultiplexed
+            // by source address in the tokio read path. Handing the raw fd to io_uring
+            // RecvMulti would bypass that demux and deliver datagrams from any peer to
+            // this link. Always fall back to tokio for the unconnected case.
+            LinkUnicastUdpVariant::Unconnected(_) => bail!("FD unavailable for unconnected UDP"),
+            LinkUnicastUdpVariant::Reliable(_) => bail!("FD unavailable"),
+        };
+
+        match fd {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
     }
 }
 

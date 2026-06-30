@@ -740,7 +740,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
     async fn multilink_vsock_only() {
         zenoh_util::init_log_from_env_or("error");
 
-        let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+        let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17020".parse().unwrap();
         multilink_transport(&endpoint).await;
     }
 }
