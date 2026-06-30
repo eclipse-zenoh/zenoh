@@ -529,6 +529,6 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 #[ignore]
 async fn time_vsock_only() {
     zenoh_util::init_log_from_env_or("error");
-    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17000".parse().unwrap();
+    let endpoint: EndPoint = "vsock/VMADDR_CID_LOCAL:17040".parse().unwrap();
     time_lowlatency_transport(&endpoint).await;
 }

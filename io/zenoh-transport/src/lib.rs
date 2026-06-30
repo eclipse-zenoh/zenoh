@@ -21,6 +21,8 @@ pub mod common;
 pub mod manager;
 pub mod multicast;
 pub mod unicast;
+#[cfg(all(feature = "uring", target_os = "linux"))]
+mod uring;
 
 use std::{any::Any, sync::Arc};
 

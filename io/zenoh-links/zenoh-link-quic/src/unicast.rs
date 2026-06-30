@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 use std::{fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -33,6 +35,8 @@ use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
 
 use super::{QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX};
@@ -167,6 +171,12 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     #[inline(always)]
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
+    }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        //TODO: expose FD for quinn???
+        bail!("Not supported");
     }
 
     #[inline(always)]
