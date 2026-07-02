@@ -195,6 +195,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-queue"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fddad1ccccb94b03dd3c135815cc7672a5992a65c024a33af2ab11db6e341ff"
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1533,6 +1539,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "io-uring"
+version = "0.7.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd7bddefd0a8833b88a4b68f90dae22c7450d11b354198baee3874fd811b344"
+dependencies = [
+ "bitflags 2.11.0",
+ "cfg-if",
+ "libc",
+]
+
+[[package]]
 name = "ipnetwork"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1778,6 +1795,15 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "lru"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96051b46fc183dc9cd4a223960ef37b9af631b55191852a8274bfef064cda20f"
+dependencies = [
+ "hashbrown 0.16.1",
+]
 
 [[package]]
 name = "lru-slab"
@@ -3400,9 +3426,9 @@ dependencies = [
 
 [[package]]
 name = "stabby"
-version = "72.1.2"
+version = "72.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec9e9da673d4db1d470fa36cf4483ad5b1fdea349a392d400fea5d3673a9c5ca"
+checksum = "a7b834ec7ced12095fea1e4b07dcb7e8cf2b59b18afa3eac52494d835965a5ec"
 dependencies = [
  "rustversion",
  "stabby-abi",
@@ -3410,9 +3436,9 @@ dependencies = [
 
 [[package]]
 name = "stabby-abi"
-version = "72.1.2"
+version = "72.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10a281b17b3cf11531b7dc4e5f1c6be27db86a06e19c477e7a88fa4ee1b6daf3"
+checksum = "ff1a4f477858a5bdf927c9fab7f579899de9b13e39f8b3b3b300c89fbab632f4"
 dependencies = [
  "rustc_version",
  "rustversion",
@@ -3422,15 +3448,14 @@ dependencies = [
 
 [[package]]
 name = "stabby-macros"
-version = "72.1.2"
+version = "72.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "605b39114a0c132d77ffdd7d179491323dbaa8369e7dcbcdf3da09d0b43c13cf"
+checksum = "b31c4b2434980b67ad83f300a58088ba14d59454dcd79ba3d87419bbd924d31e"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "rand 0.8.5",
- "syn 1.0.109",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5123,14 +5148,15 @@ dependencies = [
 name = "zenoh-ext"
 version = "1.9.0"
 dependencies = [
- "async-trait",
  "bincode",
  "flume",
  "futures",
  "leb128",
+ "lru",
  "rand 0.8.5",
  "serde",
  "tokio",
+ "tokio-util",
  "tracing",
  "uhlc",
  "zenoh",
@@ -5655,6 +5681,27 @@ dependencies = [
  "zenoh-sync",
  "zenoh-task",
  "zenoh-test",
+ "zenoh-uring",
+ "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-uring"
+version = "1.9.0"
+dependencies = [
+ "atomic-queue",
+ "flume",
+ "io-uring",
+ "libc",
+ "nix 0.29.0",
+ "rand 0.8.5",
+ "test-case",
+ "tokio",
+ "tracing",
+ "zenoh-buffers",
+ "zenoh-core",
+ "zenoh-result",
+ "zenoh-runtime",
  "zenoh-util",
 ]
 
