@@ -443,6 +443,8 @@ pub(crate) trait HatInterestTrait {
 pub(crate) enum UnregisterEntityResult {
     /// Indicates that the unregisration was a no-op (e.g. the entity has duplicates).
     Noop,
+    /// Indicates that the route should be disabled.
+    DisableRoute { res: Arc<Resource> },
     /// Indicates that the entity info changed (e.g. an update to queryable completeness).
     InfoUpdate { res: Arc<Resource> },
     /// Indicates that the last entity on the given [`Resource`] was unregistered.
