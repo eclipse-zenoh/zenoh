@@ -49,6 +49,7 @@ potential_utf = "=0.1.0"
 prost = "=0.14.1"
 prost-derive = "=0.14.1"
 quinn-proto = "=0.11.14"
+quinn-udp = "=0.5.14"
 rcgen = "=0.14.7"
 rustc-hash = "=2.1.1"
 serde_spanned = "=1.0.1"
@@ -98,6 +99,7 @@ ignored = [
   "prost",
   "prost-derive",
   "quinn-proto",
+  "quinn-udp",
   "rcgen",
   "rustc-hash",
   "security-framework",
