@@ -14,6 +14,7 @@
 name: Scheduled Fuzzing
 
 on:
+  pull_request:
   schedule:
     # Run the 1-hour campaign every day except Sunday.
     - cron: "0 0 * * 1-6"
@@ -25,8 +26,9 @@ on:
         type: choice
         description: Fuzzing duration profile
         required: true
-        default: daily
+        default: short
         options:
+          - short
           - daily
           - weekly
 
@@ -49,13 +51,18 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             profile="${{ inputs.profile }}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            profile="short"
           elif [[ "${{ github.event.schedule }}" == "0 0 * * 0" ]]; then
             profile="weekly"
           else
             profile="daily"
           fi
 
-          if [[ "$profile" == "weekly" ]]; then
+          if [[ "$profile" == "short" ]]; then
+            echo "label=short" >> "$GITHUB_OUTPUT"
+            echo "max_total_time=600" >> "$GITHUB_OUTPUT"
+          elif [[ "$profile" == "weekly" ]]; then
             echo "label=weekly" >> "$GITHUB_OUTPUT"
             echo "max_total_time=18000" >> "$GITHUB_OUTPUT"
           else
