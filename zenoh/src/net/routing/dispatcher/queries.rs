@@ -136,7 +136,7 @@ impl Face {
             match tables.hats[region].unregister_queryable(ctx.reborrow(), id, res.clone(), node_id)
             {
                 UnregisterEntityResult::Noop => {} // ¯\_(ツ)_/¯
-                UnregisterEntityResult::DisableRoute { mut res } => {
+                UnregisterEntityResult::DisableRoutes { mut res } => {
                     tables.hats[region].disable_query_routes(&mut res);
                 }
                 UnregisterEntityResult::InfoUpdate { mut res } => {
