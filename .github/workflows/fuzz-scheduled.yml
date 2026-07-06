@@ -154,20 +154,9 @@ jobs:
 
           target="${{ matrix.target }}"
           report_txt="coverage/${target}/report.txt"
-          totals_line="$(awk '/^Totals/ { print; exit }' "$report_txt")"
 
           {
             echo "## Codec fuzz coverage: \`$target\`"
-            echo
-            echo "| Scope | Function Coverage | Line Coverage | Region Coverage | Branch Coverage |"
-            echo "| --- | --- | --- | --- | --- |"
-            awk '/^Totals/ { printf("| %s | %s %s | %s %s | %s %s | %s %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9); exit }' "$report_txt"
-            echo
-            echo "Totals line:"
-            echo
-            echo '```text'
-            echo "$totals_line"
-            echo '```'
             echo
             echo "<details><summary>Full llvm-cov report</summary>"
             echo
@@ -273,20 +262,9 @@ jobs:
 
           target="endpoint_from_str"
           report_txt="coverage/${target}/report.txt"
-          totals_line="$(awk '/^Totals/ { print; exit }' "$report_txt")"
 
           {
             echo "## Protocol fuzz coverage: \`$target\`"
-            echo
-            echo "| Scope | Function Coverage | Line Coverage | Region Coverage | Branch Coverage |"
-            echo "| --- | --- | --- | --- | --- |"
-            awk '/^Totals/ { printf("| %s | %s %s | %s %s | %s %s | %s %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9); exit }' "$report_txt"
-            echo
-            echo "Totals line:"
-            echo
-            echo '```text'
-            echo "$totals_line"
-            echo '```'
             echo
             echo "<details><summary>Full llvm-cov report</summary>"
             echo
