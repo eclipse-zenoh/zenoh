@@ -57,9 +57,9 @@ fn shm_bytes_single_buf() {
     // branch to illustrate mutable access to SHM data
     {
         // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
-        let borrowed_shm_buf = payload.as_shm_mut().unwrap();
+        let mut borrowed_shm_buf = unsafe { payload.as_shm_mut().unwrap() };
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
-        let _borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
+        let _borrowed_shm_buf_mut: &mut zshmmut = (&mut *borrowed_shm_buf).try_into().unwrap();
     }
 }
