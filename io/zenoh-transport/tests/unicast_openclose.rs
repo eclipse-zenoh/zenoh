@@ -750,7 +750,7 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "Elapsed")]
+#[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
