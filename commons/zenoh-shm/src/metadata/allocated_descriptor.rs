@@ -20,6 +20,7 @@ use crate::watchdog::validator::GLOBAL_VALIDATOR;
 #[derive(Debug)]
 pub struct AllocatedMetadataDescriptor {
     descriptor: OwnedMetadataDescriptor,
+    registered_in_validator: bool,
 }
 
 impl AllocatedMetadataDescriptor {
@@ -36,13 +37,23 @@ impl AllocatedMetadataDescriptor {
         // reset watchdog on allocation
         descriptor.validate();
 
-        Self { descriptor }
+        Self {
+            descriptor,
+            registered_in_validator: false,
+        }
+    }
+
+    pub fn register_in_validator(&mut self, watchdog: OwnedMetadataDescriptor) {
+        GLOBAL_VALIDATOR.read().add(watchdog);
+        self.registered_in_validator = true;
     }
 }
 
 impl Drop for AllocatedMetadataDescriptor {
     fn drop(&mut self) {
-        GLOBAL_VALIDATOR.read().remove(self.descriptor.clone());
+        if self.registered_in_validator {
+            GLOBAL_VALIDATOR.read().remove(self.descriptor.clone());
+        }
         GLOBAL_METADATA_STORAGE
             .read()
             .reclaim(self.descriptor.clone());

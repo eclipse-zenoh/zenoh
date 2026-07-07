@@ -43,10 +43,7 @@ use crate::{
         allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
         storage::GLOBAL_METADATA_STORAGE,
     },
-    watchdog::{
-        confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
-        validator::GLOBAL_VALIDATOR,
-    },
+    watchdog::confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
     ShmBufInfo, ShmBufInner,
 };
 
@@ -969,7 +966,7 @@ where
         &self,
         chunk: AllocatedChunk,
         len: NonZeroUsize,
-        allocated_metadata: AllocatedMetadataDescriptor,
+        mut allocated_metadata: AllocatedMetadataDescriptor,
         confirmed_metadata: ConfirmedDescriptor,
     ) -> ShmBufInner {
         // write additional metadata
@@ -984,9 +981,7 @@ where
             .store(self.backend.id(), Ordering::Relaxed);
 
         // add watchdog to validator
-        GLOBAL_VALIDATOR
-            .read()
-            .add(confirmed_metadata.owned.clone());
+        allocated_metadata.register_in_validator(confirmed_metadata.owned.clone());
 
         // Create buffer's info
         let info = ShmBufInfo::new(
