@@ -32,6 +32,7 @@ on:
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  COVERAGE_IGNORE_FILENAME_REGEX: ^/rustc/|^.*/.cargo/registry
   NIGHTLY_TOOLCHAIN: nightly
 
 jobs:
@@ -79,7 +80,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install latest Rust toolchain
-        run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+        run: |
+          rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+          rustup component add llvm-tools-preview --toolchain ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Install cargo-fuzz
         run: cargo +stable install --locked cargo-fuzz
@@ -104,14 +107,34 @@ jobs:
         run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run ${{ matrix.target }} -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
         working-directory: commons/zenoh-codec/fuzz
 
+      - name: Generate codec coverage report
+        uses: ./.github/actions/fuzz-coverage
+        with:
+          working-directory: commons/zenoh-codec/fuzz
+          target: ${{ matrix.target }}
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
+          source-paths: |
+            ../src
+            ../../zenoh-protocol/src
+            ../../zenoh-buffers/src
+          title: Codec fuzz
+          artifact-prefix: codec
+          label: ${{ needs.determine-profile.outputs.label }}
+          ignore-filename-regex: ${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}
+
       - name: Upload codec fuzz artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-artifacts-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
           path: commons/zenoh-codec/fuzz/artifacts/${{ matrix.target }}
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Cleanup profraw files
+        if: always()
+        working-directory: commons/zenoh-codec/fuzz
+        run: find . -name "*.profraw" -type f -delete
 
   fuzz-protocol:
     name: Protocol fuzz (${{ needs.determine-profile.outputs.label }}) - endpoint_from_str
@@ -123,7 +146,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install latest Rust toolchain
-        run: rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+        run: |
+          rustup toolchain install ${{ env.NIGHTLY_TOOLCHAIN }}
+          rustup component add llvm-tools-preview --toolchain ${{ env.NIGHTLY_TOOLCHAIN }}
 
       - name: Install cargo-fuzz
         run: cargo +stable install --locked cargo-fuzz
@@ -148,11 +173,30 @@ jobs:
         run: cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz run endpoint_from_str -- -max_total_time=${{ needs.determine-profile.outputs.max_total_time }}
         working-directory: commons/zenoh-protocol/fuzz
 
+      - name: Generate protocol coverage report
+        uses: ./.github/actions/fuzz-coverage
+        with:
+          working-directory: commons/zenoh-protocol/fuzz
+          target: endpoint_from_str
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
+          source-paths: |
+            ../src/core/endpoint.rs
+            ../src/core/parameters.rs
+          title: Protocol fuzz
+          artifact-prefix: protocol
+          label: ${{ needs.determine-profile.outputs.label }}
+          ignore-filename-regex: ${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}
+
       - name: Upload protocol fuzz artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-artifacts-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
           path: commons/zenoh-protocol/fuzz/artifacts/endpoint_from_str
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Cleanup profraw files
+        if: always()
+        working-directory: commons/zenoh-protocol/fuzz
+        run: find . -name "*.profraw" -type f -delete
