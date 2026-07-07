@@ -15,7 +15,7 @@
 use std::{
     collections::BTreeSet,
     sync::{
-        atomic::{AtomicI32, AtomicUsize},
+        atomic::AtomicI32,
         Arc,
     },
     time::Duration,
@@ -31,6 +31,9 @@ use crate::{
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
     WatchdogValidator::new(Duration::from_millis(100));
+
+#[cfg(feature = "test")]
+use std::sync::atomic::AtomicUsize;
 
 #[cfg(feature = "test")]
 static TEST_ADD_TRANSACTIONS: AtomicUsize = AtomicUsize::new(0);
