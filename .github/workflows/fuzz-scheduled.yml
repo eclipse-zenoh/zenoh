@@ -160,7 +160,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload codec coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-coverage-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
           path: commons/zenoh-codec/fuzz/coverage/${{ matrix.target }}
@@ -169,7 +169,7 @@ jobs:
 
       - name: Upload codec fuzz artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-artifacts-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
           path: commons/zenoh-codec/fuzz/artifacts/${{ matrix.target }}
@@ -268,7 +268,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload protocol coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-coverage-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
           path: commons/zenoh-protocol/fuzz/coverage/endpoint_from_str
@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload protocol fuzz artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-artifacts-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
           path: commons/zenoh-protocol/fuzz/artifacts/endpoint_from_str
