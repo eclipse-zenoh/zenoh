@@ -481,6 +481,14 @@ impl TransportManager {
         vec
     }
 
+    pub async fn get_locators_unicast_noloopback(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
+            vec.extend_from_slice(&p.get_locators_noloopback().await);
+        }
+        vec
+    }
+
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/

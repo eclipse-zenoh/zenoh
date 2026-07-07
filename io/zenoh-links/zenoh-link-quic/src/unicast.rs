@@ -343,6 +343,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
+    }
 }
 
 fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
