@@ -40,10 +40,14 @@ use crate::{
         provider::memory_layout::{MemoryLayout, TypedLayout},
     },
     metadata::{
-        allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
+        allocated_descriptor::AllocatedMetadataDescriptor,
+        descriptor::{MetadataDescriptor, OwnedMetadataDescriptor},
         storage::GLOBAL_METADATA_STORAGE,
     },
-    watchdog::confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
+    watchdog::{
+        confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
+        validator::GLOBAL_VALIDATOR,
+    },
     ShmBufInfo, ShmBufInner,
 };
 
@@ -778,15 +782,30 @@ where
 #[derive(Debug)]
 struct BusyChunk {
     metadata: AllocatedMetadataDescriptor,
+    validator_descriptor: Option<OwnedMetadataDescriptor>,
 }
 
 impl BusyChunk {
-    fn new(metadata: AllocatedMetadataDescriptor) -> Self {
-        Self { metadata }
+    fn new(
+        metadata: AllocatedMetadataDescriptor,
+        validator_descriptor: Option<OwnedMetadataDescriptor>,
+    ) -> Self {
+        Self {
+            metadata,
+            validator_descriptor,
+        }
     }
 
     fn descriptor(&self) -> ChunkDescriptor {
         self.metadata.header().data_descriptor()
+    }
+}
+
+impl Drop for BusyChunk {
+    fn drop(&mut self) {
+        if let Some(descriptor) = self.validator_descriptor.take() {
+            GLOBAL_VALIDATOR.read().remove(descriptor);
+        }
     }
 }
 
@@ -966,28 +985,34 @@ where
         &self,
         chunk: AllocatedChunk,
         len: NonZeroUsize,
-        mut allocated_metadata: AllocatedMetadataDescriptor,
+        allocated_metadata: AllocatedMetadataDescriptor,
         confirmed_metadata: ConfirmedDescriptor,
     ) -> ShmBufInner {
+        let mut busy_chunk = BusyChunk::new(allocated_metadata, None);
+
         // write additional metadata
         // chunk descriptor
-        allocated_metadata
+        busy_chunk
+            .metadata
             .header()
             .set_data_descriptor(&chunk.descriptor);
         // protocol
-        allocated_metadata
+        busy_chunk
+            .metadata
             .header()
             .protocol
             .store(self.backend.id(), Ordering::Relaxed);
 
         // add watchdog to validator
-        allocated_metadata.register_in_validator(confirmed_metadata.owned.clone());
+        GLOBAL_VALIDATOR.read().add(confirmed_metadata.owned.clone());
+        busy_chunk.validator_descriptor = Some(confirmed_metadata.owned.clone());
 
         // Create buffer's info
         let info = ShmBufInfo::new(
             len,
             MetadataDescriptor::from(&confirmed_metadata.owned),
-            allocated_metadata
+            busy_chunk
+                .metadata
                 .header()
                 .generation
                 .load(Ordering::SeqCst),
@@ -1001,7 +1026,7 @@ where
         };
 
         // Create and store busy chunk
-        zlock!(self.busy_list).push(BusyChunk::new(allocated_metadata));
+        zlock!(self.busy_list).push(busy_chunk);
 
         shmb
     }

@@ -112,12 +112,9 @@ impl ConfirmedSegment {
             let _ = self.task_kick.send(());
         }
 
-        if self.sender.send(transaction).is_err() {
-            #[cfg(feature = "test")]
-            panic!("Watchdog Confirmator transaction channel closed");
-            #[cfg(not(feature = "test"))]
-            tracing::error!("Watchdog Confirmator transaction channel closed");
-        }
+        self.sender
+            .send(transaction)
+            .expect("Watchdog Confirmator transaction channel closed");
     }
 
     // See ordering implementation for OwnedMetadataDescriptor

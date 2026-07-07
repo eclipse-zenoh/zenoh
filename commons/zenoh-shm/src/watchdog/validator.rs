@@ -14,7 +14,10 @@
 
 use std::{
     collections::BTreeSet,
-    sync::{atomic::AtomicI32, Arc},
+    sync::{
+        atomic::{AtomicI32, AtomicUsize},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -28,6 +31,11 @@ use crate::{
 #[dynamic(lazy, drop)]
 pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
     WatchdogValidator::new(Duration::from_millis(100));
+
+#[cfg(feature = "test")]
+static TEST_ADD_TRANSACTIONS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(feature = "test")]
+static TEST_REMOVE_TRANSACTIONS: AtomicUsize = AtomicUsize::new(0);
 
 enum Transaction {
     Add(OwnedMetadataDescriptor),
@@ -129,16 +137,37 @@ impl WatchdogValidator {
         self.make_transaction(Transaction::Remove(watchdog));
     }
 
+    #[cfg(feature = "test")]
+    pub fn test_reset_transaction_counters(&self) {
+        TEST_ADD_TRANSACTIONS.store(0, std::sync::atomic::Ordering::Relaxed);
+        TEST_REMOVE_TRANSACTIONS.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(feature = "test")]
+    pub fn test_transaction_counts(&self) -> (usize, usize) {
+        (
+            TEST_ADD_TRANSACTIONS.load(std::sync::atomic::Ordering::Relaxed),
+            TEST_REMOVE_TRANSACTIONS.load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
     fn make_transaction(&self, transaction: Transaction) {
         if self.cap.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 0 {
             self.task.kick();
         }
 
-        if self.sender.send(transaction).is_err() {
-            #[cfg(feature = "test")]
-            panic!("Watchdog Validator transaction channel closed");
-            #[cfg(not(feature = "test"))]
-            tracing::error!("Watchdog Validator transaction channel closed");
+        #[cfg(feature = "test")]
+        let is_add = matches!(&transaction, Transaction::Add(_));
+
+        self.sender
+            .send(transaction)
+            .expect("Watchdog Validator transaction channel closed");
+
+        #[cfg(feature = "test")]
+        if is_add {
+            TEST_ADD_TRANSACTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            TEST_REMOVE_TRANSACTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
 }
