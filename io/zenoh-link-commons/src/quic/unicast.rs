@@ -211,9 +211,15 @@ impl UniStreams {
     fn try_open(connection: &quinn::Connection) -> ZResult<Option<Self>> {
         let alpn =
             get_negotiated_alpn(connection)?.expect("Zenoh ALPN should have been negotiated");
-        let open_uni = |_prio| {
-            let open = connection.open_uni().now_or_never();
-            Ok(open.ok_or_else(|| zerror!("Cannot open uni stream"))??)
+        let open_uni = |prio| {
+            let open = connection
+                .open_uni()
+                .now_or_never()
+                .ok_or_else(|| zerror!("Cannot open uni stream"))??;
+            // QUIC stream priority semantics (P0 < P1 < P2) are the opposite
+            // of Zenoh's (P0 > P1 > P2), so we simply multiply by -1
+            open.set_priority(-(prio as i32))?;
+            Ok(open)
         };
         Ok(match alpn.as_slice() {
             PROTOCOL_MULTI_STREAM | PROTOCOL_MULTI_STREAM_MIXED_REL => Some(Self(
