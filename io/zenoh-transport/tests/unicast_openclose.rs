@@ -693,7 +693,7 @@ async fn openclose_quic_only_with_mtls_and_no_common_name() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_interface_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_tcp_port();
 
     zenoh_util::init_log_from_env_or("error");
@@ -713,7 +713,7 @@ async fn openclose_tcp_only_connect_with_interface_restriction() {
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_listen_with_interface_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_tcp_port();
 
     zenoh_util::init_log_from_env_or("error");
@@ -733,7 +733,7 @@ async fn openclose_tcp_only_listen_with_interface_restriction() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_interface_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_udp_port();
 
     zenoh_util::init_log_from_env_or("error");
@@ -753,7 +753,7 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 #[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_listen_with_interface_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_udp_port();
 
     zenoh_util::init_log_from_env_or("error");
@@ -783,7 +783,7 @@ async fn openclose_quic_only_connect_with_interface_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_udp_port();
     let (ca, cert, key) = get_tls_certs();
 
@@ -817,7 +817,7 @@ async fn openclose_quic_only_listen_with_interface_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_udp_port();
     let (ca, cert, key) = get_tls_certs();
 
@@ -851,7 +851,7 @@ async fn openclose_tls_only_connect_with_interface_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_tcp_port();
     let (ca, cert, key) = get_tls_certs();
 
@@ -885,7 +885,7 @@ async fn openclose_tls_only_listen_with_interface_restriction() {
     use zenoh_link_commons::tls::config::*;
 
     zenoh_util::init_log_from_env_or("error");
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let port = get_free_tcp_port();
     let (ca, cert, key) = get_tls_certs();
 

@@ -390,6 +390,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
+    }
 }
 
 async fn accept_task(

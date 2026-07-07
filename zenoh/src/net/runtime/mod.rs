@@ -170,6 +170,7 @@ pub(crate) struct RuntimeState {
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
+    locators_noloopback: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     task_controller: TaskController,
     #[cfg(feature = "plugins")]
@@ -191,6 +192,7 @@ pub trait IRuntime: Send + Sync {
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
     fn get_locators(&self) -> Vec<Locator>;
+    fn get_locators_noloopback(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
 
@@ -260,6 +262,10 @@ impl IRuntime for RuntimeState {
 
     fn get_locators(&self) -> Vec<Locator> {
         self.locators.read().unwrap().clone()
+    }
+
+    fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.locators_noloopback.read().unwrap().clone()
     }
 
     fn hlc(&self) -> Option<&HLC> {
@@ -766,6 +772,7 @@ impl RuntimeBuilder {
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
+                locators_noloopback: std::sync::RwLock::new(vec![]),
                 hlc,
                 task_controller: TaskController::default(),
                 #[cfg(feature = "plugins")]
@@ -876,6 +883,10 @@ impl Runtime {
 
     pub fn get_locators(&self) -> Vec<Locator> {
         self.state.get_locators()
+    }
+
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.state.get_locators_noloopback()
     }
 
     /// Spawns a task within runtime.

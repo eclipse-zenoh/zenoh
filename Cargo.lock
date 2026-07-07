@@ -5584,7 +5584,6 @@ dependencies = [
  "advisory-lock",
  "async-trait",
  "buddy_system_allocator",
- "cfg_aliases 0.2.1",
  "crossbeam-channel",
  "crossbeam-queue",
  "libc",

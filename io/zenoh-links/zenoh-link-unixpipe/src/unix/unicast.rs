@@ -623,6 +623,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
             .map(|v| v.uplink_locator.clone())
             .collect()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
+    }
 }
 
 fn endpoint_to_pipe_path(endpoint: &EndPoint) -> (String, u32) {
