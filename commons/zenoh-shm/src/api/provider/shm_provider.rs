@@ -1004,7 +1004,9 @@ where
             .store(self.backend.id(), Ordering::Relaxed);
 
         // add watchdog to validator
-        GLOBAL_VALIDATOR.read().add(confirmed_metadata.owned.clone());
+        GLOBAL_VALIDATOR
+            .read()
+            .add(confirmed_metadata.owned.clone());
         busy_chunk.validator_descriptor = Some(confirmed_metadata.owned.clone());
 
         // Create buffer's info

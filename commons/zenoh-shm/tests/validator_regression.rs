@@ -13,12 +13,18 @@
 //
 #![cfg(feature = "test")]
 
-use std::{ops::Deref, sync::{Mutex, OnceLock}};
+use std::{
+    ops::Deref,
+    sync::{Mutex, OnceLock},
+};
 
 use zenoh_core::Wait;
 use zenoh_shm::{
     api::provider::shm_provider::ShmProviderBuilder,
-    metadata::{descriptor::MetadataDescriptor, storage::GLOBAL_METADATA_STORAGE, subscription::GLOBAL_METADATA_SUBSCRIPTION},
+    metadata::{
+        descriptor::MetadataDescriptor, storage::GLOBAL_METADATA_STORAGE,
+        subscription::GLOBAL_METADATA_SUBSCRIPTION,
+    },
     watchdog::validator::GLOBAL_VALIDATOR,
 };
 
@@ -38,7 +44,10 @@ fn plain_metadata_traffic_does_not_enqueue_validator_transactions() {
     let task = |_task_index: usize, _iteration: usize| {
         let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate().unwrap();
         let descriptor = MetadataDescriptor::from(allocated_metadata.deref());
-        let _linked_metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&descriptor).unwrap();
+        let _linked_metadata = GLOBAL_METADATA_SUBSCRIPTION
+            .read()
+            .link(&descriptor)
+            .unwrap();
     };
 
     execute_concurrent(100, 100, move |task_index, iteration| {

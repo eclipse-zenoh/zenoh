@@ -200,5 +200,8 @@ fn periodic_task_panics_on_overrun() {
     panic::set_hook(prev_hook);
 
     let message = panic_message.lock().unwrap().clone();
-    assert!(message.contains("timer overrun"), "panic message: {message}");
+    assert!(
+        message.contains("timer overrun"),
+        "panic message: {message}"
+    );
 }
