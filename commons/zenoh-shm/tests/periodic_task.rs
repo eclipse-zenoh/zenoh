@@ -13,6 +13,7 @@
 //
 #![cfg(feature = "test")]
 use std::{
+    panic,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -169,4 +170,35 @@ fn periodic_task_excessive_load_blocking() {
 fn periodic_task_excessive_load_intensive() {
     let _load = CpuLoad::excessive();
     check_task(intensive_payload(TEST_TASK));
+}
+
+#[test]
+fn periodic_task_panics_on_overrun() {
+    let panic_message = Arc::new(Mutex::new(String::new()));
+    let c_panic_message = panic_message.clone();
+    let prev_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        if std::thread::current().name() == Some("test-overrun") {
+            let message = if let Some(msg) = info.payload().downcast_ref::<&str>() {
+                (*msg).to_owned()
+            } else if let Some(msg) = info.payload().downcast_ref::<String>() {
+                msg.clone()
+            } else {
+                String::new()
+            };
+            *c_panic_message.lock().unwrap() = message;
+        }
+    }));
+
+    {
+        let _task = PeriodicTask::new("test-overrun".to_owned(), TASK_PERIOD, move |_| {
+            std::thread::sleep(TASK_PERIOD * 2);
+        });
+        std::thread::sleep(TASK_PERIOD * 3);
+    }
+
+    panic::set_hook(prev_hook);
+
+    let message = panic_message.lock().unwrap().clone();
+    assert!(message.contains("timer overrun"), "panic message: {message}");
 }
