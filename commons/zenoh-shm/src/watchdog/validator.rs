@@ -14,10 +14,7 @@
 
 use std::{
     collections::BTreeSet,
-    sync::{
-        atomic::AtomicI32,
-        Arc,
-    },
+    sync::{atomic::AtomicI32, Arc},
     time::Duration,
 };
 
