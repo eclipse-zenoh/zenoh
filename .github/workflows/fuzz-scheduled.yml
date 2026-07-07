@@ -108,64 +108,19 @@ jobs:
         working-directory: commons/zenoh-codec/fuzz
 
       - name: Generate codec coverage report
-        shell: bash
-        working-directory: commons/zenoh-codec/fuzz
-        run: |
-          set -euo pipefail
-
-          target="${{ matrix.target }}"
-          cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz coverage -s none "$target" "corpus/$target"
-
-          llvm_bin="$(dirname "$(rustc +${{ env.NIGHTLY_TOOLCHAIN }} --print target-libdir)")/bin"
-          host_triple="$(rustc +${{ env.NIGHTLY_TOOLCHAIN }} -vV | sed -n 's/^host: //p')"
-          binary="target/${host_triple}/coverage/${host_triple}/release/${target}"
-          profdata="coverage/${target}/coverage.profdata"
-          report_dir="coverage/${target}/html"
-          report_txt="coverage/${target}/report.txt"
-
-          "$llvm_bin/llvm-cov" report "$binary" \
-            -instr-profile="$profdata" \
-            --ignore-filename-regex="${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}" \
-            ../src \
-            ../../zenoh-protocol/src \
-            ../../zenoh-buffers/src | tee "$report_txt"
-
-          "$llvm_bin/llvm-cov" show "$binary" \
-            -instr-profile="$profdata" \
-            --format=html \
-            --output-dir="$report_dir" \
-            --ignore-filename-regex="${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}" \
-            ../src \
-            ../../zenoh-protocol/src \
-            ../../zenoh-buffers/src
-
-      - name: Publish codec coverage summary
-        shell: bash
-        working-directory: commons/zenoh-codec/fuzz
-        run: |
-          set -euo pipefail
-
-          target="${{ matrix.target }}"
-          report_txt="coverage/${target}/report.txt"
-
-          {
-            echo "## Codec fuzz coverage: \`$target\`"
-            echo
-            echo "<details><summary>Full llvm-cov report</summary>"
-            echo
-            echo '```text'
-            cat "$report_txt"
-            echo '```'
-            echo "</details>"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload codec coverage artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/fuzz-coverage
         with:
-          name: fuzz-coverage-codec-${{ needs.determine-profile.outputs.label }}-${{ matrix.target }}
-          path: commons/zenoh-codec/fuzz/coverage/${{ matrix.target }}
-          if-no-files-found: error
-          retention-days: 14
+          working-directory: commons/zenoh-codec/fuzz
+          target: ${{ matrix.target }}
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
+          source-paths: |
+            ../src
+            ../../zenoh-protocol/src
+            ../../zenoh-buffers/src
+          title: Codec fuzz
+          artifact-prefix: codec
+          label: ${{ needs.determine-profile.outputs.label }}
+          ignore-filename-regex: ${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}
 
       - name: Upload codec fuzz artifacts
         if: failure()
@@ -178,6 +133,7 @@ jobs:
 
       - name: Cleanup profraw files
         if: always()
+        working-directory: commons/zenoh-codec/fuzz
         run: find . -name "*.profraw" -type f -delete
 
   fuzz-protocol:
@@ -218,62 +174,18 @@ jobs:
         working-directory: commons/zenoh-protocol/fuzz
 
       - name: Generate protocol coverage report
-        shell: bash
-        working-directory: commons/zenoh-protocol/fuzz
-        run: |
-          set -euo pipefail
-
-          target="endpoint_from_str"
-          cargo +${{ env.NIGHTLY_TOOLCHAIN }} fuzz coverage -s none "$target" "corpus/$target"
-
-          llvm_bin="$(dirname "$(rustc +${{ env.NIGHTLY_TOOLCHAIN }} --print target-libdir)")/bin"
-          host_triple="$(rustc +${{ env.NIGHTLY_TOOLCHAIN }} -vV | sed -n 's/^host: //p')"
-          binary="target/${host_triple}/coverage/${host_triple}/release/${target}"
-          profdata="coverage/${target}/coverage.profdata"
-          report_dir="coverage/${target}/html"
-          report_txt="coverage/${target}/report.txt"
-
-          "$llvm_bin/llvm-cov" report "$binary" \
-            -instr-profile="$profdata" \
-            --ignore-filename-regex="${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}" \
-            ../src/core/endpoint.rs \
-            ../src/core/parameters.rs | tee "$report_txt"
-
-          "$llvm_bin/llvm-cov" show "$binary" \
-            -instr-profile="$profdata" \
-            --format=html \
-            --output-dir="$report_dir" \
-            --ignore-filename-regex="${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}" \
-            ../src/core/endpoint.rs \
-            ../src/core/parameters.rs
-
-      - name: Publish protocol coverage summary
-        shell: bash
-        working-directory: commons/zenoh-protocol/fuzz
-        run: |
-          set -euo pipefail
-
-          target="endpoint_from_str"
-          report_txt="coverage/${target}/report.txt"
-
-          {
-            echo "## Protocol fuzz coverage: \`$target\`"
-            echo
-            echo "<details><summary>Full llvm-cov report</summary>"
-            echo
-            echo '```text'
-            cat "$report_txt"
-            echo '```'
-            echo "</details>"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload protocol coverage artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./.github/actions/fuzz-coverage
         with:
-          name: fuzz-coverage-protocol-${{ needs.determine-profile.outputs.label }}-endpoint_from_str
-          path: commons/zenoh-protocol/fuzz/coverage/endpoint_from_str
-          if-no-files-found: error
-          retention-days: 14
+          working-directory: commons/zenoh-protocol/fuzz
+          target: endpoint_from_str
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
+          source-paths: |
+            ../src/core/endpoint.rs
+            ../src/core/parameters.rs
+          title: Protocol fuzz
+          artifact-prefix: protocol
+          label: ${{ needs.determine-profile.outputs.label }}
+          ignore-filename-regex: ${{ env.COVERAGE_IGNORE_FILENAME_REGEX }}
 
       - name: Upload protocol fuzz artifacts
         if: failure()
@@ -286,4 +198,5 @@ jobs:
 
       - name: Cleanup profraw files
         if: always()
+        working-directory: commons/zenoh-protocol/fuzz
         run: find . -name "*.profraw" -type f -delete
