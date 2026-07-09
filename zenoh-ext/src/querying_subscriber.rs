@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::{btree_map, BTreeMap, VecDeque},
+    collections::{btree_map, BTreeMap, HashSet, VecDeque},
     convert::TryInto,
     fmt,
     future::{IntoFuture, Ready},
@@ -430,6 +430,14 @@ where
 struct MergeQueue {
     untimestamped: VecDeque<Sample>,
     timestamped: BTreeMap<Timestamp, Sample>,
+    // Track (key_expr, SampleKind) pairs already present in `untimestamped`.
+    // When a live-path sample arrives with a synthetic timestamp for the same
+    // (key_expr, kind), it is a duplicate of a fetch-path sample and is dropped.
+    // This prevents FetchingSubscriber from delivering the same logical event
+    // twice when both the fetch query and the live subscription carry it —
+    // which is the common case for liveliness tokens that exist before the
+    // subscriber is created.  See: https://github.com/eclipse-zenoh/zenoh/issues/2523
+    untimestamped_keys: HashSet<(String, u8)>,
 }
 
 impl MergeQueue {
@@ -437,6 +445,7 @@ impl MergeQueue {
         MergeQueue {
             untimestamped: VecDeque::new(),
             timestamped: BTreeMap::new(),
+            untimestamped_keys: HashSet::new(),
         }
     }
 
@@ -446,8 +455,16 @@ impl MergeQueue {
 
     fn push(&mut self, sample: Sample) {
         if let Some(ts) = sample.timestamp() {
+            // Drop this timestamped (live-path) sample if the same (key_expr, kind)
+            // was already received without a timestamp via the fetch path.
+            let merge_key = (sample.key_expr().as_str().to_owned(), sample.kind() as u8);
+            if self.untimestamped_keys.contains(&merge_key) {
+                return;
+            }
             self.timestamped.entry(*ts).or_insert(sample);
         } else {
+            let merge_key = (sample.key_expr().as_str().to_owned(), sample.kind() as u8);
+            self.untimestamped_keys.insert(merge_key);
             self.untimestamped.push_back(sample);
         }
     }
@@ -457,6 +474,7 @@ impl MergeQueue {
         let mut queue = BTreeMap::new();
         swap(&mut self.untimestamped, &mut vec);
         swap(&mut self.timestamped, &mut queue);
+        self.untimestamped_keys.clear();
         MergeQueueValues {
             untimestamped: vec,
             timestamped: queue.into_values(),
