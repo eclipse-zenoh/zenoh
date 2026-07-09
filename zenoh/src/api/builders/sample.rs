@@ -90,17 +90,18 @@ pub struct SampleBuilder<T> {
 }
 
 impl SampleBuilder<SampleBuilderPut> {
-    pub fn put<IntoKeyExpr, IntoZBytes>(
-        key_expr: IntoKeyExpr,
+    pub fn put<TryIntoKeyExpr, IntoZBytes>(
+        key_expr: TryIntoKeyExpr,
         payload: IntoZBytes,
     ) -> SampleBuilder<SampleBuilderPut>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::zresult::Error>,
         IntoZBytes: Into<ZBytes>,
     {
         Self {
             sample: Sample {
-                key_expr: key_expr.into(),
+                key_expr: key_expr.try_into().map_err(Into::into).unwrap(),
                 payload: payload.into(),
                 kind: SampleKind::Put,
                 encoding: Encoding::default(),
@@ -126,13 +127,14 @@ impl SampleBuilder<SampleBuilderPut> {
 }
 
 impl SampleBuilder<SampleBuilderDelete> {
-    pub fn delete<IntoKeyExpr>(key_expr: IntoKeyExpr) -> SampleBuilder<SampleBuilderDelete>
+    pub fn delete<TryIntoKeyExpr>(key_expr: TryIntoKeyExpr) -> SampleBuilder<SampleBuilderDelete>
     where
-        IntoKeyExpr: Into<KeyExpr<'static>>,
+        TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::zresult::Error>,
     {
         Self {
             sample: Sample {
-                key_expr: key_expr.into(),
+                key_expr: key_expr.try_into().map_err(Into::into).unwrap(),
                 payload: ZBytes::new(),
                 kind: SampleKind::Delete,
                 encoding: Encoding::default(),
