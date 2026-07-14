@@ -21,6 +21,8 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::LinkUnicast;
+#[cfg(feature = "shared-memory")]
+use zenoh_protocol::core::Reliability::BestEffort;
 use zenoh_protocol::{
     core::{Bound, Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
@@ -34,8 +36,6 @@ use zenoh_result::ZResult;
 
 #[cfg(feature = "auth_usrpwd")]
 use super::ext::auth::UsrPwdId;
-#[cfg(feature = "shared-memory")]
-use crate::common::shm::interop::TransportShmConfig;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -622,7 +622,10 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_open_ack(())
+                .send_open_ack((
+                    self.link.link.supports_priorities(),
+                    self.link.config.reliability.unwrap_or(BestEffort),
+                ))
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,
@@ -731,6 +734,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         },
         priorities: None,
         reliability: None,
+        #[cfg(feature = "shared-memory")]
+        shm: None,
     };
     let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
     let mut fsm = AcceptLink {
@@ -844,6 +849,13 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     };
     let oack_out = step!(fsm.send_open_ack((&mut state, oack_in)).await);
 
+    // extract SHM configuration if available
+    #[cfg(feature = "shared-memory")]
+    let (transport_shm, link_shm) = fsm
+        .ext_shm
+        .take()
+        .map_or((None, None), |shm| shm.shm_init_result());
+
     // Initialize the transport
     let config = TransportConfigUnicast {
         zid: osyn_out.other_zid,
@@ -855,11 +867,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: fsm
-            .ext_shm
-            .take()
-            .and_then(|shm| shm.shm_init_result())
-            .map(|(rx, tx)| TransportShmConfig::new(rx, tx)),
+        shm: transport_shm,
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,
@@ -877,6 +885,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
+        #[cfg(feature = "shared-memory")]
+        shm: link_shm,
     };
     let a_link = link_unicast.reconfigure(a_config);
     let s_link = format!("{a_link:?}");
@@ -901,6 +911,8 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 priorities: state.transport.ext_qos.priorities(),
                 // Do not apply reliability override to MixedReliability associated links
                 reliability: None,
+                #[cfg(feature = "shared-memory")]
+                shm: None,
             };
             let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
             Some(link)

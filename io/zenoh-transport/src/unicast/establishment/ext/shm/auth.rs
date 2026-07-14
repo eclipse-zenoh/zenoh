@@ -22,16 +22,24 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::bail;
 use zenoh_crypto::PseudoRng;
-use zenoh_protocol::transport::{init, open};
+use zenoh_protocol::{
+    core::Reliability,
+    transport::{init, open},
+};
 use zenoh_result::{zerror, Error as ZError, ZResult};
 use zenoh_shm::api::common::types::ProtocolID;
 
-use crate::unicast::establishment::{
-    ext::shm::shm_segment::{
-        AuthChallenge, AuthSegmentID, RXAuthSegment, ShmCounterID, ShmRXCounterLease,
-        ShmTXCounterLease, TXAuthSegment,
+use crate::{
+    common::shm::interop::{LinkShmConfig, TransportShmConfig},
+    unicast::establishment::{
+        ext::shm::{
+            handoff::{HandoffCounterIds, RxHandoffChannel, TxHandoffChannel},
+            segment::{
+                AuthChallenge, AuthSegmentID, RXAuthSegment, ShmTXCounterLease, TXAuthSegment,
+            },
+        },
+        AcceptFsm, OpenFsm,
     },
-    AcceptFsm, OpenFsm,
 };
 
 /*************************************/
@@ -170,7 +178,7 @@ where
 /// ```
 struct OpenSyn {
     bob_challenge: u64,
-    alice_counter: ShmCounterID,
+    alice_counters: HandoffCounterIds,
 }
 
 impl<W> WCodec<&OpenSyn, &mut W> for Zenoh080
@@ -181,7 +189,7 @@ where
 
     fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
         self.write(&mut *writer, x.bob_challenge)?;
-        self.write(&mut *writer, &x.alice_counter)?;
+        self.write(&mut *writer, &x.alice_counters)?;
         Ok(())
     }
 }
@@ -194,10 +202,10 @@ where
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
         let bob_challenge: u64 = self.read(&mut *reader)?;
-        let alice_counter = self.read(&mut *reader)?;
+        let alice_counters = self.read(&mut *reader)?;
         Ok(OpenSyn {
             bob_challenge,
-            alice_counter,
+            alice_counters,
         })
     }
 }
@@ -212,7 +220,7 @@ where
 /// +---------------+
 /// ```
 struct OpenAck {
-    bob_counter: ShmCounterID,
+    bob_counters: HandoffCounterIds,
 }
 
 impl<W> WCodec<&OpenAck, &mut W> for Zenoh080
@@ -222,7 +230,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &OpenAck) -> Self::Output {
-        self.write(&mut *writer, &x.bob_counter)?;
+        self.write(&mut *writer, &x.bob_counters)?;
         Ok(())
     }
 }
@@ -234,17 +242,17 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        let bob_counter = self.read(&mut *reader)?;
-        Ok(OpenAck { bob_counter })
+        let bob_counters = self.read(&mut *reader)?;
+        Ok(OpenAck { bob_counters })
     }
 }
 
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a AuthUnicast,
-    tx_lease: std::sync::OnceLock<Arc<ShmTXCounterLease>>,
+    tx_lease: std::sync::OnceLock<TxHandoffChannel>,
     rx_segment: std::sync::OnceLock<Arc<RXAuthSegment>>,
-    rx_lease: std::sync::OnceLock<Arc<ShmRXCounterLease>>,
+    rx_lease: std::sync::OnceLock<RxHandoffChannel>,
 }
 
 impl<'a> ShmFsm<'a> {
@@ -257,8 +265,15 @@ impl<'a> ShmFsm<'a> {
         }
     }
 
-    pub fn shm_init_result(self) -> Option<(Arc<ShmRXCounterLease>, Arc<ShmTXCounterLease>)> {
-        self.rx_lease.into_inner().zip(self.tx_lease.into_inner())
+    pub fn shm_init_result(self) -> (Option<TransportShmConfig>, Option<LinkShmConfig>) {
+        let transport = self.rx_segment.into_inner().map(TransportShmConfig::new);
+        let link = self
+            .rx_lease
+            .into_inner()
+            .zip(self.tx_lease.into_inner())
+            .map(|(rx_lease, tx_lease)| LinkShmConfig::new(rx_lease, tx_lease));
+
+        (transport, link)
     }
 }
 
@@ -340,6 +355,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             }
         };
 
+        // Store Bob's SHM Segment for later use
         self.rx_segment
             .set(Arc::new(bob_segment))
             .map_err(|_| zerror!("{} State machine error", S))?;
@@ -347,13 +363,16 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         Ok(())
     }
 
-    type SendOpenSynIn = Self::RecvInitAckOut;
+    type SendOpenSynIn = (bool, Reliability);
     type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
         self,
-        _input: Self::SendOpenSynIn,
+        input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "Shm extension - Send OpenSyn.";
+
+        // Link is multipriority
+        let (multiprio_link, reliability) = input;
 
         // take RX segment from input
         let Some(rx_segment) = self.rx_segment.get() else {
@@ -361,11 +380,11 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Allocate TX counter for this session
-        let tx_counter = self.inner.lease_tx_counter()?;
+        let tx_handoff = TxHandoffChannel::new_tx(multiprio_link, reliability, &self.inner)?;
 
         let open_syn = OpenSyn {
             bob_challenge: rx_segment.challenge(),
-            alice_counter: tx_counter.id(),
+            alice_counters: tx_handoff.ids(),
         };
 
         // Encode the extension
@@ -377,7 +396,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             .map_err(|_| zerror!("{} Encoding error", S))?;
 
         self.tx_lease
-            .set(Arc::new(tx_counter))
+            .set(tx_handoff)
             .map_err(|_| zerror!("{} State machine error", S))?;
 
         Ok(Some(open::ext::Shm::new(buff.into())))
@@ -407,10 +426,10 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        let rx_counter = ShmRXCounterLease::new(segment.clone(), open_ack.bob_counter);
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_ack.bob_counters);
 
         self.rx_lease
-            .set(Arc::new(rx_counter))
+            .set(rx_handoff)
             .map_err(|_| zerror!("{} State machine error", S))?;
 
         Ok(())
@@ -543,27 +562,31 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         }
 
         // Allocate RX counter for this session
-        let rx_lease = ShmRXCounterLease::new(segment.clone(), open_syn.alice_counter);
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_syn.alice_counters);
 
         self.rx_lease
-            .set(Arc::new(rx_lease))
+            .set(rx_handoff)
             .map_err(|_| zerror!("{} State machine error", S))?;
 
         Ok(())
     }
 
-    type SendOpenAckIn = ();
+    type SendOpenAckIn = (bool, Reliability);
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
-        _input: Self::SendOpenAckIn,
+        input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Send OpenAck.";
 
-        let tx_lease = self.inner.lease_tx_counter()?;
+        // Link is multipriority
+        let (multiprio_link, reliability) = input;
+
+        // Allocate TX counter for this session
+        let tx_handoff = TxHandoffChannel::new_tx(multiprio_link, reliability, &self.inner)?;
 
         let open_ack = OpenAck {
-            bob_counter: tx_lease.id(),
+            bob_counters: tx_handoff.ids(),
         };
 
         let codec = Zenoh080::new();
@@ -574,7 +597,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             .map_err(|_| zerror!("{} Encoding error", S))?;
 
         self.tx_lease
-            .set(Arc::new(tx_lease))
+            .set(tx_handoff)
             .map_err(|_| zerror!("{} State machine error", S))?;
 
         Ok(Some(open::ext::Shm::new(buff.into())))

@@ -185,7 +185,7 @@ impl TransportUnicastLowlatency {
 
                         // Deserialize all the messages from the current ZBuf
                         let zslice = ZSlice::new(Arc::new(buffer), 0, bytes).unwrap();
-                        c_transport.read_messages(zslice, &link_rx.link, #[cfg(feature = "stats")] stats).await?;
+                        c_transport.read_messages(zslice, &link_rx, #[cfg(feature = "stats")] stats).await?;
                     }
 
                     _ = token.cancelled() => {

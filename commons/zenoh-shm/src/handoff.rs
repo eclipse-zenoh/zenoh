@@ -11,6 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod auth;
-pub(crate) mod handoff;
-pub(crate) mod segment;
+
+use std::sync::Arc;
+
+use crate::ShmBufInner;
+
+pub struct Handoff {
+    _inner: Arc<ShmBufInner>
+}
+
+impl From<Arc<ShmBufInner>> for Handoff {
+    fn from(shm_buf: Arc<ShmBufInner>) -> Self {
+        Self { _inner: shm_buf }
+    }
+}

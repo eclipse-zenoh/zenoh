@@ -22,6 +22,7 @@ use zenoh_protocol::{network::NetworkMessageMut, transport::TransportMessageLowL
 use zenoh_result::{zerror, ZResult};
 
 use super::transport::TransportUnicastLowlatency;
+use crate::unicast::link::TransportLinkUnicastRx;
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -32,6 +33,7 @@ impl TransportUnicastLowlatency {
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessageMut,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+        #[cfg(feature = "shared-memory")] link: &TransportLinkUnicastRx,
     ) -> ZResult<()> {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
@@ -42,10 +44,11 @@ impl TransportUnicastLowlatency {
             );
             #[cfg(feature = "shared-memory")]
             {
-                if let Some(shm_context) = &self.shm_context {
+                if let (Some(shm_context), Some(link_shm)) = (&self.shm_context, &link.config.shm) {
                     if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
                         msg.as_mut(),
                         &shm_context.shm_reader,
+                        &link_shm.rx,
                     ) {
                         tracing::debug!("Error receiving SHM buffer: {e}");
                         return Ok(());
@@ -66,7 +69,7 @@ impl TransportUnicastLowlatency {
     pub(super) async fn read_messages(
         &self,
         mut zslice: ZSlice,
-        link: &LinkUnicast,
+        link: &TransportLinkUnicastRx,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let codec = Zenoh080::new();
@@ -74,7 +77,7 @@ impl TransportUnicastLowlatency {
         while reader.can_read() {
             let msg: TransportMessageLowLatency = codec
                 .read(&mut reader)
-                .map_err(|_| zerror!("{}: decoding error", link))?;
+                .map_err(|_| zerror!("{}: decoding error", link.link))?;
 
             tracing::trace!("Received: {:?}", msg);
 
@@ -96,6 +99,8 @@ impl TransportUnicastLowlatency {
                         msg.as_mut(),
                         #[cfg(feature = "stats")]
                         stats,
+                        #[cfg(feature = "shared-memory")]
+                        link,
                     );
                 }
             }

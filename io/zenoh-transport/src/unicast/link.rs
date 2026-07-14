@@ -23,6 +23,8 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
+#[cfg(feature = "shared-memory")]
+use crate::common::shm::interop::LinkShmConfig;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {
@@ -37,6 +39,8 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) batch: BatchConfig,
     pub(crate) priorities: Option<PriorityRange>,
     pub(crate) reliability: Option<Reliability>,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shm: Option<LinkShmConfig>,
 }
 
 #[derive(Clone)]

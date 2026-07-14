@@ -56,6 +56,7 @@ macro_rules! tested_crate_module {
 
 pub mod api;
 mod cleanup;
+pub mod handoff;
 pub mod header;
 pub mod init;
 pub mod metadata;

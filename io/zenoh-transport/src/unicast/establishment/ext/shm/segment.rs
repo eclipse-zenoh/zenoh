@@ -13,8 +13,7 @@
 //
 
 use std::{
-    ops::Deref,
-    sync::{atomic::AtomicU16, Arc},
+    ops::Deref, sync::{Arc, atomic::AtomicU32},
 };
 
 use zenoh_buffers::{
@@ -37,16 +36,16 @@ pub(crate) type ShmCounterID = u16;
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct ShmTransportMetadata {
+struct ShmTransportMetadata {
     id_count: u64,
     challenge: u64,
     version: u64,
     protocols: [ProtocolID; 256],
-    shm_counters: [AtomicU16; 1524],
+    shm_counters: [AtomicU32; 762],
 }
 
 impl ShmTransportMetadata {
-    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+    fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
         if self.challenge != expected_challenge {
             tracing::debug!(
                 "{} Challenge mismatch: expected: {}, found in shm: {}.",
@@ -68,6 +67,14 @@ impl ShmTransportMetadata {
         }
 
         true
+    }
+
+    fn protocols(&self) -> &[ProtocolID] {
+        &self.protocols[..self.id_count as usize]
+    }
+
+    fn counter(&self, id: ShmCounterID) -> &AtomicU32 {
+        &self.shm_counters[id as usize]
     }
 }
 
@@ -171,6 +178,22 @@ impl ShmTXCounterLease {
     pub fn id(&self) -> ShmCounterID {
         self.counter_index
     }
+
+    pub fn counter_increase(&self) {
+        self.segment
+            .segment
+            .data
+            .counter(self.counter_index)
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn counter(&self) -> u32 {
+        self.segment
+            .segment
+            .data
+            .counter(self.counter_index)
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 impl Drop for ShmTXCounterLease {
@@ -195,7 +218,7 @@ impl RXAuthSegment {
     }
 
     pub fn protocols(&self) -> &[ProtocolID] {
-        &self.segment.data.protocols[..self.segment.data.id_count as usize]
+        self.segment.data.protocols()
     }
 }
 
@@ -239,8 +262,11 @@ impl ShmRXCounterLease {
         }
     }
 
-    pub fn counter_decrease(&mut self) {
-        self.segment.segment.data.shm_counters[self.counter_index as usize]
+    pub fn counter_decrease(&self) {
+        self.segment
+            .segment
+            .data
+            .counter(self.counter_index)
             .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
     }
 

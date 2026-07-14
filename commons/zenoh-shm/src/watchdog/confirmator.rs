@@ -41,19 +41,20 @@ pub struct ConfirmedDescriptor {
 
 impl Clone for ConfirmedDescriptor {
     fn clone(&self) -> Self {
+        // NOTE: need `ConfirmedDescriptor::new` to add the descriptor to the confirmed segment
         ConfirmedDescriptor::new(self.owned.clone(), self.confirmed.clone())
     }
 }
 
 impl Drop for ConfirmedDescriptor {
     fn drop(&mut self) {
-        self.confirmed.remove(self.owned.clone());
+        self.confirmed.remove(self.owned.deref().clone());
     }
 }
 
 impl ConfirmedDescriptor {
     fn new(owned: OwnedMetadataDescriptor, confirmed: Arc<ConfirmedSegment>) -> Self {
-        confirmed.add(owned.clone());
+        confirmed.add(owned.deref().clone());
         Self { owned, confirmed }
     }
 }
@@ -99,12 +100,12 @@ impl ConfirmedSegment {
         }
     }
 
-    fn add(&self, descriptor: OwnedMetadataDescriptor) {
-        self.make_transaction(Transaction::Add(descriptor.deref().clone()));
+    fn add(&self, descriptor: OwnedWatchdog) {
+        self.make_transaction(Transaction::Add(descriptor));
     }
 
-    fn remove(&self, descriptor: OwnedMetadataDescriptor) {
-        self.make_transaction(Transaction::Remove(descriptor.deref().clone()));
+    fn remove(&self, descriptor: OwnedWatchdog) {
+        self.make_transaction(Transaction::Remove(descriptor));
     }
 
     fn make_transaction(&self, transaction: Transaction) {

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub(crate) mod handoff;
 pub(crate) mod interop;
 pub(crate) mod shm_context;
 
