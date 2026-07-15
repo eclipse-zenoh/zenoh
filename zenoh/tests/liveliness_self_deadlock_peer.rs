@@ -12,10 +12,12 @@
 //! cross-test interference (leaked sessions autoconnecting to each other
 //! via scouting/multicast, which is enabled by default).
 
-use std::sync::mpsc;
-use std::time::Duration;
-use zenoh::config::{Config, WhatAmI};
-use zenoh::Wait;
+use std::{sync::mpsc, time::Duration};
+
+use zenoh::{
+    config::{Config, WhatAmI},
+    Wait,
+};
 
 const N_TOKENS: usize = 300;
 const TIMEOUT: Duration = Duration::from_secs(15);

@@ -32,6 +32,8 @@ use std::{
     any::Any,
     fmt::Debug,
     sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
 use futures::executor::block_on;
@@ -680,6 +682,11 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
+        // `send_interest`'s local-face replay (declares + DeclareFinal) runs on a
+        // spawned task now, not synchronously on this thread -- give it a moment
+        // to land before returning, since callers immediately inspect the
+        // recorder synchronously.
+        thread::sleep(Duration::from_millis(50));
     }
 
     /// Declare an interest without a key expression.
@@ -698,6 +705,7 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
+        thread::sleep(Duration::from_millis(50));
     }
 
     /// Declare a liveliness token for `key_expr` from this face's perspective.

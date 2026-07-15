@@ -12,10 +12,12 @@
 //! cross-test interference (leaked sessions autoconnecting to each other
 //! via scouting/multicast, which is enabled by default).
 
-use std::sync::mpsc;
-use std::time::Duration;
-use zenoh::config::{Config, WhatAmI};
-use zenoh::Wait;
+use std::{sync::mpsc, time::Duration};
+
+use zenoh::{
+    config::{Config, WhatAmI},
+    Wait,
+};
 
 const N_TOKENS: usize = 300;
 const TIMEOUT: Duration = Duration::from_secs(15);
@@ -123,7 +125,10 @@ fn candidate_a_router_mode() {
     std::mem::forget(handle);
 
     eprintln!("=== candidate_a_router_mode result: {outcome}, {reply_count} replies ===");
-    assert_eq!(outcome, "no-hang", "router mode self-declare/self-query hung");
+    assert_eq!(
+        outcome, "no-hang",
+        "router mode self-declare/self-query hung"
+    );
     assert_eq!(
         reply_count, N_TOKENS,
         "expected all {N_TOKENS} tokens to be replayed as replies, got {reply_count}"
