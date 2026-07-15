@@ -1107,7 +1107,13 @@ impl EstablishedConnection {
             Message::Request(r) => target.face.send_request(&mut r.clone()),
             Message::Response(r) => target.face.send_response(&mut r.clone()),
             Message::ResponseFinal(r) => target.face.send_response_final(&mut r.clone()),
-            Message::Interest(i) => target.face.send_interest(&mut i.clone()),
+            Message::Interest(i) => {
+                target.face.send_interest(&mut i.clone());
+                // See the comment on `MockFace::interest` -- send_interest's
+                // local-face replay now runs on a spawned task, not
+                // synchronously; give it a moment to land before returning.
+                thread::sleep(Duration::from_millis(50));
+            }
             Message::Oam(o) => {
                 if let Some(demux) = &target.demux {
                     let _ = demux.handle_message(NetworkMessageMut {
