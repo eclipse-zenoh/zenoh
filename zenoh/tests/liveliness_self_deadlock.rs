@@ -73,7 +73,7 @@ fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'stati
                 None => query.wait(),
             };
 
-            match replies {
+            let count = match replies {
                 Ok(replies) => {
                     let mut count = 0;
                     // Drain with a short per-recv timeout too, in case get()
@@ -92,31 +92,53 @@ fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'stati
                     eprintln!("[candidate-a] get() errored: {e:?}");
                     0
                 }
-            }
+            };
+
+            // Leak `tokens` and `session` deliberately. Dropping 300
+            // LivelinessTokens (and the Session itself) triggers a second
+            // round of synchronous undeclare/cleanup work that can itself
+            // take a long time (or hang) -- and since Drop runs as part of
+            // this async block's scope exit, it would run *before*
+            // `rt.block_on` returns to the outer thread, confounding
+            // "did the query hang" with "did cleanup hang". Leaking here
+            // decouples the two: the moment the query genuinely completes
+            // (or doesn't), that's what determines the test's timing, not
+            // teardown cost. This is a short-lived test thread/process --
+            // leaking is harmless.
+            std::mem::forget(tokens);
+            std::mem::forget(session);
+
+            count
         });
 
         let _ = tx.send(result);
     });
 
-    match rx.recv_timeout(TIMEOUT) {
+    let outcome = match rx.recv_timeout(TIMEOUT) {
         Ok(count) => {
             eprintln!("[candidate-a] completed normally, {count} replies, no hang");
-            // best-effort join, don't block test exit
-            let _ = handle.join();
             "no-hang"
         }
         Err(_) => {
             eprintln!(
                 "[candidate-a] TIMED OUT after {:?} waiting for liveliness_query to return -- \
-                 background thread still parked, NOT joining (would wedge the test process)",
+                 background thread still parked",
                 TIMEOUT
             );
-            // Deliberately do not join() -- it would hang the test process too.
-            // Leak the thread; process exit will reap it.
-            std::mem::forget(handle);
             "HUNG"
         }
-    }
+    };
+
+    // Deliberately never join() the background thread, in either branch.
+    // The query outcome is already known from the channel recv above; the
+    // background thread's tokio Runtime, when it eventually drops (in the
+    // no-hang case) or never does (in the HUNG case), blocks until all of
+    // the session's own spawned background tasks terminate -- which is
+    // teardown cost unrelated to the query itself and must not be allowed
+    // to confound (or wedge) this test's pass/fail signal. Leak the thread;
+    // process exit reaps it.
+    std::mem::forget(handle);
+    outcome
 }
 
 /// Vulnerable path: default (256-slot) bounded FIFO handler, peer mode.
