@@ -63,11 +63,8 @@ fn candidate_a_router_mode() {
                     // Drain with a short per-recv timeout too, in case get()
                     // itself returned but the channel is wedged some other
                     // way.
-                    loop {
-                        match replies.recv_timeout(Duration::from_secs(5)) {
-                            Ok(_reply) => count += 1,
-                            Err(_) => break,
-                        }
+                    while replies.recv_timeout(Duration::from_secs(5)).is_ok() {
+                        count += 1;
                     }
                     eprintln!("[candidate-a] drained {count} replies");
                     count
