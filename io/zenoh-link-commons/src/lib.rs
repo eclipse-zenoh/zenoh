@@ -80,7 +80,7 @@ pub trait ConfigurationInspector<C>: Default {
 
 impl fmt::Display for Link {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", &self.src, &self.dst)
+        write!(f, "{} => {}", self.src, self.dst)
     }
 }
 
