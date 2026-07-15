@@ -506,7 +506,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.inner.key_expr, &self.inner.parameters),
+                &format!("{}{}", self.inner.key_expr, self.inner.parameters),
             )
             .finish()
     }

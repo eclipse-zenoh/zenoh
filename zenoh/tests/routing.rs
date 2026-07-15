@@ -348,7 +348,7 @@ impl Recipe {
         let remaining_checkpoints = Arc::new(AtomicUsize::new(num_checkpoints));
         println!(
             "Recipe {} begin testing with {} checkpoint(s).",
-            &self, &num_checkpoints
+            self, num_checkpoints
         );
 
         let mut recipe_join_set = tokio::task::JoinSet::new();
@@ -386,7 +386,7 @@ impl Recipe {
 
                     // Warmup before the session starts
                     tokio::time::sleep(node.warmup).await;
-                    println!("Node: {} starting...", &node.name);
+                    println!("Node: {} starting...", node.name);
 
                     // In case of client can't connect to some peers/routers
                     loop {
@@ -430,7 +430,7 @@ impl Recipe {
                 // Close the session once all the task associated with the node are done.
                 ztimeout!(session.close())?;
 
-                println!("Node: {} is closed.", &node.name);
+                println!("Node: {} is closed.", node.name);
                 Result::Ok(())
             };
             recipe_join_set.spawn(recipe_task);

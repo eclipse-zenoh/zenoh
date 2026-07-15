@@ -151,13 +151,13 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INTERSECTS FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         assert!(
             exclone.is_empty(),
             "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
             target.deref(),
-            &exclone
+            exclone
         );
         for (k, v) in &map {
             if target.includes(k) {
@@ -191,13 +191,13 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INCLUDES FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         assert!(
             exclone.is_empty(),
             "MISSING MUTABLE INCLUDES FOR {}: {:?}",
             target.deref(),
-            &exclone
+            exclone
         );
         for (k, v) in &map {
             if k.includes(target) {
@@ -231,13 +231,13 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INCLUDES FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         assert!(
             exclone.is_empty(),
             "MISSING MUTABLE INCLUDES FOR {}: {:?}",
             target.deref(),
-            &exclone
+            exclone
         );
         #[cfg(feature = "std")]
         {
@@ -290,13 +290,13 @@ fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INTERSECTS FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         assert!(
             exclone.is_empty(),
             "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
             target.deref(),
-            &exclone
+            exclone
         );
         for (k, v) in &map {
             if target.includes(k) {
@@ -330,13 +330,13 @@ fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INCLUDES FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         assert!(
             exclone.is_empty(),
             "MISSING MUTABLE INCLUDES FOR {}: {:?}",
             target.deref(),
-            &exclone
+            exclone
         );
         #[cfg(feature = "std")]
         {
@@ -377,7 +377,7 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INTERSECTS FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         for (k, v) in &map {
             if target.includes(k) {
@@ -399,7 +399,7 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
             expected.is_empty(),
             "MISSING INCLUDES FOR {}: {:?}",
             target.deref(),
-            &expected
+            expected
         );
         #[cfg(feature = "std")]
         {
