@@ -551,26 +551,20 @@ impl Primitives for Face {
             self.state.task_controller.spawn_abortable_with_rt(
                 zenoh_runtime::ZRuntime::Net,
                 async move {
-                    // NOTE: `send_declare` ultimately invokes arbitrary user
-                    // callbacks (FIFO handler sends, or fully user-supplied
-                    // closures) that may block synchronously for an
-                    // unbounded time (see tests/callback_drop_on_undeclare.rs).
-                    // Running that directly in this async task would occupy
-                    // one of ZRuntime::Net's small async-worker threads for
-                    // that entire duration, starving other Net-scheduled
-                    // control-plane work (e.g. Session::close_inner's
-                    // teardown, the liveliness-query timeout task) that
-                    // shares the same worker pool. Offload the actual replay
-                    // onto Net's dedicated blocking-thread pool via
-                    // `spawn_blocking`, which is a separate pool from the
-                    // async workers and therefore can never starve them.
-                    let _ = zenoh_runtime::ZRuntime::Net
+                    // `send_declare` may invoke a blocking user callback, which
+                    // would otherwise starve ZRuntime::Net's small async-worker
+                    // pool (shared with Session::close_inner's teardown). Run it
+                    // on Net's separate blocking-thread pool instead.
+                    if let Err(e) = zenoh_runtime::ZRuntime::Net
                         .spawn_blocking(move || {
                             for (p, m) in declares {
                                 m.with_mut(|m| p.send_declare(m));
                             }
                         })
-                        .await;
+                        .await
+                    {
+                        tracing::error!(?e, "panic while replaying declares for send_interest");
+                    }
                 },
             );
         } else {
