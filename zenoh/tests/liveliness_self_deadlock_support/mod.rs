@@ -8,16 +8,21 @@
 use std::sync::mpsc;
 use std::time::Duration;
 use zenoh::config::{Config, WhatAmI};
-use zenoh::handlers::FifoChannel;
 use zenoh::Wait;
 
 pub const N_TOKENS: usize = 300;
 pub const TIMEOUT: Duration = Duration::from_secs(15);
 
-/// `handler_capacity = None` uses the default (256-slot) bounded FIFO
-/// handler -- the vulnerable path. `Some(cap)` uses an explicit oversized
-/// `FifoChannel`, the companion "fix shape" case that must never hang.
-pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'static str {
+/// Declares `N_TOKENS` liveliness tokens on a session, then issues a
+/// liveliness query against its own local table using the default
+/// (256-slot) bounded FIFO handler -- the vulnerable path.
+///
+/// Returns `(outcome, reply_count)`: `outcome` is `"no-hang"` if the query
+/// returned and was drained within `TIMEOUT`, `"HUNG"` otherwise.
+/// `reply_count` is the number of replies actually drained (`0` if the
+/// query hung, since the background thread's result is never observed in
+/// that case).
+pub fn run_candidate_a(whatami: WhatAmI) -> (&'static str, usize) {
     let (tx, rx) = mpsc::channel();
 
     let handle = std::thread::spawn(move || {
@@ -45,15 +50,11 @@ pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'s
             // because it's the *same* calling thread doing both the
             // declare-replay writes and (would-be) the channel drain, and
             // replay happens before the function returns.
-            eprintln!(
-                "[candidate-a] issuing liveliness_query (blocking wait), handler={:?}...",
-                handler_capacity
-            );
-            let query = session.liveliness().get("test/liveliness/selfdeadlock/**");
-            let replies = match handler_capacity {
-                Some(cap) => query.with(FifoChannel::new(cap)).wait(),
-                None => query.wait(),
-            };
+            eprintln!("[candidate-a] issuing liveliness_query (blocking wait)...");
+            let replies = session
+                .liveliness()
+                .get("test/liveliness/selfdeadlock/**")
+                .wait();
 
             let count = match replies {
                 Ok(replies) => {
@@ -97,10 +98,10 @@ pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'s
         let _ = tx.send(result);
     });
 
-    let outcome = match rx.recv_timeout(TIMEOUT) {
+    let (outcome, reply_count) = match rx.recv_timeout(TIMEOUT) {
         Ok(count) => {
             eprintln!("[candidate-a] completed normally, {count} replies, no hang");
-            "no-hang"
+            ("no-hang", count)
         }
         Err(_) => {
             eprintln!(
@@ -108,7 +109,7 @@ pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'s
                  background thread still parked",
                 TIMEOUT
             );
-            "HUNG"
+            ("HUNG", 0)
         }
     };
 
@@ -121,5 +122,5 @@ pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'s
     // to confound (or wedge) this test's pass/fail signal. Leak the thread;
     // process exit reaps it.
     std::mem::forget(handle);
-    outcome
+    (outcome, reply_count)
 }
