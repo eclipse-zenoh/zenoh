@@ -1,27 +1,9 @@
-//! Minimal single-process repro for the liveliness_query synchronous-replay
-//! self-deadlock (Candidate A).
-//!
-//! A single `Session` (peer or router mode, fully offline -- no listen /
-//! connect endpoints) declares many liveliness tokens ON ITSELF, then calls
-//! `session.liveliness().get(pattern).wait()` against its OWN local table.
-//! Tokens declared by a session are visible in that same session's local
-//! interest/routing table synchronously, with no settle-time or network
-//! delay required, so `send_interest`'s synchronous replay walk in
-//! `dispatcher::face::send_interest` fires the full token fan-out into the
-//! query's reply channel on the calling thread before
-//! `liveliness_query()`/`.wait()` can return. With the default bounded FIFO
-//! handler (256 slots, `API_DATA_RECEPTION_CHANNEL_SIZE` in
-//! `zenoh/src/api/session.rs`) and a token count above that capacity, the
-//! synchronous `flume::Sender::send` blocks forever waiting for a receiver
-//! that cannot run until the very call that would start it returns --
-//! a deterministic self-deadlock.
-//!
-//! Each sub-test runs the risky call on a background thread and joins with a
-//! bounded wall-clock timeout so a real hang fails the test cleanly instead
-//! of wedging the test process. Companion tests using an oversized
-//! `FifoChannel` capacity prove the same topology completes quickly once the
-//! channel can never fill during the synchronous replay -- the same
-//! mitigation shape as the hiroz-side fix.
+//! Shared helper for the Candidate A liveliness self-deadlock repro tests.
+//! Not a test binary itself (lives in a subdirectory, so cargo's default
+//! `tests/*.rs` auto-discovery skips it) -- included via `#[path = ...] mod
+//! support;` from each of the four single-test files that ARE separate
+//! cargo test binaries (their own OS processes), so that leaked
+//! sessions/tokens/threads from one test can never contaminate another.
 
 use std::sync::mpsc;
 use std::time::Duration;
@@ -29,13 +11,13 @@ use zenoh::config::{Config, WhatAmI};
 use zenoh::handlers::FifoChannel;
 use zenoh::Wait;
 
-const N_TOKENS: usize = 300;
-const TIMEOUT: Duration = Duration::from_secs(15);
+pub const N_TOKENS: usize = 300;
+pub const TIMEOUT: Duration = Duration::from_secs(15);
 
 /// `handler_capacity = None` uses the default (256-slot) bounded FIFO
 /// handler -- the vulnerable path. `Some(cap)` uses an explicit oversized
 /// `FifoChannel`, the companion "fix shape" case that must never hang.
-fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'static str {
+pub fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'static str {
     let (tx, rx) = mpsc::channel();
 
     let handle = std::thread::spawn(move || {
@@ -103,8 +85,9 @@ fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'stati
             // "did the query hang" with "did cleanup hang". Leaking here
             // decouples the two: the moment the query genuinely completes
             // (or doesn't), that's what determines the test's timing, not
-            // teardown cost. This is a short-lived test thread/process --
-            // leaking is harmless.
+            // teardown cost. Each candidate_a_* test is its own cargo test
+            // binary (own OS process), so leaking here cannot contaminate
+            // any other test.
             std::mem::forget(tokens);
             std::mem::forget(session);
 
@@ -139,47 +122,4 @@ fn run_candidate_a(whatami: WhatAmI, handler_capacity: Option<usize>) -> &'stati
     // process exit reaps it.
     std::mem::forget(handle);
     outcome
-}
-
-/// Vulnerable path: default (256-slot) bounded FIFO handler, peer mode.
-#[test]
-fn candidate_a_peer_mode() {
-    let outcome = run_candidate_a(WhatAmI::Peer, None);
-    eprintln!("=== candidate_a_peer_mode result: {outcome} ===");
-    assert_eq!(outcome, "no-hang", "peer mode self-declare/self-query hung");
-}
-
-/// Vulnerable path: default (256-slot) bounded FIFO handler, router mode.
-#[test]
-fn candidate_a_router_mode() {
-    let outcome = run_candidate_a(WhatAmI::Router, None);
-    eprintln!("=== candidate_a_router_mode result: {outcome} ===");
-    assert_eq!(outcome, "no-hang", "router mode self-declare/self-query hung");
-}
-
-/// Companion "fix shape" case: same topology (peer mode, N_TOKENS = 300),
-/// but with an oversized `FifoChannel` (capacity > N_TOKENS) so the
-/// synchronous replay can never fill the channel. Must complete quickly and
-/// must not hang -- proves the root cause is specifically channel capacity
-/// vs. synchronous replay size, not something inherent to self-declare
-/// self-query topology.
-#[test]
-fn candidate_a_peer_mode_oversized_handler_control() {
-    let outcome = run_candidate_a(WhatAmI::Peer, Some(N_TOKENS + 100));
-    eprintln!("=== candidate_a_peer_mode_oversized_handler_control result: {outcome} ===");
-    assert_eq!(
-        outcome, "no-hang",
-        "peer mode self-declare/self-query hung even with oversized handler"
-    );
-}
-
-/// Companion "fix shape" case, router mode.
-#[test]
-fn candidate_a_router_mode_oversized_handler_control() {
-    let outcome = run_candidate_a(WhatAmI::Router, Some(N_TOKENS + 100));
-    eprintln!("=== candidate_a_router_mode_oversized_handler_control result: {outcome} ===");
-    assert_eq!(
-        outcome, "no-hang",
-        "router mode self-declare/self-query hung even with oversized handler"
-    );
 }
