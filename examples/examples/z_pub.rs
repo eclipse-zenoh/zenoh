@@ -49,7 +49,7 @@ async fn main() {
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {payload}");
-        println!("Putting Data ('{}': '{}')...", &key_expr, buf);
+        println!("Putting Data ('{}': '{}')...", key_expr, buf);
         // Refer to z_bytes.rs to see how to serialize different types of message
         publisher
             .put(buf)

@@ -107,9 +107,9 @@ impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
             "@/{}/{}/status/plugins/{}",
-            &self.runtime.zid(),
-            &self.runtime.whatami().to_str(),
-            &self.name
+            self.runtime.zid(),
+            self.runtime.whatami().to_str(),
+            self.name
         )
     }
     fn new(runtime: DynamicRuntime, config: PluginConfig) -> ZResult<Self> {

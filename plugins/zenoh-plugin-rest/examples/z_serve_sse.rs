@@ -65,7 +65,7 @@ async fn main() {
 
     println!(
         "Putting Data periodically ('{}': '{}')...",
-        &event_key, value
+        event_key, value
     );
 
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
