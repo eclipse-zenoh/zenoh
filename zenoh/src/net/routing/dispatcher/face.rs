@@ -556,9 +556,9 @@ impl Primitives for Face {
             // that expect all state dropped immediately after close(). Plain
             // spawn_with_rt makes Session::close()'s task_controller wait for
             // genuine completion instead, bounded by its own timeout either way.
-            self.state.task_controller.spawn_with_rt(
-                zenoh_runtime::ZRuntime::Net,
-                async move {
+            self.state
+                .task_controller
+                .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
                     // `send_declare` may invoke a blocking user callback, which
                     // would otherwise starve ZRuntime::Net's small async-worker
                     // pool (shared with Session::close_inner's teardown). Run it
@@ -573,8 +573,7 @@ impl Primitives for Face {
                     {
                         tracing::error!(?e, "panic while replaying declares for send_interest");
                     }
-                },
-            );
+                });
         } else {
             self.interest_final(msg);
         }
