@@ -548,7 +548,15 @@ impl Primitives for Face {
             let mut declares = vec![];
             self.interest(msg, &mut |p, m| declares.push((p.clone(), m)));
             drop(ctrl_lock);
-            self.state.task_controller.spawn_abortable_with_rt(
+            // Not spawn_abortable_with_rt: aborting this task on teardown would
+            // drop the JoinHandle below without stopping the spawn_blocking
+            // closure it awaits (spawn_blocking closures run to completion
+            // regardless of handle drop), leaving Arc clones captured by
+            // `declares` alive past Session::close() -- racing tests/callers
+            // that expect all state dropped immediately after close(). Plain
+            // spawn_with_rt makes Session::close()'s task_controller wait for
+            // genuine completion instead, bounded by its own timeout either way.
+            self.state.task_controller.spawn_with_rt(
                 zenoh_runtime::ZRuntime::Net,
                 async move {
                     // `send_declare` may invoke a blocking user callback, which
