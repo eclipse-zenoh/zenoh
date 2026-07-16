@@ -19,7 +19,8 @@ fn main() {
     // family (including all Apple targets, which are BSD-derived) plus
     // Redox. Computed directly instead of pulling in the `cfg_aliases`
     // crate for a single derived flag.
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS")
+        .expect("CARGO_CFG_TARGET_OS must be set by Cargo when running build scripts");
     let shm_external_lockfile = matches!(
         target_os.as_str(),
         "freebsd"
