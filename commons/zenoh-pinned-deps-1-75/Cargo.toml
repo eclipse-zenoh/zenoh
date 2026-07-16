@@ -66,6 +66,7 @@ toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
 toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
+unescaper = "=0.1.8"
 unzip-n = "=0.1.2"
 uuid = "=1.20.0"
 zerofrom = "=0.1.5"
@@ -117,6 +118,7 @@ ignored = [
   "toml_parser",
   "toml_writer",
   "twox-hash",
+  "unescaper",
   "unzip-n",
   "uuid",
   "zerofrom",
