@@ -22,8 +22,16 @@ fn main() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let shm_external_lockfile = matches!(
         target_os.as_str(),
-        "freebsd" | "dragonfly" | "netbsd" | "openbsd" | "ios" | "macos" | "watchos" | "tvos"
-            | "visionos" | "redox"
+        "freebsd"
+            | "dragonfly"
+            | "netbsd"
+            | "openbsd"
+            | "ios"
+            | "macos"
+            | "watchos"
+            | "tvos"
+            | "visionos"
+            | "redox"
     );
 
     println!("cargo:rustc-check-cfg=cfg(shm_external_lockfile)");
