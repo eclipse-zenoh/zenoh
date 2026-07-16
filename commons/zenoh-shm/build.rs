@@ -41,7 +41,7 @@ fn main() {
         // we use this alias to detect platforms that
         // don't support advisory file locking on tmpfs
         shm_external_lockfile: { any(bsd, target_os = "redox") },
-    }
+    };
 
     println!("cargo:rustc-check-cfg=cfg(apple_targets)");
     println!("cargo:rustc-check-cfg=cfg(bsd)");
