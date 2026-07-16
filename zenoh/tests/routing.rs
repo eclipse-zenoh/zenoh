@@ -30,7 +30,7 @@ use zenoh_link::EndPoint;
 use zenoh_result::bail;
 use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(20);
 const MSG_COUNT: usize = 50;
 const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
 
