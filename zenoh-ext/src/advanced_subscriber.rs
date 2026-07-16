@@ -715,11 +715,12 @@ fn spawn_periodic_queries(
     period: Option<Duration>,
     source_id: EntityGlobalId,
 ) -> Option<AbortOnDropHandle<()>> {
-    let mut interval = tokio::time::interval(period?);
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let period = period?;
     let statesref = statesref.clone();
     Some(AbortOnDropHandle::new(ZRuntime::Application.spawn(
         async move {
+            let mut interval = tokio::time::interval(period);
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             interval.tick().await; // interval first tick is immediate
             loop {
                 interval.tick().await;
