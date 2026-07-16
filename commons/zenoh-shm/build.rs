@@ -13,56 +13,21 @@
 //
 
 fn main() {
-    // these aliases should at least be included in the same aliases of Nix crate:
-    // ___________________
-    // |                 |
-    // |  Nix aliases    |
-    // |  ___________    |
-    // |  |   Our   |    |
-    // |  | aliases |    |
-    // |  |_________|    |
-    // |_________________|
-    //
-    // NOTE: hand-rolled instead of using the `cfg_aliases` crate -- its macro
-    // expansion trips rustc's `semicolon_in_expressions_from_macros` lint,
-    // which is a hard error on current nightly (no fixed crate release
-    // exists as of writing). This is equivalent, just spelled out.
+    // `shm_external_lockfile` is the only cfg alias this crate actually
+    // queries (see src/posix_shm/cleanup.rs, src/shm/unix.rs) -- it marks
+    // platforms that don't support advisory file locking on tmpfs: the BSD
+    // family (including all Apple targets, which are BSD-derived) plus
+    // Redox. Computed directly instead of pulling in the `cfg_aliases`
+    // crate for a single derived flag.
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let shm_external_lockfile = matches!(
+        target_os.as_str(),
+        "freebsd" | "dragonfly" | "netbsd" | "openbsd" | "ios" | "macos" | "watchos" | "tvos"
+            | "visionos" | "redox"
+    );
 
-    let dragonfly = target_os == "dragonfly";
-    let ios = target_os == "ios";
-    let freebsd = target_os == "freebsd";
-    let macos = target_os == "macos";
-    let netbsd = target_os == "netbsd";
-    let openbsd = target_os == "openbsd";
-    let watchos = target_os == "watchos";
-    let tvos = target_os == "tvos";
-    let visionos = target_os == "visionos";
-    let redox = target_os == "redox";
-
-    let apple_targets = ios || macos || watchos || tvos || visionos;
-    let bsd = freebsd || dragonfly || netbsd || openbsd || apple_targets;
-    // we use this alias to detect platforms that
-    // don't support advisory file locking on tmpfs
-    let shm_external_lockfile = bsd || redox;
-
-    for (name, active) in [
-        ("dragonfly", dragonfly),
-        ("ios", ios),
-        ("freebsd", freebsd),
-        ("macos", macos),
-        ("netbsd", netbsd),
-        ("openbsd", openbsd),
-        ("watchos", watchos),
-        ("tvos", tvos),
-        ("visionos", visionos),
-        ("apple_targets", apple_targets),
-        ("bsd", bsd),
-        ("shm_external_lockfile", shm_external_lockfile),
-    ] {
-        println!("cargo:rustc-check-cfg=cfg({name})");
-        if active {
-            println!("cargo:rustc-cfg={name}");
-        }
+    println!("cargo:rustc-check-cfg=cfg(shm_external_lockfile)");
+    if shm_external_lockfile {
+        println!("cargo:rustc-cfg=shm_external_lockfile");
     }
 }
