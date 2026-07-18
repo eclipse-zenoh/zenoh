@@ -594,6 +594,14 @@ pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
     }
 }
 
+pub async fn get_tls_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
+    let iter = tokio::net::lookup_host(address.as_str().to_string())
+        .await
+        .map_err(|e| zerror!("{}", e))?
+        .filter(|x| !x.ip().is_multicast());
+    Ok(iter)
+}
+
 pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
     Ok(address
         .as_str()
