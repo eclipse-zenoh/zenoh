@@ -43,10 +43,13 @@ use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::{zerror, Error as ZError, ZResult};
 
 use crate::{
-    utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
+    utils::{
+        get_tls_addr, get_tls_addrs, get_tls_host, get_tls_server_name, TlsClientConfig,
+        TlsServerConfig,
+    },
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 
@@ -338,7 +341,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let epconf = endpoint.config();
 
         let server_name = get_tls_server_name(&epaddr)?;
-        let addr = get_tls_addr(&epaddr).await?;
+        let addrs = get_tls_addrs(endpoint.address()).await?;
 
         // if both `iface`, and `bind` are present, return error
         if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
@@ -356,18 +359,33 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let config = Arc::new(client_config.client_config);
         let connector = TlsConnector::from(config);
 
-        // Initialize the TcpStream
-        let (tcp_stream, src_addr, dst_addr) = client_config
-            .tcp_socket_config
-            .new_link(&addr)
-            .await
-            .map_err(|e| {
-                zerror!(
-                    "Can not create a new TLS link bound to {:?}: {}",
+        // Initialize the TcpStream, trying each resolved address like the TCP link does
+        let mut errs: Vec<ZError> = vec![];
+        let mut connected = None;
+        for da in addrs {
+            match client_config.tcp_socket_config.new_link(&da).await {
+                Ok(res) => {
+                    connected = Some(res);
+                    break;
+                }
+                Err(e) => {
+                    errs.push(e);
+                }
+            }
+        }
+        let (tcp_stream, src_addr, dst_addr) = match connected {
+            Some(res) => res,
+            None => {
+                if errs.is_empty() {
+                    errs.push(zerror!("No TLS unicast addresses available").into());
+                }
+                bail!(
+                    "Can not create a new TLS link bound to {:?}: {:?}",
                     server_name,
-                    e
+                    errs
                 )
-            })?;
+            }
+        };
 
         // Initialize the TlsStream
         let tls_stream = connector
