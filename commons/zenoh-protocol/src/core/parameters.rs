@@ -236,10 +236,10 @@ pub fn rand(into: &mut String) {
 /// Construction from a string accepts ANY input: trailing `;`, `=`, and `|` characters are
 /// trimmed, the rest is stored verbatim. Empty `;`-separated chunks are skipped on iteration,
 /// a chunk is split into key and value on its FIRST `=` (a chunk without `=` has the empty
-/// string as its value), and no percent-decoding is applied. A duplicated key is allowed:
-/// [`Parameters::get`] returns the value of its first occurrence, and the duplicates are
-/// preserved until a mutating operation ([`Parameters::insert`]/[`Parameters::remove`])
-/// rebuilds the string.
+/// string as its value), and no percent-decoding is applied. Duplicate keys are allowed:
+/// [`Parameters::get`] returns the value of the first occurrence, and duplicates are preserved
+/// (including across mutations of other keys). Mutating that key via [`Parameters::insert`] or
+/// [`Parameters::remove`] rebuilds the string and thus collapses/removes its entries.
 ///
 /// Example:
 /// ```
