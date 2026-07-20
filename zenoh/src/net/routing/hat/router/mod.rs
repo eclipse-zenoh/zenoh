@@ -234,6 +234,53 @@ impl Hat {
             }
         }
     }
+
+    fn unregister_router_entities(
+        &mut self,
+        removed_routers: HashSet<ZenohIdProto>,
+    ) -> UnregisterFaceEntitiesResult {
+        let mut removed_subscribers = HashSet::new();
+        for mut res in self.router_subs.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .retain(|router| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_subs.is_empty() {
+                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_subscribers.insert(res);
+            }
+        }
+
+        let mut removed_queryables = HashSet::new();
+        for mut res in self.router_qabls.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_qabls
+                .retain(|router, _| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_qabls.is_empty() {
+                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_queryables.insert(res);
+            }
+        }
+
+        let mut removed_tokens = HashSet::new();
+        for mut res in self.router_tokens.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_tokens
+                .retain(|router| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_tokens.is_empty() {
+                self.router_tokens.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_tokens.insert(res);
+            }
+        }
+
+        UnregisterFaceEntitiesResult {
+            removed_queryables,
+            removed_subscribers,
+            removed_tokens,
+        }
+    }
 }
 
 impl HatBaseTrait for Hat {
@@ -344,11 +391,19 @@ impl HatBaseTrait for Hat {
 
                 tracing::trace!(linkstate = ?list);
 
+                let removed_routers = self
+                    .net_mut()
+                    .link_states(list.link_states, ctx.src_face.zid)
+                    .removed_nodes
+                    .into_iter()
+                    .map(|(_, zid)| zid)
+                    .collect();
+
                 let UnregisterFaceEntitiesResult {
                     removed_subscribers,
                     removed_queryables,
                     removed_tokens,
-                } = self.unregister_face_entities(ctx.reborrow());
+                } = self.unregister_router_entities(removed_routers);
 
                 let region = self.region();
 
@@ -574,55 +629,14 @@ impl HatFace {
 
 impl HatTrait for Hat {
     fn unregister_face_entities(&mut self, ctx: DispatcherContext) -> UnregisterFaceEntitiesResult {
-        let zid = &ctx.src_face.zid;
         let removed_routers = self
             // NOTE: a &mut is not taken here and the link graph is not yet modified.
             .net()
-            .find_disconnected_nodes_after_removing_link(zid)
+            .find_disconnected_nodes_after_removing_link(&ctx.src_face.zid)
             .into_iter()
             .map(|(_, node)| node)
             .collect::<HashSet<_>>();
 
-        let mut removed_subscribers = HashSet::new();
-        for mut res in self.router_subs.iter().cloned().collect_vec() {
-            self.res_hat_mut(&mut res)
-                .router_subs
-                .retain(|router| !removed_routers.contains(router));
-
-            if self.res_hat(&res).router_subs.is_empty() {
-                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
-                removed_subscribers.insert(res);
-            }
-        }
-
-        let mut removed_queryables = HashSet::new();
-        for mut res in self.router_qabls.iter().cloned().collect_vec() {
-            self.res_hat_mut(&mut res)
-                .router_qabls
-                .retain(|router, _| !removed_routers.contains(router));
-
-            if self.res_hat(&res).router_qabls.is_empty() {
-                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
-                removed_queryables.insert(res);
-            }
-        }
-
-        let mut removed_tokens = HashSet::new();
-        for mut res in self.router_tokens.iter().cloned().collect_vec() {
-            self.res_hat_mut(&mut res)
-                .router_tokens
-                .retain(|router| !removed_routers.contains(router));
-
-            if self.res_hat(&res).router_tokens.is_empty() {
-                self.router_tokens.retain(|r| !Arc::ptr_eq(r, &res));
-                removed_tokens.insert(res);
-            }
-        }
-
-        UnregisterFaceEntitiesResult {
-            removed_queryables,
-            removed_subscribers,
-            removed_tokens,
-        }
+        self.unregister_router_entities(removed_routers)
     }
 }

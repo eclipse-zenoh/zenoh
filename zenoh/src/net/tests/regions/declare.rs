@@ -418,7 +418,7 @@ fn test_router_disconnect_undeclares_queryable() {
     );
     r1_r2.bi_fwd();
 
-    r1s.declare_queryable(None, 1, KEY_EXPR);
+    r1s.declare_queryable(None, 1, KEY_EXPR, QueryableInfoType::DEFAULT);
     r1_r2.bi_fwd();
 
     assert_eq!(r2s.recorder().queryables().len(), 1);
