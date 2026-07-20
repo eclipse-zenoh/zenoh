@@ -30,9 +30,17 @@ use zenoh_link::EndPoint;
 use zenoh_result::bail;
 use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
-const TIMEOUT: Duration = Duration::from_secs(90);
+const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
 const LIVELINESSGET_DELAY: Duration = Duration::from_millis(10);
+// `three_node_combination` runs its recipes' liveliness-token declare/notify
+// through `Face::send_interest`'s replay, which is now dispatched onto a
+// shared async runtime instead of running inline on the calling thread (see
+// `Face::send_interest`). Under CI's contended runners that adds scheduling
+// latency, occasionally past the default `TIMEOUT`; give this test alone a
+// wider budget rather than loosening the deadline for every other test in
+// this file.
+const THREE_NODE_COMBINATION_TIMEOUT: Duration = Duration::from_secs(90);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -344,6 +352,10 @@ impl Recipe {
     }
 
     async fn run(&self) -> Result<()> {
+        self.run_with_timeout(TIMEOUT).await
+    }
+
+    async fn run_with_timeout(&self, timeout: Duration) -> Result<()> {
         let num_checkpoints = self.num_checkpoints();
         let remaining_checkpoints = Arc::new(AtomicUsize::new(num_checkpoints));
         println!(
@@ -439,7 +451,7 @@ impl Recipe {
         // All tasks of the recipe run together
         loop {
             tokio::select! {
-                _ = tokio::time::sleep(TIMEOUT) => {
+                _ = tokio::time::sleep(timeout) => {
                     println!("Recipe {self} Timeout.");
 
                     // Termination
@@ -1030,10 +1042,16 @@ async fn three_node_combination() -> Result<()> {
         let mut join_set = tokio::task::JoinSet::new();
         for (pubsub, getqueryable, getliveliness, subliveliness) in chunks {
             join_set.spawn(async move {
-                pubsub.run().await?;
-                getqueryable.run().await?;
-                getliveliness.run().await?;
-                subliveliness.run().await?;
+                pubsub.run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT).await?;
+                getqueryable
+                    .run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT)
+                    .await?;
+                getliveliness
+                    .run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT)
+                    .await?;
+                subliveliness
+                    .run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT)
+                    .await?;
                 Result::Ok(())
             });
         }
