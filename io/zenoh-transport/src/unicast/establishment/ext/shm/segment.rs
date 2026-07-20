@@ -13,7 +13,8 @@
 //
 
 use std::{
-    ops::Deref, sync::{Arc, atomic::AtomicU32},
+    ops::Deref,
+    sync::{atomic::AtomicU32, Arc},
 };
 
 use zenoh_buffers::{
@@ -179,12 +180,20 @@ impl ShmTXCounterLease {
         self.counter_index
     }
 
-    pub fn counter_increase(&self) {
+    pub fn add(&self, val: u32) {
         self.segment
             .segment
             .data
             .counter(self.counter_index)
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            .fetch_add(val, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn sub(&self, val: u32) {
+        self.segment
+            .segment
+            .data
+            .counter(self.counter_index)
+            .fetch_sub(val, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn counter(&self) -> u32 {

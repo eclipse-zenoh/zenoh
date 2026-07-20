@@ -56,7 +56,6 @@ macro_rules! tested_crate_module {
 
 pub mod api;
 mod cleanup;
-pub mod handoff;
 pub mod header;
 pub mod init;
 pub mod metadata;
@@ -93,6 +92,37 @@ impl ShmBufInfo {
             metadata,
             generation,
         }
+    }
+}
+
+/// A hard shared reference to SHM buffer
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct ShmBufHardRef(ConfirmedDescriptor);
+
+impl From<&ShmBufInner> for ShmBufHardRef {
+    fn from(value: &ShmBufInner) -> Self {
+        Self(value.metadata.clone())
+    }
+}
+impl From<&ZShm> for ShmBufHardRef {
+    fn from(value: &ZShm) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&zshm> for ShmBufHardRef {
+    fn from(value: &zshm) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&ZShmMut> for ShmBufHardRef {
+    fn from(value: &ZShmMut) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&zshmmut> for ShmBufHardRef {
+    fn from(value: &zshmmut) -> Self {
+        (&value.inner).into()
     }
 }
 

@@ -30,6 +30,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
+#[cfg(feature = "shared-memory")]
+use crate::common::shm::interop::LinkShmHandoffConfig;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
 use crate::{
@@ -403,10 +405,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(ext_shm) => ext_shm
-                .send_open_syn((
-                    link.link.supports_priorities(),
-                    link.config.reliability.unwrap_or(BestEffort),
-                ))
+                .send_open_syn(link.config.reliability.unwrap_or(BestEffort))
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,
@@ -622,10 +621,13 @@ pub(crate) async fn open_link(
         },
         priorities: None,
         reliability: None,
-        #[cfg(feature = "shared-memory")]
-        shm: None,
     };
-    let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
+    let mut link_unicast = TransportLinkUnicast::new(
+        link.clone(),
+        config,
+        #[cfg(feature = "shared-memory")]
+        LinkShmHandoffConfig::new_disaled().into(),
+    );
     let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
@@ -748,7 +750,9 @@ pub(crate) async fn open_link(
     let (transport_shm, link_shm) = fsm
         .ext_shm
         .take()
-        .map_or((None, None), |shm| shm.shm_init_result());
+        .map_or((None, LinkShmHandoffConfig::new_disaled()), |shm| {
+            shm.shm_init_result()
+        });
 
     // Initialize the transport
     let config = TransportConfigUnicast {
@@ -779,10 +783,12 @@ pub(crate) async fn open_link(
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
-        #[cfg(feature = "shared-memory")]
-        shm: link_shm,
     };
-    let o_link = link_unicast.reconfigure(o_config);
+    let o_link = link_unicast.reconfigure(
+        o_config,
+        #[cfg(feature = "shared-memory")]
+        link_shm.into(),
+    );
     let s_link = format!("{o_link:?}");
     // Handle MixedReliability links
     let best_effort_link = match link.0 {
@@ -805,10 +811,13 @@ pub(crate) async fn open_link(
                 priorities: state.transport.ext_qos.priorities(),
                 // Do not apply reliability override to MixedReliability associated links
                 reliability: None,
-                #[cfg(feature = "shared-memory")]
-                shm: None,
             };
-            let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
+            let link = TransportLinkUnicast::new(
+                LinkUnicast::from(best_effort),
+                o_config,
+                #[cfg(feature = "shared-memory")]
+                LinkShmHandoffConfig::new_disaled().into(),
+            );
             Some(link)
         }
         zenoh_link::NewLink::Single(_) => None,

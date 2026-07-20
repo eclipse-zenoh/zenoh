@@ -12,75 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{
-    ops::{Index, IndexMut},
-    sync::{
-        atomic::{AtomicUsize, Ordering::SeqCst},
-        Arc,
-    },
-};
+use std::ops::{Index, IndexMut};
 
-use tokio_util::sync::CancellationToken;
 use zenoh_protocol::core::Priority;
-use zenoh_runtime::ZRuntime;
-use zenoh_shm::{handoff::Handoff, ShmBufInner};
-
-use crate::unicast::establishment::ext::shm::segment::ShmTXCounterLease;
-
-struct TxHandoffInner {
-    counter: ShmTXCounterLease,
-    handoffs_len: AtomicUsize,
-    handoffs: lockfree::queue::Queue<Handoff>,
-}
-
-impl TxHandoffInner {
-    fn new(counter: ShmTXCounterLease) -> Self {
-        Self {
-            counter,
-            handoffs: Default::default(),
-            handoffs_len: AtomicUsize::new(0),
-        }
-    }
-}
-
-pub struct TxHandoff {
-    inner: Arc<TxHandoffInner>,
-}
-
-impl TxHandoff {
-    pub fn new(counter: ShmTXCounterLease, cancellation_token: CancellationToken) -> Self {
-        let inner = Arc::new(TxHandoffInner::new(counter));
-
-        let c_inner = inner.clone();
-        ZRuntime::Net.spawn(async move {
-            cancellation_token
-                .run_until_cancelled(async move {
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                        let to_pop = c_inner.handoffs_len.load(SeqCst) as isize
-                            - c_inner.counter.counter() as isize;
-                        if to_pop > 0 {
-                            for _ in 0..to_pop {
-                                c_inner.handoffs.pop();
-                            }
-                            c_inner.handoffs_len.fetch_sub(to_pop as usize, SeqCst);
-                        }
-                    }
-                })
-                .await
-        });
-
-        Self { inner }
-    }
-
-    pub fn on_tx(&mut self, shm_buf: Arc<ShmBufInner>) {
-        // NOTE: the sequence of operations below is important
-        self.inner.counter.counter_increase();
-        self.inner.handoffs.push(shm_buf.into());
-        self.inner.handoffs_len.fetch_add(1, SeqCst);
-    }
-}
 
 #[derive(Debug)]
 pub struct PriorityContainer<T: Sized> {
@@ -91,7 +25,7 @@ impl<T: Sized> PriorityContainer<T> {
     pub fn new(per_prio_objects: [T; Priority::NUM]) -> Self {
         Self { per_prio_objects }
     }
-    
+
     pub fn from_fn<E>(mut ctor_fn: impl FnMut(Priority) -> Result<T, E>) -> Result<Self, E> {
         // TODO: std::array::try_from_fn is unstable yet...
         let per_prio_objects = [
@@ -115,7 +49,11 @@ impl<T: Sized> PriorityContainer<T> {
         Self { per_prio_objects }
     }
 
-    pub fn map<Tother: Sized>(
+    pub fn map<Tother: Sized>(self, map_fn: impl FnMut(T) -> Tother) -> PriorityContainer<Tother> {
+        PriorityContainer::new(self.per_prio_objects.map(map_fn))
+    }
+
+    pub fn map_ref<Tother: Sized>(
         &self,
         map_fn: impl Fn(&T) -> Tother,
     ) -> PriorityContainer<Tother> {
@@ -146,5 +84,13 @@ impl<T: Sized> Index<Priority> for PriorityContainer<T> {
 impl<T: Sized> IndexMut<Priority> for PriorityContainer<T> {
     fn index_mut(&mut self, index: Priority) -> &mut Self::Output {
         &mut self.per_prio_objects[index as usize]
+    }
+}
+
+impl<T: Sized + Clone> Clone for PriorityContainer<T> {
+    fn clone(&self) -> Self {
+        Self {
+            per_prio_objects: self.per_prio_objects.clone(),
+        }
     }
 }

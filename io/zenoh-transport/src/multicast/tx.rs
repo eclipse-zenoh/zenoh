@@ -48,13 +48,13 @@ impl TransportMulticastInner {
     pub(super) fn schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
-            use crate::unicast::establishment::ext::shm::handoff::TxHandoffChannel;
+            use crate::unicast::establishment::ext::shm::handoff::TxHandoffStorage;
 
-            map_zmsg_to_partner(
+            let _ = map_zmsg_to_partner(
                 &mut msg,
                 &shm_context.shm_config,
                 &shm_context.shm_provider,
-                &TxHandoffChannel::new_disabled(),
+                &TxHandoffStorage::new_disabled(),
             );
         }
 

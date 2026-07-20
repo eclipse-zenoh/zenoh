@@ -11,31 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_protocol::{
-    network::{NetworkMessageExt, NetworkMessageMut},
-    transport::{TransportBodyLowLatencyRef, TransportMessageLowLatencyRef},
-};
+use zenoh_protocol::network::NetworkMessageMut;
 use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastLowlatency;
-#[cfg(feature = "shared-memory")]
-use crate::common::shm::interop::map_zmsg_to_partner;
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<()> {
-        #[cfg(feature = "shared-memory")]
-        if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
-        }
-
-        let msg = msg.as_ref();
-        let tmsg = TransportMessageLowLatencyRef {
-            body: TransportBodyLowLatencyRef::Network(msg),
-        };
-        let res = self.send(tmsg);
+        let res = self.send(msg);
 
         #[cfg(feature = "stats")]
         if res.is_ok() {

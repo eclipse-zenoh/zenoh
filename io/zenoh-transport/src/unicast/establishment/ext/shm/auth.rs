@@ -30,7 +30,7 @@ use zenoh_result::{zerror, Error as ZError, ZResult};
 use zenoh_shm::api::common::types::ProtocolID;
 
 use crate::{
-    common::shm::interop::{LinkShmConfig, TransportShmConfig},
+    common::shm::interop::{LinkShmHandoffConfig, TransportShmConfig},
     unicast::establishment::{
         ext::shm::{
             handoff::{HandoffCounterIds, RxHandoffChannel, TxHandoffChannel},
@@ -265,13 +265,14 @@ impl<'a> ShmFsm<'a> {
         }
     }
 
-    pub fn shm_init_result(self) -> (Option<TransportShmConfig>, Option<LinkShmConfig>) {
+    pub fn shm_init_result(self) -> (Option<TransportShmConfig>, LinkShmHandoffConfig) {
         let transport = self.rx_segment.into_inner().map(TransportShmConfig::new);
         let link = self
             .rx_lease
             .into_inner()
             .zip(self.tx_lease.into_inner())
-            .map(|(rx_lease, tx_lease)| LinkShmConfig::new(rx_lease, tx_lease));
+            .map(|(rx_lease, tx_lease)| LinkShmHandoffConfig::new(rx_lease, tx_lease))
+            .unwrap_or(LinkShmHandoffConfig::new_disaled());
 
         (transport, link)
     }
@@ -363,7 +364,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         Ok(())
     }
 
-    type SendOpenSynIn = (bool, Reliability);
+    type SendOpenSynIn = Reliability;
     type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
         self,
@@ -372,7 +373,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Send OpenSyn.";
 
         // Link is multipriority
-        let (multiprio_link, reliability) = input;
+        let reliability = input;
 
         // take RX segment from input
         let Some(rx_segment) = self.rx_segment.get() else {
@@ -380,7 +381,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Allocate TX counter for this session
-        let tx_handoff = TxHandoffChannel::new_tx(multiprio_link, reliability, &self.inner)?;
+        let tx_handoff = TxHandoffChannel::new_tx(reliability, &self.inner)?;
 
         let open_syn = OpenSyn {
             bob_challenge: rx_segment.challenge(),
@@ -571,7 +572,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         Ok(())
     }
 
-    type SendOpenAckIn = (bool, Reliability);
+    type SendOpenAckIn = Reliability;
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
@@ -580,10 +581,10 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Send OpenAck.";
 
         // Link is multipriority
-        let (multiprio_link, reliability) = input;
+        let reliability = input;
 
         // Allocate TX counter for this session
-        let tx_handoff = TxHandoffChannel::new_tx(multiprio_link, reliability, &self.inner)?;
+        let tx_handoff = TxHandoffChannel::new_tx(reliability, &self.inner)?;
 
         let open_ack = OpenAck {
             bob_counters: tx_handoff.ids(),

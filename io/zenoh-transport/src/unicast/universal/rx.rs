@@ -52,18 +52,17 @@ impl TransportUnicastUniversal {
             zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
         );
         #[cfg(feature = "shared-memory")]
-        {
-            if let (Some(shm_context), Some(link_shm)) = (&self.shm_context, &link.config.shm) {
-                if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
-                    msg.as_mut(),
-                    &shm_context.shm_reader,
-                    &link_shm.rx,
-                ) {
-                    tracing::debug!("Error receiving SHM buffer: {e}");
-                    return Ok(());
-                }
+        if let Some(shm_context) = &self.shm_context {
+            if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
+                msg.as_mut(),
+                &shm_context.shm_reader,
+                &link.shm,
+            ) {
+                tracing::debug!("Error receiving SHM buffer: {e}");
+                return Ok(());
             }
         }
+
         callback.handle_message(msg)
     }
 

@@ -21,8 +21,9 @@ use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::{
-    KeepAlive, TransportBodyLowLatencyRef, TransportMessageLowLatencyRef,
+use zenoh_protocol::{
+    network::{NetworkMessageExt, NetworkMessageMut},
+    transport::{KeepAlive, TransportBodyLowLatencyRef, TransportMessageLowLatencyRef},
 };
 use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
@@ -95,8 +96,45 @@ pub(crate) async fn read_with_link(
 }
 
 impl TransportUnicastLowlatency {
-    pub(super) fn send(&self, msg: TransportMessageLowLatencyRef) -> ZResult<()> {
-        zenoh_runtime::ZRuntime::TX.block_in_place(self.send_async(msg))
+    pub(super) fn send(&self, #[allow(unused_mut)] mut msg: NetworkMessageMut) -> ZResult<()> {
+        zenoh_runtime::ZRuntime::TX.block_in_place(async {
+            let guard = zasyncwrite!(self.link);
+            let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
+
+            #[cfg(feature = "shared-memory")]
+            let shm_handoff_transaction = self
+                .shm_context
+                .as_ref()
+                .map(|shm_context| {
+                    crate::common::shm::interop::map_zmsg_to_partner(
+                        &mut msg,
+                        &shm_context.shm_config,
+                        &shm_context.shm_provider,
+                        &link.shm_handoff.tx,
+                    )
+                })
+                .flatten();
+
+            let msg = msg.as_ref();
+            let tmsg = TransportMessageLowLatencyRef {
+                body: TransportBodyLowLatencyRef::Network(msg),
+            };
+
+            send_with_link(
+                &link.link,
+                tmsg,
+                #[cfg(feature = "stats")]
+                self.link_stats.get().unwrap(),
+            )
+            .await?;
+
+            #[cfg(feature = "shared-memory")]
+            if let Some(transaction) = shm_handoff_transaction {
+                transaction.commit();
+            }
+
+            Ok(())
+        })
     }
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatencyRef<'_>) -> ZResult<()> {
