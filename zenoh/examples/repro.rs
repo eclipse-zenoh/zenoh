@@ -2,6 +2,7 @@ use zenoh::{Result, Wait};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    zenoh::init_log_from_env_or("info");
     let mut cfg = zenoh::Config::default();
     cfg.insert_json5("mode", "\"router\"")?;
     cfg.insert_json5("listen/endpoints", &format!("[\"tcp/[::]:44444\"]"))?;

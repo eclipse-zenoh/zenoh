@@ -51,7 +51,7 @@ use crate::net::{
             region::RegionMap,
             tables::Tables,
         },
-        hat::DispatcherContext,
+        hat::{self, DispatcherContext},
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -792,6 +792,14 @@ impl Primitives for Face {
                 Resource::clean(&mut res);
             } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
+            }
+        }
+
+        for hat in hats.values_mut() {
+            if let Some(hat) = hat.as_any_mut().downcast_mut::<hat::router::Hat>() {
+                // this cleanup code could reasonably be in hat::router::Hat::unregister_face_tokens to avoid the downcast
+                // but then the ordering of unregister_face_tokens etc. would be very sensitive in a surprising fashion
+                hat.net_mut().remove_link(&ctx.src_face.zid);
             }
         }
 
