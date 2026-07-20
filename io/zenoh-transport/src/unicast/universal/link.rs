@@ -1,5 +1,3 @@
-#[cfg(all(feature = "uring", target_os = "linux"))]
-use std::fmt::Debug;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,6 +11,8 @@ use std::fmt::Debug;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::fmt::Debug;
 use std::{
     future::poll_fn,
     sync::{
@@ -585,11 +585,7 @@ async fn rx_task_uring(
 
     let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
 
-    let l = Link::new_unicast(
-        &link.link,
-        link.config.priorities.clone(),
-        link.config.reliability,
-    );
+    let c_link = link.clone();
 
     let batch_config = link.config.batch;
 
@@ -606,7 +602,7 @@ async fn rx_task_uring(
 
     fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
         transport: &TransportUnicastUniversal,
-        link: &Link,
+        link: &TransportLinkUnicastRx,
         batch: RBatch<TBuffer>,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
@@ -637,7 +633,7 @@ async fn rx_task_uring(
                             })?;
                             read_batch(
                                 &transport,
-                                &l,
+                                &c_link,
                                 batch,
                                 #[cfg(feature = "stats")]
                                 &stats,
@@ -650,14 +646,14 @@ async fn rx_task_uring(
                             })? {
                                 Some(decompressed_batch) => read_batch(
                                     &transport,
-                                    &l,
+                                    &c_link,
                                     decompressed_batch,
                                     #[cfg(feature = "stats")]
                                     &stats,
                                 ),
                                 None => read_batch(
                                     &transport,
-                                    &l,
+                                    &c_link,
                                     batch,
                                     #[cfg(feature = "stats")]
                                     &stats,
@@ -680,7 +676,7 @@ async fn rx_task_uring(
 
                     read_batch(
                         &transport,
-                        &l,
+                        &c_link,
                         batch,
                         #[cfg(feature = "stats")]
                         &stats,
