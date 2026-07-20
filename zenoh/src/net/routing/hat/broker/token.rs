@@ -210,25 +210,6 @@ impl HatTokenTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_tokens(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
-        debug_assert!(self.owns(ctx.src_face));
-
-        let fid = ctx.src_face.id;
-
-        self.face_hat_mut(ctx.src_face)
-            .remote_tokens
-            .drain()
-            .map(|(_, mut res)| {
-                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
-                    get_mut_unchecked(ctx).token = false;
-                }
-
-                res
-            })
-            .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_token(&mut self, ctx: DispatcherContext, res: Arc<Resource>) {
         // NOTE(regions): we don't exclude inbound tokens from the src face as the API includes
         // session-local tokens in liveliness queries/subscribers.

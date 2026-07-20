@@ -54,7 +54,9 @@ use crate::net::{
     routing::{
         dispatcher::{queries::merge_qabl_infos, region::RegionMap},
         gateway::DEFAULT_NODE_ID,
-        hat::{DispatcherContext, Remote, TREES_COMPUTATION_DELAY_MS},
+        hat::{
+            DispatcherContext, Remote, UnregisterFaceEntitiesResult, TREES_COMPUTATION_DELAY_MS,
+        },
     },
     runtime::Runtime,
 };
@@ -341,25 +343,11 @@ impl HatBaseTrait for Hat {
 
                 tracing::trace!(linkstate = ?list);
 
-                let removed_nodes = self
-                    .net_mut()
-                    .link_states(list.link_states, ctx.src_face.zid)
-                    .removed_nodes;
-
-                let removed_subscribers = removed_nodes
-                    .iter()
-                    .flat_map(|(_, node)| self.unregister_node_subscribers(node))
-                    .collect::<HashSet<_>>();
-
-                let removed_queryables = removed_nodes
-                    .iter()
-                    .flat_map(|(_, node)| self.unregister_node_queryables(node))
-                    .collect::<HashSet<_>>();
-
-                let removed_tokens = removed_nodes
-                    .iter()
-                    .flat_map(|(_, node)| self.unregister_node_tokens(node))
-                    .collect::<HashSet<_>>();
+                let UnregisterFaceEntitiesResult {
+                    removed_subscribers,
+                    removed_queryables,
+                    removed_tokens,
+                } = self.unregister_face_entities(ctx.reborrow());
 
                 let region = self.region();
 
@@ -583,4 +571,59 @@ impl HatFace {
     }
 }
 
-impl HatTrait for Hat {}
+impl HatTrait for Hat {
+    fn unregister_face_entities(&mut self, ctx: DispatcherContext) -> UnregisterFaceEntitiesResult {
+        let zid = &ctx.src_face.zid;
+        let removed_routers = self
+            // doesnt need to be mut anymore
+            .net()
+            .find_disconnected_nodes_after_removing_link(zid)
+            .into_iter()
+            .map(|(_, node)| node)
+            .collect::<HashSet<_>>();
+
+        let mut removed_subscribers = HashSet::new();
+        for mut res in self.router_subs.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_subs
+                .retain(|router| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_subs.is_empty() {
+                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_subscribers.insert(res);
+            }
+        }
+
+        let mut removed_queryables = HashSet::new();
+        for mut res in self.router_qabls.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_qabls
+                .retain(|router, _| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_qabls.is_empty() {
+                self.router_qabls.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_queryables.insert(res);
+            }
+        }
+
+        let mut removed_tokens = HashSet::new();
+        for mut res in self.router_tokens.iter().cloned().collect_vec() {
+            self.res_hat_mut(&mut res)
+                .router_tokens
+                .retain(|router| !removed_routers.contains(router));
+
+            if self.res_hat(&res).router_tokens.is_empty() {
+                self.router_tokens.retain(|r| !Arc::ptr_eq(r, &res));
+                removed_tokens.insert(res);
+            }
+        }
+
+        self.net_mut().remove_link(zid);
+
+        UnregisterFaceEntitiesResult {
+            removed_queryables,
+            removed_subscribers,
+            removed_tokens,
+        }
+    }
+}

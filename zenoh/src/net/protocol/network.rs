@@ -954,11 +954,7 @@ impl Network {
         zid: &ZenohIdProto,
     ) -> Vec<(NodeIndex, ZenohIdProto)> {
         if self.full_linkstate || self.gossip_multihop {
-            tracing::info!("graph: {}", self.dot());
-            let disconnected = self.disconnected_nodes_after_removing(Some(zid));
-            tracing::info!("found isolated nodes {disconnected:?}");
-            tracing::info!("graph: {}", self.dot());
-            disconnected
+            self.disconnected_nodes_after_removing(Some(zid))
         } else {
             vec![]
         }
