@@ -48,7 +48,7 @@ async fn main() {
     for idx in 0..5 {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] data");
-        println!("Putting Data ('{}': '{}')...", &pub_key_expr, buf);
+        println!("Putting Data ('{}': '{}')...", pub_key_expr, buf);
         publisher.put(buf).await.unwrap();
     }
 

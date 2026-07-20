@@ -29,7 +29,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring AdvancedPublisher on {}", &key_expr);
+    println!("Declaring AdvancedPublisher on {}", key_expr);
     let publisher = session
         .declare_publisher(&key_expr)
         .cache(CacheConfig::default().max_samples(history))
@@ -42,7 +42,7 @@ async fn main() {
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
-        println!("Put Data ('{}': '{}')", &key_expr, buf);
+        println!("Put Data ('{}': '{}')", key_expr, buf);
         publisher.put(buf).await.unwrap();
     }
 }

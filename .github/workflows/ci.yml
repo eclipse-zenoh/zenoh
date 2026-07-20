@@ -395,7 +395,7 @@ jobs:
 
       - name: Upload fuzz artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-artifacts-pr-smoke
           path: |
@@ -461,7 +461,7 @@ jobs:
         run: |
           cargo +${{ env.NIGHTLY_TOOLCHAIN }} rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features "shared-memory unstable" -j3 \
             -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples \
-            --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
+            --config build.rustdocflags='["--cfg", "docsrs", "-Z", "unstable-options", "--emit=html-non-static-files", "--cap-lints", "warn", "--extern-html-root-takes-precedence"]'
 
   coverage:
     name: Coverage

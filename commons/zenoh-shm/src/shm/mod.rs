@@ -68,17 +68,23 @@ impl<ID: SegmentID> std::fmt::Debug for Segment<ID> {
 
 impl<ID: SegmentID> Segment<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         let inner = platform::SegmentImpl::create(id, len)?;
         Ok(Self { inner })
     }
 
     pub fn open(id: ID) -> ShmOpenResult<Self> {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         let inner = platform::SegmentImpl::open(id)?;
         Ok(Self { inner })
     }
 
     #[allow(unused_variables)]
     pub fn ensure_not_persistent(id: ID) {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         #[cfg(not(target_os = "windows"))]
         platform::SegmentImpl::ensure_not_persistent(id);
     }

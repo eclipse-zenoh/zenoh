@@ -16,7 +16,7 @@
 
 use zenoh_protocol::{
     core::{Bound, Region, WhatAmI, WireExpr},
-    network::Mapping,
+    network::{declare::queryable::ext::QueryableInfoType, Mapping},
 };
 
 use super::{
@@ -315,9 +315,10 @@ fn test_duplicate_queryable_undeclaration() {
             suffix: "".into(),
             mapping: Mapping::Sender,
         },
+        QueryableInfoType::DEFAULT,
     );
 
-    c0.declare_queryable(None, 2, "k");
+    c0.declare_queryable(None, 2, "k", QueryableInfoType::DEFAULT);
 
     c0.undeclare_queryable(1);
 

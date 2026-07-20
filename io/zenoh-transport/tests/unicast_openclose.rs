@@ -460,6 +460,69 @@ async fn openclose_transport(
     tokio::time::sleep(SLEEP).await;
 }
 
+#[cfg(feature = "transport_udp")]
+#[cfg(target_os = "linux")]
+async fn openclose_transport_expect_open_failure(
+    listen_endpoint: &EndPoint,
+    connect_endpoint: &EndPoint,
+    lowlatency_transport: bool,
+) {
+    let router_id = ZenohIdProto::try_from([1]).unwrap();
+    let router_handler = Arc::new(SHRouterOpenClose);
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        2,
+        lowlatency_transport,
+    )
+    .max_sessions(1);
+    let router_manager = TransportManager::builder()
+        .whatami(WhatAmI::Router)
+        .zid(router_id)
+        .unicast(unicast)
+        .build_test(router_handler.clone())
+        .unwrap();
+
+    let client01_id = ZenohIdProto::try_from([2]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        2,
+        lowlatency_transport,
+    )
+    .max_sessions(1);
+    let client01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client01_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClientOpenClose::new()))
+        .unwrap();
+
+    println!("\nTransport Open Close [1a1]");
+    let router_res = ztimeout!(router_manager.add_listener(listen_endpoint.clone()));
+    println!("Transport Open Close [1a1]: {router_res:?}");
+    assert!(router_res.is_ok());
+    println!("Transport Open Close [1a2]");
+    let locators = ztimeout!(router_manager.get_listeners());
+    println!("Transport Open Close [1a2]: {locators:?}");
+    assert_eq!(locators.len(), 1);
+
+    println!("Transport Open Close [1c1]");
+    let open_res = tokio::time::timeout(
+        TIMEOUT_EXPECTED,
+        client01_manager.open_transport_unicast(connect_endpoint.clone()),
+    )
+    .await;
+    println!("Transport Open Close [1c2]: {open_res:?}");
+    assert!(
+        !matches!(open_res, Ok(Ok(_))),
+        "expected transport open to fail or time out, but it succeeded: {open_res:?}"
+    );
+
+    ztimeout!(router_manager.close());
+    ztimeout!(client01_manager.close());
+
+    tokio::time::sleep(SLEEP).await;
+}
+
 async fn openclose_universal_transport(endpoint: &EndPoint) {
     openclose_transport(endpoint, endpoint, false).await
 }
@@ -750,7 +813,6 @@ async fn openclose_udp_only_connect_with_interface_restriction() {
 
 #[cfg(feature = "transport_udp")]
 #[cfg(target_os = "linux")]
-#[should_panic(expected = "Elapsed")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_listen_with_interface_restriction() {
     let addrs = get_ipv4_ipaddrs(None);
@@ -764,7 +826,7 @@ async fn openclose_udp_only_listen_with_interface_restriction() {
     let connect_endpoint: EndPoint = format!("udp/{}:{}", addrs[0], port).parse().unwrap();
 
     // should not connect to local interface and external address
-    openclose_transport(&listen_endpoint, &connect_endpoint, false).await;
+    openclose_transport_expect_open_failure(&listen_endpoint, &connect_endpoint, false).await;
 }
 
 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
