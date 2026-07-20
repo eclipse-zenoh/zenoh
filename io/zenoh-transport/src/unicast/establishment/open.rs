@@ -626,7 +626,7 @@ pub(crate) async fn open_link(
         link.clone(),
         config,
         #[cfg(feature = "shared-memory")]
-        LinkShmHandoffConfig::new_disaled().into(),
+        LinkShmHandoffConfig::new_disabled().into(),
     );
     let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
@@ -750,7 +750,7 @@ pub(crate) async fn open_link(
     let (transport_shm, link_shm) = fsm
         .ext_shm
         .take()
-        .map_or((None, LinkShmHandoffConfig::new_disaled()), |shm| {
+        .map_or((None, LinkShmHandoffConfig::new_disabled()), |shm| {
             shm.shm_init_result()
         });
 
@@ -816,7 +816,7 @@ pub(crate) async fn open_link(
                 LinkUnicast::from(best_effort),
                 o_config,
                 #[cfg(feature = "shared-memory")]
-                LinkShmHandoffConfig::new_disaled().into(),
+                LinkShmHandoffConfig::new_disabled().into(),
             );
             Some(link)
         }

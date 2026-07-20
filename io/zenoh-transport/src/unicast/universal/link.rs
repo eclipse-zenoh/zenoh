@@ -485,7 +485,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                     let header_bytes = if link.link.is_streamed { 2 } else { 0 };
                     stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                 }
-                transport.read_messages(batch, &link, #[cfg(feature = "stats")] &stats)?;
+                transport.read_messages(batch, link, #[cfg(feature = "stats")] &stats)?;
             }
             _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());

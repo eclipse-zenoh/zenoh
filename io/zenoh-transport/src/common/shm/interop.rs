@@ -202,7 +202,7 @@ impl LinkShmHandoffConfig {
         Self { rx, tx }
     }
 
-    pub fn new_disaled() -> Self {
+    pub fn new_disabled() -> Self {
         Self {
             rx: RxHandoffChannel::Disabled,
             tx: TxHandoffChannel::new_disabled(),

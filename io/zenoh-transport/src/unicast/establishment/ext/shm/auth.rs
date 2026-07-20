@@ -272,7 +272,7 @@ impl<'a> ShmFsm<'a> {
             .into_inner()
             .zip(self.tx_lease.into_inner())
             .map(|(rx_lease, tx_lease)| LinkShmHandoffConfig::new(rx_lease, tx_lease))
-            .unwrap_or(LinkShmHandoffConfig::new_disaled());
+            .unwrap_or(LinkShmHandoffConfig::new_disabled());
 
         (transport, link)
     }

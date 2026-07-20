@@ -738,7 +738,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         link.clone(),
         config,
         #[cfg(feature = "shared-memory")]
-        LinkShmHandoffConfig::new_disaled().into(),
+        LinkShmHandoffConfig::new_disabled().into(),
     );
     let mut fsm = AcceptLink {
         link: &mut link_unicast,
@@ -856,7 +856,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     let (transport_shm, link_shm) = fsm
         .ext_shm
         .take()
-        .map_or((None, LinkShmHandoffConfig::new_disaled()), |shm| {
+        .map_or((None, LinkShmHandoffConfig::new_disabled()), |shm| {
             shm.shm_init_result()
         });
 
@@ -922,7 +922,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 LinkUnicast::from(best_effort),
                 o_config,
                 #[cfg(feature = "shared-memory")]
-                LinkShmHandoffConfig::new_disaled().into(),
+                LinkShmHandoffConfig::new_disabled().into(),
             );
             Some(link)
         }
