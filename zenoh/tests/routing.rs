@@ -1042,7 +1042,9 @@ async fn three_node_combination() -> Result<()> {
         let mut join_set = tokio::task::JoinSet::new();
         for (pubsub, getqueryable, getliveliness, subliveliness) in chunks {
             join_set.spawn(async move {
-                pubsub.run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT).await?;
+                pubsub
+                    .run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT)
+                    .await?;
                 getqueryable
                     .run_with_timeout(THREE_NODE_COMBINATION_TIMEOUT)
                     .await?;
