@@ -131,6 +131,6 @@ jobs:
         run: >
           cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features unstable -j3
           -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples
-          --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]'
+          --config build.rustdocflags='["-Z", "unstable-options", "--emit=html-non-static-files", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]'
         env:
           RUSTDOCFLAGS: -Dwarnings
