@@ -556,14 +556,21 @@ impl Primitives for Face {
             // that expect all state dropped immediately after close(). Plain
             // spawn_with_rt makes Session::close()'s task_controller wait for
             // genuine completion instead, bounded by its own timeout either way.
+            //
+            // Application, not Net: ZRuntime::Net is configured with a single
+            // worker thread and is also where transport teardown runs (see
+            // handle_close in io/zenoh-transport/.../rx.rs), which calls
+            // TaskController::terminate_all -- a blocking call that stalls
+            // Net's one worker for up to its own timeout. Queuing this replay
+            // on Net too serializes it behind every concurrent face teardown;
+            // Application's multi-worker pool avoids that bottleneck.
             let _handle = self.state.task_controller.spawn_with_rt(
-                zenoh_runtime::ZRuntime::Net,
+                zenoh_runtime::ZRuntime::Application,
                 async move {
                     // `send_declare` may invoke a blocking user callback, which
-                    // would otherwise starve ZRuntime::Net's small async-worker
-                    // pool (shared with Session::close_inner's teardown). Run it
-                    // on Net's separate blocking-thread pool instead.
-                    if let Err(e) = zenoh_runtime::ZRuntime::Net
+                    // would otherwise starve the async worker pool. Run it on
+                    // a separate blocking-thread pool instead.
+                    if let Err(e) = zenoh_runtime::ZRuntime::Application
                         .spawn_blocking(move || {
                             for (p, m) in declares {
                                 m.with_mut(|m| p.send_declare(m));
