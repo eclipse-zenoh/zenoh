@@ -75,6 +75,9 @@ use crate::net::{
     runtime::{Runtime, RuntimeBuilder},
 };
 
+/// Bound on how long [`MockFace::wait_for_declare_final`] polls before panicking.
+const DECLARE_FINAL_TIMEOUT: Duration = Duration::from_secs(5);
+
 pub(crate) fn try_init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -384,6 +387,20 @@ impl RecordingPrimitives {
     pub(crate) fn clear(&self) {
         self.messages.lock().unwrap().clear();
     }
+
+    /// Whether a `DeclareFinal` for `interest_id` has been recorded.
+    pub(crate) fn has_declare_final(&self, interest_id: InterestId) -> bool {
+        self.messages.lock().unwrap().iter().any(|m| {
+            matches!(
+                m,
+                Message::Declare(Declare {
+                    interest_id: Some(id),
+                    body: DeclareBody::DeclareFinal(_),
+                    ..
+                }) if *id == interest_id
+            )
+        })
+    }
 }
 
 impl Primitives for RecordingPrimitives {
@@ -682,11 +699,11 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
-        // `send_interest`'s local-face replay (declares + DeclareFinal) runs on a
-        // spawned task now, not synchronously on this thread -- give it a moment
-        // to land before returning, since callers immediately inspect the
-        // recorder synchronously.
-        thread::sleep(Duration::from_millis(50));
+        // A `Final`-mode interest tears down a prior registration and never
+        // produces its own `DeclareFinal`.
+        if mode != InterestMode::Final {
+            self.wait_for_declare_final(id);
+        }
     }
 
     /// Declare an interest without a key expression.
@@ -705,7 +722,27 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
-        thread::sleep(Duration::from_millis(50));
+        // A `Final`-mode interest tears down a prior registration and never
+        // produces its own `DeclareFinal`.
+        if mode != InterestMode::Final {
+            self.wait_for_declare_final(id);
+        }
+    }
+
+    /// Block until a `DeclareFinal` for `interest_id` is recorded, or panic after
+    /// [`DECLARE_FINAL_TIMEOUT`]. `send_interest`'s local-face replay (declares +
+    /// `DeclareFinal`) runs on a spawned task, not synchronously, so callers that
+    /// immediately inspect the recorder must wait for this observable completion
+    /// marker rather than a fixed sleep.
+    pub(crate) fn wait_for_declare_final(&self, interest_id: InterestId) {
+        let deadline = std::time::Instant::now() + DECLARE_FINAL_TIMEOUT;
+        while !self.recorder.has_declare_final(interest_id) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "timed out after {DECLARE_FINAL_TIMEOUT:?} waiting for DeclareFinal(interest_id={interest_id})"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
     }
 
     /// Declare a liveliness token for `key_expr` from this face's perspective.
@@ -1109,10 +1146,11 @@ impl EstablishedConnection {
             Message::ResponseFinal(r) => target.face.send_response_final(&mut r.clone()),
             Message::Interest(i) => {
                 target.face.send_interest(&mut i.clone());
-                // See the comment on `MockFace::interest` -- send_interest's
-                // local-face replay now runs on a spawned task, not
-                // synchronously; give it a moment to land before returning.
-                thread::sleep(Duration::from_millis(50));
+                // A `Final`-mode interest tears down a prior registration and
+                // never produces its own `DeclareFinal`.
+                if i.mode != InterestMode::Final {
+                    target.wait_for_declare_final(i.id);
+                }
             }
             Message::Oam(o) => {
                 if let Some(demux) = &target.demux {

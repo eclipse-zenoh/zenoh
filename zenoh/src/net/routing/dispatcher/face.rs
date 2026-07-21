@@ -556,24 +556,35 @@ impl Primitives for Face {
             // that expect all state dropped immediately after close(). Plain
             // spawn_with_rt makes Session::close()'s task_controller wait for
             // genuine completion instead, bounded by its own timeout either way.
-            self.state
-                .task_controller
-                .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
-                    // `send_declare` may invoke a blocking user callback, which
-                    // would otherwise starve ZRuntime::Net's small async-worker
-                    // pool (shared with Session::close_inner's teardown). Run it
-                    // on Net's separate blocking-thread pool instead.
-                    if let Err(e) = zenoh_runtime::ZRuntime::Net
-                        .spawn_blocking(move || {
-                            for (p, m) in declares {
-                                m.with_mut(|m| p.send_declare(m));
+            let _handle =
+                self.state
+                    .task_controller
+                    .spawn_with_rt(zenoh_runtime::ZRuntime::Net, async move {
+                        // `send_declare` may invoke a blocking user callback, which
+                        // would otherwise starve ZRuntime::Net's small async-worker
+                        // pool (shared with Session::close_inner's teardown). Run it
+                        // on Net's separate blocking-thread pool instead.
+                        if let Err(e) = zenoh_runtime::ZRuntime::Net
+                            .spawn_blocking(move || {
+                                for (p, m) in declares {
+                                    m.with_mut(|m| p.send_declare(m));
+                                }
+                            })
+                            .await
+                        {
+                            if e.is_panic() {
+                                tracing::error!(
+                                    ?e,
+                                    "panic while replaying declares for send_interest"
+                                );
+                            } else {
+                                tracing::debug!(
+                                    ?e,
+                                    "declare replay for send_interest was cancelled"
+                                );
                             }
-                        })
-                        .await
-                    {
-                        tracing::error!(?e, "panic while replaying declares for send_interest");
-                    }
-                });
+                        }
+                    });
         } else {
             self.interest_final(msg);
         }

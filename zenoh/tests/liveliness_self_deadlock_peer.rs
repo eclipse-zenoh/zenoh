@@ -1,7 +1,9 @@
 //! Regression test: a peer-mode `Session` declares 300 liveliness tokens on
 //! itself, then queries its own local table with the default 256-slot
-//! handler -- the exact path that self-deadlocked pre-fix (see
-//! KNOWLEDGE.md). Must complete promptly and deliver every reply.
+//! handler -- the exact path that self-deadlocked pre-fix, because the
+//! synchronous token replay in `Face::send_interest` ran on the same
+//! thread that was about to drain the reply channel. Must complete
+//! promptly and deliver every reply.
 //!
 //! Own test binary (own OS process) so its deliberately-leaked
 //! session/tokens/thread can't autoconnect to and contaminate
@@ -30,7 +32,11 @@ fn candidate_a_peer_mode() {
         let result = rt.block_on(async {
             let mut config = Config::default();
             config.set_mode(Some(WhatAmI::Peer)).unwrap();
-            // No network: no listen/connect endpoints configured.
+            // No network: no listen/connect endpoints, and scouting disabled
+            // so this session can't discover or autoconnect to unrelated
+            // sessions from other test binaries running concurrently.
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            config.scouting.gossip.set_enabled(Some(false)).unwrap();
             let session = zenoh::open(config).await.unwrap();
 
             let mut tokens = Vec::with_capacity(N_TOKENS);
