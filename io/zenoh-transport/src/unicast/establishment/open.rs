@@ -19,8 +19,6 @@ use zenoh_buffers::ZSlice;
 use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
 use zenoh_link::{EndPoint, LinkUnicast};
-#[cfg(feature = "shared-memory")]
-use zenoh_protocol::core::Reliability::BestEffort;
 use zenoh_protocol::{
     core::{Bound, Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
@@ -405,7 +403,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(ext_shm) => ext_shm
-                .send_open_syn(link.config.reliability.unwrap_or(BestEffort))
+                .send_open_syn(link.link.is_reliable().into())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,

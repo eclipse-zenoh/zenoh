@@ -45,7 +45,7 @@ pub(crate) struct TransportLinkUnicastConfig {
 }
 
 #[cfg(feature = "shared-memory")]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub(crate) struct TransportLinkShmHandoff {
     pub(crate) tx: TxHandoffStorage,
     pub(crate) rx: Arc<RxHandoffChannel>,
@@ -88,6 +88,15 @@ impl TransportLinkUnicast {
         new_config: TransportLinkUnicastConfig,
         #[cfg(feature = "shared-memory")] shm_handoff: TransportLinkShmHandoff,
     ) -> Self {
+        #[cfg(not(feature = "shared-memory"))]
+        tracing::debug!("Link {:?}: reconfiguring to {:?}", self, new_config);
+        #[cfg(feature = "shared-memory")]
+        tracing::debug!(
+            "Link {:?}: reconfiguring to {:?}, handoff: {:?}",
+            self,
+            new_config,
+            shm_handoff
+        );
         Self::init(
             self.link,
             new_config,

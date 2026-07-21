@@ -267,10 +267,13 @@ impl<'a> ShmFsm<'a> {
 
     pub fn shm_init_result(self) -> (Option<TransportShmConfig>, LinkShmHandoffConfig) {
         let transport = self.rx_segment.into_inner().map(TransportShmConfig::new);
-        let link = self
-            .rx_lease
-            .into_inner()
-            .zip(self.tx_lease.into_inner())
+
+        let rx_handoff = self.rx_lease.into_inner();
+        let tx_handoff = self.tx_lease.into_inner();
+
+        let zipped = rx_handoff.zip(tx_handoff);
+
+        let link = zipped
             .map(|(rx_lease, tx_lease)| LinkShmHandoffConfig::new(rx_lease, tx_lease))
             .unwrap_or(LinkShmHandoffConfig::new_disabled());
 

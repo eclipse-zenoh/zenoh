@@ -21,8 +21,6 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::LinkUnicast;
-#[cfg(feature = "shared-memory")]
-use zenoh_protocol::core::Reliability::BestEffort;
 use zenoh_protocol::{
     core::{Bound, Field, Resolution, WhatAmI, ZenohIdProto},
     transport::{
@@ -624,7 +622,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_open_ack(self.link.config.reliability.unwrap_or(BestEffort))
+                .send_open_ack(self.link.link.is_reliable().into())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,

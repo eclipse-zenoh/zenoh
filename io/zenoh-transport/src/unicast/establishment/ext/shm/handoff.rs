@@ -116,7 +116,7 @@ impl TxHandoffChannel {
 struct TxHandoffTask {
     counter: ShmTXCounterLease,
     handoffs_len: AtomicUsize,
-    handoffs: lockfree::queue::Queue<ShmBufHardRef>,
+    handoffs: lockfree::queue::Queue<Option<ShmBufHardRef>>,
 }
 
 impl TxHandoffTask {
@@ -204,7 +204,7 @@ impl TxHandoff {
 
         let len = lock.len();
         while let Some(h) = lock.pop_front() {
-            self.inner.task.handoffs.push(h);
+            self.inner.task.handoffs.push(Some(h));
         }
         self.inner.task.handoffs_len.fetch_add(len, SeqCst);
     }
