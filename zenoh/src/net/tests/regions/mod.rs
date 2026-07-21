@@ -75,8 +75,15 @@ use crate::net::{
     runtime::{Runtime, RuntimeBuilder},
 };
 
-/// Bound on how long [`MockFace::wait_for_declare_final`] polls before panicking.
-const DECLARE_FINAL_TIMEOUT: Duration = Duration::from_secs(5);
+/// Bound on how long [`MockFace::settle_after_send_interest`] polls before
+/// giving up. `DeclareFinal` is only sent when the interest resolves
+/// entirely locally (`RouteInterestResult::ResolvedCurrentInterest`, see
+/// `dispatcher/interests.rs`); interests requiring cross-region forwarding
+/// stay unresolved until the caller's own `bi_fwd_all()` pumps messages
+/// across the mock connections, so this settle window must not block
+/// indefinitely (or assert) waiting for something that may legitimately
+/// not have happened yet.
+const DECLARE_FINAL_SETTLE: Duration = Duration::from_millis(500);
 
 pub(crate) fn try_init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt()
@@ -702,7 +709,7 @@ impl MockFace {
         // A `Final`-mode interest tears down a prior registration and never
         // produces its own `DeclareFinal`.
         if mode != InterestMode::Final {
-            self.wait_for_declare_final(id);
+            self.settle_after_send_interest(id);
         }
     }
 
@@ -725,22 +732,23 @@ impl MockFace {
         // A `Final`-mode interest tears down a prior registration and never
         // produces its own `DeclareFinal`.
         if mode != InterestMode::Final {
-            self.wait_for_declare_final(id);
+            self.settle_after_send_interest(id);
         }
     }
 
-    /// Block until a `DeclareFinal` for `interest_id` is recorded, or panic after
-    /// [`DECLARE_FINAL_TIMEOUT`]. `send_interest`'s local-face replay (declares +
-    /// `DeclareFinal`) runs on a spawned task, not synchronously, so callers that
-    /// immediately inspect the recorder must wait for this observable completion
-    /// marker rather than a fixed sleep.
-    pub(crate) fn wait_for_declare_final(&self, interest_id: InterestId) {
-        let deadline = std::time::Instant::now() + DECLARE_FINAL_TIMEOUT;
+    /// Give `send_interest`'s spawned replay a chance to land before
+    /// returning, by polling for `interest_id`'s `DeclareFinal` up to
+    /// [`DECLARE_FINAL_SETTLE`]. Best-effort: returns as soon as the
+    /// completion marker is observed, but does *not* fail if it never
+    /// shows up locally -- an interest requiring cross-region forwarding
+    /// only resolves once the caller pumps messages (e.g. `bi_fwd_all()`),
+    /// so this must never hard-block or assert.
+    pub(crate) fn settle_after_send_interest(&self, interest_id: InterestId) {
+        let deadline = std::time::Instant::now() + DECLARE_FINAL_SETTLE;
         while !self.recorder.has_declare_final(interest_id) {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "timed out after {DECLARE_FINAL_TIMEOUT:?} waiting for DeclareFinal(interest_id={interest_id})"
-            );
+            if std::time::Instant::now() >= deadline {
+                return;
+            }
             thread::sleep(Duration::from_millis(1));
         }
     }
@@ -1149,7 +1157,7 @@ impl EstablishedConnection {
                 // A `Final`-mode interest tears down a prior registration and
                 // never produces its own `DeclareFinal`.
                 if i.mode != InterestMode::Final {
-                    target.wait_for_declare_final(i.id);
+                    target.settle_after_send_interest(i.id);
                 }
             }
             Message::Oam(o) => {
