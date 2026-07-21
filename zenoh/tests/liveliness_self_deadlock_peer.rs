@@ -1,16 +1,11 @@
-//! Candidate A, vulnerable path (regression test post-fix): single `Session`
-//! in peer mode declares 300 liveliness tokens on itself, then queries its
-//! own local table with the default (256-slot) bounded FIFO handler.
-//! Pre-fix, this self-deadlocked (see KNOWLEDGE.md); post-fix (async
-//! replay in `Face::send_interest`), it must complete promptly and deliver
-//! every reply.
+//! Regression test: a peer-mode `Session` declares 300 liveliness tokens on
+//! itself, then queries its own local table with the default 256-slot
+//! handler -- the exact path that self-deadlocked pre-fix (see
+//! KNOWLEDGE.md). Must complete promptly and deliver every reply.
 //!
-//! Deliberately its own single-test file (its own cargo test binary / OS
-//! process, not merged with `liveliness_self_deadlock_router.rs`) so this
-//! test's deliberately-leaked session/tokens/thread can never contaminate
-//! another test -- running both in the same process previously caused real
-//! cross-test interference (leaked sessions autoconnecting to each other
-//! via scouting/multicast, which is enabled by default).
+//! Own test binary (own OS process) so its deliberately-leaked
+//! session/tokens/thread can't autoconnect to and contaminate
+//! `liveliness_self_deadlock_router.rs` via default scouting/multicast.
 
 use std::{sync::mpsc, time::Duration};
 
@@ -46,11 +41,9 @@ fn candidate_a_peer_mode() {
             }
             eprintln!("[candidate-a] declared {} tokens", tokens.len());
 
-            // This is the synchronous, blocking call under test. The
-            // hypothesis is that it self-deadlocks regardless of executor
-            // because it's the *same* calling thread doing both the
-            // declare-replay writes and (would-be) the channel drain, and
-            // replay happens before the function returns.
+            // The blocking call under test: replay and the reply-channel
+            // drain would run on this same thread, and replay happens
+            // before the call returns.
             eprintln!("[candidate-a] issuing liveliness_query (blocking wait)...");
             let replies = session
                 .liveliness()
@@ -75,18 +68,10 @@ fn candidate_a_peer_mode() {
                 }
             };
 
-            // Leak `tokens` and `session` deliberately. Dropping 300
-            // LivelinessTokens (and the Session itself) triggers a second
-            // round of synchronous undeclare/cleanup work that can itself
-            // take a long time (or hang) -- and since Drop runs as part of
-            // this async block's scope exit, it would run *before*
-            // `rt.block_on` returns to the outer thread, confounding
-            // "did the query hang" with "did cleanup hang". Leaking here
-            // decouples the two: the moment the query genuinely completes
-            // (or doesn't), that's what determines the test's timing, not
-            // teardown cost. This test is its own cargo test binary (own
-            // OS process), so leaking here cannot contaminate any other
-            // test.
+            // Leak deliberately: dropping 300 tokens triggers its own
+            // synchronous cleanup, which would run before `block_on`
+            // returns and confound "did the query hang" with "did
+            // teardown hang". Safe to leak -- own process, exits after.
             std::mem::forget(tokens);
             std::mem::forget(session);
 
@@ -111,14 +96,9 @@ fn candidate_a_peer_mode() {
         }
     };
 
-    // Deliberately never join() the background thread, in either branch.
-    // The query outcome is already known from the channel recv above; the
-    // background thread's tokio Runtime, when it eventually drops (in the
-    // no-hang case) or never does (in the HUNG case), blocks until all of
-    // the session's own spawned background tasks terminate -- which is
-    // teardown cost unrelated to the query itself and must not be allowed
-    // to confound (or wedge) this test's pass/fail signal. Leak the thread;
-    // process exit reaps it.
+    // Never join(): the Runtime's own drop would block on teardown,
+    // which is unrelated to (and could wedge) the query outcome we
+    // already have. Leak the thread; process exit reaps it.
     std::mem::forget(handle);
 
     eprintln!("=== candidate_a_peer_mode result: {outcome}, {reply_count} replies ===");
