@@ -24,9 +24,14 @@ use zenoh_result::ZResult;
 use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
+        },
         bytes::ZBytes,
         encoding::Encoding,
         handlers::{locked, Callback, DefaultHandler, IntoHandler},
@@ -79,6 +84,8 @@ pub struct SessionGetBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
+    pub(crate) timestamp_instrumentation: Option<TimestampInstrumentation>,
+    #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
@@ -99,6 +106,20 @@ impl<Handler> SampleBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
         let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+impl<Handler> TimestampInstrumentationBuilderTrait for SessionGetBuilder<'_, '_, Handler> {
+    #[zenoh_macros::unstable]
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self {
+        Self {
+            timestamp_instrumentation: instrumentation.into(),
             ..self
         }
     }
@@ -264,6 +285,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation,
             handler: _,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -280,6 +303,8 @@ impl<'a, 'b> SessionGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation,
             handler,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -405,6 +430,8 @@ where
             self.cancellation_token,
             None,
             None,
+            #[cfg(feature = "unstable")]
+            self.timestamp_instrumentation,
         )?;
         Ok(receiver)
     }

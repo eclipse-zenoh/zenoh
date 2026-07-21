@@ -504,6 +504,7 @@ impl MockFace {
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
+                ext_ts_stack: None,
                 payload: PushBody::Put(Put {
                     payload: payload.into(),
                     ..Default::default()
@@ -524,6 +525,7 @@ impl MockFace {
             ext_target: QueryTarget::DEFAULT,
             ext_budget: None,
             ext_timeout: None,
+            ext_ts_stack: None,
             payload: RequestBody::Query(Query::default()),
         });
     }
@@ -537,6 +539,7 @@ impl MockFace {
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
+                ext_ts_stack: None,
                 payload: PushBody::Del(Del::default()),
             },
             Reliability::BestEffort,

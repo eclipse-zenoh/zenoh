@@ -56,6 +56,7 @@ pub struct Response {
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_respid: Option<ext::ResponderIdType>,
+    pub ext_ts_stack: Option<ext::TsStackType>,
 }
 
 pub mod ext {
@@ -68,6 +69,9 @@ pub mod ext {
 
     pub type ResponderId = zextzbuf!(0x3, false);
     pub type ResponderIdType = crate::network::ext::EntityGlobalIdType<{ ResponderId::ID }>;
+
+    pub type TsStack = zextzbuf!(0x7, false);
+    pub type TsStackType = crate::network::timestamp_stack::TsStackType<{ TsStack::ID }>;
 }
 
 impl Response {
@@ -95,6 +99,7 @@ impl Response {
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_respid = rng.gen_bool(0.5).then(ext::ResponderIdType::rand);
+        let ext_ts_stack = rng.gen_bool(0.5).then(ext::TsStackType::rand);
 
         Self {
             rid,
@@ -103,6 +108,7 @@ impl Response {
             ext_qos,
             ext_tstamp,
             ext_respid,
+            ext_ts_stack,
         }
     }
 }
