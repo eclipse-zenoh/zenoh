@@ -66,7 +66,7 @@ pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
     #[cfg(feature = "shared-memory")]
-    pub(crate) shm_handoff: TransportLinkShmHandoff,
+    pub(crate) shm_handoff: Box<TransportLinkShmHandoff>,
 }
 
 impl TransportLinkUnicast {
@@ -116,7 +116,7 @@ impl TransportLinkUnicast {
             link,
             config,
             #[cfg(feature = "shared-memory")]
-            shm_handoff,
+            shm_handoff: Box::new(shm_handoff),
         }
     }
 

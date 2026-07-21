@@ -41,7 +41,7 @@ impl<T: Sized> PriorityContainer<T> {
         Ok(Self { per_prio_objects })
     }
 
-    pub fn from_fn_infallable(ctor_fn: impl Fn(Priority) -> T) -> Self {
+    pub fn from_fn_infallible(ctor_fn: impl Fn(Priority) -> T) -> Self {
         let per_prio_objects = std::array::from_fn(|prio| {
             // SAFETY: `Priority` is guaranteed to be in the range 0..=7, so this conversion is safe.
             ctor_fn(unsafe { (prio as u8).try_into().unwrap_unchecked() })
@@ -57,7 +57,7 @@ impl<T: Sized> PriorityContainer<T> {
         &self,
         map_fn: impl Fn(&T) -> Tother,
     ) -> PriorityContainer<Tother> {
-        PriorityContainer::from_fn_infallable(|prio| {
+        PriorityContainer::from_fn_infallible(|prio| {
             let obj = &self.per_prio_objects[prio as usize];
             map_fn(obj)
         })
@@ -69,7 +69,7 @@ impl<'a, T: Sized> IntoIterator for &'a PriorityContainer<T> {
     type IntoIter = core::slice::Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.per_prio_objects).into_iter()
+        (&self.per_prio_objects).iter()
     }
 }
 

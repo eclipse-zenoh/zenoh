@@ -384,7 +384,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Allocate TX counter for this session
-        let tx_handoff = TxHandoffChannel::new_tx(reliability, &self.inner)?;
+        let tx_handoff = TxHandoffChannel::new_tx(reliability, self.inner)?;
 
         let open_syn = OpenSyn {
             bob_challenge: rx_segment.challenge(),
@@ -587,7 +587,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         let reliability = input;
 
         // Allocate TX counter for this session
-        let tx_handoff = TxHandoffChannel::new_tx(reliability, &self.inner)?;
+        let tx_handoff = TxHandoffChannel::new_tx(reliability, self.inner)?;
 
         let open_ack = OpenAck {
             bob_counters: tx_handoff.ids(),

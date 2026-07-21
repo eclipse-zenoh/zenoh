@@ -182,9 +182,9 @@ impl LazyShmProvider {
             *slice = shmbuf.into();
             slice.kind = ZSliceKind::ShmPtr;
             *ext_shm = Some(ShmType::new());
-            handoff_transaction.as_ref().inspect(|transaction| {
+            if let Some(transaction) = &handoff_transaction {
                 transaction.on_tx(reference);
-            });
+            }
             return true;
         }
         false
@@ -238,11 +238,11 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
     }
 }
 
-pub fn map_zmsg_to_partner<'a, ShmCfg: PartnerShmConfig>(
+pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
-    handoff: &'a TxHandoffStorage,
+    handoff: &TxHandoffStorage,
 ) -> Option<TxHandoffTransaction> {
     match &mut msg.body {
         NetworkBodyMut::Push(Push {
@@ -364,9 +364,10 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
-                    handoff_transaction.as_ref().inspect(|transaction| {
+                    if let Some(transaction) = &handoff_transaction {
                         transaction.on_tx(shmb.into());
-                    });
+                    }
+
                     zs.kind = ZSliceKind::ShmPtr;
                     *ext_shm = Some(ShmType::new());
                 }

@@ -229,7 +229,7 @@ impl From<TxHandoffChannel> for TxHandoffStorage {
     fn from(value: TxHandoffChannel) -> Self {
         match value.0 {
             HandoffConfig::PerPrio(prio_container) => {
-                let prio_container = prio_container.map(|counter| TxHandoff::new(counter));
+                let prio_container = prio_container.map(TxHandoff::new);
                 Self(HandoffConfig::PerPrio(prio_container))
             }
             HandoffConfig::Disabled => Self(HandoffConfig::Disabled),
@@ -265,7 +265,7 @@ impl Drop for TxHandoffTransaction {
     }
 }
 
-impl<'a, 'b, W> WCodec<&'a PriorityContainer<ShmCounterID>, &'b mut W> for Zenoh080
+impl<W> WCodec<&PriorityContainer<ShmCounterID>, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -279,7 +279,7 @@ where
     }
 }
 
-impl<'a, R> RCodec<PriorityContainer<ShmCounterID>, &'a mut R> for Zenoh080
+impl<R> RCodec<PriorityContainer<ShmCounterID>, &mut R> for Zenoh080
 where
     R: Reader,
 {
