@@ -17,8 +17,8 @@ mod tests {
         any::Any,
         convert::TryFrom,
         sync::{
-            atomic::{AtomicUsize, Ordering},
-            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc, Condvar, Mutex,
         },
         time::Duration,
     };
@@ -50,6 +50,12 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
+
+    const STALLED_QUEUE_BARRIER_MARKER: u8 = 0x01;
+    const STALLED_QUEUE_SHM_MARKER: u8 = 0xa5;
+    const STALLED_QUEUE_SHM_COUNT: usize = 32;
+    const STALLED_QUEUE_SHM_SIZE: usize = 4 * 1024;
+    const STALLED_QUEUE_DURATION: Duration = Duration::from_secs(1);
 
     // Transport Handler for the router
     struct SHPeer {
@@ -142,6 +148,237 @@ mod tests {
         fn as_any(&self) -> &dyn Any {
             self
         }
+    }
+
+    struct StallGate {
+        entered: AtomicBool,
+        released: Mutex<bool>,
+        released_cv: Condvar,
+    }
+
+    impl StallGate {
+        fn new() -> Self {
+            Self {
+                entered: AtomicBool::new(false),
+                released: Mutex::new(false),
+                released_cv: Condvar::new(),
+            }
+        }
+
+        fn block(&self) {
+            self.entered.store(true, Ordering::SeqCst);
+
+            let mut released = self.released.lock().unwrap();
+            while !*released {
+                released = self.released_cv.wait(released).unwrap();
+            }
+        }
+
+        fn is_entered(&self) -> bool {
+            self.entered.load(Ordering::SeqCst)
+        }
+
+        fn release(&self) {
+            *self.released.lock().unwrap() = true;
+            self.released_cv.notify_all();
+        }
+    }
+
+    struct StallReleaseGuard(Arc<StallGate>);
+
+    impl Drop for StallReleaseGuard {
+        fn drop(&mut self) {
+            self.0.release();
+        }
+    }
+
+    struct StalledQueuePeer {
+        gate: Arc<StallGate>,
+        shm_received: Arc<AtomicUsize>,
+    }
+
+    impl StalledQueuePeer {
+        fn new() -> Self {
+            Self {
+                gate: Arc::new(StallGate::new()),
+                shm_received: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+
+        fn is_stalled(&self) -> bool {
+            self.gate.is_entered()
+        }
+
+        fn shm_received(&self) -> usize {
+            self.shm_received.load(Ordering::SeqCst)
+        }
+    }
+
+    impl TransportEventHandler for StalledQueuePeer {
+        fn new_unicast(
+            &self,
+            _peer: TransportPeer,
+            _transport: TransportUnicast,
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            Ok(Arc::new(StalledQueueSCPeer {
+                gate: self.gate.clone(),
+                shm_received: self.shm_received.clone(),
+            }))
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
+        }
+    }
+
+    struct StalledQueueSCPeer {
+        gate: Arc<StallGate>,
+        shm_received: Arc<AtomicUsize>,
+    }
+
+    impl TransportPeerEventHandler for StalledQueueSCPeer {
+        fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
+            let mut any_shm = false;
+            let mut all_shm = true;
+            let payload = match message.body {
+                NetworkBodyMut::Push(m) => match &mut m.payload {
+                    PushBody::Put(Put { payload, .. }) => {
+                        for zs in payload.zslices() {
+                            let is_shm = zs.downcast_ref::<ShmBufInner>().is_some();
+                            any_shm |= is_shm;
+                            all_shm &= is_shm;
+                        }
+                        payload.contiguous().into_owned()
+                    }
+                    _ => panic!("Unsolicited message"),
+                },
+                _ => panic!("Unsolicited message"),
+            };
+
+            match payload.first().copied() {
+                Some(STALLED_QUEUE_BARRIER_MARKER) => {
+                    assert!(!any_shm);
+                    assert_eq!(payload.len(), 1);
+                    self.gate.block();
+                }
+                Some(STALLED_QUEUE_SHM_MARKER) => {
+                    assert!(
+                        any_shm && all_shm,
+                        "expected every queued payload slice to remain SHM-backed"
+                    );
+                    assert_eq!(payload.len(), STALLED_QUEUE_SHM_SIZE);
+
+                    let mut sequence_bytes = [0_u8; 8];
+                    sequence_bytes.copy_from_slice(&payload[1..9]);
+                    let sequence = u64::from_le_bytes(sequence_bytes) as usize;
+                    let expected_sequence = self.shm_received.fetch_add(1, Ordering::SeqCst);
+                    assert_eq!(sequence, expected_sequence);
+                    assert!(payload[9..]
+                        .iter()
+                        .all(|byte| *byte == STALLED_QUEUE_SHM_MARKER));
+                }
+                marker => panic!("unexpected payload marker: {marker:?}"),
+            }
+
+            Ok(())
+        }
+
+        fn new_link(&self, _link: Link) {}
+        fn del_link(&self, _link: Link) {}
+        fn closed(&self) {}
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    async fn run_stalled_queue_test(endpoint: &EndPoint) {
+        let receiver_zid = ZenohIdProto::try_from([4]).unwrap();
+        let sender_zid = ZenohIdProto::try_from([5]).unwrap();
+
+        let backend = PosixShmProviderBackendBinaryHeap::builder(
+            2 * STALLED_QUEUE_SHM_COUNT * STALLED_QUEUE_SHM_SIZE,
+        )
+        .wait()
+        .unwrap();
+        let shm_provider = ShmProviderBuilder::backend(backend).wait();
+
+        let receiver_handler = Arc::new(StalledQueuePeer::new());
+        let receiver_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(receiver_zid)
+            .unicast(TransportManager::config_unicast().qos(true))
+            .build_test(receiver_handler.clone())
+            .unwrap();
+
+        let sender_handler = Arc::new(SHPeer::new(true));
+        let sender_manager = TransportManager::builder()
+            .whatami(WhatAmI::Peer)
+            .zid(sender_zid)
+            .unicast(TransportManager::config_unicast().qos(true))
+            .build_test(sender_handler)
+            .unwrap();
+
+        ztimeout!(receiver_manager.add_listener(endpoint.clone())).unwrap();
+        let transport = ztimeout!(sender_manager.open_transport_unicast(endpoint.clone())).unwrap();
+        assert!(transport.is_shm().unwrap());
+
+        // Block the receiver callback before sending the payloads that must remain queued.
+        let mut barrier = NetworkMessage::from(Push {
+            wire_expr: "test/stalled-queue/barrier".into(),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+            ..Push::from(Put {
+                payload: vec![STALLED_QUEUE_BARRIER_MARKER].into(),
+                ..Put::default()
+            })
+        });
+        transport.schedule(barrier.as_mut()).unwrap();
+
+        ztimeout!(async {
+            while !receiver_handler.is_stalled() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let stall_release_guard = StallReleaseGuard(receiver_handler.gate.clone());
+
+        let layout = shm_provider.alloc_layout(STALLED_QUEUE_SHM_SIZE).unwrap();
+        for sequence in 0..STALLED_QUEUE_SHM_COUNT {
+            let mut shm_buf =
+                ztimeout!(layout.alloc().with_policy::<BlockOn<GarbageCollect>>()).unwrap();
+            shm_buf.fill(STALLED_QUEUE_SHM_MARKER);
+            shm_buf[1..9].copy_from_slice(&(sequence as u64).to_le_bytes());
+
+            let mut queued_shm = NetworkMessage::from(Push {
+                wire_expr: "test/stalled-queue/shm".into(),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+                ..Push::from(Put {
+                    payload: shm_buf.into(),
+                    ..Put::default()
+                })
+            });
+            transport.schedule(queued_shm.as_mut()).unwrap();
+        }
+
+        // This is ten times the SHM validator interval, ensuring the buffer crosses
+        // multiple expiration checks before the receiver is allowed to map it.
+        tokio::time::sleep(STALLED_QUEUE_DURATION).await;
+        assert_eq!(receiver_handler.shm_received(), 0);
+
+        drop(stall_release_guard);
+        ztimeout!(async {
+            while receiver_handler.shm_received() != STALLED_QUEUE_SHM_COUNT {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+
+        ztimeout!(transport.close()).unwrap();
+        ztimeout!(receiver_manager.del_listener(endpoint)).unwrap();
+        ztimeout!(sender_manager.close());
+        ztimeout!(receiver_manager.close());
     }
 
     async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
@@ -348,6 +585,17 @@ mod tests {
             .parse()
             .unwrap();
         run(&endpoint, true).await;
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_tcp_shm_survives_stalled_queue() {
+        zenoh_util::init_log_from_env_or("error");
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap();
+
+        run_stalled_queue_test(&endpoint).await;
     }
 
     #[cfg(feature = "transport_ws")]
