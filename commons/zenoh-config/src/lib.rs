@@ -1323,7 +1323,7 @@ impl Config {
         key: &str,
         value: &str,
     ) -> Result<bool, validated_struct::InsertionError> {
-        let Some((prefix, field_value)) = key.split_once('=') else {
+        let Some((prefix, field_value)) = key.rsplit_once('=') else {
             return Ok(false);
         };
         let (array_key, field_name) =
@@ -1416,7 +1416,7 @@ impl Config {
     /// unchanged.
     pub fn try_remove_json5_array_item<K: AsRef<str>>(&mut self, key: K) -> ZResult<bool> {
         let key = key.as_ref();
-        let Some((prefix, field_value)) = key.split_once('=') else {
+        let Some((prefix, field_value)) = key.rsplit_once('=') else {
             return Ok(false);
         };
         let (array_key, field_name) = prefix.rsplit_once('/').ok_or("missing field filter")?;
@@ -2156,6 +2156,40 @@ mod tests {
             .unwrap());
         let items: serde_json::Value =
             serde_json::from_str(&config.get_json("qos/network").unwrap()).unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 0);
+    }
+
+    // Regression test for https://github.com/eclipse-zenoh/zenoh/issues/2655:
+    // the field filter is only the last `<field-name>=<field-value>` segment, so
+    // a `=` appearing earlier in the array key (e.g. in a plugin subkey) must not
+    // be mistaken for the filter separator.
+    #[test]
+    fn insert_remove_json5_array_item_with_equals_in_array_key() {
+        let mut config = Config::default();
+
+        // Seed an empty array under a key whose path contains an earlier `=`.
+        config
+            .insert_json5("plugins/example/a=b/items", "[]")
+            .unwrap();
+
+        assert!(config
+            .try_insert_json5_array_item(
+                "plugins/example/a=b/items/id=item1",
+                r#"{ id: "item1", value: 1 }"#,
+            )
+            .unwrap());
+
+        let items: serde_json::Value =
+            serde_json::from_str(&config.get_json("plugins/example/a=b/items").unwrap()).unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 1);
+        assert_eq!(items[0]["id"], "item1");
+        assert_eq!(items[0]["value"], 1);
+
+        assert!(config
+            .try_remove_json5_array_item("plugins/example/a=b/items/id=item1")
+            .unwrap());
+        let items: serde_json::Value =
+            serde_json::from_str(&config.get_json("plugins/example/a=b/items").unwrap()).unwrap();
         assert_eq!(items.as_array().unwrap().len(), 0);
     }
 }
