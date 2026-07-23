@@ -176,6 +176,85 @@ fn test_multiple_gateways_r2r_token_propagation_upstream() {
     assert!(s_g1.is_bi_complete());
 }
 
+/// **Northbound subscriber aggregation (deterministic).** A router configured with
+/// `aggregation.upstream.subscribers = ["example/**"]` folds K downstream subscribers included by
+/// the prefix into a SINGLE `example/**` declaration toward its north-bound peer, suppressing the
+/// per-key children upstream. Asserts the upstream face records exactly one `DeclareSubscriber`
+/// (not K), and that undeclaring every child withdraws exactly one aggregate.
+#[test]
+fn test_northbound_subscriber_aggregation() {
+    try_init_tracing_subscriber();
+
+    let g = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::default_south(WhatAmI::Router)])
+        .aggregation_upstream_subscribers(["example/**"])
+        .build();
+    let s = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+    let n = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .build();
+
+    let ss = s.new_session();
+
+    // s is downstream (south) of g; n is upstream (north) of g.
+    let mut s_g = Connection {
+        a: &s,
+        b: &g,
+        a2b: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .remote_bound(Bound::South),
+        b2a: FaceDef::default()
+            .mode(WhatAmI::Router)
+            .region(Region::default_south(WhatAmI::Router)),
+    }
+    .establish();
+    let mut n_g = Connection {
+        a: &n,
+        b: &g,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    // Inline (not a closure) so the `&mut` forwards are statement-scoped and the `recorder()` reads
+    // between forwarding rounds don't conflict with the mutable borrows.
+    EstablishedConnection::bi_fwd_many_unbounded([&mut s_g, &mut n_g]);
+
+    // K downstream subscribers, all included by the configured `example/**` prefix.
+    let k = 8u32;
+    for j in 0..k {
+        ss.declare_subscriber(None, j, format!("example/sensor/{j:04}"));
+    }
+    EstablishedConnection::bi_fwd_many_unbounded([&mut s_g, &mut n_g]);
+
+    // The upstream face (g -> n) must carry exactly ONE aggregate, not K per-key children.
+    let up = n_g.b2a.recorder().subscribers();
+    assert_eq!(
+        up.len(),
+        1,
+        "northbound fold must collapse {k} children into one aggregate upstream, got {}",
+        up.len()
+    );
+
+    // Undeclaring every child withdraws exactly one aggregate upstream.
+    for j in 0..k {
+        ss.undeclare_subscriber(j);
+    }
+    EstablishedConnection::bi_fwd_many_unbounded([&mut s_g, &mut n_g]);
+    let down = n_g.b2a.recorder().undeclared_subscribers();
+    assert_eq!(
+        down.len(),
+        1,
+        "withdrawing all children must withdraw exactly one aggregate upstream, got {}",
+        down.len()
+    );
+}
+
 #[test]
 fn test_multiple_gateways_r2r_token_propagation_downstream() {
     try_init_tracing_subscriber();

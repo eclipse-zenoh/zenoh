@@ -384,10 +384,12 @@ impl Face {
                 }
             }
             QueryTarget::AllComplete => {
-                for qabl in qabls
-                    .iter()
-                    .filter(|q| q.info.is_none_or(|info| info.complete) && filter(q))
-                {
+                for qabl in qabls.iter().filter(|q| {
+                    // B-A2: also forward to transparent forwarders (non-complete entries toward a
+                    // router whose resource covers the query, e.g. a northbound aggregate hiding
+                    // complete children) so the next router re-applies AllComplete against them.
+                    (q.info.is_none_or(|info| info.complete) || q.forwarder) && filter(q)
+                }) {
                     route.insert(qabl.dir.dst_face.id, || {
                         let mut dir = qabl.dir.clone();
                         let rid = insert_pending_query(&mut dir.dst_face, query.clone());

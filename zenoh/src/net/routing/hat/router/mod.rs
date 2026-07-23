@@ -105,6 +105,14 @@ pub(crate) struct Hat {
     router_qabls: HashSet<Arc<Resource>>,
     routers_net: Option<Network>,
     routers_trees_worker: TreesComputationWorker,
+    /// Northbound declaration aggregation: the per-key children folded into each configured
+    /// `aggregation.upstream` prefix, keyed by index into `TablesData::agg_sub_prefixes` /
+    /// `agg_qabl_prefixes`. The aggregate `Resource` itself is pre-created in `TablesData`; here we
+    /// only track folded children so the aggregate is declared once (first fold) and withdrawn on
+    /// the last. Queryable children additionally carry their `QueryableInfoType` so the aggregate's
+    /// advertised info is the merge of its children. Empty ⇒ stock behaviour.
+    north_agg_subs: HashMap<usize, HashSet<Arc<Resource>>>,
+    north_agg_qabls: HashMap<usize, HashMap<Arc<Resource>, QueryableInfoType>>,
     #[cfg(test)]
     disable_async_tree_computation: bool,
 }
@@ -124,6 +132,8 @@ impl Hat {
             router_tokens: HashSet::new(),
             routers_net: None,
             routers_trees_worker: TreesComputationWorker::new(region),
+            north_agg_subs: HashMap::new(),
+            north_agg_qabls: HashMap::new(),
             #[cfg(test)]
             disable_async_tree_computation: false,
         }
