@@ -43,6 +43,109 @@ pub(crate) struct SeqNum {
     mask: TransportSn,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SeqNumWindowResult {
+    Ahead,
+    Reordered,
+    Duplicate,
+    TooOld,
+}
+
+/// Tracks recently received sequence numbers around a monotonic high-water
+/// mark. This is used by unordered links to accept late packets once while
+/// retaining duplicate suppression.
+#[derive(Debug)]
+pub(crate) struct SeqNumWindow {
+    high_water: SeqNum,
+    seen: Vec<u64>,
+    capacity: usize,
+}
+
+impl SeqNumWindow {
+    pub(crate) fn make(
+        high_water: TransportSn,
+        resolution: Bits,
+        capacity: usize,
+    ) -> ZResult<Self> {
+        if capacity == 0 {
+            bail!("The sequence number window capacity must be non-zero");
+        }
+        let high_water = SeqNum::make(high_water, resolution)?;
+        let max_capacity = ((high_water.resolution() >> 1) + 1)
+            .min(usize::MAX as TransportSn) as usize;
+        let capacity = capacity.min(max_capacity);
+        Ok(Self {
+            high_water,
+            seen: vec![0; capacity.div_ceil(64)],
+            capacity,
+        })
+    }
+
+    pub(crate) fn reset(&mut self, high_water: TransportSn) -> ZResult<()> {
+        self.high_water.set(high_water)?;
+        self.seen.fill(0);
+        Ok(())
+    }
+
+    pub(crate) fn observe(&mut self, value: TransportSn) -> ZResult<SeqNumWindowResult> {
+        if self.high_water.precedes(value)? {
+            let distance =
+                value.wrapping_sub(self.high_water.get()) & self.high_water.resolution();
+            self.advance(distance as usize);
+            self.high_water.set(value)?;
+            self.mark(0);
+            return Ok(SeqNumWindowResult::Ahead);
+        }
+
+        let distance =
+            self.high_water.get().wrapping_sub(value) & self.high_water.resolution();
+        let distance = distance as usize;
+        if distance >= self.capacity {
+            return Ok(SeqNumWindowResult::TooOld);
+        }
+        if self.contains(distance) {
+            return Ok(SeqNumWindowResult::Duplicate);
+        }
+        self.mark(distance);
+        Ok(SeqNumWindowResult::Reordered)
+    }
+
+    fn advance(&mut self, distance: usize) {
+        if distance >= self.capacity {
+            self.seen.fill(0);
+            return;
+        }
+
+        let word_shift = distance / 64;
+        let bit_shift = distance % 64;
+        for dst in (0..self.seen.len()).rev() {
+            let Some(src) = dst.checked_sub(word_shift) else {
+                self.seen[dst] = 0;
+                continue;
+            };
+            let mut value = self.seen[src] << bit_shift;
+            if bit_shift != 0 && src != 0 {
+                value |= self.seen[src - 1] >> (64 - bit_shift);
+            }
+            self.seen[dst] = value;
+        }
+
+        let excess = self.seen.len() * 64 - self.capacity;
+        if excess != 0 {
+            let last = self.seen.len() - 1;
+            self.seen[last] &= u64::MAX >> excess;
+        }
+    }
+
+    fn contains(&self, distance: usize) -> bool {
+        self.seen[distance / 64] & (1 << (distance % 64)) != 0
+    }
+
+    fn mark(&mut self, distance: usize) {
+        self.seen[distance / 64] |= 1 << (distance % 64);
+    }
+}
+
 impl SeqNum {
     /// Create a new sequence number with a given resolution.
     ///
@@ -272,5 +375,68 @@ mod tests {
 
         assert_eq!(sn0.get(), 0);
         assert_eq!(sn1.get(), 6);
+    }
+
+    #[test]
+    fn sn_window_accepts_reordering_once() {
+        let mut window = SeqNumWindow::make(9, Bits::U8, 8).unwrap();
+
+        assert_eq!(window.observe(10).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(window.observe(12).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(
+            window.observe(11).unwrap(),
+            SeqNumWindowResult::Reordered
+        );
+        assert_eq!(
+            window.observe(11).unwrap(),
+            SeqNumWindowResult::Duplicate
+        );
+        assert_eq!(
+            window.observe(12).unwrap(),
+            SeqNumWindowResult::Duplicate
+        );
+    }
+
+    #[test]
+    fn sn_window_rejects_zero_capacity() {
+        assert!(SeqNumWindow::make(0, Bits::U8, 0).is_err());
+    }
+
+    #[test]
+    fn sn_window_rejects_values_outside_window() {
+        let mut window = SeqNumWindow::make(9, Bits::U8, 8).unwrap();
+        assert_eq!(window.observe(20).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(window.observe(12).unwrap(), SeqNumWindowResult::TooOld);
+    }
+
+    #[test]
+    fn sn_window_handles_rollover() {
+        let mask = (u8::MAX >> 1) as TransportSn;
+        let mut window = SeqNumWindow::make(mask - 1, Bits::U8, 8).unwrap();
+
+        assert_eq!(window.observe(mask).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(window.observe(1).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(
+            window.observe(0).unwrap(),
+            SeqNumWindowResult::Reordered
+        );
+        assert_eq!(
+            window.observe(mask).unwrap(),
+            SeqNumWindowResult::Duplicate
+        );
+    }
+
+    #[test]
+    fn sn_window_shifts_across_bitmap_words() {
+        let mut window = SeqNumWindow::make(0, Bits::U16, 130).unwrap();
+
+        assert_eq!(window.observe(1).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(window.observe(66).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(
+            window.observe(1).unwrap(),
+            SeqNumWindowResult::Duplicate
+        );
+        assert_eq!(window.observe(131).unwrap(), SeqNumWindowResult::Ahead);
+        assert_eq!(window.observe(1).unwrap(), SeqNumWindowResult::TooOld);
     }
 }

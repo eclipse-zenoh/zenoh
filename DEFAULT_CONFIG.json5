@@ -684,6 +684,12 @@
         /// more in-flight data. This is particularly relevant when dealing with large messages.
         /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
         buffer_size: 65535,
+        /// Number of recent sequence numbers remembered for duplicate detection on
+        /// unordered best-effort links. Reordered, unfragmented Frames inside this
+        /// window are accepted once and delivered immediately. No packets are
+        /// buffered or delayed. Set to 0 to use strict monotonic sequence
+        /// validation.
+        best_effort_reorder_window: 0,
         /// Maximum size of the defragmentation buffer at receiver end.
         /// Fragmented messages that are larger than the configured size will be dropped.
         /// The default value is 1GiB. This would work in most scenarios.
