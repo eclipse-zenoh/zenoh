@@ -388,25 +388,6 @@ impl HatPubSubTrait for Hat {
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
-        debug_assert!(self.owns(ctx.src_face));
-
-        let fid = ctx.src_face.id;
-
-        self.face_hat_mut(ctx.src_face)
-            .remote_subs
-            .drain()
-            .map(|(_, mut res)| {
-                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
-                    get_mut_unchecked(ctx).subs = None;
-                }
-
-                res
-            })
-            .collect()
-    }
-
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
     fn propagate_subscriber(
         &mut self,
         ctx: DispatcherContext,

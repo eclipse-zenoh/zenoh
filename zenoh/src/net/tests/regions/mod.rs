@@ -1002,6 +1002,20 @@ impl Connection<'_> {
 }
 
 impl EstablishedConnection {
+    /// Simulate loss of the bidirectional transport connection between A and B.
+    pub(crate) fn disconnect(&self) {
+        self.a2b
+            .demux
+            .as_ref()
+            .expect("EstablishedConnection::a2b should have a DeMux")
+            .closed();
+        self.b2a
+            .demux
+            .as_ref()
+            .expect("EstablishedConnection::b2a should have a DeMux")
+            .closed();
+    }
+
     /// Forward one pending message **from A to B**.
     #[tracing::instrument(level = "info", skip(self), fields(from = %self.b2a.face, to = %self.a2b.face.state.zid.short()), ret)]
     pub(crate) fn fwd1(&mut self) -> Option<Message> {
