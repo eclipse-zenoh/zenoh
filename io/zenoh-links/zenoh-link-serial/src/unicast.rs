@@ -420,6 +420,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             .map(|x| x.endpoint.to_locator())
             .collect()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

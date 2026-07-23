@@ -637,7 +637,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
-        .get_locators()
+        .get_locators_noloopback()
         .iter()
         .map(|locator| json!(locator.as_str()))
         .collect();
