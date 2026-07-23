@@ -38,7 +38,17 @@ use super::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
-#[cfg(all(feature = "uring", target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64", target_arch = "powerpc64")))]
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
 use crate::uring::Uring;
 use crate::{
     multicast::manager::{
@@ -175,7 +185,17 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
-    #[cfg(all(feature = "uring", target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64", target_arch = "powerpc64")))]
+    #[cfg(all(
+        feature = "uring",
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "loongarch64",
+            target_arch = "powerpc64"
+        )
+    ))]
     pub uring: Option<Uring>,
 }
 
@@ -521,7 +541,17 @@ impl TransportManagerBuilder {
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
-            #[cfg(all(feature = "uring", target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64", target_arch = "powerpc64")))]
+            #[cfg(all(
+                feature = "uring",
+                target_os = "linux",
+                any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv64",
+                    target_arch = "loongarch64",
+                    target_arch = "powerpc64"
+                )
+            ))]
             uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)
                 .map_err(|e| {
                     tracing::warn!("io_uring reactor init failed, falling back to tokio RX: {e}");
