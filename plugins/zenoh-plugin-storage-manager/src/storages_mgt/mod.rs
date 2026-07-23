@@ -56,8 +56,10 @@ pub(crate) async fn create_and_start_storage(
     zenoh_session: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
     tracing::trace!("Create storage '{}'", &admin_key);
-    let capability = backend.get_capability();
     let storage = backend.create_storage(config.clone()).await?;
+    let capability = storage
+        .capability()
+        .unwrap_or_else(|| backend.get_capability());
 
     // Ex: @/390CEC11A1E34977A1C609A35BC015E6/router/status/plugins/storage_manager/storages/demo1
     // -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
@@ -83,6 +85,12 @@ pub(crate) async fn create_and_start_storage(
     let mut replication_log = None;
     let mut latest_updates = HashMap::default();
     if let Some(replica_config) = &config.replication {
+        if capability.read_only {
+            bail!(
+                "Replication was enabled for storage {name} but it is read-only: replication \
+                 alignment writes to the backend, which a read-only storage cannot accept"
+            );
+        }
         if capability.history != History::Latest {
             bail!(
                 "Replication was enabled for storage {name} but its history capability is not \
