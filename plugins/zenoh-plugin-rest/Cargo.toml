@@ -71,7 +71,7 @@ path = "examples/z_serve_sse.rs"
 
 [package.metadata.deb]
 copyright = "2024 ZettaScale Technology"
-depends = "zenohd (=1.9.0)"
+depends = "zenohd (=1.9.0+69.g63fa7cc0e-1)"
 license-file = ["../../LICENSE", "0"]
 maintainer = "zenoh-dev@eclipse.org"
 name = "zenoh-plugin-rest"
