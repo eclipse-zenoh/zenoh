@@ -188,7 +188,15 @@ pub enum LowPassFilterMessage {
 #[serde(deny_unknown_fields)]
 pub struct AclConfigRule {
     pub id: String,
-    pub key_exprs: NEVec<OwnedKeyExpr>,
+    /// Static key expressions this rule applies to.
+    /// At least one of `key_exprs` and `key_expr_templates` must be provided.
+    pub key_exprs: Option<NEVec<OwnedKeyExpr>>,
+    /// Key expression templates, expanded per-connection with the authenticated identity of the
+    /// remote instance. Supported placeholders: `${cert_common_name}` (the TLS/QUIC certificate
+    /// common name) and `${username}` (user/password authentication). Templates are plain
+    /// strings (`$` is reserved in key expressions); the result of the substitution is validated
+    /// as a key expression when the transport is established.
+    pub key_expr_templates: Option<NEVec<String>>,
     pub messages: NEVec<AclMessage>,
     pub flows: Option<NEVec<InterceptorFlow>>,
     pub permission: Permission,
@@ -200,6 +208,10 @@ pub struct AclConfigSubjects {
     pub id: String,
     pub interfaces: Option<NEVec<Interface>>,
     pub cert_common_names: Option<NEVec<CertCommonName>>,
+    /// Prefix-matched certificate common names: a remote instance matches if its certificate
+    /// common name starts with any of the listed prefixes. Combined with `cert_common_names`
+    /// (exact matches) when both are provided.
+    pub cert_common_name_prefixes: Option<NEVec<CertCommonName>>,
     pub usernames: Option<NEVec<Username>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
     pub zids: Option<NEVec<ZenohId>>,
