@@ -33,6 +33,10 @@ on:
         description: Release branch
         required: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tag:
     name: Branch, bump & tag crates
