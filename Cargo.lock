@@ -5295,6 +5295,7 @@ dependencies = [
  "flume",
  "futures",
  "git-version",
+ "json5",
  "jsonschema",
  "lazy_static",
  "mime",
