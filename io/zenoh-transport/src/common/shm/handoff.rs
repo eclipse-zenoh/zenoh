@@ -69,7 +69,7 @@ impl<'a, T: Sized> IntoIterator for &'a PriorityContainer<T> {
     type IntoIter = core::slice::Iter<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.per_prio_objects).iter()
+        self.per_prio_objects.iter()
     }
 }
 
