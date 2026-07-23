@@ -32,6 +32,8 @@ use std::{
     any::Any,
     fmt::Debug,
     sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
 use futures::executor::block_on;
@@ -72,6 +74,16 @@ use crate::net::{
     },
     runtime::{Runtime, RuntimeBuilder},
 };
+
+/// Bound on how long [`MockFace::settle_after_send_interest`] polls before
+/// giving up. `DeclareFinal` is only sent when the interest resolves
+/// entirely locally (`RouteInterestResult::ResolvedCurrentInterest`, see
+/// `dispatcher/interests.rs`); interests requiring cross-region forwarding
+/// stay unresolved until the caller's own `bi_fwd_all()` pumps messages
+/// across the mock connections, so this settle window must not block
+/// indefinitely (or assert) waiting for something that may legitimately
+/// not have happened yet.
+const DECLARE_FINAL_SETTLE: Duration = Duration::from_millis(500);
 
 pub(crate) fn try_init_tracing_subscriber() {
     let _ = tracing_subscriber::fmt()
@@ -382,6 +394,20 @@ impl RecordingPrimitives {
     pub(crate) fn clear(&self) {
         self.messages.lock().unwrap().clear();
     }
+
+    /// Whether a `DeclareFinal` for `interest_id` has been recorded.
+    pub(crate) fn has_declare_final(&self, interest_id: InterestId) -> bool {
+        self.messages.lock().unwrap().iter().any(|m| {
+            matches!(
+                m,
+                Message::Declare(Declare {
+                    interest_id: Some(id),
+                    body: DeclareBody::DeclareFinal(_),
+                    ..
+                }) if *id == interest_id
+            )
+        })
+    }
 }
 
 impl Primitives for RecordingPrimitives {
@@ -683,6 +709,11 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
+        // A `Final`-mode interest tears down a prior registration and never
+        // produces its own `DeclareFinal`.
+        if mode != InterestMode::Final {
+            self.settle_after_send_interest(id);
+        }
     }
 
     /// Declare an interest without a key expression.
@@ -701,6 +732,28 @@ impl MockFace {
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
         });
+        // A `Final`-mode interest tears down a prior registration and never
+        // produces its own `DeclareFinal`.
+        if mode != InterestMode::Final {
+            self.settle_after_send_interest(id);
+        }
+    }
+
+    /// Give `send_interest`'s spawned replay a chance to land before
+    /// returning, by polling for `interest_id`'s `DeclareFinal` up to
+    /// [`DECLARE_FINAL_SETTLE`]. Best-effort: returns as soon as the
+    /// completion marker is observed, but does *not* fail if it never
+    /// shows up locally -- an interest requiring cross-region forwarding
+    /// only resolves once the caller pumps messages (e.g. `bi_fwd_all()`),
+    /// so this must never hard-block or assert.
+    pub(crate) fn settle_after_send_interest(&self, interest_id: InterestId) {
+        let deadline = std::time::Instant::now() + DECLARE_FINAL_SETTLE;
+        while !self.recorder.has_declare_final(interest_id) {
+            if std::time::Instant::now() >= deadline {
+                return;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
     }
 
     /// Declare a liveliness token for `key_expr` from this face's perspective.
@@ -1102,7 +1155,14 @@ impl EstablishedConnection {
             Message::Request(r) => target.face.send_request(&mut r.clone()),
             Message::Response(r) => target.face.send_response(&mut r.clone()),
             Message::ResponseFinal(r) => target.face.send_response_final(&mut r.clone()),
-            Message::Interest(i) => target.face.send_interest(&mut i.clone()),
+            Message::Interest(i) => {
+                target.face.send_interest(&mut i.clone());
+                // A `Final`-mode interest tears down a prior registration and
+                // never produces its own `DeclareFinal`.
+                if i.mode != InterestMode::Final {
+                    target.settle_after_send_interest(i.id);
+                }
+            }
             Message::Oam(o) => {
                 if let Some(demux) = &target.demux {
                     let _ = demux.handle_message(NetworkMessageMut {
