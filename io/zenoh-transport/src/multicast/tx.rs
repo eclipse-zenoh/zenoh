@@ -17,7 +17,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::common::shm::interop::map_zmsg_to_partner;
 
 //noinspection ALL
 impl TransportMulticastInner {
@@ -48,7 +48,14 @@ impl TransportMulticastInner {
     pub(super) fn schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
+            use crate::unicast::establishment::ext::shm::handoff::TxHandoffStorage;
+
+            let _ = map_zmsg_to_partner(
+                &mut msg,
+                &shm_context.shm_config,
+                &shm_context.shm_provider,
+                &TxHandoffStorage::new_disabled(),
+            );
         }
 
         let res = self.schedule_on_link(msg.as_ref())?;

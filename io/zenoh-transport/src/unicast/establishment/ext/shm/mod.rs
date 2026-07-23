@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2024 ZettaScale Technology
+// Copyright (c) 2026 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,5 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
-pub const SHM_VERSION: u64 = 2;
+pub(crate) mod auth;
+pub(crate) mod handoff;
+pub(crate) mod segment;

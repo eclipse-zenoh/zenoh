@@ -108,7 +108,7 @@ pub mod ext {
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
     #[cfg(feature = "shared-memory")]
-    pub type Shm = zextz64!(0x2, false);
+    pub type Shm = zextzbuf!(0x2, false);
 
     /// # Auth extension
     /// Used as challenge for probing authentication rights
@@ -155,7 +155,7 @@ impl OpenSyn {
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         #[cfg(feature = "shared-memory")]
-        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
@@ -219,7 +219,7 @@ impl OpenAck {
         let initial_sn: TransportSn = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         #[cfg(feature = "shared-memory")]
-        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());

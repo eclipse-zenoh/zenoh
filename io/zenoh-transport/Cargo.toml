@@ -56,6 +56,7 @@ uring = ["zenoh-link/uring", "zenoh-uring"]
 [dependencies]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
+lockfree = "0.5"
 flume = { workspace = true }
 futures = { workspace = true }
 lazy_static = { workspace = true }
@@ -64,6 +65,7 @@ rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
+stabby = { workspace = true }
 sha3 = { workspace = true }
 tokio = { workspace = true, features = [
   "fs",

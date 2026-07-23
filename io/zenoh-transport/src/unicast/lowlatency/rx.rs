@@ -17,11 +17,13 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::zread;
-use zenoh_link::LinkUnicast;
 use zenoh_protocol::{network::NetworkMessageMut, transport::TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 
 use super::transport::TransportUnicastLowlatency;
+#[cfg(feature = "shared-memory")]
+use crate::unicast::establishment::ext::shm::handoff::RxHandoffChannel;
+use crate::unicast::link::TransportLinkUnicastRx;
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -32,6 +34,7 @@ impl TransportUnicastLowlatency {
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessageMut,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+        #[cfg(feature = "shared-memory")] rx_handoff: &RxHandoffChannel,
     ) -> ZResult<()> {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
@@ -41,16 +44,17 @@ impl TransportUnicastLowlatency {
                 zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
             );
             #[cfg(feature = "shared-memory")]
-            {
-                if let Some(shm_context) = &self.shm_context {
-                    if let Err(e) =
-                        crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
-                    {
-                        tracing::debug!("Error receiving SHM buffer: {e}");
-                        return Ok(());
-                    }
+            if let Some(shm_context) = &self.shm_context {
+                if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
+                    msg.as_mut(),
+                    &shm_context.shm_reader,
+                    rx_handoff,
+                ) {
+                    tracing::debug!("Error receiving SHM buffer: {e}");
+                    return Ok(());
                 }
             }
+
             callback.handle_message(msg)
         } else {
             tracing::debug!(
@@ -65,7 +69,7 @@ impl TransportUnicastLowlatency {
     pub(super) async fn read_messages(
         &self,
         mut zslice: ZSlice,
-        link: &LinkUnicast,
+        link: &TransportLinkUnicastRx,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let codec = Zenoh080::new();
@@ -73,7 +77,7 @@ impl TransportUnicastLowlatency {
         while reader.can_read() {
             let msg: TransportMessageLowLatency = codec
                 .read(&mut reader)
-                .map_err(|_| zerror!("{}: decoding error", link))?;
+                .map_err(|_| zerror!("{}: decoding error", link.link))?;
 
             tracing::trace!("Received: {:?}", msg);
 
@@ -95,6 +99,8 @@ impl TransportUnicastLowlatency {
                         msg.as_mut(),
                         #[cfg(feature = "stats")]
                         stats,
+                        #[cfg(feature = "shared-memory")]
+                        &link.shm,
                     );
                 }
             }

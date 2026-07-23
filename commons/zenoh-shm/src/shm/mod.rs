@@ -52,6 +52,14 @@ pub struct Segment<ID: SegmentID> {
     inner: platform::SegmentImpl<ID>,
 }
 
+impl<ID: SegmentID> Eq for Segment<ID> {}
+
+impl<ID: SegmentID> PartialEq for Segment<ID> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.id() == other.inner.id()
+    }
+}
+
 impl<ID: SegmentID> std::fmt::Debug for Segment<ID> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Segment").field(&self.inner).finish()

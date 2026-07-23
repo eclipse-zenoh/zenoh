@@ -37,7 +37,7 @@ use super::{
     TransportEventHandler,
 };
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::ShmContext;
+use crate::common::shm::shm_context::ShmContext;
 #[cfg(all(feature = "uring", target_os = "linux"))]
 use crate::uring::Uring;
 use crate::{
