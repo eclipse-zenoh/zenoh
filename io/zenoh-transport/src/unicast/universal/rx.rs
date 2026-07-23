@@ -29,6 +29,7 @@ use crate::{
     common::{
         batch::{Decode, RBatch},
         priority::TransportChannelRx,
+        seq_num::SeqNumWindowResult,
     },
     unicast::transport_unicast_inner::TransportUnicastTrait,
     TransportPeerEventHandler,
@@ -84,6 +85,7 @@ impl TransportUnicastUniversal {
     fn handle_frame<R: BacktrackableReader>(
         &self,
         frame: FrameReader<R>,
+        link: &Link,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
@@ -104,7 +106,9 @@ impl TransportUnicastUniversal {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn("Frame", frame.sn, &mut guard)? {
+        let allow_reordering =
+            frame.reliability == Reliability::BestEffort && !link.is_streamed;
+        if !self.verify_sn("Frame", frame.sn, allow_reordering, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
         }
@@ -159,7 +163,7 @@ impl TransportUnicastUniversal {
             Reliability::BestEffort => zlock!(c.best_effort),
         };
 
-        if !self.verify_sn("Fragment", sn, &mut guard)? {
+        if !self.verify_sn("Fragment", sn, false, &mut guard)? {
             // Drop invalid message and continue
             return Ok(());
         }
@@ -215,21 +219,56 @@ impl TransportUnicastUniversal {
         &self,
         message_type: &str,
         sn: TransportSn,
+        allow_reordering: bool,
         guard: &mut MutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
-        let precedes = guard.sn.roll(sn)?;
-        if !precedes {
-            tracing::trace!(
-                "Transport: {}. {} with invalid SN dropped: {}. Expected: {}.",
-                self.config.zid,
-                message_type,
-                sn,
-                guard.sn.next()
-            );
-            return Ok(false);
+        if allow_reordering {
+            if let Some(frame_sn) = guard.frame_sn.as_mut() {
+                match frame_sn.observe(sn)? {
+                    SeqNumWindowResult::Ahead => {
+                        let advanced = guard.sn.roll(sn)?;
+                        debug_assert!(advanced);
+                        return Ok(true);
+                    }
+                    SeqNumWindowResult::Reordered => return Ok(true),
+                    SeqNumWindowResult::Duplicate => {
+                        tracing::trace!(
+                            "Transport: {}. Duplicate {} dropped: {}.",
+                            self.config.zid,
+                            message_type,
+                            sn,
+                        );
+                        return Ok(false);
+                    }
+                    SeqNumWindowResult::TooOld => {
+                        tracing::trace!(
+                            "Transport: {}. {} outside sequence window dropped: {}. Expected: {}.",
+                            self.config.zid,
+                            message_type,
+                            sn,
+                            guard.sn.next(),
+                        );
+                        return Ok(false);
+                    }
+                }
+            }
         }
 
-        Ok(true)
+        if guard.sn.roll(sn)? {
+            if let Some(frame_sn) = guard.frame_sn.as_mut() {
+                let result = frame_sn.observe(sn)?;
+                debug_assert_eq!(result, SeqNumWindowResult::Ahead);
+            }
+            return Ok(true);
+        }
+        tracing::trace!(
+            "Transport: {}. {} with invalid SN dropped: {}. Expected: {}.",
+            self.config.zid,
+            message_type,
+            sn,
+            guard.sn.next()
+        );
+        Ok(false)
     }
 
     pub(super) fn read_messages<TBuffer: BacktrackableReader + Buffer + Debug>(
@@ -247,6 +286,7 @@ impl TransportUnicastUniversal {
                 }
                 self.handle_frame(
                     frame,
+                    link,
                     #[cfg(feature = "stats")]
                     stats,
                 )?;

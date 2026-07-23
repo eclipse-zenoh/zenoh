@@ -793,6 +793,11 @@ validated_struct::validator! {
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
                     buffer_size: usize,
+                    /// Number of recent sequence numbers remembered for duplicate detection on
+                    /// unordered best-effort links. Reordered, unfragmented Frames inside this
+                    /// window are accepted once and delivered immediately. Set to 0 to use strict
+                    /// monotonic sequence validation.
+                    best_effort_reorder_window: usize,
                     /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                     /// Fragmented messages that are larger than the configured size will be dropped.
                     max_message_size: usize,
@@ -2069,6 +2074,31 @@ mod tests {
     use zenoh_protocol::core::{EndPoint, WhatAmI};
 
     use crate::{Config, ModeDependentValue, ZenohId};
+
+    #[test]
+    fn test_best_effort_reorder_window_config() {
+        let mut config = Config::default();
+        assert_eq!(
+            *config
+                .transport
+                .link
+                .rx
+                .best_effort_reorder_window(),
+            0
+        );
+
+        config
+            .insert_json5("transport/link/rx/best_effort_reorder_window", "1024")
+            .unwrap();
+        assert_eq!(
+            *config
+                .transport
+                .link
+                .rx
+                .best_effort_reorder_window(),
+            1024
+        );
+    }
 
     #[test]
     fn test_toml_config_format() {
