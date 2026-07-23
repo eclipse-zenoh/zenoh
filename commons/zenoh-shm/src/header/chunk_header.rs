@@ -29,6 +29,9 @@ pub struct ChunkHeaderType {
     */
     pub refcount: AtomicU32,
     pub watchdog_invalidated: AtomicBool,
+    /// Set by RX after installing its ConfirmedDescriptor; cleared on chunk recycle.
+    /// TX sweep checks this to release the pending lease early (before TTL expiry).
+    pub rx_ack: AtomicBool,
     pub generation: AtomicU32,
 
     /// Protocol identifier for particular SHM implementation
