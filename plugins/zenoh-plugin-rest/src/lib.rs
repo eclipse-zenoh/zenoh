@@ -587,7 +587,11 @@ mod tests {
     use futures::{FutureExt, StreamExt};
     use tokio::time::timeout;
     use tower::ServiceExt;
-    use zenoh::{bytes::Encoding, sample::SampleKind, Session, Wait};
+    use zenoh::{
+        bytes::{Encoding, ZBytes},
+        sample::SampleKind,
+        Session, Wait,
+    };
     use zenoh_test::TestSessions;
 
     use crate::app;
