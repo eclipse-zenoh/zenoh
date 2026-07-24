@@ -84,6 +84,24 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 - **`-V, --version`**  
   Print version.
 
+## Systemd integration
+
+When built with the `systemd` Cargo feature (Linux only, disabled by default), `zenohd` notifies the service manager with `READY=1` once startup completes. This allows a service unit declared with `Type=notify` to delay units ordered `After=zenohd.service` until the router is actually reachable:
+
+
+```bash
+cargo build --release --features systemd
+```
+
+```ini
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/zenohd -c /etc/zenohd/zenohd.json5
+```
+
+Without the feature (the default), no notification is sent and service units should use `Type=simple`, as the packaged [zenohd.service](.service/zenohd.service) does.
+
 ## Plugins
 
 > [!WARNING]
