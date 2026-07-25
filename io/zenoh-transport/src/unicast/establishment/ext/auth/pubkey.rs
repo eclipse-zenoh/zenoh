@@ -79,17 +79,21 @@ impl AuthPubKey {
         Ok(())
     }
 
-    pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
+    pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
+
+        let mut pub_key: Option<ZPublicKey> = None;
+        let mut pri_key: Option<ZPrivateKey> = None;
 
         // First, check if PEM keys are provided
         match (config.public_key_pem(), config.private_key_pem()) {
             (Some(public), Some(private)) => {
-                let pub_key = RsaPublicKey::from_pkcs1_pem(public)
+                let public_key = RsaPublicKey::from_pkcs1_pem(public)
                     .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
-                let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
+                let private_key = RsaPrivateKey::from_pkcs1_pem(private)
                     .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+                pub_key = Some(public_key.into());
+                pri_key = Some(private_key.into());
             }
             (Some(_), None) => {
                 bail!("{S} Missing Rsa Private Key: PEM.")
@@ -101,28 +105,64 @@ impl AuthPubKey {
         }
 
         // Second, check if PEM files are provided
-        match (config.public_key_file(), config.private_key_file()) {
-            (Some(public), Some(private)) => {
-                let path = Path::new(public);
-                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
-                let path = Path::new(private);
-                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+        if pub_key.is_none() && pri_key.is_none() {
+            match (config.public_key_file(), config.private_key_file()) {
+                (Some(public), Some(private)) => {
+                    let path = Path::new(public);
+                    let public_key = RsaPublicKey::read_pkcs1_pem_file(path)
+                        .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
+                    let path = Path::new(private);
+                    let private_key = RsaPrivateKey::read_pkcs1_pem_file(path)
+                        .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
+                    pub_key = Some(public_key.into());
+                    pri_key = Some(private_key.into());
+                }
+                (Some(_), None) => {
+                    bail!("{S} Missing Rsa Private Key: file.")
+                }
+                (None, Some(_)) => {
+                    bail!("{S} Missing Rsa Public Key: file.")
+                }
+                (None, None) => {}
             }
-            (Some(_), None) => {
-                bail!("{S} Missing Rsa Private Key: file.")
-            }
-            (None, Some(_)) => {
-                bail!("{S} Missing Rsa Public Key: file.")
-            }
-            (None, None) => {}
         }
 
-        // @TODO: populate lookup file
+        // Third, check if known_keys_file is provided
+        let mut lookup: Option<HashSet<ZPublicKey>> = None;
+        if let Some(keys_file) = config.known_keys_file() {
+            let content = tokio::fs::read_to_string(keys_file)
+                .await
+                .map_err(|e| zerror!("{S} Invalid known keys file: {}.", e))?;
+            let mut known_keys: HashSet<ZPublicKey> = HashSet::new();
+            let mut current_key = String::new();
+            for line in content.lines() {
+                let trimmed = line.trim();
+                current_key.push_str(line);
+                current_key.push('\n');
+                if trimmed == "-----END RSA PUBLIC KEY-----" {
+                    let public_key = RsaPublicKey::from_pkcs1_pem(&current_key)
+                        .map_err(|e| zerror!("{S} Invalid RSA public key in known keys file: {}.", e))?;
+                    known_keys.insert(public_key.into());
+                    current_key.clear();
+                }
+            }
+            if !known_keys.is_empty() {
+                tracing::debug!("{S} Loaded {} known public key(s) from file.", known_keys.len());
+                lookup = Some(known_keys);
+            }
+        }
 
-        Ok(None)
+        if let (Some(public), Some(private)) = (pub_key, pri_key) {
+            let mut auth = Self::new(public, private);
+            if let Some(known_keys) = lookup {
+                auth.lookup = Some(known_keys);
+            }
+            Ok(Some(auth))
+        } else if lookup.is_some() {
+            bail!("{S} known_keys_file requires a public/private key pair to be configured.");
+        } else {
+            Ok(None)
+        }
     }
 }
 
