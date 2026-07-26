@@ -1603,9 +1603,9 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "iso8601"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84d00640a3a46595e984f1b124b21d56506a5844dc799f831dde9b05cb2f6c51"
+checksum = "74a0559b45528cf0732d911524974977a5749f477d7dd99652830ffdaf53c4d1"
 dependencies = [
  "nom 8.0.0",
 ]
