@@ -115,7 +115,7 @@ fn test_current_token_repropagation() {
 /// This checks for a regression discovered in RMW Zenoh which uses peer mode and sends a
 /// [liveliness GET] right after opening a session.
 ///
-/// This issue occured because we did not check that the source of a current tokens interest is
+/// This issue occurred because we did not check that the source of a current token's interest is
 /// south-bound before propagating it to peers with unfinalized initial interests.
 ///
 /// [liveliness GET]:
