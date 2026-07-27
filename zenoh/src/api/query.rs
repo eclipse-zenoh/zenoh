@@ -101,6 +101,8 @@ impl Default for QueryConsolidation {
 pub struct ReplyError {
     pub(crate) payload: ZBytes,
     pub(crate) encoding: Encoding,
+    #[cfg(feature = "unstable")]
+    pub(crate) timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
 }
 
 impl ReplyError {
@@ -108,6 +110,8 @@ impl ReplyError {
         Self {
             payload: payload.into(),
             encoding,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
     }
 
@@ -135,7 +139,19 @@ impl ReplyError {
         ReplyError {
             payload: ZBytes::new(),
             encoding: Encoding::default(),
+            #[cfg(feature = "unstable")]
+            timestamp_stack: None,
         }
+    }
+
+    /// Gets the timestamp stack of this ReplyError.
+    ///
+    /// The timestamp stack carries interception records (Send, Route, Receive)
+    /// collected along the message's path through the network.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
+        self.timestamp_stack.as_ref()
     }
 }
 

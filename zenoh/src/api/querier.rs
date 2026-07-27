@@ -175,6 +175,8 @@ impl<'a> Querier<'a> {
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             cancellation_token: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 

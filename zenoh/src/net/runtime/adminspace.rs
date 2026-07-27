@@ -50,8 +50,6 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
-#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
-use crate::internal::runtime::DynamicRuntime;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -62,7 +60,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{dispatcher::tables::Tables, gateway::Resource, hat::Sources},
-        runtime::region,
+        runtime::{region, DynamicRuntime},
     },
     LONG_VERSION,
 };
@@ -386,6 +384,15 @@ impl Primitives for AdminSpace {
 
     fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
         trace!("recv Push {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let state = self.context.runtime.state.clone();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         {
             let conf = &self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
@@ -477,6 +484,15 @@ impl Primitives for AdminSpace {
 
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let state = self.context.runtime.state.clone();
+            crate::api::timestamp_stack::push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             RequestBody::Query(query) => {
                 let _span =
@@ -522,6 +538,12 @@ impl Primitives for AdminSpace {
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives: ReplyPrimitives::new_remote(None, primitives),
+                        #[cfg(feature = "unstable")]
+                        runtime: Some(
+                            DynamicRuntime::from(self.context.runtime.clone()).downgrade(),
+                        ),
+                        #[cfg(feature = "unstable")]
+                        query_ts_stack: None,
                     }),
                     eid: self.queryable_id,
                     value: mem::take(&mut query.ext_body)

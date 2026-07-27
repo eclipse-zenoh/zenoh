@@ -27,7 +27,9 @@ version = { workspace = true }
 [features]
 uring_trace = []
 
-[target.'cfg(target_os = "linux")'.dependencies]
+# Build the code in this crate only on platforms supported by io-uring.
+# Listed from https://github.com/tokio-rs/io-uring/blob/a52c1c07ffa7ab64750fd6a39f2f0a922f205815/src/sys/mod.rs#L18-L28
+[target.'cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "riscv64", target_arch = "loongarch64", target_arch = "powerpc64")))'.dependencies]
 atomic-queue = { workspace = true }
 flume = { workspace = true }
 io-uring = { workspace = true }
