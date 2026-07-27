@@ -77,7 +77,7 @@ jobs:
           - scouting_message
     steps:
       - name: Clone this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install latest Rust toolchain
         run: |
@@ -88,7 +88,7 @@ jobs:
         run: cargo +stable install --locked cargo-fuzz
 
       - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           cache-bin: false
           workspaces: |
@@ -143,7 +143,7 @@ jobs:
     timeout-minutes: 330
     steps:
       - name: Clone this repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install latest Rust toolchain
         run: |
@@ -154,7 +154,7 @@ jobs:
         run: cargo +stable install --locked cargo-fuzz
 
       - name: Setup rust-cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           cache-bin: false
           workspaces: |
