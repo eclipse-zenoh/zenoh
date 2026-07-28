@@ -34,6 +34,7 @@ shared-memory = [
   "zenoh-protocol/shared-memory",
   "zenoh-shm",
   "zenoh-stats?/shared-memory",
+  "lockfree"
 ]
 stats = ["zenoh-stats"]
 test = []
@@ -56,10 +57,10 @@ uring = ["zenoh-link/uring", "zenoh-uring"]
 [dependencies]
 async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
-lockfree = "0.5"
 flume = { workspace = true }
 futures = { workspace = true }
 lazy_static = { workspace = true }
+lockfree = { workspace = true, optional = true }
 lz4_flex = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
