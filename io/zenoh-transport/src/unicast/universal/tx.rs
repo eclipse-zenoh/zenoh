@@ -140,7 +140,7 @@ impl TransportUnicastUniversal {
             .expect("transport link index should be valid");
 
         #[cfg(feature = "shared-memory")]
-        let shm_handoff_transaction = self.shm_context.as_ref().and_then(|shm_context| {
+        let shm_handoff_transaction = self.shm_context.as_ref().map(|shm_context| {
             crate::common::shm::interop::map_zmsg_to_partner(
                 &mut msg,
                 &shm_context.shm_config,
@@ -202,7 +202,7 @@ impl TransportUnicastUniversal {
 
         #[cfg(feature = "shared-memory")]
         if pushed {
-            if let Some(transaction) = shm_handoff_transaction {
+            if let Some(mut transaction) = shm_handoff_transaction {
                 transaction.commit();
             }
         }
