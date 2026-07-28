@@ -15,9 +15,14 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main", "release/*", "!release/dry-run/*"]
   pull_request:
     branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
