@@ -129,6 +129,12 @@ impl TransportUnicastLowlatency {
                 transaction.commit();
             }
 
+            #[cfg(feature = "stats")]
+            self.link_stats
+                .get()
+                .unwrap()
+                .inc_network_message(zenoh_stats::Rx, msg);
+
             Ok(())
         })
     }

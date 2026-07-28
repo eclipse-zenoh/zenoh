@@ -130,7 +130,7 @@ impl TransportUnicastUniversal {
             );
             // No Link found
             #[cfg(feature = "stats")]
-            self.stats.tx_observe_no_link(msg);
+            self.stats.tx_observe_no_link(msg.as_ref());
             return Ok(false);
         };
 

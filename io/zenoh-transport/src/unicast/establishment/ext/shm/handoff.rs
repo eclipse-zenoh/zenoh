@@ -441,11 +441,7 @@ where
 
 #[cfg(test)]
 mod race_tests {
-    use std::{
-        sync::{atomic::Ordering::SeqCst, Barrier},
-        thread,
-        time::Duration,
-    };
+    use std::{sync::atomic::Ordering::SeqCst, thread, time::Duration};
 
     use zenoh_core::Wait;
     use zenoh_shm::{

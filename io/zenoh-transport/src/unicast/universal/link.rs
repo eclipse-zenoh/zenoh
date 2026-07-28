@@ -522,7 +522,7 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                 lease_tracker.reset();
                 #[cfg(feature = "stats")]
                 {
-                    let header_bytes = if link.link.is_streamed { 2 } else { 0 };
+                    let header_bytes = if link.link.is_streamed() { 2 } else { 0 };
                     stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                 }
                 transport.read_messages(batch, link, #[cfg(feature = "stats")] &stats)?;
