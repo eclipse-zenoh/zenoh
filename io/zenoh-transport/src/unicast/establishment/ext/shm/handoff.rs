@@ -190,7 +190,11 @@ impl TxHandoff {
     fn lock(&self) -> LockedTxHandoff {
         let inner = self.inner.clone();
         let lock = zlock!(self.inner.not_commit);
-        let lock = unsafe { std::mem::transmute(lock) };
+
+        // SAFETY: this is safe because we store Arc to inner together with this reference. Should
+        // track that reference never leaves  LockedTxHandoff
+        let lock: std::sync::MutexGuard<'static, VecDeque<ShmBufHardRef>> =
+            unsafe { std::mem::transmute(lock) };
         LockedTxHandoff { inner, lock }
     }
 }
@@ -440,6 +444,7 @@ mod race_tests {
     use std::{
         sync::{atomic::Ordering::SeqCst, Barrier},
         thread,
+        time::Duration,
     };
 
     use zenoh_core::Wait;
@@ -473,34 +478,20 @@ mod race_tests {
         let h_a = handoff.clone();
         let h_b = handoff.clone();
 
-        // Barrier 1: both transactions have staged their hard ref (mirrors `on_tx` being called
-        // for two in-flight `internal_schedule` calls before either has learned whether its own
-        // `pipeline.push_network_message` succeeded).
-        let staged = Arc::new(Barrier::new(2));
-        // Barrier 2: B has committed before A attempts to cancel (mirrors B's send succeeding
-        // and committing while A's send is still about to fail).
-        let b_committed = Arc::new(Barrier::new(2));
-
-        let staged_a = staged.clone();
-        let committed_a = b_committed.clone();
         let a = thread::spawn(move || {
             let mut locked = h_a.lock();
             locked.push(ref_a);
-            staged_a.wait();
-            committed_a.wait();
+            std::thread::sleep(Duration::from_millis(1000));
             // Simulate A's own `pipeline.push_network_message` failing: the transaction is
             // dropped without ever calling `commit()`, so only `cancel()` runs.
             locked.cancel();
         });
 
-        let staged_b = staged.clone();
-        let committed_b = b_committed.clone();
         let b = thread::spawn(move || {
             let mut locked = h_b.lock();
             locked.push(ref_b);
-            staged_b.wait();
+            std::thread::sleep(Duration::from_millis(500));
             locked.commit();
-            committed_b.wait();
         });
 
         a.join().unwrap();

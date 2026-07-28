@@ -239,11 +239,11 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
     }
 }
 
-pub fn map_zmsg_to_partner<'a, ShmCfg: PartnerShmConfig>(
+pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
-    handoff: &'a TxHandoffStorage,
+    handoff: &TxHandoffStorage,
 ) -> TxHandoffTransaction {
     let open = match &mut msg.body {
         NetworkBodyMut::Push(Push {
