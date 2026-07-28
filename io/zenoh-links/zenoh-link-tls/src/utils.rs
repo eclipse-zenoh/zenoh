@@ -29,6 +29,7 @@ use rustls::{
 };
 use rustls_pki_types::ServerName;
 use secrecy::ExposeSecret;
+use tokio::net::TcpStream;
 use webpki::anchor_from_trusted_cert;
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
@@ -602,6 +603,23 @@ pub async fn get_tls_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item =
     Ok(iter)
 }
 
+pub(crate) async fn connect_first_reachable(
+    config: &TcpSocketConfig<'_>,
+    addrs: impl Iterator<Item = SocketAddr>,
+) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
+    let mut errs: Vec<zenoh_result::Error> = vec![];
+    for da in addrs {
+        match config.new_link(&da).await {
+            Ok(res) => return Ok(res),
+            Err(e) => errs.push(e),
+        }
+    }
+    if errs.is_empty() {
+        errs.push(zerror!("No TLS unicast addresses available").into());
+    }
+    bail!("{:?}", errs)
+}
+
 pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
     Ok(address
         .as_str()
@@ -612,4 +630,57 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
 
 pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::net::TcpListener;
+
+    use super::*;
+
+    fn tcp_config() -> TcpSocketConfig<'static> {
+        TcpSocketConfig::new(None, None, None, None, None)
+    }
+
+    // Binding then dropping listeners yields ports that refuse connections fast;
+    // binding them all before dropping guarantees the ports are distinct.
+    async fn unreachable_addrs<const N: usize>() -> [SocketAddr; N] {
+        let mut listeners = vec![];
+        for _ in 0..N {
+            listeners.push(TcpListener::bind("127.0.0.1:0").await.unwrap());
+        }
+        core::array::from_fn(|i| listeners[i].local_addr().unwrap())
+    }
+
+    #[tokio::test]
+    async fn connect_falls_through_to_reachable_addr() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let live = listener.local_addr().unwrap();
+        let [dead] = unreachable_addrs().await;
+
+        let (_stream, _src, dst) = connect_first_reachable(&tcp_config(), [dead, live].into_iter())
+            .await
+            .unwrap();
+        assert_eq!(dst, live);
+    }
+
+    #[tokio::test]
+    async fn connect_failure_reports_every_addr() {
+        let [dead1, dead2] = unreachable_addrs().await;
+
+        let err = connect_first_reachable(&tcp_config(), [dead1, dead2].into_iter())
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains(&dead1.to_string()), "{msg}");
+        assert!(msg.contains(&dead2.to_string()), "{msg}");
+    }
+
+    #[tokio::test]
+    async fn connect_no_addrs_is_error() {
+        let err = connect_first_reachable(&tcp_config(), std::iter::empty())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("No TLS unicast addresses"));
+    }
 }

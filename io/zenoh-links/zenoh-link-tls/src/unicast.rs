@@ -43,12 +43,12 @@ use zenoh_protocol::{
     core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
-use zenoh_result::{zerror, Error as ZError, ZResult};
+use zenoh_result::{zerror, ZResult};
 
 use crate::{
     utils::{
-        get_tls_addr, get_tls_addrs, get_tls_host, get_tls_server_name, TlsClientConfig,
-        TlsServerConfig,
+        connect_first_reachable, get_tls_addr, get_tls_addrs, get_tls_host, get_tls_server_name,
+        TlsClientConfig, TlsServerConfig,
     },
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
@@ -360,32 +360,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let connector = TlsConnector::from(config);
 
         // Initialize the TcpStream, trying each resolved address like the TCP link does
-        let mut errs: Vec<ZError> = vec![];
-        let mut connected = None;
-        for da in addrs {
-            match client_config.tcp_socket_config.new_link(&da).await {
-                Ok(res) => {
-                    connected = Some(res);
-                    break;
-                }
-                Err(e) => {
-                    errs.push(e);
-                }
-            }
-        }
-        let (tcp_stream, src_addr, dst_addr) = match connected {
-            Some(res) => res,
-            None => {
-                if errs.is_empty() {
-                    errs.push(zerror!("No TLS unicast addresses available").into());
-                }
-                bail!(
-                    "Can not create a new TLS link bound to {:?}: {:?}",
-                    server_name,
-                    errs
-                )
-            }
-        };
+        let (tcp_stream, src_addr, dst_addr) =
+            connect_first_reachable(&client_config.tcp_socket_config, addrs)
+                .await
+                .map_err(|e| {
+                    zerror!(
+                        "Can not create a new TLS link bound to {:?}: {}",
+                        server_name,
+                        e
+                    )
+                })?;
 
         // Initialize the TlsStream
         let tls_stream = connector
