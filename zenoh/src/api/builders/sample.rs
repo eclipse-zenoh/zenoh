@@ -20,14 +20,13 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::TimestampInstrumentation;
+use crate::api::timestamp_stack::{TimestampInstrumentation, TimestampStack};
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{QoS, QoSBuilder, Sample, SampleKind},
-    timestamp_stack::TimestampStack,
 };
 #[zenoh_macros::internal]
 use crate::pubsub::{
