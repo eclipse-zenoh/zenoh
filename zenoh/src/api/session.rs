@@ -73,11 +73,7 @@ use super::{
     connectivity,
 };
 #[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::push_ts_interception;
-#[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::TimestampInstrumentation;
-#[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::{push_ts_interception, TimestampStack};
+use crate::api::timestamp_stack::{push_ts_interception, TimestampInstrumentation, TimestampStack};
 #[cfg(feature = "unstable")]
 use crate::api::{
     cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
