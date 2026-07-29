@@ -19,6 +19,7 @@ use std::{sync::Arc, time::Duration};
 use zenoh::{
     config::WhatAmI,
     query::ConsolidationMode,
+    sample::SampleFields,
     timestamp_stack::{
         InstrumentationTimestamp, InterceptionPoint, TimestampContext, TimestampInstrumentation,
         TimestampInstrumentationBuilder,
@@ -208,6 +209,30 @@ async fn records_non_empty_timestamp_bytes() {
             "UHLC timestamp should be valid"
         );
     }
+
+    session.close().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn sample_fields_keeps_timestamp_stack() {
+    zenoh_util::init_log_from_env_or("error");
+    let ke = "test/ts_instr/records/sample_fields";
+    let instr = make_instrumentation(true, false, false);
+
+    let session = ztimeout!(zenoh::open(zenoh::Config::default())).unwrap();
+    let publisher = ztimeout!(session.declare_publisher(ke)).unwrap();
+    let subscriber = ztimeout!(session.declare_subscriber(ke)).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+    ztimeout!(publisher.put("payload").timestamp_instrumentation(instr)).unwrap();
+    let sample = ztimeout!(subscriber.recv_async()).unwrap();
+
+    let expected = sample
+        .timestamp_stack()
+        .expect("timestamp_stack should be Some")
+        .clone();
+    let fields: SampleFields = sample.into();
+    assert_eq!(fields.timestamp_stack.as_ref(), Some(&expected));
 
     session.close().await.unwrap();
 }

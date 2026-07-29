@@ -209,6 +209,8 @@ pub struct SampleFields {
     pub reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
     pub attachment: Option<ZBytes>,
 }
 
@@ -227,6 +229,8 @@ impl From<Sample> for SampleFields {
             reliability: sample.reliability,
             #[cfg(feature = "unstable")]
             source_info: sample.source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: sample.timestamp_stack,
             attachment: sample.attachment,
         }
     }
