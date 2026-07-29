@@ -27,6 +27,7 @@ use crate::api::{
     key_expr::KeyExpr,
     publisher::Priority,
     sample::{QoS, QoSBuilder, Sample, SampleKind},
+    timestamp_stack::TimestampStack,
 };
 #[zenoh_macros::internal]
 use crate::pubsub::{
@@ -253,9 +254,7 @@ impl<T> TimestampInstrumentationBuilderTrait for SampleBuilder<T> {
     ) -> Self {
         Self {
             sample: Sample {
-                timestamp_stack: instrumentation
-                    .into()
-                    .map(crate::api::timestamp_stack::TimestampStack::new),
+                timestamp_stack: instrumentation.into().map(TimestampStack::new),
                 ..self.sample
             },
             _t: PhantomData::<T>,

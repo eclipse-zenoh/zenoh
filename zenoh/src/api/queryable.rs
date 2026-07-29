@@ -31,10 +31,12 @@ use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalI
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
+#[zenoh_macros::unstable]
+use crate::api::timestamp_stack::push_ts_interception;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
 #[cfg(feature = "unstable")]
-use crate::net::runtime::WeakDynamicRuntime;
+use crate::{api::timestamp_stack::TimestampStack, net::runtime::WeakDynamicRuntime};
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
@@ -123,7 +125,7 @@ pub(crate) struct QueryInner {
     #[cfg(feature = "unstable")]
     pub(crate) runtime: Option<WeakDynamicRuntime>,
     #[cfg(feature = "unstable")]
-    pub(crate) query_ts_stack: Option<crate::api::timestamp_stack::TimestampStack>,
+    pub(crate) query_ts_stack: Option<TimestampStack>,
 }
 
 impl QueryInner {
@@ -360,7 +362,7 @@ impl Query {
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
+    pub fn timestamp_stack(&self) -> Option<&TimestampStack> {
         self.inner.query_ts_stack.as_ref()
     }
 
@@ -625,11 +627,12 @@ impl Query {
             let weak_rt = self.inner.runtime.clone();
             response.ext_ts_stack = self.inner.query_ts_stack.as_ref().and_then(|ts_stack| {
                 use zenoh_protocol::network::timestamp_stack::{interception_point, TsStackType};
+
                 let mut ext_ts_stack = Some(TsStackType {
                     ts_stack: ts_stack.into(),
                 });
                 let upgrade = weak_rt.clone();
-                crate::api::timestamp_stack::push_ts_interception(
+                push_ts_interception(
                     &mut ext_ts_stack,
                     move || upgrade.and_then(|r| r.upgrade()).map(|dr| dr.get_inner()),
                     interception_point::SEND,

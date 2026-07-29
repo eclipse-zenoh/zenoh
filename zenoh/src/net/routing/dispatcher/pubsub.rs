@@ -26,6 +26,8 @@ use super::{
     resource::Resource,
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::push_ts_interception;
 use crate::net::routing::{
     dispatcher::{
         face::Face,
@@ -325,7 +327,7 @@ pub fn route_data(
                 #[cfg(feature = "unstable")]
                 {
                     let weak = weak_runtime.clone();
-                    crate::api::timestamp_stack::push_ts_interception(
+                    push_ts_interception(
                         &mut msg.ext_ts_stack,
                         move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                         zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
@@ -361,7 +363,7 @@ pub fn route_data(
                 #[cfg(feature = "unstable")]
                 {
                     let weak = weak_runtime.as_ref();
-                    crate::api::timestamp_stack::push_ts_interception(
+                    push_ts_interception(
                         &mut push.ext_ts_stack,
                         || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                         zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
