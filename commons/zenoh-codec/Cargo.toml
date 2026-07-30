@@ -39,8 +39,8 @@ shared-memory = [
 std = ["tracing", "uhlc/std", "zenoh-buffers/std", "zenoh-protocol/std"]
 
 [dependencies]
-tracing = { workspace = true, optional = true }
 rand = { workspace = true }
+tracing = { workspace = true, optional = true }
 uhlc = { workspace = true }
 zenoh-buffers = { workspace = true, default-features = false }
 zenoh-protocol = { workspace = true }
