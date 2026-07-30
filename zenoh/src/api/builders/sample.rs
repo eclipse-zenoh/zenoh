@@ -20,7 +20,7 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::TimestampInstrumentation;
+use crate::api::timestamp_stack::{TimestampInstrumentation, TimestampStack};
 use crate::api::{
     bytes::{OptionZBytes, ZBytes},
     encoding::Encoding,
@@ -253,9 +253,7 @@ impl<T> TimestampInstrumentationBuilderTrait for SampleBuilder<T> {
     ) -> Self {
         Self {
             sample: Sample {
-                timestamp_stack: instrumentation
-                    .into()
-                    .map(crate::api::timestamp_stack::TimestampStack::new),
+                timestamp_stack: instrumentation.into().map(TimestampStack::new),
                 ..self.sample
             },
             _t: PhantomData::<T>,
