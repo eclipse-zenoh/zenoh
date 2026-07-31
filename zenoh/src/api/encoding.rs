@@ -472,6 +472,14 @@ impl Encoding {
         schema: None,
     });
 
+    /// Application-specific cap'n proto-encoded data.
+    ///
+    /// Constant alias for string: `"application/capnp"`.
+    pub const APPLICATION_CAPNP: Encoding = Self(zenoh_protocol::core::Encoding {
+        id: 53,
+        schema: None,
+    });
+
     const ID_TO_STR: phf::Map<EncodingId, &'static str> = phf_map! {
         0u16 => "zenoh/bytes",
         1u16 => "zenoh/string",
@@ -526,6 +534,7 @@ impl Encoding {
         50u16 => "video/raw",
         51u16 => "video/vp8",
         52u16 => "video/vp9",
+        53u16 => "application/capnp",
         // The 0xFFFFu16 is used to indicate a custom encoding where both encoding and schema
         // are stored in the schema field.
         0xFFFFu16 => "",
@@ -585,6 +594,7 @@ impl Encoding {
         "video/raw" => 50u16,
         "video/vp8" => 51u16,
         "video/vp9" => 52u16,
+        "application/capnp" => 53u16,
     };
 
     /// The default [`Encoding`] is [`ZENOH_BYTES`](Encoding::ZENOH_BYTES).
