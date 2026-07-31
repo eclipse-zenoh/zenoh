@@ -388,3 +388,211 @@ mod tests {
         run(&endpoint, true).await;
     }
 }
+
+// Unit tests for the per-category SHM optimization gating (config fields
+// `transport_optimization.publications` and `.queries_replies`).
+//
+// They exercise the actual implicit transport optimization: a normal (non-SHM) ZBuf
+// payload above the size threshold is handed to `map_zmsg_to_partner` together with a
+// ready provider, and we check whether it gets copied into an SHM buffer
+// (downcasts to ShmBufInner, ZSliceKind::ShmPtr, `ext_shm` set) depending on the policy.
+#[cfg(feature = "shared-memory")]
+mod optimization_policy {
+    use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+
+    use zenoh_buffers::{ZBuf, ZSliceKind};
+    use zenoh_protocol::{
+        core::{CongestionControl, Encoding, Priority},
+        network::{push::ext::QoSType, NetworkBody, NetworkMessage, Push, Request, Response},
+        zenoh::{
+            query::{ext::QueryBodyType, Query},
+            reply::Reply,
+            PushBody, Put, RequestBody, ResponseBody,
+        },
+    };
+    use zenoh_shm::{api::common::types::ProtocolID, ShmBufInner};
+    use zenoh_transport::shm::{
+        map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ProviderInitState,
+        ShmOptimizationPolicy,
+    };
+
+    // Implicit transport optimization only kicks in for payloads at or above this size.
+    const MESSAGE_SIZE_THRESHOLD: usize = 3072;
+    // A raw (non-SHM) payload larger than the threshold, hence eligible for the
+    // implicit optimization (automatic copy into SHM).
+    const LARGE_PAYLOAD_SIZE: usize = 4096;
+    // SHM arena size: must comfortably exceed a handful of LARGE_PAYLOAD_SIZE allocations.
+    const POOL_SIZE: usize = 1024 * 1024;
+
+    // Partner that supports every SHM protocol. Only relevant to the explicit-buffer
+    // branch; the implicit optimization does not consult it, but the argument is required.
+    struct AllProtocols;
+    impl PartnerShmConfig for AllProtocols {
+        fn supports_protocol(&self, _protocol: ProtocolID) -> bool {
+            true
+        }
+    }
+
+    // Build a LazyShmProvider for the implicit optimization and drive its lazy
+    // initialization to completion, so map_zmsg_to_partner can actually wrap payloads.
+    async fn ready_provider() -> Option<Arc<LazyShmProvider>> {
+        let provider = Arc::new(LazyShmProvider::new(
+            NonZeroUsize::new(POOL_SIZE).unwrap(),
+            MESSAGE_SIZE_THRESHOLD,
+        ));
+        loop {
+            match provider.try_get_provider() {
+                ProviderInitState::Ready(_) => break,
+                ProviderInitState::Initializing(_) => {
+                    tokio::time::sleep(Duration::from_millis(10)).await
+                }
+                ProviderInitState::Error => panic!("failed to initialize SHM provider"),
+            }
+        }
+        Some(provider)
+    }
+
+    // A normal, non-SHM payload large enough to be eligible for implicit optimization.
+    fn raw_payload() -> ZBuf {
+        ZBuf::from(vec![0u8; LARGE_PAYLOAD_SIZE])
+    }
+
+    fn put_message(payload: ZBuf) -> NetworkMessage {
+        NetworkMessage::from(Push {
+            wire_expr: "test".into(),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+            ..Push::from(Put {
+                payload,
+                ..Put::default()
+            })
+        })
+    }
+
+    fn query_message(payload: ZBuf) -> NetworkMessage {
+        let mut query = Query::rand();
+        query.ext_body = Some(QueryBodyType {
+            ext_shm: None,
+            encoding: Encoding::default(),
+            payload,
+        });
+        let mut request = Request::rand();
+        request.payload = RequestBody::Query(query);
+        NetworkMessage::from(NetworkBody::Request(request))
+    }
+
+    fn reply_message(payload: ZBuf) -> NetworkMessage {
+        let mut reply = Reply::rand();
+        reply.payload = PushBody::Put(Put {
+            payload,
+            ..Put::default()
+        });
+        let mut response = Response::rand();
+        response.payload = ResponseBody::Reply(reply);
+        NetworkMessage::from(NetworkBody::Response(response))
+    }
+
+    // Run map_zmsg_to_partner and report whether the payload was promoted to SHM.
+    // Asserts that the three promotion signals (backed by ShmBufInner, ZSliceKind::ShmPtr,
+    // and the `ext_shm` extension) are consistent with each other.
+    fn map_and_check_promoted(
+        mut msg: NetworkMessage,
+        provider: &Option<Arc<LazyShmProvider>>,
+        policy: ShmOptimizationPolicy,
+    ) -> bool {
+        {
+            let mut m = msg.as_mut();
+            map_zmsg_to_partner(&mut m, &AllProtocols, provider, policy);
+        }
+
+        let (payload, ext_shm_set) = match &msg.body {
+            NetworkBody::Push(Push {
+                payload: PushBody::Put(Put {
+                    payload, ext_shm, ..
+                }),
+                ..
+            }) => (payload, ext_shm.is_some()),
+            NetworkBody::Request(Request {
+                payload: RequestBody::Query(Query {
+                    ext_body: Some(body),
+                    ..
+                }),
+                ..
+            }) => (&body.payload, body.ext_shm.is_some()),
+            NetworkBody::Response(Response {
+                payload: ResponseBody::Reply(Reply {
+                    payload: PushBody::Put(Put {
+                        payload, ext_shm, ..
+                    }),
+                    ..
+                }),
+                ..
+            }) => (payload, ext_shm.is_some()),
+            other => panic!("unexpected message body: {other:?}"),
+        };
+
+        let zs = payload.zslices().next().unwrap();
+        // For the implicit path, "promoted" means the raw payload was actually copied
+        // into an SHM buffer. All three signals must agree.
+        let is_shm_buf = zs.downcast_ref::<ShmBufInner>().is_some();
+        let kind_is_shmptr = zs.kind == ZSliceKind::ShmPtr;
+        assert_eq!(
+            is_shm_buf, kind_is_shmptr,
+            "inconsistent SHM promotion signals (ShmBufInner vs ZSliceKind::ShmPtr)"
+        );
+        assert_eq!(
+            is_shm_buf, ext_shm_set,
+            "inconsistent SHM promotion signals (ShmBufInner vs ext_shm)"
+        );
+        is_shm_buf
+    }
+
+    const ALL_ON: ShmOptimizationPolicy = ShmOptimizationPolicy {
+        publications: true,
+        queries_replies: true,
+    };
+    const NO_QUERIES: ShmOptimizationPolicy = ShmOptimizationPolicy {
+        publications: true,
+        queries_replies: false,
+    };
+    const NO_PUBS: ShmOptimizationPolicy = ShmOptimizationPolicy {
+        publications: false,
+        queries_replies: true,
+    };
+
+    #[tokio::test]
+    async fn publications_flag_gates_put() {
+        let provider = ready_provider().await;
+        // Put follows `publications`, independently of `queries_replies`.
+        assert!(map_and_check_promoted(put_message(raw_payload()), &provider, ALL_ON));
+        assert!(map_and_check_promoted(put_message(raw_payload()), &provider, NO_QUERIES));
+        assert!(!map_and_check_promoted(put_message(raw_payload()), &provider, NO_PUBS));
+    }
+
+    #[tokio::test]
+    async fn queries_replies_flag_gates_query() {
+        let provider = ready_provider().await;
+        // Query follows `queries_replies`, independently of `publications`.
+        assert!(map_and_check_promoted(query_message(raw_payload()), &provider, ALL_ON));
+        assert!(map_and_check_promoted(query_message(raw_payload()), &provider, NO_PUBS));
+        assert!(!map_and_check_promoted(query_message(raw_payload()), &provider, NO_QUERIES));
+    }
+
+    #[tokio::test]
+    async fn queries_replies_flag_gates_reply() {
+        let provider = ready_provider().await;
+        // Reply (query response) also follows `queries_replies`.
+        assert!(map_and_check_promoted(reply_message(raw_payload()), &provider, ALL_ON));
+        assert!(map_and_check_promoted(reply_message(raw_payload()), &provider, NO_PUBS));
+        assert!(!map_and_check_promoted(reply_message(raw_payload()), &provider, NO_QUERIES));
+    }
+
+    // A payload below the threshold is never promoted, even when the category is
+    // enabled: this is the size gate of the transport optimization itself.
+    #[tokio::test]
+    async fn below_threshold_is_never_promoted() {
+        let provider = ready_provider().await;
+        let small = || ZBuf::from(vec![0u8; MESSAGE_SIZE_THRESHOLD - 1]);
+        assert!(!map_and_check_promoted(put_message(small()), &provider, ALL_ON));
+        assert!(!map_and_check_promoted(query_message(small()), &provider, ALL_ON));
+    }
+}
