@@ -758,6 +758,14 @@
           pool_size: 16777216,
           /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
           message_size_threshold: 3072,
+          /// Whether SHM optimization is applied to publications (Put) payloads (default `true`).
+          publications: true,
+          /// Whether SHM optimization is applied to query and reply (Request/Response) payloads (default `true`).
+          /// Disabling this keeps queries/replies off the SHM path.
+          /// Set it to `false` for a workaround for the in-transit watchdog invalidation race,
+          /// which could occur under high CPU load.
+          /// See https://github.com/eclipse-zenoh/zenoh/issues/2628).
+          queries_replies: true,
       },
     },
     auth: {

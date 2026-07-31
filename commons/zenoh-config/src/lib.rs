@@ -860,6 +860,12 @@ validated_struct::validator! {
                     pool_size: NonZeroUsize,
                     /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
                     message_size_threshold: usize,
+                    /// Whether SHM optimization is applied to publications (Put) payloads (default `true`).
+                    publications: bool,
+                    /// Whether SHM optimization is applied to query and reply (Request/Response) payloads (default `true`).
+                    /// Disabling this keeps queries/replies off the SHM path (workaround for the in-transit
+                    /// watchdog invalidation race, see https://github.com/eclipse-zenoh/zenoh/issues/2628).
+                    queries_replies: bool,
                 },
             },
             pub auth: #[derive(Default)]
