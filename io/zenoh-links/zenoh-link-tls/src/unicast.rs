@@ -46,7 +46,10 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 use crate::{
-    utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
+    utils::{
+        connect_first_reachable, get_tls_addr, get_tls_addrs, get_tls_host, get_tls_server_name,
+        TlsClientConfig, TlsServerConfig,
+    },
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 
@@ -338,7 +341,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let epconf = endpoint.config();
 
         let server_name = get_tls_server_name(&epaddr)?;
-        let addr = get_tls_addr(&epaddr).await?;
+        let addrs = get_tls_addrs(endpoint.address()).await?;
 
         // if both `iface`, and `bind` are present, return error
         if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
@@ -356,18 +359,17 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let config = Arc::new(client_config.client_config);
         let connector = TlsConnector::from(config);
 
-        // Initialize the TcpStream
-        let (tcp_stream, src_addr, dst_addr) = client_config
-            .tcp_socket_config
-            .new_link(&addr)
-            .await
-            .map_err(|e| {
-                zerror!(
-                    "Can not create a new TLS link bound to {:?}: {}",
-                    server_name,
-                    e
-                )
-            })?;
+        // Initialize the TcpStream, trying each resolved address like the TCP link does
+        let (tcp_stream, src_addr, dst_addr) =
+            connect_first_reachable(&client_config.tcp_socket_config, addrs)
+                .await
+                .map_err(|e| {
+                    zerror!(
+                        "Can not create a new TLS link bound to {:?}: {}",
+                        server_name,
+                        e
+                    )
+                })?;
 
         // Initialize the TlsStream
         let tls_stream = connector
