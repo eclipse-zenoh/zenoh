@@ -506,25 +506,29 @@ mod optimization_policy {
 
         let (payload, ext_shm_set) = match &msg.body {
             NetworkBody::Push(Push {
-                payload: PushBody::Put(Put {
-                    payload, ext_shm, ..
-                }),
+                payload:
+                    PushBody::Put(Put {
+                        payload, ext_shm, ..
+                    }),
                 ..
             }) => (payload, ext_shm.is_some()),
             NetworkBody::Request(Request {
-                payload: RequestBody::Query(Query {
-                    ext_body: Some(body),
-                    ..
-                }),
+                payload:
+                    RequestBody::Query(Query {
+                        ext_body: Some(body),
+                        ..
+                    }),
                 ..
             }) => (&body.payload, body.ext_shm.is_some()),
             NetworkBody::Response(Response {
-                payload: ResponseBody::Reply(Reply {
-                    payload: PushBody::Put(Put {
-                        payload, ext_shm, ..
+                payload:
+                    ResponseBody::Reply(Reply {
+                        payload:
+                            PushBody::Put(Put {
+                                payload, ext_shm, ..
+                            }),
+                        ..
                     }),
-                    ..
-                }),
                 ..
             }) => (payload, ext_shm.is_some()),
             other => panic!("unexpected message body: {other:?}"),
@@ -563,27 +567,63 @@ mod optimization_policy {
     async fn publications_flag_gates_put() {
         let provider = ready_provider().await;
         // Put follows `publications`, independently of `queries_replies`.
-        assert!(map_and_check_promoted(put_message(raw_payload()), &provider, ALL_ON));
-        assert!(map_and_check_promoted(put_message(raw_payload()), &provider, NO_QUERIES));
-        assert!(!map_and_check_promoted(put_message(raw_payload()), &provider, NO_PUBS));
+        assert!(map_and_check_promoted(
+            put_message(raw_payload()),
+            &provider,
+            ALL_ON
+        ));
+        assert!(map_and_check_promoted(
+            put_message(raw_payload()),
+            &provider,
+            NO_QUERIES
+        ));
+        assert!(!map_and_check_promoted(
+            put_message(raw_payload()),
+            &provider,
+            NO_PUBS
+        ));
     }
 
     #[tokio::test]
     async fn queries_replies_flag_gates_query() {
         let provider = ready_provider().await;
         // Query follows `queries_replies`, independently of `publications`.
-        assert!(map_and_check_promoted(query_message(raw_payload()), &provider, ALL_ON));
-        assert!(map_and_check_promoted(query_message(raw_payload()), &provider, NO_PUBS));
-        assert!(!map_and_check_promoted(query_message(raw_payload()), &provider, NO_QUERIES));
+        assert!(map_and_check_promoted(
+            query_message(raw_payload()),
+            &provider,
+            ALL_ON
+        ));
+        assert!(map_and_check_promoted(
+            query_message(raw_payload()),
+            &provider,
+            NO_PUBS
+        ));
+        assert!(!map_and_check_promoted(
+            query_message(raw_payload()),
+            &provider,
+            NO_QUERIES
+        ));
     }
 
     #[tokio::test]
     async fn queries_replies_flag_gates_reply() {
         let provider = ready_provider().await;
         // Reply (query response) also follows `queries_replies`.
-        assert!(map_and_check_promoted(reply_message(raw_payload()), &provider, ALL_ON));
-        assert!(map_and_check_promoted(reply_message(raw_payload()), &provider, NO_PUBS));
-        assert!(!map_and_check_promoted(reply_message(raw_payload()), &provider, NO_QUERIES));
+        assert!(map_and_check_promoted(
+            reply_message(raw_payload()),
+            &provider,
+            ALL_ON
+        ));
+        assert!(map_and_check_promoted(
+            reply_message(raw_payload()),
+            &provider,
+            NO_PUBS
+        ));
+        assert!(!map_and_check_promoted(
+            reply_message(raw_payload()),
+            &provider,
+            NO_QUERIES
+        ));
     }
 
     // A payload below the threshold is never promoted, even when the category is
@@ -592,7 +632,15 @@ mod optimization_policy {
     async fn below_threshold_is_never_promoted() {
         let provider = ready_provider().await;
         let small = || ZBuf::from(vec![0u8; MESSAGE_SIZE_THRESHOLD - 1]);
-        assert!(!map_and_check_promoted(put_message(small()), &provider, ALL_ON));
-        assert!(!map_and_check_promoted(query_message(small()), &provider, ALL_ON));
+        assert!(!map_and_check_promoted(
+            put_message(small()),
+            &provider,
+            ALL_ON
+        ));
+        assert!(!map_and_check_promoted(
+            query_message(small()),
+            &provider,
+            ALL_ON
+        ));
     }
 }
