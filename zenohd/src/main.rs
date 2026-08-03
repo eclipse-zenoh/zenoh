@@ -14,6 +14,7 @@
 use clap::Parser;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use zenoh::internal::bail;
 use zenoh::{config::WhatAmI, Config, Result, Wait};
 use zenoh_config::{EndPoint, EndPoints, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
@@ -76,7 +77,7 @@ struct Args {
     adminspace_permissions: Option<String>,
 }
 
-fn main() {
+fn main() -> Result<()> {
     if let Err(e) = init_logging() {
         eprintln!("{e}. Exiting...");
         std::process::exit(-1);
@@ -85,7 +86,7 @@ fn main() {
     tracing::info!("zenohd {}", *LONG_VERSION);
 
     let args = Args::parse();
-    let config = config_from_args(&args);
+    let config = config_from_args(&args)?;
     tracing::info!("Initial conf: {}", &config);
 
     let _session = match zenoh::open(config).wait() {
@@ -97,9 +98,10 @@ fn main() {
     };
 
     std::thread::park();
+    Ok(())
 }
 
-fn config_from_args(args: &Args) -> Config {
+fn config_from_args(args: &Args) -> Result<Config> {
     let mut inline_config = None;
     for json in &args.cfg {
         if let Some(("", cfg)) = json.split_once(':') {
@@ -108,9 +110,9 @@ fn config_from_args(args: &Args) -> Config {
     }
 
     let mut config = if let Some(cfg) = inline_config {
-        Config::from_json5(cfg).expect("Invalid Zenoh config")
+        Config::from_json5(cfg).or_else(|_| bail!("Invalid Zenoh config") as Result<_>)?
     } else if let Some(fname) = args.config.as_ref() {
-        Config::from_file(fname).expect("Failed to load config file")
+        Config::from_file(fname).or_else(|_| bail!("Failed to load config file") as Result<_>)?
     } else {
         Config::default()
     };
@@ -119,18 +121,14 @@ fn config_from_args(args: &Args) -> Config {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if let Some(id) = &args.id {
-        config.set_id(Some(id.parse().unwrap())).unwrap();
+        config.set_id(Some(id.parse()?)).unwrap();
     }
     // apply '--rest-http-port' to config only if explicitly set (overwriting config)
     if args.rest_http_port.is_some() {
         let value = args.rest_http_port.as_deref().unwrap_or("8000");
         if !value.eq_ignore_ascii_case("none") {
-            config
-                .insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))
-                .unwrap();
-            config
-                .insert_json5("plugins/rest/__required__", "true")
-                .unwrap();
+            config.insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))?;
+            config.insert_json5("plugins/rest/__required__", "true")?;
         }
     }
     config.adminspace.set_enabled(true).unwrap();
@@ -148,17 +146,11 @@ fn config_from_args(args: &Args) -> Config {
     for plugin in &args.plugin {
         match plugin.split_once(':') {
             Some((name, path)) => {
-                config
-                    .insert_json5(&format!("plugins/{name}/__required__"), "true")
-                    .unwrap();
-                config
-                    .insert_json5(&format!("plugins/{name}/__path__"), &format!("\"{path}\""))
-                    .unwrap();
+                config.insert_json5(&format!("plugins/{name}/__required__"), "true")?;
+                config.insert_json5(&format!("plugins/{name}/__path__"), &format!("\"{path}\""))?;
             }
-            None => config
-                .insert_json5(&format!("plugins/{plugin}/__required__"), "true")
-                .unwrap(),
-        }
+            None => config.insert_json5(&format!("plugins/{plugin}/__required__"), "true")?,
+        };
     }
     if !args.connect.is_empty() {
         config
@@ -167,13 +159,12 @@ fn config_from_args(args: &Args) -> Config {
             .set(
                 args.connect
                     .iter()
-                    .map(|v| match v.parse::<EndPoints>() {
-                        Ok(v) => v,
-                        Err(e) => {
-                            panic!("Couldn't parse option --peer={v} into Locator: {e}");
-                        }
+                    .map(|v| {
+                        v.parse::<EndPoints>().or_else(|e| {
+                            bail!("Couldn't parse option --peer={v} into Locator: {e}")
+                        })
                     })
-                    .collect(),
+                    .collect::<Result<_>>()?,
             )
             .unwrap();
     }
@@ -184,13 +175,12 @@ fn config_from_args(args: &Args) -> Config {
             .set(
                 args.listen
                     .iter()
-                    .map(|v| match v.parse::<EndPoint>() {
-                        Ok(v) => v,
-                        Err(e) => {
-                            panic!("Couldn't parse option --listen={v} into Locator: {e}");
-                        }
+                    .map(|v| {
+                        v.parse::<EndPoint>().or_else(|e| {
+                            bail!("Couldn't parse option --listen={v} into Locator: {e}")
+                        })
                     })
-                    .collect(),
+                    .collect::<Result<_>>()?,
             )
             .unwrap();
     }
@@ -242,7 +232,7 @@ fn config_from_args(args: &Args) -> Config {
                     write: false,
                 })
                 .unwrap(),
-            s => panic!(
+            s => bail!(
                 r#"Invalid option: --adminspace-permissions={s} - Accepted values: "r", "w", "rw" or "none""#
             ),
         };
@@ -259,14 +249,14 @@ fn config_from_args(args: &Args) -> Config {
                         }
                     }
                     Err(e) => tracing::warn!("Couldn't perform configuration {}: {}", json, e),
-                }
+                };
             }
         } else {
-            panic!("--cfg accepts KEY:VALUE pairs. {json} is not a valid KEY:VALUE pair.")
+            bail!("--cfg accepts KEY:VALUE pairs. {json} is not a valid KEY:VALUE pair.")
         }
     }
     tracing::debug!("Config: {:?}", &config);
-    config
+    Ok(config)
 }
 
 fn init_logging() -> Result<()> {
@@ -336,4 +326,52 @@ fn test_no_default_features() {
             // " zenoh/default",
         )
     );
+}
+
+#[test]
+fn test_config_from_args_invalid_inline_c_returns_err() {
+    let args = Args::parse_from(["zenohd", "-c", "/dev/null"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_invalid_inline_cfg_returns_err() {
+    let args = Args::parse_from(["zenohd", "--cfg", ":not valid json5"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_missing_config_file_returns_err() {
+    let args = Args::parse_from(["zenohd", "--config", "/nonexistent/path/to/config.json5"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_invalid_id_returns_err() {
+    let args = Args::parse_from(["zenohd", "--id", "not-a-valid-zid"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_invalid_connect_endpoint_returns_err() {
+    let args = Args::parse_from(["zenohd", "--connect", "not-an-endpoint"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_invalid_listen_endpoint_returns_err() {
+    let args = Args::parse_from(["zenohd", "--listen", "not-an-endpoint"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_invalid_adminspace_permissions_returns_err() {
+    let args = Args::parse_from(["zenohd", "--adminspace-permissions", "bogus"]);
+    assert!(config_from_args(&args).is_err());
+}
+
+#[test]
+fn test_config_from_args_defaults_returns_ok() {
+    let args = Args::parse_from(["zenohd"]);
+    assert!(config_from_args(&args).is_ok());
 }
