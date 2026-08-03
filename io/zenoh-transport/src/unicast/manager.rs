@@ -664,6 +664,7 @@ impl TransportManager {
                     context.shm_reader.clone(),
                     shm_provider,
                     shm_config.clone(),
+                    context.policy,
                 )
             }),
             None => None,

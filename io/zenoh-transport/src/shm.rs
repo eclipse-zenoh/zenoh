@@ -207,22 +207,74 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
     }
 }
 
+/// Controls which categories of messages are eligible for the *implicit* SHM
+/// optimization on TX, derived from the `transport_optimization.messages` configuration.
+///
+/// Each flag gates only the implicit optimization for its category — automatically
+/// copying a large raw payload into SHM. A payload the application already allocated in
+/// SHM is always forwarded as a descriptor (when the partner supports its protocol),
+/// regardless of these flags.
+#[derive(Clone, Copy, Debug)]
+pub struct ShmOptimizationPolicy {
+    /// Whether publication (`Put`) payloads may be implicitly copied into SHM.
+    pub put: bool,
+    /// Whether query (`Request`) payloads may be implicitly copied into SHM.
+    pub query: bool,
+    /// Whether reply (`Response`: `Reply`/`Err`) payloads may be implicitly copied into SHM.
+    pub reply: bool,
+}
+
 pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
+    policy: ShmOptimizationPolicy,
 ) {
+    // The policy gates only the *implicit* optimization (auto-copying a large raw
+    // payload into SHM): a category is granted the provider only when it is enabled.
+    // An already-allocated SHM buffer is *always* forwarded as a descriptor (subject to
+    // the partner supporting its protocol) since the explicit branch of `map_to_partner`
+    // does not use the provider.
+    let no_provider: Option<Arc<LazyShmProvider>> = None;
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
-            PushBody::Put(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+            PushBody::Put(b) => {
+                let p = if policy.put {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
+                b.map_to_partner(partner_shm_cfg, p);
+            }
             PushBody::Del(_) => {}
         },
         NetworkBodyMut::Request(Request { payload, .. }) => match payload {
-            RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+            RequestBody::Query(b) => {
+                let p = if policy.query {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
+                b.map_to_partner(partner_shm_cfg, p);
+            }
         },
         NetworkBodyMut::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
-            ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
+            ResponseBody::Reply(b) => {
+                let p = if policy.reply {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
+                b.map_to_partner(partner_shm_cfg, p);
+            }
+            ResponseBody::Err(b) => {
+                let p = if policy.reply {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
+                b.map_to_partner(partner_shm_cfg, p);
+            }
         },
         NetworkBodyMut::ResponseFinal(_)
         | NetworkBodyMut::Interest(_)
