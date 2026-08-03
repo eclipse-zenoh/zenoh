@@ -207,22 +207,20 @@ impl PartnerShmConfig for MulticastTransportShmConfig {
     }
 }
 
-/// Controls which categories of messages are eligible for SHM optimization on TX.
+/// Controls which categories of messages are eligible for SHM optimization on TX,
+/// derived from the `transport_optimization.messages` configuration.
 ///
 /// Gating a category disables *both* the implicit optimization (wrapping a large raw
-/// payload into SHM) and the forwarding of an explicitly-allocated SHM buffer as a
+/// payload into SHM) and the forwarding of an already-allocated SHM buffer as a
 /// descriptor, so the payload is sent over the regular network path instead.
-///
-/// Disabling `queries_replies` is a workaround for the in-transit watchdog invalidation
-/// race (see https://github.com/eclipse-zenoh/zenoh/issues/2628): reliable query traffic
-/// (e.g. ROS 2 services over rmw_zenoh) can be silently dropped when a SHM buffer is
-/// invalidated before the receiver mounts it.
 #[derive(Clone, Copy, Debug)]
 pub struct ShmOptimizationPolicy {
-    /// Whether publications (Put) payloads may use SHM.
-    pub publications: bool,
-    /// Whether query and reply (Request/Response) payloads may use SHM.
-    pub queries_replies: bool,
+    /// Whether publication (`Put`) payloads may use SHM.
+    pub put: bool,
+    /// Whether query (`Request`) payloads may use SHM.
+    pub query: bool,
+    /// Whether reply (`Response`: `Reply`/`Err`) payloads may use SHM.
+    pub reply: bool,
 }
 
 pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
@@ -233,7 +231,7 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
 ) {
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => {
-            if policy.publications {
+            if policy.put {
                 match payload {
                     PushBody::Put(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
                     PushBody::Del(_) => {}
@@ -241,14 +239,14 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
             }
         }
         NetworkBodyMut::Request(Request { payload, .. }) => {
-            if policy.queries_replies {
+            if policy.query {
                 match payload {
                     RequestBody::Query(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
                 }
             }
         }
         NetworkBodyMut::Response(Response { payload, .. }) => {
-            if policy.queries_replies {
+            if policy.reply {
                 match payload {
                     ResponseBody::Reply(b) => b.map_to_partner(partner_shm_cfg, shm_provider),
                     ResponseBody::Err(b) => b.map_to_partner(partner_shm_cfg, shm_provider),

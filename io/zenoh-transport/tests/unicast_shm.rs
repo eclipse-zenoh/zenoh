@@ -551,16 +551,19 @@ mod optimization_policy {
     }
 
     const ALL_ON: ShmOptimizationPolicy = ShmOptimizationPolicy {
-        publications: true,
-        queries_replies: true,
+        put: true,
+        query: true,
+        reply: true,
     };
     const NO_QUERIES: ShmOptimizationPolicy = ShmOptimizationPolicy {
-        publications: true,
-        queries_replies: false,
+        put: true,
+        query: false,
+        reply: false,
     };
     const NO_PUBS: ShmOptimizationPolicy = ShmOptimizationPolicy {
-        publications: false,
-        queries_replies: true,
+        put: false,
+        query: true,
+        reply: true,
     };
 
     #[tokio::test]

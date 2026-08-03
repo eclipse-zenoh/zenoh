@@ -106,9 +106,11 @@ impl ShmContext {
             None
         };
 
+        let messages = cfg.transport_optimization.messages();
         let policy = ShmOptimizationPolicy {
-            publications: *cfg.transport_optimization.publications(),
-            queries_replies: *cfg.transport_optimization.queries_replies(),
+            put: messages.contains(&zenoh_config::DataMessage::Put),
+            query: messages.contains(&zenoh_config::DataMessage::Query),
+            reply: messages.contains(&zenoh_config::DataMessage::Reply),
         };
 
         let shm_reader = external_reader
