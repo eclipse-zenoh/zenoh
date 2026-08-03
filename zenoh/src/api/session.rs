@@ -73,7 +73,7 @@ use super::{
     connectivity,
 };
 #[cfg(feature = "unstable")]
-use crate::api::timestamp_stack::TimestampInstrumentation;
+use crate::api::timestamp_stack::{push_ts_interception, TimestampInstrumentation, TimestampStack};
 #[cfg(feature = "unstable")]
 use crate::api::{
     cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
@@ -2569,11 +2569,7 @@ impl Session {
             });
             {
                 let rt = self.0.runtime.get_inner();
-                crate::api::timestamp_stack::push_ts_interception(
-                    &mut ext_ts_stack,
-                    || Some(rt),
-                    interception_point::SEND,
-                );
+                push_ts_interception(&mut ext_ts_stack, || Some(rt), interception_point::SEND);
             }
             push.ext_ts_stack = ext_ts_stack;
         }
@@ -2612,7 +2608,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             {
                 let rt = self.0.runtime.get_inner();
-                crate::api::timestamp_stack::push_ts_interception(
+                push_ts_interception(
                     &mut push.ext_ts_stack,
                     || Some(rt),
                     zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -2802,11 +2798,7 @@ impl Session {
             });
             {
                 let rt = self.0.runtime.get_inner();
-                crate::api::timestamp_stack::push_ts_interception(
-                    &mut ext_ts_stack,
-                    || Some(rt),
-                    interception_point::SEND,
-                );
+                push_ts_interception(&mut ext_ts_stack, || Some(rt), interception_point::SEND);
             }
             ext_ts_stack
         });
@@ -2845,7 +2837,7 @@ impl Session {
             #[cfg(feature = "unstable")]
             {
                 let rt = self.0.runtime.get_inner();
-                crate::api::timestamp_stack::push_ts_interception(
+                push_ts_interception(
                     &mut ext_ts_stack,
                     || Some(rt),
                     zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -3013,7 +3005,7 @@ impl Session {
         #[cfg(feature = "unstable")]
         let query_ts_stack = timestamp_stack
             .as_ref()
-            .and_then(|ts| crate::api::timestamp_stack::TimestampStack::try_from(ts).ok());
+            .and_then(|ts| TimestampStack::try_from(ts).ok());
 
         let query_inner = Arc::new(QueryInner {
             key_expr: key_expr.clone().into_owned(),
@@ -3350,7 +3342,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         {
             let rt = self.0.runtime.get_inner();
-            crate::api::timestamp_stack::push_ts_interception(
+            push_ts_interception(
                 &mut msg.ext_ts_stack,
                 || Some(rt),
                 zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -3372,7 +3364,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         {
             let rt = self.0.runtime.get_inner();
-            crate::api::timestamp_stack::push_ts_interception(
+            push_ts_interception(
                 &mut msg.ext_ts_stack,
                 || Some(rt),
                 zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -3416,7 +3408,7 @@ impl Primitives for WeakSession {
         #[cfg(feature = "unstable")]
         {
             let rt = self.0.runtime.get_inner();
-            crate::api::timestamp_stack::push_ts_interception(
+            push_ts_interception(
                 &mut msg.ext_ts_stack,
                 || Some(rt),
                 zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -3437,12 +3429,10 @@ impl Primitives for WeakSession {
                                 payload: mem::take(&mut e.payload).into(),
                                 encoding: mem::take(&mut e.encoding).into(),
                                 #[cfg(feature = "unstable")]
-                                timestamp_stack: msg.ext_ts_stack.as_ref().and_then(|ts| {
-                                    crate::api::timestamp_stack::TimestampStack::try_from(
-                                        &ts.ts_stack,
-                                    )
-                                    .ok()
-                                }),
+                                timestamp_stack: msg
+                                    .ext_ts_stack
+                                    .as_ref()
+                                    .and_then(|ts| TimestampStack::try_from(&ts.ts_stack).ok()),
                             }),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
