@@ -13,6 +13,7 @@
 //
 
 use std::{
+    collections::VecDeque,
     ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering::SeqCst},
@@ -125,7 +126,7 @@ impl ShmTransportMetadataSegment {
 #[derive(Debug)]
 pub struct TXAuthSegment {
     segment: ShmTransportMetadataSegment,
-    available_shm_counters: Arc<std::sync::Mutex<Vec<ShmCounterID>>>,
+    available_shm_counters: Arc<std::sync::Mutex<VecDeque<ShmCounterID>>>,
 }
 
 impl TXAuthSegment {
@@ -160,7 +161,7 @@ pub struct ShmTXCounterLease {
 
 impl ShmTXCounterLease {
     pub fn new(segment: Arc<TXAuthSegment>) -> ZResult<Self> {
-        let index = zlock!(segment.available_shm_counters).pop();
+        let index = zlock!(segment.available_shm_counters).pop_front();
         index
             .map(|counter_index| {
                 // Reset counter to 0 when lease is created
@@ -204,7 +205,7 @@ impl ShmTXCounterLease {
 
 impl Drop for ShmTXCounterLease {
     fn drop(&mut self) {
-        zlock!(self.segment.available_shm_counters).push(self.counter_index);
+        zlock!(self.segment.available_shm_counters).push_front(self.counter_index);
     }
 }
 
