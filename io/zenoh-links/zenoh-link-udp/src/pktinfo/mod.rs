@@ -62,4 +62,73 @@ impl PktInfoUdpSocket {
         }
         Ok((res.0, res.1, src_addr))
     }
+
+    pub(crate) async fn send_to(
+        &self,
+        buffer: &[u8],
+        dst_addr: &SocketAddr,
+        src_addr: &SocketAddr,
+    ) -> io::Result<usize> {
+        #[cfg(target_family = "unix")]
+        {
+            send_with_src(&self.socket, buffer, dst_addr, src_addr).await
+        }
+        #[cfg(not(target_family = "unix"))]
+        {
+            // Fallback for non-unix platforms
+            let _ = src_addr;
+            self.socket.send_to(buffer, dst_addr).await
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        net::{IpAddr, Ipv4Addr, SocketAddr},
+        sync::Arc,
+    };
+
+    use tokio::net::UdpSocket;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_pktinfo_source_ip_consistency() {
+        let server_socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+        let server_addr = server_socket.local_addr().unwrap();
+        let server_pktinfo = PktInfoUdpSocket::new(Arc::new(server_socket)).unwrap();
+
+        let client_socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let client_target_addr =
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), server_addr.port());
+
+        // The connect() call makes the OS kernel strict about the source IP of incoming packets.
+        client_socket.connect(client_target_addr).await.unwrap();
+
+        client_socket.send(b"request").await.unwrap();
+
+        let mut buf = [0u8; 1024];
+        let (size, client_addr, captured_local_ip) =
+            server_pktinfo.receive(&mut buf).await.unwrap();
+        assert_eq!(&buf[..size], b"request");
+        assert_eq!(
+            captured_local_ip.ip(),
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+        );
+
+        // Server replies using send_to with IP_PKTINFO
+        server_pktinfo
+            .send_to(b"response", &client_addr, &captured_local_ip)
+            .await
+            .unwrap();
+
+        let mut resp_buf = [0u8; 1024];
+        let n = tokio::time::timeout(std::time::Duration::from_secs(1), client_socket.recv(&mut resp_buf))
+            .await
+            .expect("Timeout: Client did not receive the response. This usually means the source IP drifted and the packet was dropped by the OS kernel.")
+            .unwrap();
+
+        assert_eq!(&resp_buf[..n], b"response");
+    }
 }
