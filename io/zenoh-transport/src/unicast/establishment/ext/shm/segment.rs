@@ -123,10 +123,21 @@ impl ShmTransportMetadataSegment {
     }
 }
 
-#[derive(Debug)]
 pub struct TXAuthSegment {
     segment: ShmTransportMetadataSegment,
     available_shm_counters: Arc<std::sync::Mutex<VecDeque<ShmCounterID>>>,
+}
+
+impl std::fmt::Debug for TXAuthSegment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TXAuthSegment")
+            .field("segment", &self.segment)
+            .field(
+                "available_shm_counters",
+                &zlock!(self.available_shm_counters).len(),
+            )
+            .finish()
+    }
 }
 
 impl TXAuthSegment {
