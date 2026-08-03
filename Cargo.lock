@@ -5501,6 +5501,7 @@ dependencies = [
  "rsa",
  "serde",
  "sha3",
+ "static_init",
  "tokio",
  "tokio-util",
  "tracing",

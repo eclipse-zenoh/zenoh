@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     collections::VecDeque,
     sync::{
@@ -20,7 +19,8 @@ use std::{
     },
 };
 
-use tokio_util::sync::CancellationToken;
+use flume::{Sender, TryRecvError};
+use static_init::dynamic;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -112,6 +112,40 @@ impl TxHandoffChannel {
     }
 }
 
+#[dynamic(lazy, drop)]
+static mut GLOBAL_HANDOFF_REACTOR: HandoffReactor = HandoffReactor::new();
+
+struct HandoffReactor {
+    task_sender: Sender<Arc<TxHandoffTask>>,
+}
+
+impl HandoffReactor {
+    fn new() -> Self {
+        let (task_sender, task_receiver) = flume::unbounded();
+
+        ZRuntime::Net.spawn(async move {
+            // we mostly iterate over this rather than add\remove elements, so Vec should be optimal choice
+            let mut tasks: Vec<Arc<TxHandoffTask>> = Vec::default();
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                loop {
+                    match task_receiver.try_recv() {
+                        Ok(new_task) => tasks.push(new_task),
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => return,
+                    }
+                }
+                tasks.retain(|t| {
+                    t.poll();
+                    Arc::strong_count(t) > 1
+                });
+            }
+        });
+
+        Self { task_sender }
+    }
+}
+
 #[derive(Debug)]
 struct TxHandoffTask {
     counter: ShmTXCounterLease,
@@ -127,52 +161,38 @@ impl TxHandoffTask {
             handoffs_len: AtomicUsize::new(0),
         }
     }
+
+    fn poll(&self) {
+        let to_pop = self.handoffs_len.load(SeqCst) as isize - self.counter.counter() as isize;
+        if to_pop > 0 {
+            for _ in 0..to_pop {
+                self.handoffs.pop();
+            }
+            self.handoffs_len.fetch_sub(to_pop as usize, SeqCst);
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct TxHandoffInner {
     task: Arc<TxHandoffTask>,
-    token: CancellationToken,
     not_commit: Mutex<VecDeque<ShmBufHardRef>>,
 }
 
 impl TxHandoffInner {
     pub fn new(counter: ShmTXCounterLease) -> Self {
         let task = Arc::new(TxHandoffTask::new(counter));
-        let token = CancellationToken::new();
 
-        let c_task = task.clone();
-        let c_token = token.clone();
-        ZRuntime::Net.spawn(async move {
-            c_token
-                .run_until_cancelled(async move {
-                    loop {
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-                        let to_pop = c_task.handoffs_len.load(SeqCst) as isize
-                            - c_task.counter.counter() as isize;
-                        if to_pop > 0 {
-                            for _ in 0..to_pop {
-                                c_task.handoffs.pop();
-                            }
-                            c_task.handoffs_len.fetch_sub(to_pop as usize, SeqCst);
-                        }
-                    }
-                })
-                .await
-        });
+        GLOBAL_HANDOFF_REACTOR
+            .read()
+            .task_sender
+            .send(task.clone())
+            .unwrap();
 
         Self {
             task,
-            token,
             not_commit: Default::default(),
         }
-    }
-}
-
-impl Drop for TxHandoffInner {
-    fn drop(&mut self) {
-        self.token.cancel();
     }
 }
 

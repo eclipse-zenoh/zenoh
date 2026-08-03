@@ -30,6 +30,7 @@ auth_usrpwd = ["transport_auth"]
 default = ["test", "transport_multilink"]
 shared-memory = [
   "lockfree",
+  "static_init",
   "zenoh-buffers/shared-memory",
   "zenoh-codec/shared-memory",
   "zenoh-protocol/shared-memory",
@@ -67,6 +68,7 @@ ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
 sha3 = { workspace = true }
+static_init = { workspace = true, optional = true }
 tokio = { workspace = true, features = [
   "fs",
   "io-util",

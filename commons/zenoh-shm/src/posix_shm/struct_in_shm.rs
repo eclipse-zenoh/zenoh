@@ -26,7 +26,7 @@ use super::segment::Segment;
 use crate::shm;
 
 /// An SHM segment that contains data structure
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
@@ -34,6 +34,23 @@ where
 {
     inner: Segment<ID>,
     _phantom: PhantomData<Elem>,
+}
+
+impl<ID, Elem: Sync> PartialEq for StructInSHM<ID, Elem>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: shm::SegmentID,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<ID, Elem: Sync> Eq for StructInSHM<ID, Elem>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: shm::SegmentID,
+{
 }
 
 unsafe impl<ID, Elem: Sync> Sync for StructInSHM<ID, Elem>

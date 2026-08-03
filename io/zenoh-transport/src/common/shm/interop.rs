@@ -383,15 +383,21 @@ fn map_to_shmbuf<const ID: u8>(
     handoff: &RxHandoffChannel,
     priority: Priority,
 ) -> ZResult<()> {
+    let mut result = Ok(());
     if ext_shm.is_some() {
         *ext_shm = None;
         for zs in zbuf.zslices_mut() {
             if zs.kind == ZSliceKind::ShmPtr {
-                map_zslice_to_shmbuf(zs, shmr, handoff, priority)?;
+                let new_result = map_zslice_to_shmbuf(zs, shmr);
+                // Handle RX handoff
+                handoff.on_rx(priority);
+                if let Err(e) = new_result {
+                    result = Err(e);
+                }
             }
         }
     }
-    Ok(())
+    result
 }
 
 // Impl - Put
@@ -544,12 +550,7 @@ impl MapShm for Err {
 
 #[cold]
 #[inline(never)]
-pub fn map_zslice_to_shmbuf(
-    zslice: &mut ZSlice,
-    shmr: &ShmReader,
-    handoff: &RxHandoffChannel,
-    priority: Priority,
-) -> ZResult<()> {
+pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &ShmReader) -> ZResult<()> {
     let codec = Zenoh080::new();
     let mut reader = zslice.reader();
 
@@ -558,9 +559,6 @@ pub fn map_zslice_to_shmbuf(
 
     // Mount shmbuf
     let smb = shmr.read_shmbuf(shmbinfo)?;
-
-    // Handle RX handoff
-    handoff.on_rx(priority);
 
     // Replace the content of the slice
     *zslice = smb.into();

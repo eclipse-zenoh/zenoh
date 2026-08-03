@@ -14,7 +14,10 @@
 
 use std::{
     ops::Deref,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{
+        atomic::{AtomicU32, Ordering::SeqCst},
+        Arc,
+    },
 };
 
 use zenoh_buffers::{
@@ -42,7 +45,9 @@ struct ShmTransportMetadata {
     challenge: u64,
     version: u64,
     protocols: [ProtocolID; 256],
-    shm_counters: [AtomicU32; 762],
+    // 351 priority-enaled peers
+    // TODO: Support growing counters array based on segment memory overcommit to control memory usage
+    shm_counters: [AtomicU32; 762 + 2048],
 }
 
 impl ShmTransportMetadata {
@@ -79,18 +84,10 @@ impl ShmTransportMetadata {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct ShmTransportMetadataSegment {
     data: StructInSHM<AuthSegmentID, ShmTransportMetadata>,
 }
-
-impl PartialEq for ShmTransportMetadataSegment {
-    fn eq(&self, other: &Self) -> bool {
-        self.data.id() == other.data.id()
-    }
-}
-
-impl Eq for ShmTransportMetadataSegment {}
 
 impl ShmTransportMetadataSegment {
     fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
@@ -108,9 +105,13 @@ impl ShmTransportMetadataSegment {
         data.challenge = challenge;
         data.version = SHM_VERSION;
         data.protocols[..shm_protocols.len()].copy_from_slice(shm_protocols);
-        data.shm_counters
-            .iter()
-            .for_each(|counter| counter.store(0, std::sync::atomic::Ordering::Relaxed));
+
+        // We intentionally do not reset the counters here, as they are expected to be reset when leased.
+        // This allows to rely on memory overcommit mechanics and save some physical memory pages for most setups
+        // that don't really utilize all the counters
+        // data.shm_counters
+        //     .iter()
+        //     .for_each(|counter| counter.store(0, std::sync::atomic::Ordering::Relaxed));
 
         Ok(Self { data })
     }
@@ -126,14 +127,6 @@ pub struct TXAuthSegment {
     segment: ShmTransportMetadataSegment,
     available_shm_counters: Arc<std::sync::Mutex<Vec<ShmCounterID>>>,
 }
-
-impl PartialEq for TXAuthSegment {
-    fn eq(&self, other: &Self) -> bool {
-        self.segment == other.segment
-    }
-}
-
-impl Eq for TXAuthSegment {}
 
 impl TXAuthSegment {
     pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
@@ -159,7 +152,7 @@ impl TXAuthSegment {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct ShmTXCounterLease {
     segment: Arc<TXAuthSegment>,
     counter_index: ShmCounterID,
@@ -169,9 +162,13 @@ impl ShmTXCounterLease {
     pub fn new(segment: Arc<TXAuthSegment>) -> ZResult<Self> {
         let index = zlock!(segment.available_shm_counters).pop();
         index
-            .map(|counter_index| Self {
-                segment,
-                counter_index,
+            .map(|counter_index| {
+                // Reset counter to 0 when lease is created
+                segment.segment.data.counter(counter_index).store(0, SeqCst);
+                Self {
+                    segment,
+                    counter_index,
+                }
             })
             .ok_or_else(|| zerror!("No available SHM counters").into())
     }
@@ -185,7 +182,7 @@ impl ShmTXCounterLease {
             .segment
             .data
             .counter(self.counter_index)
-            .fetch_add(val, std::sync::atomic::Ordering::SeqCst);
+            .fetch_add(val, SeqCst);
     }
 
     pub fn sub(&self, val: u32) {
@@ -193,7 +190,7 @@ impl ShmTXCounterLease {
             .segment
             .data
             .counter(self.counter_index)
-            .fetch_sub(val, std::sync::atomic::Ordering::SeqCst);
+            .fetch_sub(val, SeqCst);
     }
 
     pub fn counter(&self) -> u32 {
