@@ -46,7 +46,7 @@ struct ShmTransportMetadata {
     challenge: u64,
     version: u64,
     protocols: [ProtocolID; 256],
-    // 351 priority-enaled peers
+    // Allows to service 351 priority-enabled peers
     // TODO: Support growing counters array based on segment memory overcommit to control memory usage
     shm_counters: [AtomicU32; 762 + 2048],
 }
