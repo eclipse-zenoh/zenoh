@@ -839,8 +839,11 @@ validated_struct::validator! {
                     pool_size: NonZeroUsize,
                     /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
                     message_size_threshold: usize,
-                    /// The categories of messages the SHM optimization is applied to
-                    /// (default: all of `put`, `delete`, `query`, `reply`).
+                    /// The categories of messages the *implicit* SHM optimization is applied
+                    /// to, i.e. for which a large enough regular payload is automatically
+                    /// copied into shared memory (default: `put`, `query`, `reply`).
+                    /// Payloads the application already allocated in shared memory are always
+                    /// sent over SHM when the peer supports it, regardless of this list.
                     messages: Vec<DataMessage>,
                 },
             },

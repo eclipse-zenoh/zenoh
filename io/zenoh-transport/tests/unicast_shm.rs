@@ -389,18 +389,22 @@ mod tests {
     }
 }
 
-// Unit tests for the per-category SHM optimization gating (config fields
-// `transport_optimization.publications` and `.queries_replies`).
+// Unit tests for the per-category SHM optimization gating (`transport_optimization.messages`).
 //
-// They exercise the actual implicit transport optimization: a normal (non-SHM) ZBuf
-// payload above the size threshold is handed to `map_zmsg_to_partner` together with a
-// ready provider, and we check whether it gets copied into an SHM buffer
-// (downcasts to ShmBufInner, ZSliceKind::ShmPtr, `ext_shm` set) depending on the policy.
+// Two behaviors are covered:
+// - Implicit optimization: a normal (non-SHM) ZBuf payload above the size threshold is
+//   copied into SHM only when its category is enabled in the policy.
+// - Explicit forwarding: a payload already allocated in SHM is always forwarded as a
+//   descriptor, regardless of the policy.
+//
+// In both cases "promoted" is observed as ZSliceKind::ShmPtr together with the `ext_shm`
+// extension being set on the message.
 #[cfg(feature = "shared-memory")]
 mod optimization_policy {
     use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
     use zenoh_buffers::{ZBuf, ZSliceKind};
+    use zenoh_core::Wait;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, Priority},
         network::{push::ext::QoSType, NetworkBody, NetworkMessage, Push, Request, Response},
@@ -410,7 +414,14 @@ mod optimization_policy {
             PushBody, Put, RequestBody, ResponseBody,
         },
     };
-    use zenoh_shm::{api::common::types::ProtocolID, ShmBufInner};
+    use zenoh_shm::{
+        api::{
+            common::types::ProtocolID,
+            protocol_implementations::posix::posix_shm_provider_backend_binary_heap::PosixShmProviderBackendBinaryHeap,
+            provider::shm_provider::{BlockOn, GarbageCollect, ShmProviderBuilder},
+        },
+        ShmBufInner,
+    };
     use zenoh_transport::shm::{
         map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ProviderInitState,
         ShmOptimizationPolicy,
@@ -491,9 +502,9 @@ mod optimization_policy {
         NetworkMessage::from(NetworkBody::Response(response))
     }
 
-    // Run map_zmsg_to_partner and report whether the payload was promoted to SHM.
-    // Asserts that the three promotion signals (backed by ShmBufInner, ZSliceKind::ShmPtr,
-    // and the `ext_shm` extension) are consistent with each other.
+    // Run map_zmsg_to_partner and report whether the payload was promoted to SHM
+    // (i.e. it will be sent as a descriptor). Asserts the two promotion signals
+    // (ZSliceKind::ShmPtr and the `ext_shm` extension) are consistent with each other.
     fn map_and_check_promoted(
         mut msg: NetworkMessage,
         provider: &Option<Arc<LazyShmProvider>>,
@@ -534,20 +545,16 @@ mod optimization_policy {
             other => panic!("unexpected message body: {other:?}"),
         };
 
-        let zs = payload.zslices().next().unwrap();
-        // For the implicit path, "promoted" means the raw payload was actually copied
-        // into an SHM buffer. All three signals must agree.
-        let is_shm_buf = zs.downcast_ref::<ShmBufInner>().is_some();
-        let kind_is_shmptr = zs.kind == ZSliceKind::ShmPtr;
+        // "Promoted" = the payload will be sent over SHM as a descriptor, signaled by
+        // ZSliceKind::ShmPtr and by the `ext_shm` extension; both must agree. We key on
+        // these rather than on `downcast_ref::<ShmBufInner>()`, because an explicitly
+        // allocated SHM buffer downcasts to ShmBufInner whether or not it is forwarded.
+        let kind_is_shmptr = payload.zslices().next().unwrap().kind == ZSliceKind::ShmPtr;
         assert_eq!(
-            is_shm_buf, kind_is_shmptr,
-            "inconsistent SHM promotion signals (ShmBufInner vs ZSliceKind::ShmPtr)"
+            kind_is_shmptr, ext_shm_set,
+            "inconsistent SHM promotion signals (ZSliceKind::ShmPtr vs ext_shm)"
         );
-        assert_eq!(
-            is_shm_buf, ext_shm_set,
-            "inconsistent SHM promotion signals (ShmBufInner vs ext_shm)"
-        );
-        is_shm_buf
+        kind_is_shmptr
     }
 
     const ALL_ON: ShmOptimizationPolicy = ShmOptimizationPolicy {
@@ -555,21 +562,25 @@ mod optimization_policy {
         query: true,
         reply: true,
     };
-    const NO_QUERIES: ShmOptimizationPolicy = ShmOptimizationPolicy {
-        put: true,
-        query: false,
-        reply: false,
-    };
     const NO_PUBS: ShmOptimizationPolicy = ShmOptimizationPolicy {
         put: false,
         query: true,
         reply: true,
     };
+    const NO_QUERIES: ShmOptimizationPolicy = ShmOptimizationPolicy {
+        put: true,
+        query: false,
+        reply: true,
+    };
+    const NO_REPLIES: ShmOptimizationPolicy = ShmOptimizationPolicy {
+        put: true,
+        query: true,
+        reply: false,
+    };
 
     #[tokio::test]
     async fn publications_flag_gates_put() {
         let provider = ready_provider().await;
-        // Put follows `publications`, independently of `queries_replies`.
         assert!(map_and_check_promoted(
             put_message(raw_payload()),
             &provider,
@@ -579,6 +590,11 @@ mod optimization_policy {
             put_message(raw_payload()),
             &provider,
             NO_QUERIES
+        ));
+        assert!(map_and_check_promoted(
+            put_message(raw_payload()),
+            &provider,
+            NO_REPLIES
         ));
         assert!(!map_and_check_promoted(
             put_message(raw_payload()),
@@ -588,9 +604,9 @@ mod optimization_policy {
     }
 
     #[tokio::test]
-    async fn queries_replies_flag_gates_query() {
+    async fn query_flag_gates_query() {
         let provider = ready_provider().await;
-        // Query follows `queries_replies`, independently of `publications`.
+        // Query follows the `query` flag, independently of `put` and `reply`.
         assert!(map_and_check_promoted(
             query_message(raw_payload()),
             &provider,
@@ -600,6 +616,11 @@ mod optimization_policy {
             query_message(raw_payload()),
             &provider,
             NO_PUBS
+        ));
+        assert!(map_and_check_promoted(
+            query_message(raw_payload()),
+            &provider,
+            NO_REPLIES
         ));
         assert!(!map_and_check_promoted(
             query_message(raw_payload()),
@@ -609,9 +630,9 @@ mod optimization_policy {
     }
 
     #[tokio::test]
-    async fn queries_replies_flag_gates_reply() {
+    async fn reply_flag_gates_reply() {
         let provider = ready_provider().await;
-        // Reply (query response) also follows `queries_replies`.
+        // Reply follows the `reply` flag, independently of `put` and `query`.
         assert!(map_and_check_promoted(
             reply_message(raw_payload()),
             &provider,
@@ -622,10 +643,15 @@ mod optimization_policy {
             &provider,
             NO_PUBS
         ));
-        assert!(!map_and_check_promoted(
+        assert!(map_and_check_promoted(
             reply_message(raw_payload()),
             &provider,
             NO_QUERIES
+        ));
+        assert!(!map_and_check_promoted(
+            reply_message(raw_payload()),
+            &provider,
+            NO_REPLIES
         ));
     }
 
@@ -643,6 +669,68 @@ mod optimization_policy {
         assert!(!map_and_check_promoted(
             query_message(small()),
             &provider,
+            ALL_ON
+        ));
+        assert!(!map_and_check_promoted(
+            reply_message(small()),
+            &provider,
+            ALL_ON
+        ));
+    }
+
+    // Allocate a real SHM buffer and return it as a ZBuf payload. Its ZSlice downcasts to
+    // ShmBufInner, exercising the explicit-forwarding branch of map_to_partner.
+    async fn shm_payload() -> ZBuf {
+        const SHM_ARENA: usize = 4 * LARGE_PAYLOAD_SIZE;
+        let backend = PosixShmProviderBackendBinaryHeap::builder(SHM_ARENA)
+            .wait()
+            .unwrap();
+        let provider = ShmProviderBuilder::backend(backend).wait();
+        let layout = provider.alloc_layout(LARGE_PAYLOAD_SIZE).unwrap();
+        let sbuf = layout
+            .alloc()
+            .with_policy::<BlockOn<GarbageCollect>>()
+            .await
+            .unwrap();
+        let zbuf: ZBuf = sbuf.into();
+        assert!(zbuf
+            .zslices()
+            .next()
+            .unwrap()
+            .downcast_ref::<ShmBufInner>()
+            .is_some());
+        zbuf
+    }
+
+    // Explicitly-allocated SHM buffers are always forwarded as descriptors, even when the
+    // implicit optimization is disabled for that message category (and even with no
+    // implicit provider at all).
+    #[tokio::test]
+    async fn explicit_shm_buffer_always_forwarded() {
+        // No implicit provider: only the explicit branch can promote here.
+        let no_provider: Option<Arc<LazyShmProvider>> = None;
+
+        // Category disabled -> still forwarded.
+        assert!(map_and_check_promoted(
+            put_message(shm_payload().await),
+            &no_provider,
+            NO_PUBS
+        ));
+        assert!(map_and_check_promoted(
+            query_message(shm_payload().await),
+            &no_provider,
+            NO_QUERIES
+        ));
+        assert!(map_and_check_promoted(
+            reply_message(shm_payload().await),
+            &no_provider,
+            NO_REPLIES
+        ));
+
+        // Category enabled -> forwarded as well.
+        assert!(map_and_check_promoted(
+            query_message(shm_payload().await),
+            &no_provider,
             ALL_ON
         ));
     }
