@@ -239,24 +239,40 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     match &mut msg.body {
         NetworkBodyMut::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => {
-                let p = if policy.put { shm_provider } else { &no_provider };
+                let p = if policy.put {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
                 b.map_to_partner(partner_shm_cfg, p);
             }
             PushBody::Del(_) => {}
         },
         NetworkBodyMut::Request(Request { payload, .. }) => match payload {
             RequestBody::Query(b) => {
-                let p = if policy.query { shm_provider } else { &no_provider };
+                let p = if policy.query {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
                 b.map_to_partner(partner_shm_cfg, p);
             }
         },
         NetworkBodyMut::Response(Response { payload, .. }) => match payload {
             ResponseBody::Reply(b) => {
-                let p = if policy.reply { shm_provider } else { &no_provider };
+                let p = if policy.reply {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
                 b.map_to_partner(partner_shm_cfg, p);
             }
             ResponseBody::Err(b) => {
-                let p = if policy.reply { shm_provider } else { &no_provider };
+                let p = if policy.reply {
+                    shm_provider
+                } else {
+                    &no_provider
+                };
                 b.map_to_partner(partner_shm_cfg, p);
             }
         },
