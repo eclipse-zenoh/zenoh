@@ -327,7 +327,7 @@ async fn openclose_transport(
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_and_interface() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
 
     zenoh_util::init_log_from_env_or("error");
 
@@ -353,7 +353,7 @@ async fn openclose_tcp_only_connect_with_bind_and_interface() {
 #[cfg(feature = "transport_tcp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_tcp_only_connect_with_bind_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
 
     zenoh_util::init_log_from_env_or("error");
 
@@ -380,8 +380,8 @@ async fn openclose_tcp_only_connect_with_bind_restriction() {
 async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
     use zenoh_util::net::get_ipv6_ipaddrs;
 
-    let addrs = get_ipv4_ipaddrs(None);
-    let addrs_v6 = get_ipv6_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
+    let addrs_v6 = get_ipv6_ipaddrs(None, true);
 
     if addrs_v6.is_empty() {
         // No IPv6 addresses on this host; test requires IPv6 to produce a protocol mismatch.
@@ -409,8 +409,8 @@ async fn openclose_tcp_only_connect_with_bind_restriction_mismatch_protocols() {
 async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
     use zenoh_util::net::get_ipv6_ipaddrs;
 
-    let addrs = get_ipv4_ipaddrs(None);
-    let addrs_v6 = get_ipv6_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
+    let addrs_v6 = get_ipv6_ipaddrs(None, true);
 
     if addrs_v6.is_empty() {
         // No IPv6 addresses on this host; test requires IPv6 to produce a protocol mismatch.
@@ -437,7 +437,7 @@ async fn openclose_udp_only_connect_with_bind_restriction_mismatch_protocols() {
 #[should_panic(expected = "assertion failed: open_res.is_ok()")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_and_interface() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let listen_port = get_free_udp_port();
     let bind_port = get_free_udp_port();
     let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
@@ -461,7 +461,7 @@ async fn openclose_udp_only_connect_with_bind_and_interface() {
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn openclose_udp_only_connect_with_bind_restriction() {
-    let addrs = get_ipv4_ipaddrs(None);
+    let addrs = get_ipv4_ipaddrs(None, true);
     let listen_port = get_free_udp_port();
     let bind_port = get_free_udp_port();
     let bind_addr_str = format!("{}:{}", addrs[0], bind_port);
