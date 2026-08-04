@@ -84,6 +84,7 @@ pub(crate) async fn open_link(
         crate::common::shm::shm_context::MulticastTransportShmContext::new(
             context.shm_reader.clone(),
             context.shm_provider.clone(),
+            context.policy,
         )
     });
 

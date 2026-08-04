@@ -146,6 +146,7 @@ impl TransportUnicastUniversal {
                 &shm_context.shm_config,
                 &shm_context.shm_provider,
                 &transport_link.link.shm_handoff.tx,
+                shm_context.policy,
             )
         });
 

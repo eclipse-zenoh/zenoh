@@ -55,6 +55,7 @@ impl TransportMulticastInner {
                 &shm_context.shm_config,
                 &shm_context.shm_provider,
                 &TxHandoffStorage::new_disabled(),
+                shm_context.policy,
             );
         }
 

@@ -108,6 +108,7 @@ impl TransportUnicastLowlatency {
                     &shm_context.shm_config,
                     &shm_context.shm_provider,
                     &link.shm_handoff.tx,
+                    shm_context.policy,
                 )
             });
 

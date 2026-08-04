@@ -110,13 +110,14 @@ pub enum InterceptorFlow {
     Ingress,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+/// A category of data message that carries a payload. Used by downsampling, low-pass
+/// filtering, and SHM transport optimization to select which messages a configuration
+/// applies to.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum DownsamplingMessage {
-    Delete,
-    #[deprecated = "Use `Put` or `Delete` instead."]
-    Push,
+pub enum DataMessage {
     Put,
+    Delete,
     Query,
     Reply,
 }
@@ -143,24 +144,11 @@ pub struct DownsamplingItemConf {
     /// Downsampling will be applied for all link types if the parameter is None
     pub link_protocols: Option<NEVec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
-    pub messages: NEVec<DownsamplingMessage>,
+    pub messages: NEVec<DataMessage>,
     /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
     pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
     pub flows: Option<NEVec<InterceptorFlow>>,
-}
-
-fn downsampling_validator(d: &Vec<DownsamplingItemConf>) -> bool {
-    for item in d {
-        if item
-            .messages
-            .iter()
-            .any(|m| *m == DownsamplingMessage::Push)
-        {
-            tracing::warn!("In 'downsampling/messages' configuration: 'push' is deprecated and may not be supported in future versions, use 'put' and/or 'delete' instead");
-        }
-    }
-    true
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -170,18 +158,9 @@ pub struct LowPassFilterConf {
     pub interfaces: Option<NEVec<String>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
     pub flows: Option<NEVec<InterceptorFlow>>,
-    pub messages: NEVec<LowPassFilterMessage>,
+    pub messages: NEVec<DataMessage>,
     pub key_exprs: NEVec<OwnedKeyExpr>,
     pub size_limit: usize,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum LowPassFilterMessage {
-    Put,
-    Delete,
-    Query,
-    Reply,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -860,6 +839,12 @@ validated_struct::validator! {
                     pool_size: NonZeroUsize,
                     /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
                     message_size_threshold: usize,
+                    /// The categories of messages the *implicit* SHM optimization is applied
+                    /// to, i.e. for which a large enough regular payload is automatically
+                    /// copied into shared memory (default: `put`, `query`, `reply`).
+                    /// Payloads the application already allocated in shared memory are always
+                    /// sent over SHM when the peer supports it, regardless of this list.
+                    messages: Vec<DataMessage>,
                 },
             },
             pub auth: #[derive(Default)]
@@ -920,7 +905,7 @@ validated_struct::validator! {
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
-        downsampling: Vec<DownsamplingItemConf> where (downsampling_validator),
+        downsampling: Vec<DownsamplingItemConf>,
 
         /// Configuration of the access control (ACL)
         pub access_control: AclConfig {

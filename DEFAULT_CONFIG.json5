@@ -758,6 +758,18 @@
           pool_size: 16777216,
           /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
           message_size_threshold: 3072,
+          /// The categories of messages the *implicit* SHM optimization is applied to,
+          /// i.e. for which a large enough regular payload is automatically copied into
+          /// shared memory (default: "put", "query", "reply").
+          /// This does not affect payloads the application already allocated in shared
+          /// memory: those are always sent over SHM when the peer supports it.
+          /// Adding "delete" here has no effect since "delete" messages don't have a payload
+          /// and hence are never optimized.
+          /// Removing "query" and "reply" keeps auto-promoted queries/replies off the SHM
+          /// path. This is useful for RPC-style traffic, and a workaround for the in-transit
+          /// watchdog invalidation race that could occur under high CPU load.
+          /// See https://github.com/eclipse-zenoh/zenoh/issues/2628
+          messages: ["put", "query", "reply"],
       },
     },
     auth: {
