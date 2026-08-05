@@ -73,7 +73,12 @@ use super::{
     connectivity,
 };
 #[cfg(feature = "unstable")]
-use crate::api::{cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters};
+use crate::api::timestamp_stack::{push_ts_interception, TimestampInstrumentation, TimestampStack};
+#[cfg(feature = "unstable")]
+use crate::api::{
+    cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
+    timestamp_stack::GetTimestampCallback,
+};
 #[cfg(feature = "internal")]
 use crate::net::runtime::Runtime;
 #[cfg(all(feature = "shared-memory", feature = "unstable"))]
@@ -552,11 +557,20 @@ impl SubscriberCallbacks {
         qos: push::ext::QoSType,
         msg: &mut PushBody,
         #[cfg(feature = "unstable")] reliability: Reliability,
+        #[cfg(feature = "unstable")] timestamp_stack: Option<
+            zenoh_protocol::network::timestamp_stack::TimestampStack,
+        >,
     ) {
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = self.0.into_iter();
         for (cb, key_expr) in drain {
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, &mut msg.clone(), reliability));
+            cb.call_with_message((
+                key_expr,
+                qos,
+                &mut msg.clone(),
+                reliability,
+                timestamp_stack.clone(),
+            ));
             #[cfg(not(feature = "unstable"))]
             cb.call_with_message((key_expr, qos, &mut msg.clone()));
         }
@@ -568,7 +582,7 @@ impl SubscriberCallbacks {
                 msg = &mut msg_clone;
             }
             #[cfg(feature = "unstable")]
-            cb.call_with_message((key_expr, qos, msg, reliability));
+            cb.call_with_message((key_expr, qos, msg, reliability, timestamp_stack));
             #[cfg(not(feature = "unstable"))]
             cb.call_with_message((key_expr, qos, msg));
         }
@@ -1337,6 +1351,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 
@@ -1372,6 +1388,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
     /// Query data from the matching queryables in the system. This is a shortcut for declaring
@@ -1422,6 +1440,8 @@ impl Session {
             source_info: None,
             #[cfg(feature = "unstable")]
             cancellation_token: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 }
@@ -1431,6 +1451,7 @@ impl Session {
     pub(super) fn new(
         config: Config,
         #[cfg(feature = "shared-memory")] shm_clients: Option<Arc<ShmClientStorage>>,
+        #[cfg(feature = "unstable")] timestamp_callback: Option<GetTimestampCallback>,
     ) -> impl Resolve<ZResult<Session>> {
         ResolveFuture::new(async move {
             tracing::debug!("Config: {:?}", &config);
@@ -1441,6 +1462,10 @@ impl Session {
             #[cfg(feature = "shared-memory")]
             {
                 runtime = runtime.shm_clients(shm_clients);
+            }
+            #[cfg(feature = "unstable")]
+            {
+                runtime = runtime.timestamp_callback(timestamp_callback);
             }
             let mut runtime = runtime.build().await?;
 
@@ -1687,28 +1712,41 @@ impl Session {
         };
         if let Some(querier_state) = state.queriers.remove(&querier_id) {
             trace!("undeclare_querier({:?})", querier_state);
-            // remove all pending queries from this querier
-            state
+            // Remove all pending queries from this querier. The removed queries own
+            // the user callbacks (including completion/drop callbacks); they must be
+            // dropped *after* the state lock is released below, otherwise a completion
+            // callback that re-enters the `Session` would deadlock re-acquiring the lock.
+            let removed_query_ids: Vec<_> = state
                 .queries
-                .retain(|_, q| q.querier_id != Some(querier_id));
-            if querier_state.destination != Locality::SessionLocal {
-                // Note: there might be several queriers on the same KeyExpr.
-                // Before calling forget_queriers(key_expr), check if this was the last one.
-                if !state.queriers.values().any(|p| {
+                .iter()
+                .filter(|(_, q)| q.querier_id == Some(querier_id))
+                .map(|(id, _)| *id)
+                .collect();
+            let removed_queries = removed_query_ids
+                .into_iter()
+                .filter_map(|id| state.queries.remove(&id))
+                .collect::<Vec<_>>();
+            // Note: there might be several queriers on the same KeyExpr.
+            // Before calling forget_queriers(key_expr), check if this was the last one.
+            let send_final = querier_state.destination != Locality::SessionLocal
+                && !state.queriers.values().any(|p| {
                     p.destination != Locality::SessionLocal
                         && p.remote_id == querier_state.remote_id
-                }) {
-                    drop(state);
-                    primitives.send_interest(&mut Interest {
-                        id: querier_state.remote_id,
-                        mode: InterestMode::Final,
-                        options: InterestOptions::empty(),
-                        wire_expr: None,
-                        ext_qos: interest::ext::QoSType::DEFAULT,
-                        ext_tstamp: None,
-                        ext_nodeid: interest::ext::NodeIdType::DEFAULT,
-                    });
-                }
+                });
+            drop(state);
+            // Lock released: now it is safe to drop the removed queries (and their
+            // callbacks, which may re-enter the `Session`).
+            drop(removed_queries);
+            if send_final {
+                primitives.send_interest(&mut Interest {
+                    id: querier_state.remote_id,
+                    mode: InterestMode::Final,
+                    options: InterestOptions::empty(),
+                    wire_expr: None,
+                    ext_qos: interest::ext::QoSType::DEFAULT,
+                    ext_tstamp: None,
+                    ext_nodeid: interest::ext::NodeIdType::DEFAULT,
+                });
             }
             Ok(())
         } else {
@@ -2054,6 +2092,8 @@ impl Session {
                             #[cfg(feature = "unstable")]
                             source_info: None,
                             attachment: None,
+                            #[cfg(feature = "unstable")]
+                            timestamp_stack: None,
                         });
                     }
                 });
@@ -2452,6 +2492,10 @@ impl Session {
             msg,
             #[cfg(feature = "unstable")]
             reliability,
+            // NOTE: execute_subscriber_callbacks is currently only called for Liveliness subscribers,
+            // so there is no need to pass ext_ts_stack in its parameters.
+            #[cfg(feature = "unstable")]
+            None,
         );
     }
 
@@ -2470,6 +2514,7 @@ impl Session {
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         attachment: Option<ZBytes>,
+        #[cfg(feature = "unstable")] timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> ZResult<()> {
         trace!("write({:?}, [...])", key_expr);
         let state = zread!(self.0.state);
@@ -2511,6 +2556,23 @@ impl Session {
                 }),
             })
         };
+        #[cfg(feature = "unstable")]
+        if let Some(instrumentation) = timestamp_instrumentation {
+            use zenoh_protocol::network::timestamp_stack::{
+                interception_point, TimestampStack, TsStackType,
+            };
+            let mut ext_ts_stack = Some(TsStackType {
+                ts_stack: TimestampStack {
+                    conf_flags: instrumentation.conf_flags(),
+                    stack: vec![],
+                },
+            });
+            {
+                let rt = self.0.runtime.get_inner();
+                push_ts_interception(&mut ext_ts_stack, || Some(rt), interception_point::SEND);
+            }
+            push.ext_ts_stack = ext_ts_stack;
+        }
         let has_local_callbacks = !callbacks.is_empty();
         if destination != Locality::SessionLocal {
             primitives.send_push_consume(
@@ -2528,6 +2590,9 @@ impl Session {
                 callbacks: SubscriberCallbacks,
                 push: &mut Push,
                 #[cfg(feature = "unstable")] reliability: Reliability,
+                #[cfg(feature = "unstable")] timestamp_stack: Option<
+                    zenoh_protocol::network::timestamp_stack::TimestampStack,
+                >,
             ) {
                 callbacks.call(
                     true,
@@ -2535,13 +2600,29 @@ impl Session {
                     &mut push.payload,
                     #[cfg(feature = "unstable")]
                     reliability,
+                    #[cfg(feature = "unstable")]
+                    timestamp_stack,
                 );
             }
+
+            #[cfg(feature = "unstable")]
+            {
+                let rt = self.0.runtime.get_inner();
+                push_ts_interception(
+                    &mut push.ext_ts_stack,
+                    || Some(rt),
+                    zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+                );
+            }
+            #[cfg(feature = "unstable")]
+            let timestamp_stack = push.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone());
             call_local(
                 callbacks,
                 &mut push,
                 #[cfg(feature = "unstable")]
                 reliability,
+                #[cfg(feature = "unstable")]
+                timestamp_stack,
             );
         }
         // ext_unknown is not touched by routing/callbacks, so it must be empty
@@ -2622,6 +2703,7 @@ impl Session {
         #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
         querier_id: Option<EntityId>,
         querier_notifier: Option<SyncGroupNotifier>,
+        #[cfg(feature = "unstable")] timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> ZResult<()> {
         tracing::trace!(
             "get({}, {:?}, {:?})",
@@ -2701,6 +2783,25 @@ impl Session {
         );
         drop(state);
 
+        #[cfg(not(feature = "unstable"))]
+        let ext_ts_stack = None;
+        #[cfg(feature = "unstable")]
+        let mut ext_ts_stack = timestamp_instrumentation.and_then(|instrumentation| {
+            use zenoh_protocol::network::timestamp_stack::{
+                interception_point, TimestampStack, TsStackType,
+            };
+            let mut ext_ts_stack = Some(TsStackType {
+                ts_stack: TimestampStack {
+                    conf_flags: instrumentation.conf_flags(),
+                    stack: vec![],
+                },
+            });
+            {
+                let rt = self.0.runtime.get_inner();
+                push_ts_interception(&mut ext_ts_stack, || Some(rt), interception_point::SEND);
+            }
+            ext_ts_stack
+        });
         if destination != Locality::SessionLocal {
             let wexpr = key_expr.to_wire(self).to_owned();
             let ext_attachment = attachment.clone().map(Into::into);
@@ -2729,9 +2830,19 @@ impl Session {
                     ext_attachment,
                     ext_unknown: vec![],
                 }),
+                ext_ts_stack: ext_ts_stack.clone(),
             });
         }
         if destination != Locality::Remote {
+            #[cfg(feature = "unstable")]
+            {
+                let rt = self.0.runtime.get_inner();
+                push_ts_interception(
+                    &mut ext_ts_stack,
+                    || Some(rt),
+                    zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+                );
+            }
             self.handle_query(
                 zread!(self.0.state),
                 true,
@@ -2750,6 +2861,8 @@ impl Session {
                     payload: v.0.clone().into(),
                 }),
                 attachment,
+                #[cfg(feature = "unstable")]
+                ext_ts_stack.map(|ext| ext.ts_stack),
             );
         }
         Ok(())
@@ -2866,6 +2979,9 @@ impl Session {
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
         body: Option<QueryBodyType>,
         attachment: Option<ZBytes>,
+        #[cfg(feature = "unstable")] timestamp_stack: Option<
+            zenoh_protocol::network::timestamp_stack::TimestampStack,
+        >,
     ) {
         let Ok(primitives) = state.primitives() else {
             return;
@@ -2886,6 +3002,11 @@ impl Session {
 
         let zid = self.zid();
 
+        #[cfg(feature = "unstable")]
+        let query_ts_stack = timestamp_stack
+            .as_ref()
+            .and_then(|ts| TimestampStack::try_from(ts).ok());
+
         let query_inner = Arc::new(QueryInner {
             key_expr: key_expr.clone().into_owned(),
             parameters: parameters.to_owned().into(),
@@ -2899,6 +3020,10 @@ impl Session {
             } else {
                 ReplyPrimitives::new_remote(Some(self.downgrade()), primitives.into_primitives())
             },
+            #[cfg(feature = "unstable")]
+            runtime: Some(self.0.runtime.downgrade()),
+            #[cfg(feature = "unstable")]
+            query_ts_stack,
         });
         if !queryables.is_empty() {
             let mut query = Query {
@@ -3108,6 +3233,8 @@ impl Primitives for WeakSession {
                                         #[cfg(feature = "unstable")]
                                         source_info: None,
                                         attachment: None,
+                                        #[cfg(feature = "unstable")]
+                                        timestamp_stack: None,
                                     }),
                                     #[cfg(feature = "unstable")]
                                     replier_id: None,
@@ -3212,17 +3339,37 @@ impl Primitives for WeakSession {
         let callbacks =
             state.subscriber_callbacks(false, SubscriberKind::Subscriber, &msg.wire_expr, false);
         drop(state);
+        #[cfg(feature = "unstable")]
+        {
+            let rt = self.0.runtime.get_inner();
+            push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         callbacks.call(
             consume,
             msg.ext_qos,
             &mut msg.payload,
             #[cfg(feature = "unstable")]
             _reliability,
+            #[cfg(feature = "unstable")]
+            msg.ext_ts_stack.as_ref().map(|ts| ts.ts_stack.clone()),
         );
     }
 
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let rt = self.0.runtime.get_inner();
+            push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             RequestBody::Query(m) => {
                 let state = zread!(self.0.state);
@@ -3244,6 +3391,8 @@ impl Primitives for WeakSession {
                             m.ext_sinfo.map(Into::into),
                             mem::take(&mut m.ext_body),
                             mem::take(&mut m.ext_attachment).map(Into::into),
+                            #[cfg(feature = "unstable")]
+                            mem::take(&mut msg.ext_ts_stack).map(|ts| ts.ts_stack),
                         );
                     }
                     Err(err) => {
@@ -3256,6 +3405,15 @@ impl Primitives for WeakSession {
 
     fn send_response(&self, msg: &mut Response) {
         trace!("recv Response {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let rt = self.0.runtime.get_inner();
+            push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(rt),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             ResponseBody::Err(e) => {
                 let mut state = zwrite!(self.0.state);
@@ -3270,6 +3428,11 @@ impl Primitives for WeakSession {
                             result: Err(ReplyError {
                                 payload: mem::take(&mut e.payload).into(),
                                 encoding: mem::take(&mut e.encoding).into(),
+                                #[cfg(feature = "unstable")]
+                                timestamp_stack: msg
+                                    .ext_ts_stack
+                                    .as_ref()
+                                    .and_then(|ts| TimestampStack::try_from(&ts.ts_stack).ok()),
                             }),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {
@@ -3319,6 +3482,8 @@ impl Primitives for WeakSession {
                                 &mut m.payload,
                                 #[cfg(feature = "unstable")]
                                 Reliability::Reliable,
+                                #[cfg(feature = "unstable")]
+                                mem::take(&mut msg.ext_ts_stack).map(|ts| ts.ts_stack),
                             )),
                             #[cfg(feature = "unstable")]
                             replier_id: mem::take(&mut msg.ext_respid).map(|rid| {

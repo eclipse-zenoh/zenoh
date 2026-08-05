@@ -18,11 +18,13 @@ use core::{
     ops::Deref,
 };
 use std::net::SocketAddr;
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 
 use async_trait::async_trait;
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -35,6 +37,7 @@ pub trait LinkManagerUnicastTrait: Send + Sync {
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()>;
     async fn get_listeners(&self) -> Vec<EndPoint>;
     async fn get_locators(&self) -> Vec<Locator>;
+    async fn get_locators_noloopback(&self) -> Vec<Locator>;
 }
 pub type NewLinkChannelSender = flume::Sender<LinkUnicast>;
 
@@ -43,7 +46,35 @@ pub trait ConstructibleLinkManagerUnicast<T>: Sized {
 }
 
 #[derive(Clone)]
-pub struct LinkUnicast(pub Arc<dyn LinkUnicastTrait>);
+pub struct LinkUnicast(pub NewLink);
+
+#[derive(Clone)]
+pub enum NewLink {
+    Single(Arc<dyn LinkUnicastTrait>),
+    MixedReliability {
+        reliable: Arc<dyn LinkUnicastTrait>,
+        best_effort: Arc<dyn LinkUnicastTrait>,
+    },
+}
+
+impl fmt::Debug for NewLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Single(link) => f
+                .debug_tuple("Single")
+                .field(&LinkUnicast::from(link.clone()))
+                .finish(),
+            Self::MixedReliability {
+                reliable,
+                best_effort,
+            } => f
+                .debug_struct("MixedReliability")
+                .field("reliable", &LinkUnicast::from(reliable.clone()))
+                .field("best_effort", &LinkUnicast::from(best_effort.clone()))
+                .finish(),
+        }
+    }
+}
 
 #[async_trait]
 pub trait LinkUnicastTrait: Send + Sync {
@@ -54,11 +85,16 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn is_streamed(&self) -> bool;
     fn get_interface_names(&self) -> Vec<String>;
     fn get_auth_id(&self) -> &LinkAuthId;
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
+    fn supports_priorities(&self) -> bool {
+        false
+    }
+    async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()>;
+    async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize>;
+    async fn read_exact(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd>;
 }
 
 impl Deref for LinkUnicast {
@@ -66,7 +102,10 @@ impl Deref for LinkUnicast {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        match &self.0 {
+            NewLink::Single(link) => link,
+            NewLink::MixedReliability { reliable, .. } => reliable,
+        }
     }
 }
 
@@ -105,7 +144,7 @@ impl fmt::Debug for LinkUnicast {
 
 impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
     fn from(link: Arc<dyn LinkUnicastTrait>) -> LinkUnicast {
-        LinkUnicast(link)
+        LinkUnicast(NewLink::Single(link))
     }
 }
 

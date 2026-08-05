@@ -63,6 +63,7 @@ impl Display for InvalidLibSearchDir {
 
 impl Error for InvalidLibSearchDir {}
 
+#[derive(Debug)]
 pub struct IntoIter {
     iter: std::vec::IntoIter<LibSearchDir>,
 }

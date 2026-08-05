@@ -121,6 +121,7 @@ use std::time::Duration;
 
 use zenoh_config::ZenohId;
 use zenoh_core::ztimeout;
+use zenoh_test::get_free_tcp_port;
 
 use crate::{config::WhatAmI, init_log_from_env_or, open, Config};
 
@@ -225,7 +226,7 @@ async fn create_net(
     net: Vec<(u16, Vec<(u16, Option<u16>)>)>,
     source: u16,
     dest: u16,
-    port_offset: u16,
+    _port_offset: u16,
 ) -> Net {
     let start_id = ZenohId::from_str("a").unwrap();
     let end_id = ZenohId::from_str("b").unwrap();
@@ -247,15 +248,30 @@ async fn create_net(
         }
     }
     let mut routers = Vec::new();
+    let mut router_ports = HashMap::new();
+
+    for (id, _) in &net {
+        let mut port = get_free_tcp_port();
+        while router_ports.values().any(|p| *p == port) {
+            port = get_free_tcp_port();
+        }
+        router_ports.insert(*id, port);
+    }
 
     for v in &net {
         let zid = ZenohId::from_str(&v.0.to_string()).unwrap();
         let connect =
             v.1.iter()
-                .map(|(id, _)| id + port_offset)
+                .map(|(id, _)| {
+                    *router_ports
+                        .get(id)
+                        .unwrap_or_else(|| panic!("Missing port for router {id}"))
+                })
                 .collect::<Vec<_>>();
-        let mut config =
-            get_basic_router_config(&[port_offset + v.0], &connect, WhatAmI::Router).await;
+        let listen_port = *router_ports
+            .get(&v.0)
+            .unwrap_or_else(|| panic!("Missing port for router {}", v.0));
+        let mut config = get_basic_router_config(&[listen_port], &connect, WhatAmI::Router).await;
         config.set_id(Some(zid)).unwrap();
         let weights =
             v.1.iter()
@@ -277,9 +293,19 @@ async fn create_net(
         routers.push(router);
     }
 
-    let mut config_client_a = get_basic_client_config(source + port_offset).await;
+    let mut config_client_a = get_basic_client_config(
+        *router_ports
+            .get(&source)
+            .unwrap_or_else(|| panic!("Missing port for source router {source}")),
+    )
+    .await;
     config_client_a.set_id(Some(start_id)).unwrap();
-    let mut config_client_b = get_basic_client_config(dest + port_offset).await;
+    let mut config_client_b = get_basic_client_config(
+        *router_ports
+            .get(&dest)
+            .unwrap_or_else(|| panic!("Missing port for destination router {dest}")),
+    )
+    .await;
     config_client_b.set_id(Some(end_id)).unwrap();
 
     let session_a = ztimeout!(open(config_client_a)).unwrap();

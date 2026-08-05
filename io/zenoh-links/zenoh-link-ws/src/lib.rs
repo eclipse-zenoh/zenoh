@@ -43,7 +43,7 @@ pub const WS_LOCATOR_PREFIX: &str = "ws";
 
 const IS_RELIABLE: bool = true;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct WsLocatorInspector;
 #[async_trait]
 impl LocatorInspector for WsLocatorInspector {

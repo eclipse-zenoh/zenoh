@@ -210,7 +210,7 @@ pub mod common {
             }
 
             pub fn is_null(&self) -> bool {
-                self.wire_expr.is_empty()
+                self == &Self::null()
             }
 
             #[cfg(feature = "test")]

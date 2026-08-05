@@ -21,6 +21,7 @@ pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 2;
 type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct PluginVTable<StartArgs, Instance> {
     pub plugin_version: &'static str,
     pub plugin_long_version: &'static str,

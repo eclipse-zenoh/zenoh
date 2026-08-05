@@ -85,6 +85,16 @@ where
     To: Sized + Send,
     C: FnOnce() -> To + Send;
 
+impl<C, To> std::fmt::Debug for ResolveClosure<C, To>
+where
+    To: Sized + Send,
+    C: FnOnce() -> To + Send,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ResolveClosure").field(&"..").finish()
+    }
+}
+
 impl<C, To> ResolveClosure<C, To>
 where
     To: Sized + Send,
@@ -132,6 +142,16 @@ pub struct ResolveFuture<F, To>(F)
 where
     To: Sized + Send,
     F: Future<Output = To> + Send;
+
+impl<F, To> std::fmt::Debug for ResolveFuture<F, To>
+where
+    To: Sized + Send,
+    F: Future<Output = To> + Send,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ResolveFuture").field(&"..").finish()
+    }
+}
 
 impl<F, To> ResolveFuture<F, To>
 where

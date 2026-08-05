@@ -45,7 +45,7 @@ pub trait LCodec<Message> {
     fn w_len(self, message: Message) -> usize;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080;
 
 impl Default for Zenoh080 {
@@ -60,7 +60,7 @@ impl Zenoh080 {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080Header {
     pub header: u8,
     pub codec: Zenoh080,
@@ -75,7 +75,7 @@ impl Zenoh080Header {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080Condition {
     pub condition: bool,
     pub codec: Zenoh080,
@@ -90,7 +90,7 @@ impl Zenoh080Condition {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080Length {
     pub length: usize,
     pub codec: Zenoh080,
@@ -105,7 +105,7 @@ impl Zenoh080Length {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080Reliability {
     pub reliability: Reliability,
     pub codec: Zenoh080,
@@ -120,7 +120,7 @@ impl Zenoh080Reliability {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Zenoh080Bounded<T> {
     _t: PhantomData<T>,
 }
@@ -138,7 +138,7 @@ impl<T> Zenoh080Bounded<T> {
 }
 
 #[cfg(feature = "shared-memory")]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Zenoh080Sliced<T> {
     is_sliced: bool,
     codec: Zenoh080Bounded<T>,

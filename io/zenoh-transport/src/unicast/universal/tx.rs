@@ -110,7 +110,12 @@ impl TransportUnicastUniversal {
     pub(crate) fn internal_schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
+            map_zmsg_to_partner(
+                &mut msg,
+                &shm_context.shm_config,
+                &shm_context.shm_provider,
+                shm_context.policy,
+            );
         }
         let msg = msg.as_ref();
         let transport_links = self
@@ -119,7 +124,7 @@ impl TransportUnicastUniversal {
             .expect("reading `TransportUnicastUniversal::links` should not fail");
 
         let Some(transport_link_index) = Self::select(
-            transport_links.iter().map(|tl| {
+            transport_links.get_links().iter().map(|tl| {
                 (
                     tl.link
                         .config
@@ -142,6 +147,7 @@ impl TransportUnicastUniversal {
         };
 
         let transport_link = transport_links
+            .get_links()
             .get(transport_link_index)
             .expect("transport link index should be valid");
 

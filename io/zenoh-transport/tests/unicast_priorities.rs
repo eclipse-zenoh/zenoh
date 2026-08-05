@@ -32,6 +32,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -101,6 +102,7 @@ impl TransportEventHandler for SHRouter {
 }
 
 // Transport Callback for the router
+#[derive(Debug)]
 pub struct SCRouter {
     priority: Arc<AtomicUsize>,
     count: Arc<AtomicUsize>,
@@ -163,6 +165,7 @@ impl TransportEventHandler for SHClient {
 }
 
 // Transport Callback for the client
+#[derive(Debug)]
 pub struct SCClient;
 
 impl Default for SCClient {
@@ -316,7 +319,9 @@ async fn run(endpoints: &[EndPoint]) {
 async fn priorities_tcp_only() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap()];
     // Run
     run(&endpoints).await;
 }
@@ -340,7 +345,9 @@ async fn conduits_unixpipe_only() {
 async fn priorities_ws_only() {
     zenoh_util::init_log_from_env_or("error");
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap()];
     // Run
     run(&endpoints).await;
 }

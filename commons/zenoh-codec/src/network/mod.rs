@@ -17,6 +17,7 @@ mod oam;
 mod push;
 mod request;
 mod response;
+mod timestamp_stack;
 
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
@@ -140,6 +141,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct NetworkMessageIter<R> {
     codec: Zenoh080Reliability,
     reader: R,

@@ -22,12 +22,17 @@ pub mod orchestrator;
 mod region;
 mod scouting;
 
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use std::future::IntoFuture;
+#[cfg(feature = "unstable")]
+use std::sync::OnceLock;
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::{Mutex, MutexGuard};
 use std::{
     any::Any,
     collections::HashSet,
+    fmt,
     ops::Deref,
     sync::{
         atomic::{AtomicU32, Ordering},
@@ -48,6 +53,8 @@ use zenoh_config::{
 };
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+#[cfg(all(feature = "unstable", feature = "shared-memory"))]
+use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
 use zenoh_link::EndPoint;
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
@@ -87,6 +94,8 @@ use super::{
 use crate::api::loader::{load_plugins, start_plugins};
 #[cfg(feature = "plugins")]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::{GetTimestampCallback, TimestampContext};
 #[cfg(feature = "internal")]
 use crate::session::CloseBuilder;
 use crate::{
@@ -105,9 +114,10 @@ use crate::{
 /// State of current lazily-initialized [`ShmProvider`](ShmProvider) associated with [`Runtime`](Runtime)
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
+#[derive(Debug)]
 pub enum ShmProviderState {
     Disabled,
-    Initializing,
+    Initializing(flume::Receiver<Option<Arc<ShmProvider<PosixShmProviderBackend>>>>),
     Ready(Arc<ShmProvider<PosixShmProviderBackend>>),
     Error,
 }
@@ -115,11 +125,48 @@ pub enum ShmProviderState {
 #[cfg(feature = "shared-memory")]
 #[zenoh_macros::unstable]
 impl ShmProviderState {
-    pub fn into_option(self) -> Option<Arc<ShmProvider<PosixShmProviderBackend>>> {
+    pub fn into_option(self) -> <Self as Resolvable>::To {
         match self {
             ShmProviderState::Ready(provider) => Some(provider),
             _ => None,
         }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Resolvable for ShmProviderState {
+    type To = Option<Arc<ShmProvider<PosixShmProviderBackend>>>;
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl Wait for ShmProviderState {
+    fn wait(self) -> <Self as Resolvable>::To {
+        match self {
+            ShmProviderState::Ready(provider) => Some(provider),
+            ShmProviderState::Initializing(receiver) => receiver.recv().ok().flatten(),
+            ShmProviderState::Disabled | ShmProviderState::Error => None,
+        }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[zenoh_macros::unstable]
+impl IntoFuture for ShmProviderState {
+    type Output = <Self as Resolvable>::To;
+    type IntoFuture = std::pin::Pin<Box<dyn Future<Output = <Self as IntoFuture>::Output> + Send>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            match self {
+                ShmProviderState::Ready(provider) => Some(provider),
+                ShmProviderState::Initializing(receiver) => {
+                    receiver.recv_async().await.ok().flatten()
+                }
+                ShmProviderState::Disabled | ShmProviderState::Error => None,
+            }
+        })
     }
 }
 
@@ -132,7 +179,15 @@ pub(crate) struct RuntimeState {
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
+    locators_noloopback: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
+    // TODO: lazy_hlc is added for timestamp instrumentation feature, in order to avoid breaking
+    // existing logic that relies on state of hlc Option to check if timestamping is enabled or
+    // not. Once ts_instrumentation is stabilized, hlc should be changed to use OnceLock instead.
+    #[cfg(feature = "unstable")]
+    lazy_hlc: OnceLock<Arc<HLC>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     task_controller: TaskController,
     #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
@@ -153,7 +208,12 @@ pub trait IRuntime: Send + Sync {
     fn next_id(&self) -> u32;
     fn is_closed(&self) -> bool;
     fn new_timestamp(&self) -> Option<uhlc::Timestamp>;
+    /// Returns a timestamp for timestamp instrumentation. The boolean indicates whether the timestamp
+    /// is the result of a custom user-callback or a Zenoh UHLC timestamp.
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
+    fn get_locators_noloopback(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
 
@@ -221,8 +281,34 @@ impl IRuntime for RuntimeState {
         self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
 
+    #[cfg(feature = "unstable")]
+    fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool) {
+        if let Some(cb) = &self.timestamp_callback {
+            return (cb(context), true);
+        }
+
+        let hlc = self.hlc.as_ref().unwrap_or_else(|| {
+            self.lazy_hlc.get_or_init(|| {
+                Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(self.zid)).build())
+            })
+        });
+
+        let ts = hlc.new_timestamp();
+
+        use zenoh_codec::{WCodec, Zenoh080};
+        let mut buf = Vec::new();
+        if Zenoh080.write(&mut buf, &ts).is_err() {
+            return (Vec::new(), false);
+        }
+        (buf, false)
+    }
+
     fn get_locators(&self) -> Vec<Locator> {
         self.locators.read().unwrap().clone()
+    }
+
+    fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.locators_noloopback.read().unwrap().clone()
     }
 
     fn hlc(&self) -> Option<&HLC> {
@@ -389,7 +475,7 @@ impl IRuntime for RuntimeState {
         match &self.manager.get_shm_context() {
             Some(ctx) => match ctx.shm_provider() {
                 Some(provider) => match provider.try_get_provider() {
-                    ProviderInitState::Initializing => ShmProviderState::Initializing,
+                    ProviderInitState::Initializing(recv) => ShmProviderState::Initializing(recv),
                     ProviderInitState::Ready(provider) => ShmProviderState::Ready(provider),
                     ProviderInitState::Error => ShmProviderState::Error,
                 },
@@ -547,6 +633,14 @@ pub struct WeakRuntime {
     state: Weak<RuntimeState>,
 }
 
+impl fmt::Debug for WeakRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WeakRuntime")
+            .field("is_live", &self.state.strong_count().gt(&0))
+            .finish()
+    }
+}
+
 impl WeakRuntime {
     pub fn upgrade(&self) -> Option<Runtime> {
         self.state.upgrade().map(|state| Runtime { state })
@@ -559,10 +653,34 @@ pub struct RuntimeBuilder {
     plugins_manager: Option<PluginsManager>,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
     disable_async_tree_computation: bool,
+}
+
+impl fmt::Debug for RuntimeBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("RuntimeBuilder");
+        debug.field("config", &self.config);
+        #[cfg(feature = "plugins")]
+        debug.field(
+            "plugins_manager",
+            &self.plugins_manager.as_ref().map(|_| ".."),
+        );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        #[cfg(test)]
+        debug.field("subregions", &self.subregions);
+        #[cfg(test)]
+        debug.field(
+            "disable_async_tree_computation",
+            &self.disable_async_tree_computation,
+        );
+        debug.finish()
+    }
 }
 
 impl RuntimeBuilder {
@@ -573,6 +691,8 @@ impl RuntimeBuilder {
             plugins_manager: None,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(feature = "unstable")]
+            timestamp_callback: None,
             #[cfg(test)]
             subregions: None,
             #[cfg(test)]
@@ -589,6 +709,12 @@ impl RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
     pub fn shm_clients(mut self, shm_clients: Option<Arc<ShmClientStorage>>) -> Self {
         self.shm_clients = shm_clients;
+        self
+    }
+
+    #[cfg(feature = "unstable")]
+    pub fn timestamp_callback(mut self, cb: Option<GetTimestampCallback>) -> Self {
+        self.timestamp_callback = cb;
         self
     }
 
@@ -613,6 +739,8 @@ impl RuntimeBuilder {
             mut plugins_manager,
             #[cfg(feature = "shared-memory")]
             shm_clients,
+            #[cfg(feature = "unstable")]
+            timestamp_callback,
             #[cfg(test)]
             subregions,
             #[cfg(test)]
@@ -701,7 +829,12 @@ impl RuntimeBuilder {
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
+                locators_noloopback: std::sync::RwLock::new(vec![]),
                 hlc,
+                #[cfg(feature = "unstable")]
+                lazy_hlc: OnceLock::new(),
+                #[cfg(feature = "unstable")]
+                timestamp_callback,
                 task_controller: TaskController::default(),
                 #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
@@ -747,11 +880,37 @@ impl RuntimeBuilder {
 
 #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RuntimeState>,
+    pub(crate) state: Arc<RuntimeState>,
+}
+
+impl fmt::Debug for Runtime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Runtime")
+            .field("zid", &self.state.zid)
+            .field("whatami", &self.state.whatami)
+            .field("namespace", &self.state.namespace)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone)]
 pub struct DynamicRuntime(Arc<dyn IRuntime>);
+
+impl DynamicRuntime {
+    pub(crate) fn downgrade(&self) -> WeakDynamicRuntime {
+        WeakDynamicRuntime(Arc::downgrade(&self.0))
+    }
+
+    pub(crate) fn get_inner(&self) -> Arc<dyn IRuntime> {
+        self.0.clone()
+    }
+}
+
+impl fmt::Debug for DynamicRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DynamicRuntime").field(&"..").finish()
+    }
+}
 
 impl Deref for DynamicRuntime {
     type Target = Arc<dyn IRuntime>;
@@ -771,6 +930,15 @@ impl StructVersion for DynamicRuntime {
 }
 
 impl PluginStartArgs for DynamicRuntime {}
+
+#[derive(Clone)]
+pub struct WeakDynamicRuntime(pub(crate) Weak<dyn IRuntime>);
+
+impl WeakDynamicRuntime {
+    pub(crate) fn upgrade(&self) -> Option<DynamicRuntime> {
+        self.0.upgrade().map(DynamicRuntime)
+    }
+}
 
 impl Runtime {
     #[inline(always)]
@@ -805,6 +973,10 @@ impl Runtime {
 
     pub fn get_locators(&self) -> Vec<Locator> {
         self.state.get_locators()
+    }
+
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.state.get_locators_noloopback()
     }
 
     /// Spawns a task within runtime.

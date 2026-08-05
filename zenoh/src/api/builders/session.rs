@@ -12,9 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::future::{IntoFuture, Ready};
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
+use std::{
+    fmt,
+    future::{IntoFuture, Ready},
+};
 
 use zenoh_core::{Resolvable, Wait};
 #[cfg(feature = "internal")]
@@ -26,6 +29,8 @@ use zenoh_shm::api::client_storage::ShmClientStorage;
 use crate::api::session::Session;
 #[cfg(feature = "internal")]
 use crate::net::runtime::DynamicRuntime;
+#[cfg(feature = "unstable")]
+use crate::{api::timestamp_stack::GetTimestampCallback, timestamp_stack::TimestampContext};
 
 /// A builder returned by [`crate::open`] used to open a zenoh [`Session`].
 ///
@@ -46,6 +51,27 @@ where
     config: TryIntoConfig,
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
+    #[cfg(feature = "unstable")]
+    timestamp_callback: Option<GetTimestampCallback>,
+}
+
+impl<TryIntoConfig> fmt::Debug for OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("OpenBuilder");
+        debug.field("config", &"..");
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_clients", &self.shm_clients.as_ref().map(|_| ".."));
+        #[cfg(feature = "unstable")]
+        debug.field(
+            "timestamp_callback",
+            &self.timestamp_callback.as_ref().map(|_| ".."),
+        );
+        debug.finish()
+    }
 }
 
 impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
@@ -58,6 +84,8 @@ where
             config,
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
+            #[cfg(feature = "unstable")]
+            timestamp_callback: None,
         }
     }
 }
@@ -70,6 +98,28 @@ where
 {
     pub fn with_shm_clients(mut self, shm_clients: Arc<ShmClientStorage>) -> Self {
         self.shm_clients = Some(shm_clients);
+        self
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    /// Set a custom timestamp callback for timestamp stack instrumentation.
+    ///
+    /// The callback will be called at each interception point (Send, Route, Receive)
+    /// when the timestamp stack feature is activated.
+    ///
+    /// If no callback is provided, the default UHLC timestamp generation will be used.
+    #[zenoh_macros::unstable]
+    pub fn with_timestamp_callback<F: Fn(TimestampContext) -> Vec<u8> + Send + Sync + 'static>(
+        mut self,
+        cb: F,
+    ) -> Self {
+        self.timestamp_callback = Some(Box::new(cb));
         self
     }
 }
@@ -96,6 +146,8 @@ where
             config,
             #[cfg(feature = "shared-memory")]
             self.shm_clients,
+            #[cfg(feature = "unstable")]
+            self.timestamp_callback,
         )
         .wait()
     }
@@ -133,6 +185,17 @@ pub struct InitBuilder {
     runtime: DynamicRuntime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
+}
+
+#[zenoh_macros::internal]
+impl fmt::Debug for InitBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InitBuilder")
+            .field("runtime", &"..")
+            .field("aggregated_subscribers", &self.aggregated_subscribers)
+            .field("aggregated_publishers", &self.aggregated_publishers)
+            .finish()
+    }
 }
 
 #[zenoh_macros::internal]

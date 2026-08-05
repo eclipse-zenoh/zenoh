@@ -117,6 +117,7 @@ impl Segment<'_> {
     }
 }
 
+#[derive(Debug)]
 pub enum IterativeConstructor<Complete, Partial, Error> {
     Complete(Complete),
     Partial(Partial),

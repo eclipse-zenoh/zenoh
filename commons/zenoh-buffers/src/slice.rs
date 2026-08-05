@@ -106,6 +106,7 @@ impl Writer for &mut [u8] {
     }
 }
 
+#[derive(Debug)]
 pub struct SliceMark<'s> {
     ptr: *const u8,
     len: usize,
@@ -180,6 +181,9 @@ impl Reader for &[u8] {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
+        if self.len() < len {
+            return Err(DidntRead);
+        }
         // SAFETY: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
         // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
         // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.

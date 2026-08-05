@@ -37,6 +37,7 @@ mod tests {
         },
     };
     use zenoh_result::ZResult;
+    use zenoh_test::get_free_udp_port;
     use zenoh_transport::{
         multicast::{TransportManagerBuilderMulticast, TransportMulticast},
         unicast::TransportUnicast,
@@ -312,10 +313,11 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:21000",
+                "udp/224.{}.{}.{}:{}",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
-                rand::random::<u8>()
+                rand::random::<u8>(),
+                get_free_udp_port()
             )
             .parse()
             .unwrap(),

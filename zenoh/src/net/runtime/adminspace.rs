@@ -15,7 +15,7 @@ use std::{
     convert::TryInto,
     io::Write,
     mem,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use itertools::Itertools;
@@ -24,7 +24,10 @@ use tracing::{error, trace};
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{wrappers::ZenohId, ConfigValidator};
 use zenoh_core::Wait;
-use zenoh_keyexpr::keyexpr;
+use zenoh_keyexpr::{
+    format::{KeFormat, Segment},
+    keyexpr,
+};
 use zenoh_link::Link;
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use zenoh_plugin_trait::PluginDiff;
@@ -47,8 +50,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
-#[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
-use crate::internal::runtime::DynamicRuntime;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::push_ts_interception;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -59,7 +62,7 @@ use crate::{
     net::{
         primitives::Primitives,
         routing::{dispatcher::tables::Tables, gateway::Resource, hat::Sources},
-        runtime::region,
+        runtime::{region, DynamicRuntime},
     },
     LONG_VERSION,
 };
@@ -111,6 +114,19 @@ impl ConfigValidator for AdminSpace {
             let _ = (name, path, current, new);
             Ok(None)
         }
+    }
+}
+
+impl std::fmt::Debug for AdminSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminSpace")
+            .field("zid", &self.zid)
+            .field("queryable_id", &self.queryable_id)
+            .field("primitives", &"..")
+            .field("mappings", &"..")
+            .field("handlers_len", &self.handlers.len())
+            .field("context", &"..")
+            .finish()
     }
 }
 
@@ -370,6 +386,15 @@ impl Primitives for AdminSpace {
 
     fn send_push_consume(&self, msg: &mut Push, _reliability: Reliability, _consume: bool) {
         trace!("recv Push {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let state = self.context.runtime.state.clone();
+            push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         {
             let conf = &self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
@@ -381,46 +406,79 @@ impl Primitives for AdminSpace {
             }
         }
 
-        if let Some(key) = msg.wire_expr.as_str().strip_prefix(&format!(
-            "@/{}/{}/config/",
-            self.context.runtime.state.zid, self.context.runtime.state.whatami,
-        )) {
-            match &msg.payload {
-                PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
-                    Ok(json) => {
-                        tracing::trace!(
-                            "Insert conf value @/{}/{}/config/{} : {}",
-                            self.context.runtime.state.zid,
-                            self.context.runtime.state.whatami,
-                            key,
-                            json
-                        );
-                        if let Err(e) = self.context.runtime.state.config.insert_json5(key, json) {
-                            error!(
-                                "Error inserting conf value @/{}/{}/config/{} : {} - {}",
-                                self.context.runtime.state.zid,
-                                self.context.runtime.state.whatami,
-                                key,
-                                json,
-                                e
-                            );
-                        }
+        let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
+            Ok(key_expr) => key_expr,
+            Err(e) => {
+                tracing::error!("Unknown KeyExpr: {}", e);
+                return;
+            }
+        };
+
+        static CONFIG_FORMAT: OnceLock<KeFormat<'static, [Segment<'static>; 3]>> = OnceLock::new();
+        let config_format = CONFIG_FORMAT.get_or_init(|| {
+            KeFormat::noalloc_new("@/${zid:*}/${whatami:*}/config/${key:**}").unwrap()
+        });
+
+        // NOTE: First use keyexpr set semantics to decide whether this PUT/DEL targets
+        // this runtime's config space, then use the format only to extract the
+        // config path suffix.
+        let local_config_key: OwnedKeyExpr = format!(
+            "@/{}/{}/config/**",
+            self.zid, self.context.runtime.state.whatami,
+        )
+        .try_into()
+        .unwrap();
+        if !local_config_key.intersects(&key_expr) {
+            return;
+        }
+
+        let parsed = match config_format.parse(&key_expr) {
+            Ok(parsed) => parsed,
+            Err(e) => {
+                tracing::error!("Failed to parse adminspace config key {}: {}", key_expr, e);
+                return;
+            }
+        };
+        let Some(key) = parsed.get("key").ok().filter(|key| !key.is_empty()) else {
+            tracing::error!(
+                "Failed to extract non-empty config key suffix from {}",
+                key_expr
+            );
+            return;
+        };
+
+        match &msg.payload {
+            PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
+                Ok(json) => {
+                    tracing::trace!("Insert conf value {} : {}", key_expr, json);
+                    let config = &self.context.runtime.state.config;
+                    if let Err(e) =
+                        config
+                            .try_insert_json5_array_item(key, json)
+                            .and_then(|applied| {
+                                if applied {
+                                    Ok(())
+                                } else {
+                                    config.insert_json5(key, json)
+                                }
+                            })
+                    {
+                        error!("Error inserting conf value {} : {} - {}", key_expr, json, e);
                     }
-                    Err(e) => error!(
-                        "Received non utf8 conf value on @/{}/{}/config/{} : {}",
-                        self.context.runtime.state.zid, self.context.runtime.state.whatami, key, e
-                    ),
-                },
-                PushBody::Del(_) => {
-                    tracing::trace!(
-                        "Deleting conf value /@/{}/{}/config/{}",
-                        self.context.runtime.state.zid,
-                        self.context.runtime.state.whatami,
-                        key
-                    );
-                    if let Err(e) = self.context.runtime.state.config.remove(key) {
-                        tracing::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
+                }
+                Err(e) => error!("Received non utf8 conf value on {} : {}", key_expr, e),
+            },
+            PushBody::Del(_) => {
+                tracing::trace!("Deleting conf value {}", key_expr);
+                let config = &self.context.runtime.state.config;
+                if let Err(e) = config.try_remove_json5_array_item(key).and_then(|applied| {
+                    if applied {
+                        Ok(())
+                    } else {
+                        config.remove(key)
                     }
+                }) {
+                    tracing::error!("Error deleting conf value {} : {}", key_expr, e)
                 }
             }
         }
@@ -428,6 +486,15 @@ impl Primitives for AdminSpace {
 
     fn send_request(&self, msg: &mut Request) {
         trace!("recv Request {:?}", msg);
+        #[cfg(feature = "unstable")]
+        {
+            let state = self.context.runtime.state.clone();
+            push_ts_interception(
+                &mut msg.ext_ts_stack,
+                || Some(state),
+                zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
+            );
+        }
         match &mut msg.payload {
             RequestBody::Query(query) => {
                 let _span =
@@ -473,6 +540,12 @@ impl Primitives for AdminSpace {
                         #[cfg(feature = "unstable")]
                         source_info: query.ext_sinfo.map(Into::into),
                         primitives: ReplyPrimitives::new_remote(None, primitives),
+                        #[cfg(feature = "unstable")]
+                        runtime: Some(
+                            DynamicRuntime::from(self.context.runtime.clone()).downgrade(),
+                        ),
+                        #[cfg(feature = "unstable")]
+                        query_ts_stack: None,
                     }),
                     eid: self.queryable_id,
                     value: mem::take(&mut query.ext_body)
@@ -566,7 +639,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
-        .get_locators()
+        .get_locators_noloopback()
         .iter()
         .map(|locator| json!(locator.as_str()))
         .collect();

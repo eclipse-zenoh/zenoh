@@ -341,6 +341,7 @@ impl Default for LargeMessageTransportOpt {
             enabled: true,
             pool_size: unsafe { NonZeroUsize::new_unchecked(16 * 1024 * 1024) },
             message_size_threshold: 3072,
+            messages: vec![DataMessage::Put, DataMessage::Query, DataMessage::Reply],
         }
     }
 }

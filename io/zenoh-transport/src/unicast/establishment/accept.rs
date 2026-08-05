@@ -149,7 +149,7 @@ struct AcceptLink<'a> {
     #[cfg(feature = "transport_compression")]
     ext_compression: ext::compression::CompressionFsm<'a>,
     ext_patch: ext::patch::PatchFsm<'a>,
-    ext_south: Option<RemoteBoundCallback>,
+    ext_remote_bound: Option<RemoteBoundCallback>,
     ext_region_name: ext::region_name::RegionNameFsm,
 }
 
@@ -596,7 +596,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvOpenSynOut {
             other_zid: cookie.zid,
             other_whatami: cookie.whatami,
-            other_bound: match open_syn.ext_south {
+            other_bound: match open_syn.ext_remote_bound {
                 Some(ext) => Some(
                     Bound::try_from(ext.value as u8)
                         .map_err(|e| (e.into(), Some(close::reason::GENERIC)))?,
@@ -681,7 +681,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension South
-        let ext_south = if let Some(callback) = self.ext_south.as_ref() {
+        let ext_remote_bound = if let Some(callback) = self.ext_remote_bound.as_ref() {
             let p = TransportPeer {
                 zid: input.other_zid,
                 whatami: input.other_whatami,
@@ -716,7 +716,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             ext_mlink,
             ext_lowlatency,
             ext_compression,
-            ext_south,
+            ext_remote_bound,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -747,9 +747,9 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: None,
         reliability: None,
     };
-    let mut link = TransportLinkUnicast::new(link, config);
+    let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
     let mut fsm = AcceptLink {
-        link: &mut link,
+        link: &mut link_unicast,
         prng: &manager.prng,
         cipher: &manager.cipher,
         ext_qos: ext::qos::QoSFsm::new(),
@@ -767,7 +767,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_compression")]
         ext_compression: ext::compression::CompressionFsm::new(),
         ext_patch: ext::patch::PatchFsm::new(),
-        ext_south: manager.config.bound_callback.clone(),
+        ext_remote_bound: manager.config.bound_callback.clone(),
         ext_region_name: ext::region_name::RegionNameFsm::new(manager.config.region_name.clone()),
     };
 
@@ -778,7 +778,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 Ok(output) => output,
                 Err((e, reason)) => {
                     tracing::debug!("{}", e);
-                    let _ = link.close(reason).await;
+                    let _ = link_unicast.close(reason).await;
                     return Err(e);
                 }
             }
@@ -894,9 +894,38 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
     };
-    let a_link = link.reconfigure(a_config);
+    let a_link = link_unicast.reconfigure(a_config);
     let s_link = format!("{a_link:?}");
-    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack));
+    // Handle MixedReliability links
+    let best_effort_link = match link.0 {
+        zenoh_link::NewLink::MixedReliability { best_effort, .. } => {
+            #[allow(clippy::unnecessary_min_or_max)]
+            let mtu = manager
+                .config
+                .batch_size
+                .min(best_effort.get_mtu())
+                .min(batch_size::UNICAST);
+
+            let o_config = TransportLinkUnicastConfig {
+                direction,
+                batch: BatchConfig {
+                    mtu,
+                    is_streamed: best_effort.is_streamed(),
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: state.link.ext_compression.is_compression(),
+                },
+                priorities: state.transport.ext_qos.priorities(),
+                // Do not apply reliability override to MixedReliability associated links
+                reliability: None,
+            };
+            let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
+            Some(link)
+        }
+        zenoh_link::NewLink::Single(_) => None,
+    };
+    let s_best_effort = best_effort_link.as_ref().map(|l| format!("{l:?}"));
+
+    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack), best_effort_link);
     let _transport = manager
         .init_transport_unicast(
             config,
@@ -907,10 +936,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         .await?;
 
     tracing::debug!(
-        "New transport link accepted from {} to {}: {}",
+        "New transport link accepted from {} to {}: {} {}",
         osyn_out.other_zid,
         manager.config.zid,
         s_link,
+        if let Some(s) = s_best_effort {
+            format!(" with associated link {s}")
+        } else {
+            "".into()
+        }
     );
 
     Ok(())

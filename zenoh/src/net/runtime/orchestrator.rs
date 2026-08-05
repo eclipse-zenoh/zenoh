@@ -13,7 +13,7 @@
 //
 use std::{
     collections::{HashMap, HashSet},
-    net::{IpAddr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::DerefMut,
     str::FromStr,
     time::Duration,
@@ -31,12 +31,57 @@ use zenoh_config::{
     ConnectionRetryPeriod, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
-use zenoh_protocol::core::{EndPoint, Metadata, PriorityRange, WhatAmI, ZenohIdProto};
+use zenoh_protocol::core::{
+    EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange, WhatAmI, ZenohIdProto,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
 use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo, runtime::scouting::Scouting};
 
+// TODO(fuzzypixelz): collapse per-interface scout sockets into one wildcard socket
+// per address family. Select egress with `set_multicast_if_*` before send;
+// serialize set+send because the socket option is mutable.
+/// UDP scout socket for one multicast egress interface.
+///
+/// The socket is wildcard-bound; `iface` pins multicast egress via socket
+/// options.[^mcast-if]
+///
+/// [^mcast-if]: [`Socket::set_multicast_if_v4`], [`Socket::set_multicast_if_v6`].
+pub(crate) struct ScoutSocket {
+    /// Wildcard-bound UDP socket used for Scout/Hello traffic.
+    socket: UdpSocket,
+    /// Interface address used for multicast egress and responder matching.
+    iface: IpAddr,
+}
+
+impl ScoutSocket {
+    /// Sends a multicast datagram through this socket's egress interface.
+    pub(crate) async fn send_multicast(
+        &self,
+        buffer: &[u8],
+        dst: SocketAddr,
+    ) -> std::io::Result<usize> {
+        self.socket.send_to(buffer, dst).await
+    }
+
+    pub(crate) async fn recv_from(
+        &self,
+        buffer: &mut [u8],
+    ) -> std::io::Result<(usize, SocketAddr)> {
+        self.socket.recv_from(buffer).await
+    }
+
+    pub(crate) fn iface(&self) -> &IpAddr {
+        &self.iface
+    }
+
+    pub(crate) fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.socket.local_addr()
+    }
+}
+
+#[derive(Debug)]
 pub enum Loop {
     Continue,
     Break,
@@ -109,6 +154,17 @@ impl StartConditions {
 }
 
 impl Runtime {
+    fn warn_if_oneof(peer_group: &EndPoints) {
+        if let EndPoints::Locators(group) = peer_group {
+            if matches!(group.strategy, LocatorsStrategy::OneOf) {
+                tracing::warn!(
+                    "connect.endpoints locator groups with strategy=oneOf are not implemented yet; \
+                     falling back to current allOf behavior"
+                );
+            }
+        }
+    }
+
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
@@ -282,7 +338,7 @@ impl Runtime {
         Ok(())
     }
 
-    async fn connect_peers(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers(&self, peers: &[EndPoints], single_link: bool) -> ZResult<()> {
         let timeout = self.get_global_connect_timeout();
         if timeout.is_zero() {
             self.connect_peers_impl(peers, single_link).await
@@ -302,7 +358,7 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_impl(&self, peers: &[EndPoint], single_link: bool) -> ZResult<()> {
+    async fn connect_peers_impl(&self, peers: &[EndPoints], single_link: bool) -> ZResult<()> {
         if single_link {
             self.connect_peers_single_link(peers).await
         } else {
@@ -310,63 +366,83 @@ impl Runtime {
         }
     }
 
-    async fn connect_peers_single_link(&self, peers: &[EndPoint]) -> ZResult<()> {
-        let mut peers_to_retry = Vec::new();
-        for peer in peers {
-            let endpoint = peer.clone();
-            let retry_config = self.get_connect_retry_config(&endpoint);
-            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+    async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
+        let mut success_flag = false;
+        for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
+            // try to connect to each peer in the group
+            let mut peers_to_retry = Vec::new();
+            for peer in peer_group.as_vec() {
+                let endpoint = peer.clone();
+                let retry_config = self.get_connect_retry_config(&endpoint);
+                if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                    tracing::debug!(
+                        "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
+                        endpoint,
+                        self.get_global_connect_timeout(),
+                        retry_config
+                    );
+                    // try to connect directly when there is no timeout configuration
+                    if self.peer_connector(endpoint).await.is_ok() {
+                        success_flag = true;
+                    }
+                } else {
+                    peers_to_retry.push(endpoint);
+                }
+            }
+            // sequentially try to connect to one of the remaining peers
+            // respecting connection retry delays
+            if self
+                .peers_connector_retry(peers_to_retry, false)
+                .await
+                .is_ok()
+            {
+                success_flag = true;
+            }
+            // any endpoint in the group is available, it's marked as success and break
+            if success_flag {
+                break;
+            }
+        }
+
+        // return error if none of them succeeded
+        if success_flag {
+            Ok(())
+        } else {
+            let e = zerror!("Unable to connect to any of {:?}! ", peers);
+            tracing::warn!("{}", &e);
+            Err(e.into())
+        }
+    }
+
+    async fn connect_peers_multiply_links(&self, peers: &[EndPoints]) -> ZResult<()> {
+        for peer_group in peers {
+            Self::warn_if_oneof(peer_group);
+            for peer in peer_group.as_vec() {
+                let endpoint = peer.clone();
+                let retry_config = self.get_connect_retry_config(&endpoint);
                 tracing::debug!(
                     "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
                     endpoint,
                     self.get_global_connect_timeout(),
                     retry_config
                 );
-                // try to connect and exit immediately without retry
-                if self.peer_connector(endpoint).await.is_ok() {
-                    return Ok(());
-                }
-            } else {
-                peers_to_retry.push(endpoint);
-            }
-        }
-        // sequentially try to connect to one of the remaining peers
-        // respecting connection retry delays
-        match self.peers_connector_retry(peers_to_retry, true).await {
-            Ok(_) => Ok(()),
-            Err(_) => {
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
-                tracing::warn!("{}", &e);
-                Err(e.into())
-            }
-        }
-    }
-
-    async fn connect_peers_multiply_links(&self, peers: &[EndPoint]) -> ZResult<()> {
-        for peer in peers {
-            let endpoint = peer.clone();
-            let retry_config = self.get_connect_retry_config(&endpoint);
-            tracing::debug!(
-                "Try to connect: {:?}: global timeout: {:?}, retry: {:?}",
-                endpoint,
-                self.get_global_connect_timeout(),
-                retry_config
-            );
-            if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
-                // try to connect and exit immediately without retry
-                if let Err(e) = self.peer_connector(endpoint).await {
-                    if retry_config.exit_on_failure {
+                if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+                    // try to connect and exit immediately without retry
+                    if let Err(e) = self.peer_connector(endpoint).await {
+                        if retry_config.exit_on_failure {
+                            return Err(e);
+                        }
+                    }
+                } else if retry_config.exit_on_failure {
+                    // try to connect with retry waiting
+                    let _ = self.peer_connector_retry(endpoint).await;
+                } else {
+                    // try to connect in background
+                    if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
+                        tracing::warn!("Error connecting to {}: {}", endpoint, e);
                         return Err(e);
                     }
-                }
-            } else if retry_config.exit_on_failure {
-                // try to connect with retry waiting
-                let _ = self.peer_connector_retry(endpoint).await;
-            } else {
-                // try to connect in background
-                if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
-                    tracing::warn!("Error connecting to {}: {}", endpoint, e);
-                    return Err(e);
                 }
             }
         }
@@ -374,23 +450,26 @@ impl Runtime {
     }
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
-        match self.manager().open_transport_unicast(peer.clone()).await {
-            Ok(transport) => {
-                if let Ok(Some(orch_transport)) = transport.get_callback() {
-                    if let Some(orch_transport) = orch_transport
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        zwrite!(orch_transport.endpoints).insert(peer);
-                    }
-                }
+        let result = self
+            .manager()
+            .open_transport_unicast(peer.clone())
+            .await
+            .and_then(|transport| -> ZResult<_> {
+                let cb = transport
+                    .get_callback()?
+                    .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                let session = cb
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                    .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                zwrite!(session.endpoints).insert(peer.clone());
                 Ok(())
-            }
-            Err(e) => {
-                tracing::warn!("Unable to connect to {}! {}", peer, e);
-                Err(e)
-            }
+            });
+
+        if let Err(e) = &result {
+            tracing::warn!("Unable to connect to {}! {}", peer, e);
         }
+        result
     }
 
     fn get_listen_retry_config(&self, endpoint: &EndPoint) -> zenoh_config::ConnectionRetryConf {
@@ -500,23 +579,30 @@ impl Runtime {
 
     pub fn update_locators(&self) -> bool {
         let mut locators = self.state.locators.write().unwrap();
+        let mut locators_noloopback = self.state.locators_noloopback.write().unwrap();
         let new_locators = self.manager().get_locators();
-        if are_locators_equal(&locators, &new_locators) {
+        let new_locators_noloopback = self.manager().get_locators_noloopback();
+
+        if are_locators_equal(&locators, &new_locators)
+            && are_locators_equal(&locators_noloopback, &new_locators_noloopback)
+        {
             return false;
         }
+
         if tracing::enabled!(tracing::Level::INFO) {
-            for locator in &new_locators {
+            for locator in &new_locators_noloopback {
                 if !locators.contains(locator) {
                     tracing::info!("Zenoh can be reached at: {}", locator);
                 }
             }
-            for old_locator in &*locators {
+            for old_locator in &*locators_noloopback {
                 if !new_locators.contains(old_locator) {
                     tracing::info!("Zenoh can no longer be reached at: {}", old_locator);
                 }
             }
         }
         *locators = new_locators;
+        *locators_noloopback = new_locators_noloopback;
         true
     }
 
@@ -648,40 +734,120 @@ impl Runtime {
         Ok(udp_socket)
     }
 
-    pub fn bind_ucast_port(addr: IpAddr, multicast_ttl: u32) -> ZResult<UdpSocket> {
-        let sockaddr = || SocketAddr::new(addr, 0);
-        let socket = match Socket::new(Domain::for_address(sockaddr()), Type::DGRAM, None) {
+    /// Binds a scout socket for `iface`.
+    ///
+    /// The socket is bound to the address-family wildcard; `iface` is selected
+    /// with multicast egress socket options.[^mcast-if]
+    ///
+    /// [^mcast-if]: [`Socket::set_multicast_if_v4`], [`Socket::set_multicast_if_v6`].
+    pub(crate) fn bind_ucast_port(iface: IpAddr, multicast_ttl: u32) -> ZResult<ScoutSocket> {
+        let bind_addr = match iface {
+            IpAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            IpAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+        };
+        let socket = match Socket::new(Domain::for_address(bind_addr), Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                tracing::warn!("Unable to create datagram socket: {}", err);
-                bail!(err=> "Unable to create datagram socket");
+                tracing::warn!(
+                    "Unable to create UDP scout socket for multicast interface {}: {}",
+                    iface,
+                    err
+                );
+                bail!(err => "Unable to create UDP scout socket for multicast interface {}", iface);
             }
         };
-        match socket.bind(&sockaddr().into()) {
+
+        match iface {
+            IpAddr::V4(addr) => {
+                if !addr.is_unspecified() {
+                    socket.set_multicast_if_v4(&addr).map_err(|err| {
+                        zerror!(
+                            "Unable to select multicast interface {} on UDP scout socket: {}",
+                            iface,
+                            err
+                        )
+                    })?;
+                }
+                socket.set_multicast_ttl_v4(multicast_ttl).map_err(|err| {
+                    zerror!(
+                        "Unable to set multicast TTL {} on UDP scout socket for multicast interface {}: {}",
+                        multicast_ttl,
+                        iface,
+                        err
+                    )
+                })?;
+            }
+            IpAddr::V6(addr) => {
+                if !addr.is_unspecified() {
+                    let idx = zenoh_util::net::get_index_of_interface(IpAddr::V6(addr))?;
+                    socket.set_multicast_if_v6(idx).map_err(|err| {
+                        zerror!(
+                            "Unable to select multicast interface {} on UDP scout socket: {}",
+                            iface,
+                            err
+                        )
+                    })?;
+                }
+                socket.set_multicast_hops_v6(multicast_ttl).map_err(|err| {
+                    zerror!(
+                        "Unable to set multicast hop limit {} on UDP scout socket for multicast interface {}: {}",
+                        multicast_ttl,
+                        iface,
+                        err
+                    )
+                })?;
+            }
+        }
+
+        match socket.bind(&bind_addr.into()) {
             Ok(()) => {
                 #[allow(clippy::or_fun_call)]
                 let local_addr = socket
                     .local_addr()
-                    .unwrap_or(sockaddr().into())
+                    .unwrap_or(bind_addr.into())
                     .as_socket()
-                    .unwrap_or(sockaddr());
-                tracing::debug!("UDP port bound to {}", local_addr);
+                    .unwrap_or(bind_addr);
+                tracing::debug!(
+                    "UDP scout socket bound to {} for multicast interface {}",
+                    local_addr,
+                    iface
+                );
             }
             Err(err) => {
-                tracing::warn!("Unable to bind udp port {}:0: {}", addr, err);
-                bail!(err => "Unable to bind udp port {}:0", addr);
+                tracing::warn!(
+                    "Unable to bind UDP scout socket to {} for multicast interface {}: {}",
+                    bind_addr,
+                    iface,
+                    err
+                );
+                bail!(err => "Unable to bind UDP scout socket to {} for multicast interface {}", bind_addr, iface);
             }
         }
 
         // Must set to nonblocking according to the doc of tokio
         // https://docs.rs/tokio/latest/tokio/net/struct.UdpSocket.html#notes
-        socket.set_nonblocking(true)?;
-        socket.set_multicast_ttl_v4(multicast_ttl)?;
+        socket.set_nonblocking(true).map_err(|err| {
+            zerror!(
+                "Unable to make UDP scout socket non-blocking for multicast interface {}: {}",
+                iface,
+                err
+            )
+        })?;
 
         // UdpSocket::from_std requires a runtime even though it's a sync function
         let udp_socket = zenoh_runtime::ZRuntime::Net
-            .block_in_place(async { UdpSocket::from_std(socket.into()) })?;
-        Ok(udp_socket)
+            .block_in_place(async { UdpSocket::from_std(socket.into()) })
+            .map_err(|err| {
+                zerror!(
+                    "Unable to create async UDP scout socket for multicast interface {}: {}",
+                    iface,
+                    err
+                )
+            })?;
+        Ok(ScoutSocket {
+            socket: udp_socket,
+            iface,
+        })
     }
 
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -761,20 +927,27 @@ impl Runtime {
                     self.get_global_connect_timeout(),
                     self.get_connect_retry_config(&peer)
                 );
-                match self.manager().open_transport_unicast(peer.clone()).await {
-                    Ok(transport) => {
+                let result = self
+                    .manager()
+                    .open_transport_unicast(peer.clone())
+                    .await
+                    .and_then(|transport| -> ZResult<_> {
+                        let zid = transport.get_zid()?;
+                        let cb = transport
+                            .get_callback()?
+                            .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                        let session = cb
+                            .as_any()
+                            .downcast_ref::<super::RuntimeSession>()
+                            .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                        zwrite!(session.endpoints).insert(peer.clone());
+                        Ok(zid)
+                    });
+
+                match result {
+                    Ok(zid) => {
                         tracing::debug!("Successfully connected to configured peer {}", peer);
-                        if let Ok(Some(orch_transport)) = transport.get_callback() {
-                            if let Some(orch_transport) = orch_transport
-                                .as_any()
-                                .downcast_ref::<super::RuntimeSession>()
-                            {
-                                zwrite!(orch_transport.endpoints).insert(peer);
-                            }
-                        }
-                        if let Ok(zid) = transport.get_zid() {
-                            connected_peers.push(zid);
-                        }
+                        connected_peers.push(zid);
                         if stop_after_first_connection {
                             break;
                         }
@@ -827,8 +1000,10 @@ impl Runtime {
             .connect()
             .endpoints()
             .get(self.whatami())
+            .unwrap_or(&vec![])
             .iter()
-            .flat_map(|e| e.iter().map(EndPoint::to_locator))
+            .flat_map(|e| e.as_vec())
+            .map(|e| e.to_locator())
             .collect::<HashSet<_>>();
 
         let locators = scouted_locators
@@ -886,7 +1061,7 @@ impl Runtime {
                         Err(e) => tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e),
                     }
                 } else {
-                    match manager.open_transport_unicast(endpoint).await {
+                    match manager.open_transport_unicast_with_zid(endpoint, zid).await {
                         Ok(transport) => {
                             tracing::debug!(
                                 "Successfully connected to newly scouted peer: {:?}",
@@ -955,7 +1130,7 @@ impl Runtime {
         if zread!(session.endpoints).is_empty() {
             return;
         }
-        let mut peers = session
+        let endpoints = session
             .runtime
             .state
             .config
@@ -965,6 +1140,10 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let mut peers = vec![];
+        for peer in endpoints {
+            peers.extend(peer.flatten());
+        }
 
         if session.runtime.whatami() != WhatAmI::Client {
             let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
@@ -990,7 +1169,7 @@ impl Runtime {
         if session.runtime.is_closed() {
             return;
         }
-        let peers = session
+        let endpoints = session
             .runtime
             .state
             .config
@@ -1000,6 +1179,10 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let mut peers = vec![];
+        for peer in endpoints {
+            peers.extend(peer.flatten());
+        }
 
         if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
             let runtime = session.runtime.clone();
@@ -1036,4 +1219,33 @@ fn are_locators_equal(a: &[Locator], b: &[Locator]) -> bool {
     use std::collections::hash_map::RandomState;
     a.len() == b.len()
         && HashSet::<&Locator, RandomState>::from_iter(a.iter()) == HashSet::from_iter(b.iter())
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::time::{timeout, Duration};
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn scout_sender_can_multicast_on_loopback() {
+        let iface = IpAddr::V4(Ipv4Addr::LOCALHOST);
+        let group = IpAddr::V4(Ipv4Addr::new(224, 0, 0, 224));
+        let rx = Runtime::bind_mcast_port(&SocketAddr::new(group, 0), &[iface], 1)
+            .await
+            .unwrap();
+        let dst = SocketAddr::new(group, rx.local_addr().unwrap().port());
+        let tx = Runtime::bind_ucast_port(iface, 1).unwrap();
+        let payload = b"zenoh loopback multicast regression";
+
+        let sent = tx.send_multicast(payload, dst).await.unwrap();
+        assert_eq!(sent, payload.len());
+
+        let mut buf = [0; 256];
+        let (n, _) = timeout(Duration::from_secs(2), rx.recv_from(&mut buf))
+            .await
+            .expect("timed out waiting for loopback multicast packet")
+            .unwrap();
+        assert_eq!(&buf[..n], payload);
+    }
 }

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 use std::{
     cell::UnsafeCell,
     convert::TryInto,
@@ -38,7 +40,7 @@ use zenoh_link_commons::{
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -188,7 +190,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         self.close().await
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
@@ -196,7 +198,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         let _guard = zasynclock!(self.write_mtx);
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
@@ -204,7 +206,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         let _guard = zasynclock!(self.read_mtx);
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             tracing::trace!("Read error on TLS link {}: {}", self, e);
@@ -212,7 +214,7 @@ impl LinkUnicastTrait for LinkUnicastTls {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _guard = zasynclock!(self.read_mtx);
         let _ = self
             .get_mut_socket()
@@ -259,6 +261,11 @@ impl LinkUnicastTrait for LinkUnicastTls {
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        bail!("Correct FD unavailable for TLS extension")
+    }
 }
 
 #[async_trait]
@@ -304,6 +311,15 @@ impl fmt::Debug for LinkUnicastTls {
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
+}
+
+impl fmt::Debug for LinkManagerUnicastTls {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastTls")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
 }
 
 impl LinkManagerUnicastTls {
@@ -393,7 +409,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             )
         });
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -468,6 +484,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
     }
 }
 
@@ -557,7 +577,10 @@ async fn accept_task(
                         });
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager
+                            .send_async(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
+                            .await
+                        {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }

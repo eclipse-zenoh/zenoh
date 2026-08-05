@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -24,7 +26,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -126,7 +128,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -134,7 +136,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -142,7 +144,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on TCP link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -150,7 +152,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _ = self
             .get_mut_socket()
             .read_exact(buffer)
@@ -197,6 +199,14 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Tcp
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 // // WARN: This sometimes causes timeout in routing test
@@ -233,6 +243,15 @@ pub struct LinkManagerUnicastTcp {
     listeners: ListenersUnicastIP,
 }
 
+impl fmt::Debug for LinkManagerUnicastTcp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastTcp")
+            .field("manager", &self.manager)
+            .field("listeners", &self.listeners)
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastTcp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
@@ -265,7 +284,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
             match socket_config.new_link(&da).await {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
-                    return Ok(LinkUnicast(link));
+                    return Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>));
                 }
                 Err(e) => {
                     errs.push(e);
@@ -371,6 +390,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
+    }
 }
 
 async fn accept_task(
@@ -407,10 +430,10 @@ async fn accept_task(
 
                         tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

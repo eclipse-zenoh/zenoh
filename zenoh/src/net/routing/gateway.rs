@@ -279,6 +279,9 @@ impl Gateway {
         let ingress = Arc::new(ArcSwapOption::new(InterceptorsChain::empty().into()));
         let mux = Arc::new(Mux::new(transport.clone(), InterceptorsChain::empty()));
 
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats().ok();
+
         let newface = tables
             .data
             .faces
@@ -294,6 +297,15 @@ impl Gateway {
                 )
                 .whatami(whatami)
                 .ingress_interceptors(ingress.clone());
+
+                #[cfg(feature = "stats")]
+                let builder = {
+                    if let Some(stats) = stats {
+                        builder.stats(stats)
+                    } else {
+                        builder
+                    }
+                };
 
                 Arc::new(builder.build())
             })

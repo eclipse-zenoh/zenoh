@@ -175,6 +175,8 @@ impl<'a> Querier<'a> {
             handler: DefaultHandler::default(),
             #[cfg(feature = "unstable")]
             cancellation_token: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 
@@ -302,6 +304,15 @@ impl<'a> UndeclarableSealed<()> for Querier<'a> {
 pub struct QuerierUndeclaration<'a> {
     querier: Querier<'a>,
     wait_callbacks: bool,
+}
+
+impl fmt::Debug for QuerierUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QuerierUndeclaration")
+            .field("querier", &self.querier)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
 }
 
 impl<'a> QuerierUndeclaration<'a> {

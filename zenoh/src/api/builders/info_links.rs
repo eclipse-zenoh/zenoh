@@ -65,6 +65,16 @@ pub struct LinksBuilder<'a> {
 }
 
 #[zenoh_macros::unstable]
+impl std::fmt::Debug for LinksBuilder<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinksBuilder")
+            .field("session", &"..")
+            .field("transport", &self.transport)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<'a> LinksBuilder<'a> {
     pub(crate) fn new(session: &'a WeakSession) -> Self {
         Self {
@@ -165,11 +175,21 @@ impl std::fmt::Debug for LinkEventsListenerInner {
 /// # }
 /// ```
 #[zenoh_macros::unstable]
-#[derive(Debug)]
 pub struct LinkEventsListener<Handler> {
     pub(crate) inner: LinkEventsListenerInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler> std::fmt::Debug for LinkEventsListener<Handler> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinkEventsListener")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]
@@ -273,6 +293,16 @@ pub struct LinkEventsListenerUndeclaration<Handler> {
 }
 
 #[zenoh_macros::unstable]
+impl<Handler> std::fmt::Debug for LinkEventsListenerUndeclaration<Handler> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinkEventsListenerUndeclaration")
+            .field("listener", &self.listener)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 impl<Handler> Resolvable for LinkEventsListenerUndeclaration<Handler> {
     type To = ZResult<()>;
 }
@@ -343,6 +373,21 @@ pub struct LinkEventsListenerBuilder<'a, Handler, const BACKGROUND: bool = false
     handler: Handler,
     history: bool,
     transport: Option<Transport>,
+}
+
+#[zenoh_macros::unstable]
+impl<Handler, const BACKGROUND: bool> std::fmt::Debug
+    for LinkEventsListenerBuilder<'_, Handler, BACKGROUND>
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LinkEventsListenerBuilder")
+            .field("session", &"..")
+            .field("handler", &"..")
+            .field("history", &self.history)
+            .field("transport", &self.transport)
+            .field("background", &BACKGROUND)
+            .finish()
+    }
 }
 
 #[zenoh_macros::unstable]

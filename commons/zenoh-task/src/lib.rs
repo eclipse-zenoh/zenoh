@@ -32,6 +32,14 @@ pub struct TaskController {
     token: CancellationToken,
 }
 
+impl std::fmt::Debug for TaskController {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TaskController")
+            .field("is_cancelled", &self.token.is_cancelled())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Default for TaskController {
     fn default() -> Self {
         TaskController {
@@ -141,6 +149,15 @@ impl TaskController {
 pub struct TerminatableTask {
     handle: Option<JoinHandle<()>>,
     token: CancellationToken,
+}
+
+impl std::fmt::Debug for TerminatableTask {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TerminatableTask")
+            .field("has_handle", &self.handle.is_some())
+            .field("is_cancelled", &self.token.is_cancelled())
+            .finish()
+    }
 }
 
 impl Drop for TerminatableTask {

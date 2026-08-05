@@ -51,7 +51,7 @@ use crate::net::{
             region::RegionMap,
             tables::Tables,
         },
-        hat::DispatcherContext,
+        hat::{DispatcherContext, UnregisterFaceEntitiesResult},
         interceptor::{
             EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorTrait,
             InterceptorsChain,
@@ -207,6 +207,11 @@ impl FaceStateBuilder {
     }
 
     pub(crate) fn build(self) -> FaceState {
+        #[cfg(feature = "stats")]
+        debug_assert!(
+            self.0.is_local || self.0.stats.is_some(),
+            "non-local faces must be built with transport stats"
+        );
         self.0
     }
 }
@@ -720,7 +725,13 @@ impl Primitives for Face {
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
 
-        for mut res in hats[region].unregister_face_subscribers(ctx.reborrow()) {
+        let UnregisterFaceEntitiesResult {
+            removed_subscribers,
+            removed_queryables,
+            removed_tokens,
+        } = hats[region].unregister_face_entities(ctx.reborrow());
+
+        for mut res in removed_subscribers {
             hats[region].disable_data_routes(&mut res);
 
             let mut remaining = hats
@@ -739,7 +750,7 @@ impl Primitives for Face {
             }
         }
 
-        for mut res in hats[region].unregister_face_queryables(ctx.reborrow()) {
+        for mut res in removed_queryables {
             hats[region].disable_query_routes(&mut res);
 
             let remaining = hats
@@ -773,7 +784,7 @@ impl Primitives for Face {
             }
         }
 
-        for mut res in hats[region].unregister_face_tokens(ctx.reborrow()) {
+        for mut res in removed_tokens {
             let mut remaining = hats
                 .values_mut()
                 .filter(|hat| hat.remote_tokens_of(ctx.tables, &res))

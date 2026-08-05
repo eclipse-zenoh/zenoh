@@ -69,6 +69,7 @@ lazy_static::lazy_static! {
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 
+#[derive(Debug)]
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
@@ -106,9 +107,9 @@ impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
             "@/{}/{}/status/plugins/{}",
-            &self.runtime.zid(),
-            &self.runtime.whatami().to_str(),
-            &self.name
+            self.runtime.zid(),
+            self.runtime.whatami().to_str(),
+            self.name
         )
     }
     fn new(runtime: DynamicRuntime, config: PluginConfig) -> ZResult<Self> {

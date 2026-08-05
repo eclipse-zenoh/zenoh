@@ -35,8 +35,8 @@ use crate::{
     common::{
         batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
         pipeline::{
-            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-            TransmissionPipelineProducer,
+            PipelineConsumer, TransmissionPipeline, TransmissionPipelineConf,
+            TransmissionPipelineConsumer, TransmissionPipelineProducer,
         },
         priority::TransportPriorityTx,
     },
@@ -190,7 +190,7 @@ pub(crate) struct TransportLinkMulticastRx {
 }
 
 impl TransportLinkMulticastRx {
-    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch, Locator)>
+    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<(RBatch<ZSlice>, Locator)>
     where
         C: Fn() -> T + Copy,
         T: AsMut<[u8]> + ZSliceBuffer + 'static,
@@ -320,7 +320,7 @@ impl TransportLinkMulticastUniversal {
                 queue_alloc: self.transport.manager.config.queue_alloc,
             };
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);
+            let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx, false);
             self.pipeline = Some(producer);
 
             // Spawn the TX task
@@ -532,7 +532,7 @@ async fn rx_task(
     async fn read<T, F>(
         link: &mut TransportLinkMulticastRx,
         pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<(RBatch, Locator)>
+    ) -> ZResult<(RBatch<ZSlice>, Locator)>
     where
         T: ZSliceBuffer + 'static,
         F: Fn() -> T,

@@ -655,6 +655,7 @@ impl PartialEq for VolumeConfig {
         self.name == other.name && self.paths == other.paths && self.rest == other.rest
     }
 }
+#[derive(Debug)]
 pub enum PrivacyGetResult<T> {
     NotFound,
     Private(T),

@@ -45,8 +45,10 @@ impl Plugin for ExampleBackend {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 }
 
+#[derive(Debug)]
 pub struct ExampleBackend {}
 
+#[derive(Debug)]
 pub struct ExampleStorage {
     map: RwLock<HashMap<Option<OwnedKeyExpr>, StoredData>>,
 }

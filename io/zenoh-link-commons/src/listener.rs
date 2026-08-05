@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt,
     net::{IpAddr, SocketAddr},
     sync::{Arc, RwLock},
 };
@@ -30,6 +31,16 @@ pub struct ListenerUnicastIP {
     endpoint: EndPoint,
     token: CancellationToken,
     handle: JoinHandle<ZResult<()>>,
+}
+
+impl fmt::Debug for ListenerUnicastIP {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ListenerUnicastIP")
+            .field("endpoint", &self.endpoint)
+            .field("token", &self.token)
+            .field("handle", &"..")
+            .finish()
+    }
 }
 
 impl ListenerUnicastIP {
@@ -54,6 +65,21 @@ pub struct ListenersUnicastIP {
     // TODO(yuyuan): should we change this to AsyncRwLock?
     listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastIP>>>,
     pub token: CancellationToken,
+}
+
+impl fmt::Debug for ListenersUnicastIP {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("ListenersUnicastIP");
+        match self.listeners.try_read() {
+            Ok(listeners) => {
+                debug.field("listeners_len", &listeners.len());
+            }
+            Err(_) => {
+                debug.field("listeners_len", &"<locked>");
+            }
+        }
+        debug.field("token", &self.token).finish()
+    }
 }
 
 impl ListenersUnicastIP {
@@ -112,7 +138,7 @@ impl ListenersUnicastIP {
             .collect()
     }
 
-    pub fn get_locators(&self) -> Vec<Locator> {
+    fn get_locators_impl(&self, noloopback: bool) -> Vec<Locator> {
         let mut locators = vec![];
 
         let guard = zread!(self.listeners);
@@ -124,8 +150,8 @@ impl ListenersUnicastIP {
             // Either ipv4/0.0.0.0 or ipv6/[::]
             if kip.is_unspecified() {
                 let mut addrs = match kip {
-                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(iface),
-                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(iface),
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(iface, noloopback),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(iface, noloopback),
                 };
                 let iter = addrs.drain(..).map(|x| {
                     Locator::new(
@@ -136,12 +162,20 @@ impl ListenersUnicastIP {
                     .unwrap()
                 });
                 locators.extend(iter);
-            } else {
+            } else if !noloopback || !kip.is_loopback() {
                 locators.push(value.endpoint.to_locator());
             }
         }
 
         locators
+    }
+
+    pub fn get_locators(&self) -> Vec<Locator> {
+        self.get_locators_impl(false)
+    }
+
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators_impl(true)
     }
 }
 

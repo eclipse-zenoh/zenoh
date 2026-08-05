@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -31,7 +33,7 @@ use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{endpoint::Address, EndPoint, Locator},
+    core::{endpoint::Address, EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -123,7 +125,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -131,7 +133,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -139,7 +141,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on vsock link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -147,7 +149,7 @@ impl LinkUnicastTrait for LinkUnicastVsock {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         let _ = self
             .get_mut_socket()
             .read_exact(buffer)
@@ -194,6 +196,14 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Vsock
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 impl fmt::Display for LinkUnicastVsock {
@@ -237,6 +247,15 @@ pub struct LinkManagerUnicastVsock {
     listeners: Arc<AsyncRwLock<HashMap<VsockAddr, ListenerUnicastVsock>>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastVsock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastVsock")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastVsock {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
@@ -253,8 +272,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastVsock {
         if let Ok(stream) = VsockStream::connect(addr).await {
             let local_addr = stream.local_addr()?;
             let peer_addr = stream.peer_addr()?;
-            let link = Arc::new(LinkUnicastVsock::new(stream, local_addr, peer_addr));
-            return Ok(LinkUnicast(link));
+            let link: Arc<dyn LinkUnicastTrait> =
+                Arc::new(LinkUnicastVsock::new(stream, local_addr, peer_addr));
+            return Ok(LinkUnicast::from(link));
         }
 
         bail!("Can not create a new vsock link bound to {}", endpoint)
@@ -328,6 +348,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastVsock {
             .map(|x| x.endpoint.to_locator())
             .collect()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
+    }
 }
 
 async fn accept_task(
@@ -355,10 +379,10 @@ async fn accept_task(
                     Ok((stream, dst_addr)) => {
                         tracing::debug!("Accepted vsock connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastVsock::new(stream, src_addr, dst_addr));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     },

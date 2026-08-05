@@ -40,6 +40,14 @@ type TimedFuture = Arc<dyn Timed + Send + Sync>;
 #[derive(Clone)]
 pub struct TimedHandle(Weak<AtomicBool>);
 
+impl std::fmt::Debug for TimedHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TimedHandle")
+            .field("is_live", &self.0.strong_count().gt(&0))
+            .finish()
+    }
+}
+
 impl TimedHandle {
     pub fn defuse(self) {
         if let Some(arc) = self.0.upgrade() {
@@ -54,6 +62,17 @@ pub struct TimedEvent {
     period: Option<Duration>,
     future: TimedFuture,
     fused: Arc<AtomicBool>,
+}
+
+impl std::fmt::Debug for TimedEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TimedEvent")
+            .field("when", &self.when)
+            .field("period", &self.period)
+            .field("future", &"..")
+            .field("fused", &self.fused.load(AtomicOrdering::Acquire))
+            .finish()
+    }
 }
 
 impl TimedEvent {
@@ -191,6 +210,16 @@ pub struct Timer {
     events: Arc<Mutex<BinaryHeap<TimedEvent>>>,
     sl_sender: Option<Sender<()>>,
     ev_sender: Option<Sender<(bool, TimedEvent)>>,
+}
+
+impl std::fmt::Debug for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Timer")
+            .field("events", &"..")
+            .field("has_sleep_sender", &self.sl_sender.is_some())
+            .field("has_event_sender", &self.ev_sender.is_some())
+            .finish()
+    }
 }
 
 impl Timer {

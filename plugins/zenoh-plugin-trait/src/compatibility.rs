@@ -101,8 +101,8 @@ impl Compatibility {
 impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Rust version:\n{}", self.rust_version)?;
-        writeln!(f, "Zenoh version:\n {}", &self.zenoh_version)?;
-        writeln!(f, "Zenoh features:\n {}", &self.zenoh_features)?;
+        writeln!(f, "Zenoh version:\n {}", self.zenoh_version)?;
+        writeln!(f, "Zenoh features:\n {}", self.zenoh_features)?;
         Ok(())
     }
 }

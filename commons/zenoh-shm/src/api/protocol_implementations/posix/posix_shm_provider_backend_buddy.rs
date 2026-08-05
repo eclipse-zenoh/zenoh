@@ -40,6 +40,14 @@ pub struct PosixShmProviderBackendBuddyBuilder<Layout> {
     layout: Layout,
 }
 
+impl<Layout> std::fmt::Debug for PosixShmProviderBackendBuddyBuilder<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBuddyBuilder")
+            .field("layout", &"..")
+            .finish()
+    }
+}
+
 #[zenoh_macros::unstable_doc]
 impl<Layout> Resolvable for PosixShmProviderBackendBuddyBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendBuddy>;
@@ -64,6 +72,16 @@ pub struct PosixShmProviderBackendBuddy {
     segment: Arc<PosixShmSegment>,
     heap: Mutex<Heap<BUDDY_ORDER>>,
     alignment: AllocAlignment,
+}
+
+impl std::fmt::Debug for PosixShmProviderBackendBuddy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendBuddy")
+            .field("segment", &"..")
+            .field("heap", &"..")
+            .field("alignment", &self.alignment)
+            .finish()
+    }
 }
 
 // see `buddy_system_allocator` doc for details

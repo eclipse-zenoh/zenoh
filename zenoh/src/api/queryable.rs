@@ -31,8 +31,12 @@ use {zenoh_config::wrappers::EntityGlobalId, zenoh_protocol::core::EntityGlobalI
 
 #[zenoh_macros::unstable]
 use crate::api::sample::SourceInfo;
+#[zenoh_macros::unstable]
+use crate::api::timestamp_stack::push_ts_interception;
 #[zenoh_macros::internal]
 use crate::net::primitives::DummyPrimitives;
+#[cfg(feature = "unstable")]
+use crate::{api::timestamp_stack::TimestampStack, net::runtime::WeakDynamicRuntime};
 use crate::{
     api::{
         builders::reply::{ReplyBuilder, ReplyBuilderDelete, ReplyBuilderPut, ReplyErrBuilder},
@@ -118,6 +122,10 @@ pub(crate) struct QueryInner {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) primitives: ReplyPrimitives,
+    #[cfg(feature = "unstable")]
+    pub(crate) runtime: Option<WeakDynamicRuntime>,
+    #[cfg(feature = "unstable")]
+    pub(crate) query_ts_stack: Option<TimestampStack>,
 }
 
 impl QueryInner {
@@ -132,6 +140,10 @@ impl QueryInner {
             #[cfg(feature = "unstable")]
             source_info: None,
             primitives: ReplyPrimitives::new_remote(None, Arc::new(DummyPrimitives)),
+            #[cfg(feature = "unstable")]
+            runtime: None,
+            #[cfg(feature = "unstable")]
+            query_ts_stack: None,
         }
     }
 }
@@ -337,11 +349,21 @@ impl Query {
         self.attachment.as_mut()
     }
 
-    /// Gets info on the source of this Query.
+    /// Gets info on the source of this Query as an optional [`SourceInfo`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn source_info(&self) -> Option<&SourceInfo> {
         self.inner.source_info.as_ref()
+    }
+
+    /// Gets the timestamp stack attached to this query.
+    ///
+    /// The timestamp stack carries interception records (Send, Route, Receive)
+    /// collected along the message's path through the network.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn timestamp_stack(&self) -> Option<&TimestampStack> {
+        self.inner.query_ts_stack.as_ref()
     }
 
     /// Sends a reply in the form of [`Sample`] to this Query.
@@ -506,7 +528,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.inner.key_expr, &self.inner.parameters),
+                &format!("{}{}", self.inner.key_expr, self.inner.parameters),
             )
             .finish()
     }
@@ -524,6 +546,16 @@ impl CallbackParameter for Query {
 pub struct ReplySample<'a> {
     query: &'a Query,
     sample: Sample,
+}
+
+#[zenoh_macros::internal]
+impl fmt::Debug for ReplySample<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ReplySample")
+            .field("query", &self.query)
+            .field("sample", &self.sample)
+            .finish()
+    }
 }
 
 #[zenoh_macros::internal]
@@ -557,7 +589,7 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.map(Into::into);
-        self.inner.primitives.send_response(&mut Response {
+        let mut response = Response {
             rid: self.inner.qid,
             wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
             payload: ResponseBody::Reply(zenoh::Reply {
@@ -588,7 +620,27 @@ impl Query {
                 zid: self.inner.zid,
                 eid: self.eid,
             }),
-        });
+            ext_ts_stack: None,
+        };
+        #[cfg(feature = "unstable")]
+        {
+            let weak_rt = self.inner.runtime.clone();
+            response.ext_ts_stack = self.inner.query_ts_stack.as_ref().and_then(|ts_stack| {
+                use zenoh_protocol::network::timestamp_stack::{interception_point, TsStackType};
+
+                let mut ext_ts_stack = Some(TsStackType {
+                    ts_stack: ts_stack.into(),
+                });
+                let upgrade = weak_rt.clone();
+                push_ts_interception(
+                    &mut ext_ts_stack,
+                    move || upgrade.and_then(|r| r.upgrade()).map(|dr| dr.get_inner()),
+                    interception_point::SEND,
+                );
+                ext_ts_stack
+            });
+        }
+        self.inner.primitives.send_response(&mut response);
         Ok(())
     }
 }
@@ -634,6 +686,15 @@ pub(crate) struct QueryableInner {
 pub struct QueryableUndeclaration<Handler> {
     queryable: Queryable<Handler>,
     wait_callbacks: bool,
+}
+
+impl<Handler> fmt::Debug for QueryableUndeclaration<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("QueryableUndeclaration")
+            .field("queryable", &self.queryable)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
 }
 
 impl<Handler> QueryableUndeclaration<Handler> {
@@ -722,11 +783,20 @@ impl<Handler> IntoFuture for QueryableUndeclaration<Handler> {
 /// # }
 /// ```
 #[non_exhaustive]
-#[derive(Debug)]
 pub struct Queryable<Handler> {
     pub(crate) inner: QueryableInner,
     pub(crate) handler: Handler,
     pub(crate) callback_sync_group: SyncGroup,
+}
+
+impl<Handler> fmt::Debug for Queryable<Handler> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Queryable")
+            .field("inner", &self.inner)
+            .field("handler", &"..")
+            .field("callback_sync_group", &self.callback_sync_group)
+            .finish()
+    }
 }
 
 impl<Handler> Queryable<Handler> {

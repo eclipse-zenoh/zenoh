@@ -38,6 +38,19 @@ transport_unixpipe = [
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
 transport_vsock = ["zenoh-link-vsock"]
 transport_ws = ["zenoh-link-ws"]
+uring = [
+  "zenoh-link-commons/uring",
+  "zenoh-link-quic/uring",
+  "zenoh-link-quic_datagram/uring",
+  "zenoh-link-serial/uring",
+  "zenoh-link-tcp/uring",
+  "zenoh-link-tls/uring",
+  "zenoh-link-udp/uring",
+  "zenoh-link-unixpipe/uring",
+  "zenoh-link-unixsock_stream/uring",
+  "zenoh-link-vsock/uring",
+  "zenoh-link-ws/uring",
+]
 
 [dependencies]
 zenoh-config = { workspace = true }

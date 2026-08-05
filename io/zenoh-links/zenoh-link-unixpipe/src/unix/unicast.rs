@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{
     cell::UnsafeCell,
     collections::HashMap,
@@ -40,7 +42,7 @@ use zenoh_link_commons::{
     LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{bail, ZResult};
@@ -273,7 +275,7 @@ async fn handle_incoming_connections(
         endpoint.metadata(),
     )?;
 
-    let link = Arc::new(UnicastPipe {
+    let link: Arc<dyn LinkUnicastTrait> = Arc::new(UnicastPipe {
         r: UnsafeCell::new(dedicated_uplink),
         w: UnsafeCell::new(dedicated_downlink),
         local,
@@ -281,7 +283,7 @@ async fn handle_incoming_connections(
     });
 
     // send newly established link to manager
-    manager.send_async(LinkUnicast(link)).await?;
+    manager.send_async(LinkUnicast::from(link)).await?;
 
     ZResult::Ok(())
 }
@@ -478,19 +480,19 @@ impl LinkUnicastTrait for UnicastPipe {
         Ok(())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_w_mut().write(buffer).await
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_w_mut().write_all(buffer).await
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_r_mut().read(buffer).await
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_r_mut().read_exact(buffer).await
     }
 
@@ -530,6 +532,14 @@ impl LinkUnicastTrait for UnicastPipe {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Unixpipe
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match self.get_r_mut().pipe.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 impl fmt::Display for UnicastPipe {
@@ -553,6 +563,15 @@ pub struct LinkManagerUnicastPipe {
     listeners: tokio::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
 }
 
+impl fmt::Debug for LinkManagerUnicastPipe {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastPipe")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
+}
+
 impl LinkManagerUnicastPipe {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
@@ -571,7 +590,9 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastPipe {
 impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let pipe = UnicastPipeClient::connect_to(endpoint).await?;
-        Ok(LinkUnicast(Arc::new(pipe)))
+        Ok(LinkUnicast::from(
+            Arc::new(pipe) as Arc<dyn LinkUnicastTrait>
+        ))
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
@@ -601,6 +622,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
             .values()
             .map(|v| v.uplink_locator.clone())
             .collect()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
     }
 }
 

@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg(feature = "unstable")]
 
 use std::{
     sync::{
@@ -27,6 +28,7 @@ use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_core::ztimeout;
 use zenoh_link::EndPoint;
 use zenoh_result::bail;
+use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
@@ -346,7 +348,7 @@ impl Recipe {
         let remaining_checkpoints = Arc::new(AtomicUsize::new(num_checkpoints));
         println!(
             "Recipe {} begin testing with {} checkpoint(s).",
-            &self, &num_checkpoints
+            self, num_checkpoints
         );
 
         let mut recipe_join_set = tokio::task::JoinSet::new();
@@ -384,7 +386,7 @@ impl Recipe {
 
                     // Warmup before the session starts
                     tokio::time::sleep(node.warmup).await;
-                    println!("Node: {} starting...", &node.name);
+                    println!("Node: {} starting...", node.name);
 
                     // In case of client can't connect to some peers/routers
                     loop {
@@ -428,7 +430,7 @@ impl Recipe {
                 // Close the session once all the task associated with the node are done.
                 ztimeout!(session.close())?;
 
-                println!("Node: {} is closed.", &node.name);
+                println!("Node: {} is closed.", node.name);
                 Result::Ok(())
             };
             recipe_join_set.spawn(recipe_task);
@@ -470,7 +472,7 @@ impl Recipe {
 async fn gossip() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    let locator = String::from("tcp/127.0.0.1:17446");
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprGossip");
     let msg_size = 8;
 
@@ -537,14 +539,11 @@ async fn gossip() -> Result<()> {
 async fn gossip_regression_1() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:17480";
-    const PEER_ENDPOINT: &str = "tcp/localhost:17481";
-
     let router = {
         let mut c = Config::default();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -552,6 +551,7 @@ async fn gossip_regression_1() -> Result<()> {
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
+    let router_endpoint = get_tcp_locator(&router).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -559,7 +559,7 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -578,11 +578,11 @@ async fn gossip_regression_1() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.into()])
             .unwrap();
         c.listen
             .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -594,15 +594,13 @@ async fn gossip_regression_1() -> Result<()> {
         tracing::info!("Peer (2) ZID: {}", s.zid());
         s
     };
+    let peer_endpoint = get_tcp_locator(&peer2).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -635,13 +633,11 @@ async fn gossip_regression_1() -> Result<()> {
 async fn gossip_regression_2() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:17482";
-
     let router = {
         let mut c = Config::default();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -649,6 +645,7 @@ async fn gossip_regression_2() -> Result<()> {
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
+    let router_endpoint = get_tcp_locator(&router).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -656,7 +653,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -676,7 +673,7 @@ async fn gossip_regression_2() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -712,14 +709,11 @@ async fn gossip_regression_2() -> Result<()> {
 async fn gossip_regression_3() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:17483";
-    const PEER_ENDPOINT: &str = "tcp/localhost:17484";
-
     let router = {
         let mut c = Config::default();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting.gossip.set_multihop(Some(true)).unwrap();
@@ -728,6 +722,7 @@ async fn gossip_regression_3() -> Result<()> {
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
+    let router_endpoint = get_tcp_locator(&router).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -735,7 +730,7 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -756,11 +751,11 @@ async fn gossip_regression_3() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.into()])
             .unwrap();
         c.listen
             .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
@@ -773,15 +768,13 @@ async fn gossip_regression_3() -> Result<()> {
         tracing::info!("Peer (2) ZID: {}", s.zid());
         s
     };
+    let peer_endpoint = get_tcp_locator(&peer2).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let peer3 = {
         let mut c = Config::default();
-        c.connect
-            .endpoints
-            .set(vec![PEER_ENDPOINT.parse::<EndPoint>().unwrap()])
-            .unwrap();
+        c.connect.endpoints.set(vec![peer_endpoint.into()]).unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         c.scouting
             .gossip
@@ -825,7 +818,7 @@ async fn gossip_regression_3() -> Result<()> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn static_failover_brokering() -> Result<()> {
     zenoh::init_log_from_env_or("error");
-    let locator = String::from("tcp/127.0.0.1:17449");
+    let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
     let ke = String::from("testKeyExprStaticFailoverBrokering");
     let msg_size = 8;
 
@@ -899,8 +892,6 @@ async fn three_node_combination() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17451 to 17498
-    let base_port = 17450;
 
     let recipe_list: Vec<_> = modes
         .map(|n1| modes.map(|n2| (n1, n2)))
@@ -911,7 +902,7 @@ async fn three_node_combination() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
                 let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("three_node_combination_keyexpr_getqueryable_{idx}");
@@ -1076,8 +1067,6 @@ async fn two_node_combination() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17501 to 17509
-    let base_port = 17500;
     let recipe_list: Vec<_> = modes
         .into_iter()
         .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
@@ -1089,7 +1078,7 @@ async fn two_node_combination() -> Result<()> {
             let ke_getliveliness = format!("two_node_combination_keyexpr_getliveliness_{idx}");
 
             let (node1_listen_connect, node2_listen_connect) = {
-                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let locator = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
                 let listen = vec![locator];
                 let connect = vec![];
 
@@ -1227,8 +1216,6 @@ async fn three_node_combination_multicast() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 18511 .. 18535
-    let base_port = 18510;
 
     let recipe_list: Vec<_> = modes
         .map(|n1| modes.map(|n2| (n1, n2)))
@@ -1239,8 +1226,9 @@ async fn three_node_combination_multicast() -> Result<()> {
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let unicast_locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-                let multicast_locator = format!("udp/224.0.0.1:{}", base_port + idx);
+                let port = get_free_tcp_port();
+                let unicast_locator = format!("tcp/127.0.0.1:{}", port);
+                let multicast_locator = format!("udp/224.0.0.1:{}", port);
 
                 let ke_pubsub = format!("three_node_combination_multicast_keyexpr_pubsub_{idx}");
 
@@ -1345,17 +1333,15 @@ async fn router_linkstate() -> Result<()> {
     ];
 
     let mut idx = 0;
-    // Ports going to be used: 17601 to 17648
-    let base_port = 17600;
 
     let recipe_list: Vec<_> = delay_in_secs
         .into_iter()
         .map(|d| (1024, d))
         .map(|(msg_size, (delay1, delay2, delay3))| {
             idx += 1;
-            let locator1 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3));
-            let locator2 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3) + 1);
-            let locator3 = format!("tcp/127.0.0.1:{}", base_port + (idx * 3) + 2);
+            let locator1 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator2 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
+            let locator3 = format!("tcp/127.0.0.1:{}", get_free_tcp_port());
 
             let ke_pubsub = format!("router_linkstate_keyexpr_pubsub_{idx}");
             let ke_getqueryable = format!("router_linkstate_keyexpr_getqueryable_{idx}");
@@ -1533,13 +1519,11 @@ async fn router_linkstate() -> Result<()> {
 async fn scouting_delay_regression() -> Result<()> {
     zenoh::init_log_from_env_or("error");
 
-    const ROUTER_ENDPOINT: &str = "tcp/localhost:17490";
-
     let router = {
         let mut c = Config::default();
         c.listen
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec!["tcp/127.0.0.1:0".parse::<EndPoint>().unwrap()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Router));
@@ -1547,6 +1531,7 @@ async fn scouting_delay_regression() -> Result<()> {
         tracing::info!("Router ZID: {}", s.zid());
         s
     };
+    let router_endpoint = get_tcp_locator(&router).await;
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
@@ -1554,7 +1539,7 @@ async fn scouting_delay_regression() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.clone().into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));
@@ -1571,7 +1556,7 @@ async fn scouting_delay_regression() -> Result<()> {
         let mut c = Config::default();
         c.connect
             .endpoints
-            .set(vec![ROUTER_ENDPOINT.parse::<EndPoint>().unwrap()])
+            .set(vec![router_endpoint.into()])
             .unwrap();
         c.scouting.multicast.set_enabled(Some(false)).unwrap();
         let _ = c.set_mode(Some(WhatAmI::Peer));

@@ -121,6 +121,7 @@ pub fn intersect<const STAR_DSL: bool>(s1: &[u8], s2: &[u8]) -> bool {
 
 use super::{restriction::NoSubWilds, Intersector, MayHaveVerbatim};
 
+#[derive(Debug)]
 pub struct ClassicIntersector;
 impl Intersector<NoSubWilds<&[u8]>, NoSubWilds<&[u8]>> for ClassicIntersector {
     fn intersect(&self, left: NoSubWilds<&[u8]>, right: NoSubWilds<&[u8]>) -> bool {

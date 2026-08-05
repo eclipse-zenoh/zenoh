@@ -24,12 +24,22 @@ use super::LifoQueue;
 
 /// Provides a pool of pre-allocated objects that are automaticlaly reinserted into
 /// the pool when dropped.
+#[derive(Debug)]
 pub struct RecyclingObjectPool<T, F>
 where
     F: Fn() -> T,
 {
     inner: Arc<LifoQueue<T>>,
     f: F,
+}
+
+impl<T, F: Fn() -> T + Clone> Clone for RecyclingObjectPool<T, F> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            f: self.f.clone(),
+        }
+    }
 }
 
 impl<T, F: Fn() -> T> RecyclingObjectPool<T, F> {

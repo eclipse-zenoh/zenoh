@@ -269,6 +269,8 @@ impl<'a> Publisher<'a> {
             #[cfg(feature = "unstable")]
             source_info: None,
             attachment: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 
@@ -296,6 +298,8 @@ impl<'a> Publisher<'a> {
             #[cfg(feature = "unstable")]
             source_info: None,
             attachment: None,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation: None,
         }
     }
 
@@ -423,6 +427,15 @@ pub struct PublisherUndeclaration<'a> {
     wait_callbacks: bool,
 }
 
+impl fmt::Debug for PublisherUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PublisherUndeclaration")
+            .field("publisher", &self.publisher)
+            .field("wait_callbacks", &self.wait_callbacks)
+            .finish()
+    }
+}
+
 impl<'a> PublisherUndeclaration<'a> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
@@ -497,6 +510,8 @@ impl Sink<Sample> for Publisher<'_> {
             #[cfg(feature = "unstable")]
             None,
             attachment,
+            #[cfg(feature = "unstable")]
+            None,
         )
     }
 

@@ -26,6 +26,18 @@ pub mod unicast;
 pub mod shm;
 #[cfg(feature = "shared-memory")]
 mod shm_context;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+mod uring;
 
 use std::{any::Any, sync::Arc};
 
@@ -56,7 +68,7 @@ pub trait TransportEventHandler: Send + Sync {
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>>;
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportEventHandler;
 
 impl TransportEventHandler for DummyTransportEventHandler {
@@ -86,7 +98,7 @@ pub trait TransportMulticastEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportMulticastEventHandler;
 
 impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
@@ -124,7 +136,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 }
 
 // Define an empty TransportCallback for the listener transport
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {

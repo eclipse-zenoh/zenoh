@@ -15,7 +15,7 @@ use clap::Parser;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use zenoh::{config::WhatAmI, Config, Result, Wait};
-use zenoh_config::{EndPoint, ModeDependentValue, PermissionsConf};
+use zenoh_config::{EndPoint, EndPoints, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -167,7 +167,7 @@ fn config_from_args(args: &Args) -> Config {
             .set(
                 args.connect
                     .iter()
-                    .map(|v| match v.parse::<EndPoint>() {
+                    .map(|v| match v.parse::<EndPoints>() {
                         Ok(v) => v,
                         Err(e) => {
                             panic!("Couldn't parse option --peer={v} into Locator: {e}");

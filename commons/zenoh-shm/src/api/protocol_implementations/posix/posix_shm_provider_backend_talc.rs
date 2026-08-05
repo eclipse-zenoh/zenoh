@@ -41,6 +41,14 @@ pub struct PosixShmProviderBackendTalcBuilder<Layout> {
     layout: Layout,
 }
 
+impl<Layout> std::fmt::Debug for PosixShmProviderBackendTalcBuilder<Layout> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendTalcBuilder")
+            .field("layout", &"..")
+            .finish()
+    }
+}
+
 #[zenoh_macros::unstable_doc]
 impl<Layout> Resolvable for PosixShmProviderBackendTalcBuilder<Layout> {
     type To = ZResult<PosixShmProviderBackendTalc>;
@@ -66,6 +74,16 @@ pub struct PosixShmProviderBackendTalc {
     segment: Arc<PosixShmSegment>,
     talc: Mutex<Talc<ErrOnOom>>,
     alignment: AllocAlignment,
+}
+
+impl std::fmt::Debug for PosixShmProviderBackendTalc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PosixShmProviderBackendTalc")
+            .field("segment", &"..")
+            .field("talc", &"..")
+            .field("alignment", &self.alignment)
+            .finish()
+    }
 }
 
 impl PosixShmProviderBackendTalc {

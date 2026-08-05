@@ -13,6 +13,7 @@
 //
 use std::{
     convert::{TryFrom, TryInto},
+    fmt,
     future::{IntoFuture, Ready},
     str::FromStr,
     sync::Arc,
@@ -602,6 +603,15 @@ impl<'a> UndeclarableSealed<&'a Session> for KeyExpr<'a> {
 pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
     expr: KeyExpr<'a>,
+}
+
+impl fmt::Debug for KeyExprUndeclaration<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyExprUndeclaration")
+            .field("session", &"..")
+            .field("expr", &self.expr)
+            .finish()
+    }
 }
 
 impl Resolvable for KeyExprUndeclaration<'_> {

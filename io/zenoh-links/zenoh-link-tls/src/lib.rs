@@ -44,7 +44,7 @@ pub const TLS_LOCATOR_PREFIX: &str = "tls";
 
 const IS_RELIABLE: bool = true;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct TlsLocatorInspector;
 #[async_trait]
 impl LocatorInspector for TlsLocatorInspector {

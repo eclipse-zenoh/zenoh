@@ -17,7 +17,7 @@
 use zenoh_protocol::{
     core::{Bound, Region, WhatAmI},
     network::{
-        declare::{DeclareToken, TokenId},
+        declare::{queryable::ext::QueryableInfoType, DeclareToken, TokenId},
         interest::{InterestMode, InterestOptions},
     },
 };
@@ -115,7 +115,7 @@ fn test_current_token_repropagation() {
 /// This checks for a regression discovered in RMW Zenoh which uses peer mode and sends a
 /// [liveliness GET] right after opening a session.
 ///
-/// This issue occured because we did not check that the source of a current tokens interest is
+/// This issue occurred because we did not check that the source of a current token's interest is
 /// south-bound before propagating it to peers with unfinalized initial interests.
 ///
 /// [liveliness GET]:
@@ -233,7 +233,7 @@ fn test_current_future_interest_propagation_on_open(north: WhatAmI, south: WhatA
     assert_eq!(n.recorder().interests().len(), 1);
     assert_eq!(s.recorder().queryables().len(), 0);
 
-    n.declare_queryable(Some(42), 1999, "k");
+    n.declare_queryable(Some(42), 1999, "k", QueryableInfoType::DEFAULT);
 
     assert_eq!(s.recorder().queryables().len(), 1);
 }

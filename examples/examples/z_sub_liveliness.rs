@@ -25,7 +25,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring Liveliness Subscriber on '{}'...", &key_expr);
+    println!("Declaring Liveliness Subscriber on '{}'...", key_expr);
 
     let subscriber = session
         .liveliness()

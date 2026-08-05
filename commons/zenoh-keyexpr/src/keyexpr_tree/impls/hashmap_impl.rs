@@ -32,6 +32,7 @@ use hashbrown::{
 use crate::keyexpr_tree::*;
 
 #[cfg_attr(not(feature = "std"), allow(deprecated))]
+#[derive(Debug)]
 pub struct HashMapProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
     core::marker::PhantomData<Hash>,
 );

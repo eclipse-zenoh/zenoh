@@ -23,7 +23,10 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 use super::{Runtime, WeakRuntime};
-use crate::net::{common::AutoConnect, runtime::orchestrator::Loop};
+use crate::net::{
+    common::AutoConnect,
+    runtime::orchestrator::{Loop, ScoutSocket},
+};
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -50,7 +53,7 @@ struct ScoutState {
 
 struct ScoutSockets {
     mcast_socket: UdpSocket,
-    ucast_sockets: Vec<UdpSocket>,
+    ucast_sockets: Vec<ScoutSocket>,
 }
 
 impl Scouting {
@@ -96,8 +99,7 @@ impl Scouting {
         let used_mcast_addrs = zasyncread!(self.state.sockets)
             .ucast_sockets
             .iter()
-            .filter_map(|s| s.local_addr().ok())
-            .map(|s| s.ip())
+            .map(|s| *s.iface())
             .collect::<HashSet<_>>();
         let new_addrs = available_mcast_addrs
             .difference(&used_mcast_addrs)
@@ -138,15 +140,13 @@ impl Scouting {
         {
             let mut sockets = zasyncwrite!(self.state.sockets);
             sockets.ucast_sockets.retain(|s| {
-                s.local_addr().map_or(true, |a| {
-                    let ip = a.ip();
-                    if addrs_to_remove.iter().copied().contains(&ip) {
-                        tracing::debug!("Removing socket udp/{}", ip);
-                        false
-                    } else {
-                        true
-                    }
-                })
+                let ip = s.iface();
+                if addrs_to_remove.iter().copied().contains(ip) {
+                    tracing::debug!("Removing socket udp/{}", ip);
+                    false
+                } else {
+                    true
+                }
             });
             sockets.ucast_sockets.extend(
                 addrs_to_add
@@ -193,7 +193,7 @@ impl Scouting {
     }
 
     pub async fn scout<Fut, F>(
-        sockets: &[UdpSocket],
+        sockets: &[ScoutSocket],
         matcher: WhatAmIMatcher,
         mcast_addr: &SocketAddr,
         f: F,
@@ -224,21 +224,14 @@ impl Scouting {
                         "Send {:?} to {} on interface {}",
                         scout.body,
                         mcast_addr,
-                        socket
-                            .local_addr()
-                            .map_or("unknown".to_string(), |addr| addr.ip().to_string())
+                        socket.iface()
                     );
-                    if let Err(err) = socket
-                        .send_to(wbuf.as_slice(), mcast_addr.to_string())
-                        .await
-                    {
+                    if let Err(err) = socket.send_multicast(wbuf.as_slice(), *mcast_addr).await {
                         tracing::debug!(
                             "Unable to send {:?} to {} on interface {}: {}",
                             scout.body,
                             mcast_addr,
-                            socket
-                                .local_addr()
-                                .map_or("unknown".to_string(), |addr| addr.ip().to_string()),
+                            socket.iface(),
                             err
                         );
                     }
@@ -345,7 +338,7 @@ impl Scouting {
 
     async fn autoconnect_all(
         &self,
-        ucast_sockets: &[UdpSocket],
+        ucast_sockets: &[ScoutSocket],
         autoconnect: AutoConnect,
         addr: &SocketAddr,
     ) {
@@ -405,11 +398,16 @@ impl Scouting {
         }
     }
 
-    async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[UdpSocket]) {
+    async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[ScoutSocket]) {
         let mut buf = vec![0; RCV_BUF_SIZE];
         let local_addrs: Vec<SocketAddr> = ucast_sockets
             .iter()
-            .filter_map(|sock| sock.local_addr().ok())
+            .filter_map(|sock| {
+                sock.local_addr()
+                    .ok()
+                    .map(|addr| (*sock.iface(), addr.port()))
+            })
+            .map(|(iface, port)| SocketAddr::new(iface, port))
             .collect();
         tracing::debug!("Waiting for UDP datagram...");
         loop {
@@ -442,7 +440,7 @@ impl Scouting {
                             version: zenoh_protocol::VERSION,
                             whatami: runtime.whatami(),
                             zid,
-                            locators: runtime.get_locators(),
+                            locators: Self::get_hello_locators(&runtime, &peer),
                         }
                         .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
@@ -456,7 +454,7 @@ impl Scouting {
                         );
                         codec.write(&mut writer, &hello).unwrap();
 
-                        if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
+                        if let Err(err) = socket.send_multicast(wbuf.as_slice(), peer).await {
                             tracing::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
                         }
                     }
@@ -482,25 +480,32 @@ impl Scouting {
             false
         }
     }
+
+    fn get_hello_locators(runtime: &Runtime, peer: &SocketAddr) -> Vec<Locator> {
+        if peer.ip().is_loopback() {
+            runtime.get_locators()
+        } else {
+            runtime.get_locators_noloopback()
+        }
+    }
 }
 
-fn get_best_match<'a>(addr: &IpAddr, sockets: &'a [UdpSocket]) -> Option<&'a UdpSocket> {
+fn get_best_match<'a>(addr: &IpAddr, sockets: &'a [ScoutSocket]) -> Option<&'a ScoutSocket> {
     fn octets(addr: &IpAddr) -> Vec<u8> {
         match addr {
             IpAddr::V4(addr) => addr.octets().to_vec(),
             IpAddr::V6(addr) => addr.octets().to_vec(),
         }
     }
-    fn matching_octets(addr: &IpAddr, sock: &UdpSocket) -> usize {
+    fn matching_octets(addr: &IpAddr, sock: &ScoutSocket) -> usize {
         octets(addr)
             .iter()
-            .zip(octets(&sock.local_addr().unwrap().ip()))
+            .zip(octets(&sock.iface()))
             .map(|(x, y)| x.cmp(&y))
             .position(|ord| ord != std::cmp::Ordering::Equal)
             .unwrap_or_else(|| octets(addr).len())
     }
     sockets
         .iter()
-        .filter(|sock| sock.local_addr().is_ok())
         .max_by(|sock1, sock2| matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2)))
 }

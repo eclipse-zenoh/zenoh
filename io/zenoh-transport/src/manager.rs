@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
@@ -38,6 +38,18 @@ use super::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::shm_context::ShmContext;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use crate::uring::Uring;
 use crate::{
     multicast::manager::{
         TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
@@ -133,16 +145,83 @@ pub struct TransportManagerConfig {
     pub region_name: Option<RegionName>,
 }
 
+impl fmt::Debug for TransportManagerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerConfig")
+            .field("version", &self.version)
+            .field("zid", &self.zid)
+            .field("whatami", &self.whatami)
+            .field("resolution", &self.resolution)
+            .field("batch_size", &self.batch_size)
+            .field("batching", &self.batching)
+            .field("wait_before_drop", &self.wait_before_drop)
+            .field(
+                "max_wait_before_drop_fragments",
+                &self.max_wait_before_drop_fragments,
+            )
+            .field("wait_before_close", &self.wait_before_close)
+            .field("queue_size", &self.queue_size)
+            .field("queue_backoff", &self.queue_backoff)
+            .field("queue_alloc", &self.queue_alloc)
+            .field("defrag_buff_size", &self.defrag_buff_size)
+            .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field("unicast", &self.unicast)
+            .field("multicast", &self.multicast)
+            .field("link_configs", &self.link_configs)
+            .field("handler", &"..")
+            .field("tx_threads", &self.tx_threads)
+            .field("supported_links", &self.supported_links)
+            .field(
+                "bound_callback",
+                &self.bound_callback.as_ref().map(|_| ".."),
+            )
+            .field("region_name", &self.region_name)
+            .finish()
+    }
+}
+
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    #[cfg(all(
+        feature = "uring",
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "loongarch64",
+            target_arch = "powerpc64"
+        )
+    ))]
+    pub uring: Option<Uring>,
+}
+
+impl fmt::Debug for TransportManagerState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerState");
+        debug.field("unicast", &self.unicast);
+        debug.field("multicast", &self.multicast);
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_context", &self.shm_context.as_ref().map(|_| ".."));
+        debug.finish()
+    }
 }
 
 pub struct TransportManagerParams {
     config: TransportManagerConfig,
     state: TransportManagerState,
+}
+
+impl fmt::Debug for TransportManagerParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParams")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 pub struct TransportManagerBuilder {
@@ -171,6 +250,45 @@ pub struct TransportManagerBuilder {
     shm: zenoh_config::ShmConf,
     #[cfg(feature = "shared-memory")]
     shm_reader: Option<ShmReader>,
+}
+
+impl fmt::Debug for TransportManagerBuilder {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilder");
+        debug
+            .field("version", &self.version)
+            .field("zid", &self.zid)
+            .field("whatami", &self.whatami)
+            .field("resolution", &self.resolution)
+            .field("batch_size", &self.batch_size)
+            .field("batching_enabled", &self.batching_enabled)
+            .field("batching_time_limit", &self.batching_time_limit)
+            .field("wait_before_drop", &self.wait_before_drop)
+            .field(
+                "max_wait_before_drop_fragments",
+                &self.max_wait_before_drop_fragments,
+            )
+            .field("wait_before_close", &self.wait_before_close)
+            .field("queue_size", &self.queue_size)
+            .field("queue_alloc", &self.queue_alloc)
+            .field("defrag_buff_size", &self.defrag_buff_size)
+            .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field("unicast", &self.unicast)
+            .field("multicast", &self.multicast)
+            .field("link_configs", &self.link_configs)
+            .field("tx_threads", &self.tx_threads)
+            .field("supported_links", &self.supported_links)
+            .field("region_name", &self.region_name)
+            .field(
+                "bound_callback",
+                &self.bound_callback.as_ref().map(|_| ".."),
+            );
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm", &self.shm);
+        #[cfg(feature = "shared-memory")]
+        debug.field("shm_reader", &self.shm_reader.as_ref().map(|_| ".."));
+        debug.finish()
+    }
 }
 
 impl TransportManagerBuilder {
@@ -400,11 +518,46 @@ impl TransportManagerBuilder {
             region_name: self.region_name,
         };
 
+        if cfg!(feature = "uring")
+            && !cfg!(all(
+                target_os = "linux",
+                any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv64",
+                    target_arch = "loongarch64",
+                    target_arch = "powerpc64"
+                )
+            ))
+        {
+            tracing::warn!(
+                "The `uring` feature is enabled, but io_uring is only supported with Linux on x86_64, \
+                 aarch64, riscv64, loongarch64 or powerpc64; falling back to tokio RX."
+            );
+        }
+
         let state = TransportManagerState {
             unicast: unicast.state,
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(all(
+                feature = "uring",
+                target_os = "linux",
+                any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv64",
+                    target_arch = "loongarch64",
+                    target_arch = "powerpc64"
+                )
+            ))]
+            uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)
+                .map_err(|e| {
+                    tracing::warn!("io_uring reactor init failed, falling back to tokio RX: {e}");
+                    e
+                })
+                .ok(),
         };
 
         let params = TransportManagerParams { config, state };
@@ -479,6 +632,24 @@ pub struct TransportManager {
     #[cfg(feature = "stats")]
     pub(crate) stats: zenoh_stats::StatsRegistry,
     pub(crate) task_controller: TaskController,
+}
+
+impl fmt::Debug for TransportManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManager");
+        debug
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .field("prng", &"..")
+            .field("cipher", &"..")
+            .field("locator_inspector", &self.locator_inspector)
+            .field("new_unicast_link_sender", &self.new_unicast_link_sender);
+        #[cfg(feature = "stats")]
+        debug.field("stats", &self.stats);
+        debug
+            .field("task_controller", &self.task_controller)
+            .finish()
+    }
 }
 
 impl TransportManager {
@@ -590,6 +761,15 @@ impl TransportManager {
     // TODO(yuyuan): Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
         let mut lsu = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
+    }
+
+    // TODO(yuyuan): Can we make this async as above?
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        let mut lsu =
+            zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast_noloopback());
         let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu

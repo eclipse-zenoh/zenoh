@@ -13,6 +13,7 @@
 //
 use std::{
     collections::HashMap,
+    fmt,
     sync::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
@@ -51,6 +52,7 @@ use crate::{
 /*************************************/
 /*         TRANSPORT CONFIG          */
 /*************************************/
+#[derive(Debug)]
 pub struct TransportManagerConfigUnicast {
     pub lease: Duration,
     pub keep_alive: usize,
@@ -112,9 +114,33 @@ pub struct TransportManagerStateUnicast {
     pub(super) authenticator: Arc<Auth>,
 }
 
+impl fmt::Debug for TransportManagerStateUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerStateUnicast");
+        debug
+            .field("incoming", &self.incoming)
+            .field("link_managers", &"..")
+            .field("transports", &"..");
+        #[cfg(feature = "transport_multilink")]
+        debug.field("multilink", &"..");
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.finish()
+    }
+}
+
 pub struct TransportManagerParamsUnicast {
     pub config: TransportManagerConfigUnicast,
     pub state: TransportManagerStateUnicast,
+}
+
+impl fmt::Debug for TransportManagerParamsUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportManagerParamsUnicast")
+            .field("config", &self.config)
+            .field("state", &self.state)
+            .finish()
+    }
 }
 
 pub struct TransportManagerBuilderUnicast {
@@ -137,6 +163,28 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_lowlatency: bool,
     #[cfg(feature = "transport_compression")]
     pub(super) is_compression: bool,
+}
+
+impl fmt::Debug for TransportManagerBuilderUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut debug = f.debug_struct("TransportManagerBuilderUnicast");
+        debug
+            .field("lease", &self.lease)
+            .field("keep_alive", &self.keep_alive)
+            .field("open_timeout", &self.open_timeout)
+            .field("accept_timeout", &self.accept_timeout)
+            .field("accept_pending", &self.accept_pending)
+            .field("max_sessions", &self.max_sessions)
+            .field("is_qos", &self.is_qos);
+        #[cfg(feature = "transport_multilink")]
+        debug.field("max_links", &self.max_links);
+        #[cfg(feature = "transport_auth")]
+        debug.field("authenticator", &"..");
+        debug.field("is_lowlatency", &self.is_lowlatency);
+        #[cfg(feature = "transport_compression")]
+        debug.field("is_compression", &self.is_compression);
+        debug.finish()
+    }
 }
 
 impl TransportManagerBuilderUnicast {
@@ -433,6 +481,14 @@ impl TransportManager {
         vec
     }
 
+    pub async fn get_locators_unicast_noloopback(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
+            vec.extend_from_slice(&p.get_locators_noloopback().await);
+        }
+        vec
+    }
+
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
@@ -455,9 +511,11 @@ impl TransportManager {
                 existing_config
             );
             tracing::trace!("{}", e);
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -546,7 +604,8 @@ impl TransportManager {
                 match $s {
                     Ok(output) => output,
                     Err(e) => {
-                        return Err(InitTransportError::Link((e, link.fail(), $reason)));
+                        let (l, asl) = link.fail();
+                        return Err(InitTransportError::Link((e, l, asl, $reason)));
                     }
                 }
             };
@@ -556,9 +615,11 @@ impl TransportManager {
         if config.zid == self.zid() {
             let e = zerror!("{} Attempt to establish transport to itself", self.zid());
             tracing::warn!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::CONNECTION_TO_SELF,
             )));
         }
@@ -571,9 +632,11 @@ impl TransportManager {
                 config.zid
             );
             tracing::trace!("{e}");
+            let (l, asl) = link.fail();
             return Err(InitTransportError::Link((
                 e.into(),
-                link.fail(),
+                l,
+                asl,
                 close::reason::INVALID,
             )));
         }
@@ -609,6 +672,7 @@ impl TransportManager {
                     context.shm_reader.clone(),
                     shm_provider,
                     shm_config.clone(),
+                    context.policy,
                 )
             }),
             None => None,
@@ -634,7 +698,7 @@ impl TransportManager {
                     #[cfg(feature = "shared-memory")]
                     shm_context,
                     #[cfg(feature = "stats")]
-                    stats
+                    stats,
                 ),
                 close::reason::INVALID
             )
@@ -645,7 +709,7 @@ impl TransportManager {
             match t.add_link(link, other_initial_sn, other_lease).await {
                 Ok(val) => val,
                 Err(e) => {
-                    let _ = t.close(e.2).await;
+                    let _ = t.close(e.3).await;
                     return Err(InitTransportError::Link(e));
                 }
             };
@@ -759,8 +823,11 @@ impl TransportManager {
 
         match init_result {
             Ok(transport) => Ok(TransportUnicast(Arc::downgrade(&transport))),
-            Err(InitTransportError::Link((e, link, reason))) => {
+            Err(InitTransportError::Link((e, link, associated_link, reason))) => {
                 let _ = link.close(Some(reason)).await;
+                if let Some(asl) = associated_link {
+                    let _ = asl.close(Some(reason)).await;
+                }
                 Err(e)
             }
             Err(InitTransportError::Transport((e, transport, reason))) => {
@@ -770,9 +837,23 @@ impl TransportManager {
         }
     }
 
-    pub async fn open_transport_unicast(
+    pub async fn open_transport_unicast(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, None).await
+    }
+
+    pub async fn open_transport_unicast_with_zid(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: &ZenohIdProto,
+    ) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, Some(expected_zid))
+            .await
+    }
+
+    async fn open_transport_unicast_inner(
         &self,
         mut endpoint: EndPoint,
+        expected_zid: Option<&ZenohIdProto>,
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
@@ -807,7 +888,9 @@ impl TransportManager {
         // Open the link
         tokio::time::timeout(self.config.unicast.open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
-                Ok(link) => super::establishment::open::open_link(endpoint, link, self).await,
+                Ok(link) => {
+                    super::establishment::open::open_link(endpoint, link, self, expected_zid).await
+                }
                 Err(e) => Err(e),
             }
         })

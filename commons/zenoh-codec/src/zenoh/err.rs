@@ -50,10 +50,10 @@ where
         if encoding != &Encoding::empty() {
             header |= flag::E;
         }
-        let mut n_exts = (ext_sinfo.is_some() as u8) + (ext_unknown.len() as u8);
+        let mut n_exts = usize::from(ext_sinfo.is_some()) + ext_unknown.len();
         #[cfg(feature = "shared-memory")]
         {
-            n_exts += ext_shm.is_some() as u8;
+            n_exts += usize::from(ext_shm.is_some());
         }
         if n_exts != 0 {
             header |= flag::Z;

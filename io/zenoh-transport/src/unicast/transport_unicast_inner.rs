@@ -30,7 +30,12 @@ use crate::{
     TransportPeerEventHandler,
 };
 
-pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
+pub(crate) type LinkError = (
+    zenoh_result::Error,
+    TransportLinkUnicast,
+    Option<TransportLinkUnicast>,
+    u8,
+);
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
 pub(crate) enum InitTransportError {
     Link(LinkError),

@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+use std::{
+    fmt::{self, DebugStruct},
+    sync::Arc,
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use tokio::sync::MutexGuard as AsyncMutexGuard;
@@ -44,6 +48,16 @@ pub struct MockTransportUnicastInner {
     zid: ZenohIdProto,
     whatami: WhatAmI,
     on_schedule: Arc<dyn Fn(NetworkMessage) + Send + Sync>,
+}
+
+impl fmt::Debug for MockTransportUnicastInner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MockTransportUnicastInner")
+            .field("zid", &self.zid)
+            .field("whatami", &self.whatami)
+            .field("on_schedule", &"..")
+            .finish()
+    }
 }
 
 #[async_trait]

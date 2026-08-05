@@ -193,7 +193,7 @@ impl Default for CancellationToken {
 }
 
 #[cfg(feature = "unstable")]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CancelResult(CancellationToken);
 
 #[cfg(feature = "unstable")]

@@ -339,7 +339,7 @@ impl Network {
             whatami: self.graph[idx].whatami,
             locators: if details.locators {
                 if idx == self.idx {
-                    Some(self.runtime.upgrade().unwrap().get_locators())
+                    Some(self.runtime.upgrade().unwrap().get_locators_noloopback())
                 } else {
                     self.graph[idx].locators.clone()
                 }
@@ -563,7 +563,7 @@ impl Network {
             .collect::<Vec<_>>()
     }
 
-    fn process_linkstates_peer_to_peer(&mut self, link_states: Vec<LocalLinkState>) -> Changes {
+    fn process_singlehop_gossip_linkstate(&mut self, link_states: Vec<LocalLinkState>) -> Changes {
         let mut changes = Changes::default();
 
         for ls in link_states.into_iter() {
@@ -589,7 +589,14 @@ impl Network {
                         continue;
                     }
                     node.sn = ls.sn;
-                    node.links.clone_from(&ls.links);
+                    // NOTE(regions): only Gossip may send malformed messages with empty
+                    // linkstate. These can be safely ignored since they don't occur in "full"
+                    // linkstate. Note that a Gossip node sends non-empty linkstate for itself
+                    // to its gateway. Also note that Network only considers two nodes to be
+                    // connected if both their linkstates imply the connection.
+                    if !ls.links.is_empty() {
+                        node.links.clone_from(&ls.links);
+                    }
                     changes.updated_nodes.push((idx, node.clone()));
                     if ls.locators.is_none() || node.locators == ls.locators {
                         continue;
@@ -705,7 +712,7 @@ impl Network {
         }
 
         if !self.full_linkstate && !self.gossip_multihop {
-            return self.process_linkstates_peer_to_peer(link_states);
+            return self.process_singlehop_gossip_linkstate(link_states);
         }
 
         let mut new_nodes = vec![];
@@ -717,16 +724,8 @@ impl Network {
                     let node = &mut self.graph[idx];
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
-                        tracing::info!(target: "dbg", x=Option::<u8>::None, ?node.links, ?node.zid, ?ls.links, node.sn, ls.sn);
                         node.sn = ls.sn;
-                        // NOTE(regions): only Gossip may send malformed messages with empty
-                        // linkstate. These can be safely ignored since they don't occur in "full"
-                        // linkstate. Note that a Gossip node sends non-empty linkstate for itself
-                        // to its gateway. Also note that Network only considers two nodes to be
-                        // connected if both their linkstates imply the connection.
-                        if !ls.links.is_empty() {
-                            node.links.clone_from(&ls.links);
-                        }
+                        node.links.clone_from(&ls.links);
                         if ls.locators.is_some() {
                             node.locators = ls.locators;
                         }
@@ -950,6 +949,17 @@ impl Network {
         free_index
     }
 
+    pub(crate) fn find_disconnected_nodes_after_removing_link(
+        &self,
+        zid: &ZenohIdProto,
+    ) -> Vec<(NodeIndex, ZenohIdProto)> {
+        if self.full_linkstate || self.gossip_multihop {
+            self.disconnected_nodes_when_removing(Some(zid))
+        } else {
+            vec![]
+        }
+    }
+
     pub(crate) fn remove_link(&mut self, zid: &ZenohIdProto) -> Vec<(NodeIndex, ZenohIdProto)> {
         tracing::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
@@ -1003,12 +1013,23 @@ impl Network {
         );
     }
 
-    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
+    fn disconnected_nodes_when_removing(
+        &self,
+        dropped_zid: Option<&ZenohIdProto>,
+    ) -> Vec<(NodeIndex, ZenohIdProto)> {
         let mut dfs_stack = vec![self.idx];
         let mut visit_map = self.graph.visit_map();
         while let Some(node) = dfs_stack.pop() {
             if visit_map.visit(node) {
                 for succzid in self.graph[node].links.keys() {
+                    if node == self.idx && dropped_zid.is_some_and(|it| it == succzid) {
+                        // NOTE: Don't branch out to `dropped_zid` from self.
+                        // Either (1) there is no path between self and `dropped_zid` other than this one,
+                        // in which case `dropped_zid` will never visited and thus considered a detached node.
+                        // Or, (2) there is a path between self and `dropped_zid` that goes through another node,
+                        // in which case self (even though present in `dropped_zid`'s links) will not be revisited thanks to `visit_map`.
+                        continue;
+                    }
                     if let Some(succ) = self.get_idx(succzid) {
                         if !visit_map.is_visited(&succ) {
                             dfs_stack.push(succ);
@@ -1018,14 +1039,20 @@ impl Network {
             }
         }
 
-        let mut removed = vec![];
-        for idx in self.graph.node_indices().collect::<Vec<NodeIndex>>() {
-            if !visit_map.is_visited(&idx) {
-                tracing::debug!("Remove node {}", &self.graph[idx].zid);
-                removed.push((idx, self.graph.remove_node(idx).unwrap().zid));
-            }
+        self.graph
+            .node_indices()
+            .filter(|idx| !visit_map.is_visited(idx))
+            .map(|idx| (idx, self.graph.node_weight(idx).unwrap().zid))
+            .collect()
+    }
+
+    fn remove_detached_nodes(&mut self) -> Vec<(NodeIndex, ZenohIdProto)> {
+        let disconnected = self.disconnected_nodes_when_removing(None);
+        for (idx, _) in &disconnected {
+            tracing::debug!("Remove node {}", &self.graph[*idx].zid);
+            self.graph.remove_node(*idx).unwrap();
         }
-        removed
+        disconnected
     }
 
     pub(crate) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
@@ -1207,4 +1234,180 @@ pub(crate) struct SuccessorEntry {
     pub(crate) source: ZenohIdProto,
     pub(crate) destination: ZenohIdProto,
     pub(crate) successor: ZenohIdProto,
+}
+
+#[cfg(all(test, feature = "test"))]
+mod tests {
+    use std::{
+        collections::{HashMap, HashSet},
+        mem,
+        sync::Arc,
+    };
+
+    use futures::executor::block_on;
+    use zenoh_config::Config;
+    use zenoh_protocol::core::{Bound, WhatAmI, WhatAmIMatcher, ZenohIdProto};
+
+    use super::Network;
+    use crate::net::{
+        common::AutoConnect,
+        protocol::linkstate::LinkState,
+        runtime::{Runtime, RuntimeBuilder},
+    };
+
+    /// Builds a minimal [`Runtime`] needed to construct a [`Network`].
+    fn minimal_runtime() -> Runtime {
+        let mut config = Config::default();
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.adminspace.set_enabled(false).unwrap();
+        config.plugins_loading.set_enabled(false).unwrap();
+        block_on(
+            RuntimeBuilder::new(crate::api::config::Config(config))
+                .subregions(vec![])
+                .disable_async_tree_computation(true)
+                .build(),
+        )
+        .unwrap()
+    }
+
+    /// Verifies that [`Network`] does **not** overwrite a node's existing
+    /// `links` when the incoming gossip linkstate has an empty `links` field, even if its sequence
+    /// number is strictly higher.
+    #[test]
+    fn test_gossip_singlehop_linkstate_empty_links_not_overwritten() {
+        use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
+
+        crate::try_init_log_from_env();
+
+        let gwy_zid = "a".parse::<ZenohIdProto>().unwrap();
+        let p1_zid = "b0".parse::<ZenohIdProto>().unwrap();
+        let p2_zid = "b1".parse::<ZenohIdProto>().unwrap();
+
+        let mut net = Network::new(
+            "[Test]".to_string(),
+            gwy_zid,
+            minimal_runtime(),
+            /* full_linkstate */ false,
+            /* gossip */ true,
+            /* gossip_multihop */ false,
+            WhatAmIMatcher::empty(),
+            AutoConnect::disabled(),
+            HashMap::new(),
+            Bound::South,
+        );
+
+        for p_zid in [p1_zid, p2_zid] {
+            let (transport, transport_guard) =
+                mock_transport_unicast(p_zid, WhatAmI::Peer, Arc::new(|_| {}));
+            mem::forget(transport_guard);
+            net.add_link(transport);
+        }
+
+        net.link_states(
+            vec![
+                LinkState {
+                    psid: 1,
+                    sn: 0,
+                    zid: Some(gwy_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 2,
+                    sn: 0,
+                    zid: Some(p2_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 0,
+                    sn: 0,
+                    zid: Some(p1_zid),
+                    whatami: Some(WhatAmI::Peer),
+                    locators: None,
+                    links: vec![1, 2],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+            ],
+            p1_zid,
+        );
+
+        net.link_states(
+            vec![
+                LinkState {
+                    psid: 1,
+                    sn: 1,
+                    zid: Some(gwy_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 2,
+                    sn: 1,
+                    zid: Some(p1_zid),
+                    whatami: None,
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 0,
+                    sn: 1,
+                    zid: Some(p2_zid),
+                    whatami: Some(WhatAmI::Peer),
+                    locators: None,
+                    links: vec![1, 2],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+            ],
+            p2_zid,
+        );
+
+        assert_eq!(
+            net.graph.node_count(),
+            3,
+            "there should be exactly three nodes in a's graph"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .map(|n| n.zid)
+                .collect::<HashSet<_>>(),
+            [gwy_zid, p1_zid, p2_zid].into_iter().collect(),
+            "a's graph should contain exactly the expected ZIDs"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .filter(|n| n.zid == p1_zid && !n.links.is_empty())
+                .count(),
+            1,
+            "b0's links info in a's graph should be non-empty"
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .filter(|n| n.zid == p2_zid && !n.links.is_empty())
+                .count(),
+            1,
+            "b1's links info in a's graph should be non-empty"
+        );
+    }
 }

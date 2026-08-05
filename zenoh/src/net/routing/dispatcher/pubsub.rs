@@ -26,6 +26,8 @@ use super::{
     resource::Resource,
     tables::{NodeId, Route, RoutingExpr, Tables, TablesLock},
 };
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::push_ts_interception;
 use crate::net::routing::{
     dispatcher::{
         face::Face,
@@ -306,6 +308,10 @@ pub fn route_data(
             let dir = route.iter().next().unwrap();
 
             if inter_region_filter(dir) && rtables.egress_filter(src_face, &dir.dst_face) {
+                // Get the runtime to handle ext_ts_stack
+                #[cfg(feature = "unstable")]
+                let weak_runtime = rtables.data.runtime.clone();
+
                 drop(rtables);
                 let mut msg_clone;
                 let mut msg = &mut *msg;
@@ -318,6 +324,15 @@ pub fn route_data(
                 msg.ext_nodeid = ext::NodeIdType {
                     node_id: dir.node_id,
                 };
+                #[cfg(feature = "unstable")]
+                {
+                    let weak = weak_runtime.clone();
+                    push_ts_interception(
+                        &mut msg.ext_ts_stack,
+                        move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
+                        zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                    );
+                }
                 send_push(&dir.dst_face, msg, reliability);
             }
         } else {
@@ -328,21 +343,33 @@ pub fn route_data(
                 })
                 .collect::<Vec<&Direction>>();
 
+            // Get the runtime to handle ext_ts_stack
+            #[cfg(feature = "unstable")]
+            let weak_runtime = rtables.data.runtime.clone();
+
             drop(rtables);
+
             for dir in dirs {
-                send_push(
-                    &dir.dst_face,
-                    &mut Push {
-                        wire_expr: dir.wire_expr.clone(),
-                        ext_qos: msg.ext_qos,
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType {
-                            node_id: dir.node_id,
-                        },
-                        payload: msg.payload.clone(),
+                let mut push = Push {
+                    wire_expr: dir.wire_expr.clone(),
+                    ext_qos: msg.ext_qos,
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType {
+                        node_id: dir.node_id,
                     },
-                    reliability,
-                );
+                    ext_ts_stack: msg.ext_ts_stack.clone(),
+                    payload: msg.payload.clone(),
+                };
+                #[cfg(feature = "unstable")]
+                {
+                    let weak = weak_runtime.as_ref();
+                    push_ts_interception(
+                        &mut push.ext_ts_stack,
+                        || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
+                        zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
+                    );
+                }
+                send_push(&dir.dst_face, &mut push, reliability);
             }
         }
     }

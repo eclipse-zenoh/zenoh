@@ -26,6 +26,7 @@ mod adminspace;
 mod declare;
 mod forwarding;
 mod interest;
+mod oam;
 
 use std::{
     any::Any,
@@ -37,17 +38,19 @@ use futures::executor::block_on;
 use tracing_subscriber::EnvFilter;
 use zenoh_config::{Config, ZenohId};
 use zenoh_protocol::{
+    common::ZExtBody,
     core::{Bound, ExprId, Region, Reliability, WhatAmI, WireExpr, ZenohIdProto},
     network::{
         declare::{
             common::ext::WireExprType,
-            queryable::{QueryableId, UndeclareQueryable},
+            queryable::{ext::QueryableInfoType, QueryableId, UndeclareQueryable},
             subscriber::{SubscriberId, UndeclareSubscriber},
             token::{TokenId, UndeclareToken},
             DeclareQueryable, DeclareSubscriber, DeclareToken,
         },
         ext::{self, NodeIdType},
         interest::{InterestId, InterestMode, InterestOptions},
+        oam::id::OAM_LINKSTATE,
         request::ext::QueryTarget,
         Declare, DeclareBody, DeclareFinal, DeclareKeyExpr, Interest, NetworkBody, NetworkBodyMut,
         NetworkMessageMut, Oam, Push, Request, RequestId, Response, ResponseFinal,
@@ -59,7 +62,9 @@ use zenoh_transport::{
 };
 
 use crate::net::{
+    codec::Zenoh080Routing,
     primitives::{DeMux, EPrimitives, Primitives},
+    protocol::linkstate::{LinkState, LinkStateList},
     routing::{
         dispatcher::face::Face,
         gateway::{Gateway, GatewayBuilder},
@@ -331,6 +336,48 @@ impl RecordingPrimitives {
             .collect()
     }
 
+    /// Decode and return all recorded OAM messages whose `id` is [`OAM_LINKSTATE`].
+    ///
+    /// Each matching OAM message carries a [`ZExtBody::ZBuf`] that is decoded as a
+    /// [`LinkStateList`] using [`Zenoh080Routing`].  Messages that fail to decode are
+    /// silently skipped.
+    pub(crate) fn linkstates(&self) -> Vec<LinkStateList> {
+        use zenoh_buffers::reader::HasReader;
+        use zenoh_codec::RCodec;
+
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| {
+                if let Message::Oam(Oam {
+                    id: OAM_LINKSTATE,
+                    body: ZExtBody::ZBuf(buf),
+                    ..
+                }) = m
+                {
+                    let codec = Zenoh080Routing::new();
+                    let mut reader = buf.reader();
+                    codec.read(&mut reader).ok()
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Decode and return all individual [`LinkState`] entries from every recorded OAM linkstate
+    /// message, in arrival order.
+    ///
+    /// This is a flattened view of [`linkstates`](Self::linkstates): each [`LinkStateList`] is
+    /// expanded and all contained [`LinkState`] entries are concatenated into a single `Vec`.
+    pub(crate) fn flat_linkstates(&self) -> Vec<LinkState> {
+        self.linkstates()
+            .into_iter()
+            .flat_map(|list| list.link_states)
+            .collect()
+    }
+
     /// Discard all recorded messages.
     pub(crate) fn clear(&self) {
         self.messages.lock().unwrap().clear();
@@ -457,6 +504,7 @@ impl MockFace {
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
+                ext_ts_stack: None,
                 payload: PushBody::Put(Put {
                     payload: payload.into(),
                     ..Default::default()
@@ -477,6 +525,7 @@ impl MockFace {
             ext_target: QueryTarget::DEFAULT,
             ext_budget: None,
             ext_timeout: None,
+            ext_ts_stack: None,
             payload: RequestBody::Query(Query::default()),
         });
     }
@@ -490,6 +539,7 @@ impl MockFace {
                 ext_qos: ext::QoSType::DEFAULT,
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::DEFAULT,
+                ext_ts_stack: None,
                 payload: PushBody::Del(Del::default()),
             },
             Reliability::BestEffort,
@@ -554,8 +604,8 @@ impl MockFace {
         interest_id: Option<InterestId>,
         id: QueryableId,
         wire_expr: impl Into<WireExpr<'static>>,
+        info: QueryableInfoType,
     ) {
-        use zenoh_protocol::network::declare::queryable::ext::QueryableInfoType;
         self.face.send_declare(&mut Declare {
             interest_id,
             ext_qos: ext::QoSType::DECLARE,
@@ -564,7 +614,7 @@ impl MockFace {
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id,
                 wire_expr: wire_expr.into(),
-                ext_info: QueryableInfoType::DEFAULT,
+                ext_info: info,
             }),
         });
     }
@@ -952,6 +1002,20 @@ impl Connection<'_> {
 }
 
 impl EstablishedConnection {
+    /// Simulate loss of the bidirectional transport connection between A and B.
+    pub(crate) fn disconnect(&self) {
+        self.a2b
+            .demux
+            .as_ref()
+            .expect("EstablishedConnection::a2b should have a DeMux")
+            .closed();
+        self.b2a
+            .demux
+            .as_ref()
+            .expect("EstablishedConnection::b2a should have a DeMux")
+            .closed();
+    }
+
     /// Forward one pending message **from A to B**.
     #[tracing::instrument(level = "info", skip(self), fields(from = %self.b2a.face, to = %self.a2b.face.state.zid.short()), ret)]
     pub(crate) fn fwd1(&mut self) -> Option<Message> {

@@ -13,15 +13,13 @@
 //
 
 #![cfg(feature = "unstable")]
-mod common;
 
 use core::time::Duration;
 use std::sync::{atomic::AtomicBool, Arc};
 
 use zenoh::handlers::CallbackDrop;
 use zenoh_core::ztimeout;
-
-use crate::common::TestSessions;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 

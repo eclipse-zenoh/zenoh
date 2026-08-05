@@ -181,7 +181,7 @@ impl fmt::Debug for LinkMulticastUdp {
 /*************************************/
 /*             MANAGER               */
 /*************************************/
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct LinkManagerMulticastUdp;
 
 impl LinkManagerMulticastUdp {

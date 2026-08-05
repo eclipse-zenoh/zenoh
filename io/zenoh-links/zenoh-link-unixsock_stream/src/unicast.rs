@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::AsRawFd;
 use std::{
     cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
     path::PathBuf, sync::Arc, time::Duration,
@@ -25,12 +27,14 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use zenoh_core::bail;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -76,7 +80,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         res.map_err(|e| zerror!(e).into())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().write(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -84,7 +88,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
+    async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket().write_all(buffer).await.map_err(|e| {
             let e = zerror!("Write error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -92,7 +96,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
         self.get_mut_socket().read(buffer).await.map_err(|e| {
             let e = zerror!("Read error on UnixSocketStream link {}: {}", self, e);
             tracing::trace!("{}", e);
@@ -100,7 +104,7 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
         })
     }
 
-    async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
+    async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
         self.get_mut_socket()
             .read_exact(buffer)
             .await
@@ -148,6 +152,14 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::UnixsockStream
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 impl Drop for LinkUnicastUnixSocketStream {
@@ -160,7 +172,7 @@ impl Drop for LinkUnicastUnixSocketStream {
 
 impl fmt::Display for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", &self.src_locator, &self.dst_locator)?;
+        write!(f, "{} => {}", self.src_locator, self.dst_locator)?;
         Ok(())
     }
 }
@@ -207,6 +219,15 @@ impl ListenerUnixSocketStream {
 pub struct LinkManagerUnicastUnixSocketStream {
     manager: NewLinkChannelSender,
     listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnixSocketStream>>>,
+}
+
+impl fmt::Debug for LinkManagerUnicastUnixSocketStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LinkManagerUnicastUnixSocketStream")
+            .field("manager", &self.manager)
+            .field("listeners", &"..")
+            .finish()
+    }
 }
 
 impl LinkManagerUnicastUnixSocketStream {
@@ -275,13 +296,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         let remote_path_str = path.as_str();
 
-        let link = Arc::new(LinkUnicastUnixSocketStream::new(
+        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
             local_path_str,
             remote_path_str,
         ));
 
-        Ok(LinkUnicast(link))
+        Ok(LinkUnicast::from(link))
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
@@ -458,6 +479,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             .map(|x| x.endpoint.to_locator())
             .collect()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
+    }
 }
 
 async fn accept_task(
@@ -512,12 +537,12 @@ async fn accept_task(
                         tracing::debug!("Accepted UnixSocketStream connection on: {:?}", src_addr,);
 
                         // Create the new link object
-                        let link = Arc::new(LinkUnicastUnixSocketStream::new(
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastUnixSocketStream::new(
                             stream, src_path, &dst_path,
                         ));
 
                         // Communicate the new link to the initial transport manager
-                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                        if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
 

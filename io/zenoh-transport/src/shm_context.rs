@@ -18,7 +18,9 @@ use zenoh_result::ZResult;
 use zenoh_shm::{api::client_storage::GLOBAL_CLIENT_STORAGE, reader::ShmReader};
 
 use crate::{
-    shm::{LazyShmProvider, MulticastTransportShmConfig, TransportShmConfig},
+    shm::{
+        LazyShmProvider, MulticastTransportShmConfig, ShmOptimizationPolicy, TransportShmConfig,
+    },
     unicast::establishment::ext::shm::AuthUnicast,
 };
 
@@ -27,14 +29,20 @@ pub(super) struct MulticastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
     pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(super) shm_config: MulticastTransportShmConfig,
+    pub(crate) policy: ShmOptimizationPolicy,
 }
 
 impl MulticastTransportShmContext {
-    pub(super) fn new(shm_reader: ShmReader, shm_provider: Option<Arc<LazyShmProvider>>) -> Self {
+    pub(super) fn new(
+        shm_reader: ShmReader,
+        shm_provider: Option<Arc<LazyShmProvider>>,
+        policy: ShmOptimizationPolicy,
+    ) -> Self {
         Self {
             shm_reader,
             shm_provider,
             shm_config: MulticastTransportShmConfig,
+            policy,
         }
     }
 }
@@ -44,6 +52,7 @@ pub(super) struct UnicastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
     pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(super) shm_config: TransportShmConfig,
+    pub(crate) policy: ShmOptimizationPolicy,
 }
 
 impl UnicastTransportShmContext {
@@ -51,11 +60,13 @@ impl UnicastTransportShmContext {
         shm_reader: ShmReader,
         shm_provider: Option<Arc<LazyShmProvider>>,
         shm_config: TransportShmConfig,
+        policy: ShmOptimizationPolicy,
     ) -> Self {
         Self {
             shm_reader,
             shm_provider,
             shm_config,
+            policy,
         }
     }
 }
@@ -63,7 +74,18 @@ impl UnicastTransportShmContext {
 pub struct ShmContext {
     pub(crate) shm_reader: ShmReader,
     pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
+    pub(crate) policy: ShmOptimizationPolicy,
     pub(super) auth: AuthUnicast,
+}
+
+impl std::fmt::Debug for ShmContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShmContext")
+            .field("shm_reader", &self.shm_reader)
+            .field("shm_provider", &self.shm_provider)
+            .field("auth", &"..")
+            .finish()
+    }
 }
 
 impl ShmContext {
@@ -84,6 +106,13 @@ impl ShmContext {
             None
         };
 
+        let messages = cfg.transport_optimization.messages();
+        let policy = ShmOptimizationPolicy {
+            put: messages.contains(&zenoh_config::DataMessage::Put),
+            query: messages.contains(&zenoh_config::DataMessage::Query),
+            reply: messages.contains(&zenoh_config::DataMessage::Reply),
+        };
+
         let shm_reader = external_reader
             .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
 
@@ -91,6 +120,7 @@ impl ShmContext {
 
         Ok(Some(Self {
             shm_provider,
+            policy,
             shm_reader,
             auth,
         }))

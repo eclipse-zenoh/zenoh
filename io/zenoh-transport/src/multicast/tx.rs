@@ -48,7 +48,12 @@ impl TransportMulticastInner {
     pub(super) fn schedule(&self, mut msg: NetworkMessageMut) -> ZResult<bool> {
         #[cfg(feature = "shared-memory")]
         if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
+            map_zmsg_to_partner(
+                &mut msg,
+                &shm_context.shm_config,
+                &shm_context.shm_provider,
+                shm_context.policy,
+            );
         }
 
         let res = self.schedule_on_link(msg.as_ref())?;

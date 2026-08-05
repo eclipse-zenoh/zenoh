@@ -105,6 +105,7 @@ pub mod iext {
     }
 }
 
+#[derive(Debug)]
 pub struct DidntConvert;
 
 #[repr(transparent)]

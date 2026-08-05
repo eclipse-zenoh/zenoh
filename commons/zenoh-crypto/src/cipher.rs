@@ -20,6 +20,7 @@ use zenoh_result::{bail, ZResult};
 
 use super::PseudoRng;
 
+#[derive(Debug)]
 pub struct BlockCipher {
     inner: Aes128,
 }

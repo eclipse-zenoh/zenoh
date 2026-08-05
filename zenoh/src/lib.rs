@@ -1009,7 +1009,7 @@ pub mod time {
 /// let session = zenoh::open(config).await.unwrap();
 /// # }
 pub mod config {
-    pub use zenoh_config::{EndPoint, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
+    pub use zenoh_config::{EndPoint, EndPoints, Locator, WhatAmI, WhatAmIMatcher, ZenohId};
 
     pub use crate::api::config::Config;
     #[zenoh_macros::unstable]
@@ -1035,11 +1035,10 @@ pub mod internal {
     pub mod traits {
         pub use crate::api::builders::sample::{
             EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
         };
     }
-    pub use zenoh_core::{
-        zasync_executor_init, zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture,
-    };
+    pub use zenoh_core::{zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture};
     pub use zenoh_result::bail;
     pub use zenoh_sync::Condition;
     pub use zenoh_task::{TaskController, TerminatableTask};
@@ -1121,6 +1120,76 @@ pub mod shm {
     };
 
     pub use crate::net::runtime::ShmProviderState;
+}
+
+/// Timestamp instrumentation for Zenoh messages.
+///
+/// Timestamp instrumentation allows you to track the temporal path of a message
+/// as it travels through the Zenoh topology. By enabling one or more
+/// *interception points*, timestamps are recorded at each matching node and
+/// accumulated into a **timestamp stack** carried alongside the message.
+///
+/// # Interception Points
+///
+/// | Point | Where recorded | Meaning |
+/// |-------|---------------|---------|
+/// | [`Send`](crate::timestamp_stack::InterceptionPoint::Send) | Data source | Message leaves the application |
+/// | [`Route`](crate::timestamp_stack::InterceptionPoint::Route) | Routing layer of any instance | Message transits the routing layer |
+/// | [`Receive`](crate::timestamp_stack::InterceptionPoint::Receive) | Data receiver | Message arrives at the application |
+///
+/// Records are appended in traversal order. For example, in a routed
+/// client→router→client topology with all three points enabled, a subscriber
+/// will receive a stack ordered: `Send → Route → Route → Route → Receive`.
+///
+/// # Timestamp Sources
+///
+/// By default, each interception point records a Zenoh [UHLC] timestamp.
+/// Alternatively, you can register a custom callback on the session via
+/// [`OpenBuilder::with_timestamp_callback`](crate::api::builders::session::OpenBuilder::with_timestamp_callback)
+/// to produce arbitrary timestamp formats.
+///
+/// # Usage
+///
+/// ```no_run
+/// # #[tokio::main]
+/// # async fn main() {
+/// use zenoh::timestamp_stack::{
+///     InstrumentationTimestamp, InterceptionPoint, TimestampInstrumentationBuilder,
+/// };
+///
+/// // Build an instrumentation config: record at send and receive.
+/// let instr = TimestampInstrumentationBuilder::new()
+///     .set_send(true)
+///     .set_receive(true)
+///     .build()
+///     .unwrap();
+///
+/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+/// let publisher = session.declare_publisher("key/expr").await.unwrap();
+/// let subscriber = session.declare_subscriber("key/expr").await.unwrap();
+///
+/// publisher
+///     .put("payload")
+///     .timestamp_instrumentation(instr)
+///     .await
+///     .unwrap();
+///
+/// let sample = subscriber.recv_async().await.unwrap();
+/// if let Some(stack) = sample.timestamp_stack() {
+///     for record in stack.records() {
+///         println!("{:?} at {:?}", record.point(), record.timestamp());
+///     }
+/// }
+/// # }
+/// ```
+///
+/// [UHLC]: https://github.com/eclipse-zenoh/uhlc-rs
+#[zenoh_macros::unstable]
+pub mod timestamp_stack {
+    pub use crate::api::timestamp_stack::{
+        InstrumentationTimestamp, InterceptionPoint, TimestampContext, TimestampInstrumentation,
+        TimestampInstrumentationBuilder, TimestampStack, TimestampStackRecord,
+    };
 }
 
 /// Functionality for interrupting queries.

@@ -219,6 +219,29 @@ fn buffer_zslice() {
 }
 
 #[test]
+fn read_zslice_oversized_length_fails_without_consuming() {
+    // This test targets the reader-layer contract directly.
+    // In real packet decoding, a length is first decoded from the wire and then
+    // passed into `read_zslice(len)`. Here we inject the oversized `len`
+    // directly to verify the readers reject it before trying to allocate.
+    let bytes = [1_u8];
+
+    let mut slice_reader = bytes.as_slice().reader();
+    assert!(slice_reader.read_zslice(2).is_err());
+    assert_eq!(slice_reader.remaining(), 1);
+
+    let mut zslice_reader = ZSlice::from(bytes.to_vec());
+    assert!(zslice_reader.read_zslice(2).is_err());
+    assert_eq!(zslice_reader.remaining(), 1);
+
+    let mut zbuf = ZBuf::empty();
+    zbuf.push_zslice(bytes.to_vec().into());
+    let mut zbuf_reader = zbuf.reader();
+    assert!(zbuf_reader.read_zslice(2).is_err());
+    assert_eq!(zbuf_reader.remaining(), 1);
+}
+
+#[test]
 fn buffer_siphon() {
     let capacity = 1 + u8::MAX as usize;
 

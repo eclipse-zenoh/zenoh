@@ -1,3 +1,15 @@
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use std::fmt::Debug;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -11,27 +23,68 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::time::Duration;
+use std::{
+    future::poll_fn,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    },
+    task::Poll,
+    time::{Duration, Instant},
+};
 
+use futures::{future::select_all, task::AtomicWaker};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use zenoh_buffers::ZSliceBuffer;
+use zenoh_buffers::ZSlice;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use zenoh_buffers::{
+    buffer::Buffer,
+    reader::{BacktrackableReader, HasReader},
+};
 use zenoh_link::Link;
-#[cfg(feature = "unstable")]
-use zenoh_protocol::core::Priority;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
-use zenoh_result::{zerror, ZResult};
+use zenoh_protocol::{
+    core::Priority,
+    transport::{KeepAlive, TransportMessage},
+};
+use zenoh_result::{bail, zerror, ZResult};
+use zenoh_sync::RecyclingObjectPool;
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 use zenoh_task::TaskController;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use zenoh_uring::api::reader::{
+    fragmented_batch::{DefragmentationState, FragmentedBatch},
+    rx_buffer::RxBuffer,
+};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
     common::{
         batch::{BatchConfig, RBatch},
         pipeline::{
-            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-            TransmissionPipelineProducer,
+            PipelineConsumer, TransmissionPipeline, TransmissionPipelineConf,
+            TransmissionPipelineConsumer, TransmissionPipelineProducer,
         },
         priority::TransportPriorityTx,
     },
@@ -82,7 +135,8 @@ impl TransportLinkUnicastUniversal {
         };
 
         // The pipeline
-        let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
+        let (producer, consumer) =
+            TransmissionPipeline::make(config, priority_tx, link.link.supports_priorities());
 
         // Use the complete src and dest locators including parameters
         #[cfg(feature = "stats")]
@@ -165,19 +219,19 @@ impl TransportLinkUnicastUniversal {
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = cancellation_token
-                .run_until_cancelled(rx_task(
-                    &mut rx,
-                    transport.clone(),
-                    lease,
-                    transport.manager.config.link_rx_buffer_size,
-                    #[cfg(feature = "stats")]
-                    stats,
-                ))
-                .await;
+            let res = rx_task(
+                &mut rx,
+                transport.clone(),
+                lease,
+                transport.manager.config.link_rx_buffer_size,
+                cancellation_token,
+                #[cfg(feature = "stats")]
+                stats,
+            )
+            .await;
 
             // TODO(yuyuan): improve this callback
-            if let Some(Err(e)) = res {
+            if let Err(e) = res {
                 // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
@@ -217,18 +271,70 @@ impl TransportLinkUnicastUniversal {
 /*              TASKS                */
 /*************************************/
 async fn tx_task(
-    mut pipeline: TransmissionPipelineConsumer,
+    pipeline: TransmissionPipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
+    let keep_alive_tracker = TimeoutTracker::new(keep_alive);
+    if link.inner.link.supports_priorities() {
+        let (res, _, _) = select_all(pipeline.split().into_iter().map(|pipeline| {
+            let mut link = link.clone();
+            let cancellation_token = cancellation_token.clone();
+            let keep_alive_tracker = keep_alive_tracker.clone();
+            #[cfg(feature = "stats")]
+            let stats = stats.clone();
+            zenoh_runtime::ZRuntime::TX.spawn(async move {
+                write_loop(
+                    Some(pipeline.priority()),
+                    pipeline,
+                    &mut link,
+                    keep_alive_tracker,
+                    cancellation_token,
+                    #[cfg(feature = "stats")]
+                    stats,
+                )
+                .await
+            })
+        }))
+        .await;
+        res.unwrap()?;
+    } else {
+        write_loop(
+            None,
+            pipeline,
+            link,
+            keep_alive_tracker,
+            cancellation_token,
+            #[cfg(feature = "stats")]
+            stats,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn write_loop(
+    write_priority: Option<Priority>,
+    mut pipeline: impl PipelineConsumer,
+    link: &mut TransportLinkUnicastTx,
+    keep_alive_tracker: TimeoutTracker,
+    cancellation_token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
     let task = async {
         loop {
-            let res = tokio::time::timeout(keep_alive, pipeline.pull()).await;
-            match res {
-                Ok(Some((mut batch, priority))) => {
-                    link.send_batch(&mut batch).await?;
+            tokio::select! {
+                pull = pipeline.pull() => {
+                    let Some((mut batch, priority)) = pull else {
+                        // The queue has been disabled: break the tx loop, drain the queue, and exit
+                        break
+                    };
+                    debug_assert!(write_priority.is_none() || write_priority == Some(priority));
+                    link.send_batch(&mut batch, write_priority).await?;
+                    // inform the latest message tracker that a message has been sent
+                    keep_alive_tracker.reset();
 
                     #[cfg(feature = "stats")]
                     {
@@ -238,18 +344,14 @@ async fn tx_task(
 
                     // Reinsert the batch into the queue
                     pipeline.refill(batch, priority);
-                }
-                Ok(None) => {
-                    // The queue has been disabled: break the tx loop, drain the queue, and exit
-                    break;
-                }
-                Err(_) => {
+                },
+                _ = keep_alive_tracker.wait_if(write_priority.unwrap_or(Priority::Control) == Priority::Control) => {
                     // A timeout occurred, no control/data messages have been sent during
                     // the keep_alive period, we need to send a KeepAlive message
                     let message: TransportMessage = KeepAlive.into();
 
                     #[allow(unused_variables)] // Used when stats feature is enabled
-                    let n = link.send(&message).await?;
+                    let n = link.send(&message, Some(Priority::Control)).await?;
 
                     #[cfg(feature = "stats")]
                     {
@@ -268,9 +370,17 @@ async fn tx_task(
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
     for (mut b, _) in batches.drain(..) {
-        tokio::time::timeout(keep_alive, link.send_batch(&mut b))
-            .await
-            .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
+        tokio::time::timeout(
+            keep_alive_tracker.timeout(),
+            link.send_batch(&mut b, write_priority),
+        )
+        .await
+        .map_err(|_| {
+            zerror!(
+                "{link}: flush failed after {} ms",
+                keep_alive_tracker.timeout().as_millis()
+            )
+        })??;
 
         #[cfg(feature = "stats")]
         {
@@ -287,23 +397,239 @@ async fn rx_task(
     transport: TransportUnicastUniversal,
     lease: Duration,
     rx_buffer_size: usize,
+    cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
-    async fn read<T, F>(
+    #[cfg(all(
+        feature = "uring",
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "loongarch64",
+            target_arch = "powerpc64"
+        )
+    ))]
+    if transport.manager.state.uring.is_some() && link.link.get_fd().is_ok() {
+        return rx_task_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            #[cfg(feature = "stats")]
+            stats,
+            cancellation_token,
+        )
+        .await;
+    }
+
+    cancellation_token
+        .run_until_cancelled(rx_task_non_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            cancellation_token.clone(),
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+        .await
+        .unwrap_or(Ok(()))
+}
+
+async fn rx_task_non_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    cancellation_token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
+    // The pool of buffers
+    let mtu = link.config.batch.mtu as usize;
+    let mut n = rx_buffer_size / mtu;
+    if n == 0 {
+        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
+        n = 1;
+    }
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
+
+    let lease_tracker = TimeoutTracker::new(lease);
+    if link.link.supports_priorities() {
+        let (res, _, _) = select_all((Priority::MAX as u8..=Priority::MIN as u8).map(|prio| {
+            let mut link = link.clone();
+            let transport = transport.clone();
+            let cancellation_token = cancellation_token.clone();
+            let lease_tracker = lease_tracker.clone();
+            #[cfg(feature = "stats")]
+            let stats = stats.clone();
+            let pool = pool.clone();
+            zenoh_runtime::ZRuntime::RX.spawn(async move {
+                cancellation_token
+                    .run_until_cancelled(read_loop(
+                        Some(Priority::try_from(prio).unwrap()),
+                        &mut link,
+                        transport,
+                        lease_tracker,
+                        #[cfg(feature = "stats")]
+                        stats,
+                        &pool,
+                    ))
+                    .await
+            })
+        }))
+        .await;
+        res.unwrap().transpose()?;
+        Ok(())
+    } else {
+        read_loop(
+            None,
+            link,
+            transport,
+            lease_tracker,
+            #[cfg(feature = "stats")]
+            stats,
+            &pool,
+        )
+        .await
+    }
+}
+
+async fn read_loop<F: Fn() -> Box<[u8]>>(
+    priority: Option<Priority>,
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease_tracker: TimeoutTracker,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    pool: &RecyclingObjectPool<Box<[u8]>, F>,
+) -> ZResult<()> {
+    async fn read<F: Fn() -> Box<[u8]>>(
         link: &mut TransportLinkUnicastRx,
-        pool: &RecyclingObjectPool<T, F>,
-    ) -> ZResult<RBatch>
-    where
-        T: ZSliceBuffer + 'static,
-        F: Fn() -> T,
-        RecyclingObject<T>: AsMut<[u8]> + ZSliceBuffer,
-    {
+        priority: Option<Priority>,
+        pool: &RecyclingObjectPool<Box<[u8]>, F>,
+    ) -> ZResult<RBatch<ZSlice>> {
         let batch = link
-            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()), priority)
             .await?;
         Ok(batch)
     }
 
+    let l = Link::new_unicast(
+        &link.link,
+        link.config.priorities.clone(),
+        link.config.reliability,
+    );
+    loop {
+        tokio::select! {
+            batch = read(link, priority, pool) => {
+                let batch = batch?;
+                lease_tracker.reset();
+                #[cfg(feature = "stats")]
+                {
+                    let header_bytes = if l.is_streamed { 2 } else { 0 };
+                    stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+                }
+                transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
+            }
+            _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
+                bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());
+            }
+        }
+    }
+}
+
+struct TimeoutTrackerInner {
+    timeout: Duration,
+    waker: AtomicWaker,
+    has_timed_out: AtomicBool,
+    latest_reset: Mutex<Instant>,
+    task: OnceLock<JoinHandle<()>>,
+}
+
+#[derive(Clone)]
+struct TimeoutTracker(Arc<TimeoutTrackerInner>);
+
+impl TimeoutTracker {
+    fn new(timeout: Duration) -> TimeoutTracker {
+        let now = Instant::now();
+        let inner = Arc::new(TimeoutTrackerInner {
+            timeout,
+            waker: AtomicWaker::new(),
+            has_timed_out: AtomicBool::new(false),
+            latest_reset: Mutex::new(now),
+            task: OnceLock::new(),
+        });
+        let tracker = Arc::downgrade(&inner);
+        let task = tokio::spawn(async move {
+            let mut latest_reset = now;
+            loop {
+                tokio::time::sleep_until((latest_reset + timeout).into()).await;
+                let prev = latest_reset;
+                let Some(tracker) = tracker.upgrade() else {
+                    break;
+                };
+                latest_reset = *tracker.latest_reset.lock().unwrap();
+                if latest_reset <= prev {
+                    latest_reset = Instant::now();
+                    tracker.has_timed_out.store(true, Ordering::Release);
+                    tracker.waker.wake();
+                }
+            }
+        });
+        inner.task.set(task).unwrap();
+        Self(inner)
+    }
+
+    fn timeout(&self) -> Duration {
+        self.0.timeout
+    }
+
+    fn reset(&self) {
+        *self.0.latest_reset.lock().unwrap() = Instant::now();
+    }
+
+    async fn wait_if(&self, predicate: bool) {
+        poll_fn(|cx| {
+            if !predicate {
+                return Poll::Pending;
+            }
+            self.0.waker.register(cx.waker());
+            if self.0.has_timed_out.load(Ordering::Acquire) {
+                self.0.has_timed_out.store(false, Ordering::Release);
+                return Poll::Ready(());
+            }
+            Poll::Pending
+        })
+        .await
+    }
+}
+
+impl Drop for TimeoutTracker {
+    fn drop(&mut self) {
+        self.0.task.get().unwrap().abort();
+    }
+}
+
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+async fn rx_task_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
+) -> ZResult<()> {
     // The pool of buffers
     let mtu = link.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
@@ -312,27 +638,135 @@ async fn rx_task(
         n = 1;
     }
 
-    let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
+
     let l = Link::new_unicast(
         &link.link,
         link.config.priorities.clone(),
         link.config.reliability,
     );
 
-    loop {
-        let batch = tokio::time::timeout(lease, read(link, &pool)).await;
-        let batch = batch
-            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+    let batch_config = link.config.batch;
+
+    let r = transport
+        .manager
+        .state
+        .uring
+        .as_ref()
+        .expect("uring is Some: checked by caller")
+        .reader
+        .clone();
+
+    let lease_tracker = TimeoutTracker::new(lease);
+
+    fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
+        transport: &TransportUnicastUniversal,
+        link: &Link,
+        batch: RBatch<TBuffer>,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+    ) -> ZResult<()> {
         #[cfg(feature = "stats")]
         {
-            let header_bytes = if l.is_streamed { 2 } else { 0 };
+            let header_bytes = 2;
             stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
         }
         transport.read_messages(
             batch,
-            &l,
+            link,
             #[cfg(feature = "stats")]
-            &stats,
-        )?;
+            stats,
+        )
     }
+
+    let mut uring_read_task = {
+        match link.link.is_streamed() {
+            true => {
+                let lt = lease_tracker.clone();
+                let ring_cb = move |data: FragmentedBatch| {
+                    lt.reset();
+                    match data.defragment()? {
+                        DefragmentationState::Single(slice) => {
+                            let mut batch = RBatch::new(batch_config, slice);
+                            batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })?;
+                            read_batch(
+                                &transport,
+                                &l,
+                                batch,
+                                #[cfg(feature = "stats")]
+                                &stats,
+                            )
+                        }
+                        DefragmentationState::Fragmented(buf) => {
+                            let mut batch = RBatch::new(batch_config, buf.reader());
+                            match batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })? {
+                                Some(decompressed_batch) => read_batch(
+                                    &transport,
+                                    &l,
+                                    decompressed_batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                                None => read_batch(
+                                    &transport,
+                                    &l,
+                                    batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                            }
+                        }
+                    }
+                };
+
+                r.setup_fragmented_read(link.link.get_fd()?, ring_cb)
+                    .await?
+            }
+            false => {
+                let lt = lease_tracker.clone();
+                let ring_cb = move |data: Arc<RxBuffer>| {
+                    lt.reset();
+                    let slice: ZSlice = data.into();
+                    let mut batch = RBatch::new(batch_config, slice);
+                    batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+
+                    read_batch(
+                        &transport,
+                        &l,
+                        batch,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
+                };
+
+                r.setup_read(link.link.get_fd()?, ring_cb).await?
+            }
+        }
+    };
+
+    let result = tokio::select! {
+        e = uring_read_task.read_error() => {
+            tracing::debug!("Uring RX task stopped by uring task error event");
+            Err(e)
+        },
+        finished = r.wait_finished() => {
+            tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
+            finished
+        }
+        _ = lease_tracker.wait_if(true) => {
+            tracing::debug!("Uring RX task stopped by lease timeout");
+            bail!("{link}: expired after {} milliseconds", lease.as_millis());
+        }
+        _ = cancellation_token.cancelled() => {
+            tracing::debug!("Uring RX task stopped by cancellation event");
+            Ok(())
+        }
+    };
+
+    uring_read_task.stop().await;
+
+    result
 }

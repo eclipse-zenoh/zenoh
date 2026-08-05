@@ -19,9 +19,7 @@
 use std::{str::FromStr, thread::sleep};
 
 use tokio::runtime::Runtime;
-use zenoh::{
-    internal::zasync_executor_init, query::Reply, sample::Sample, time::Timestamp, Config, Session,
-};
+use zenoh::{query::Reply, sample::Sample, time::Timestamp, Config, Session};
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
@@ -50,10 +48,6 @@ async fn get_data(session: &Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_updates_in_order() {
-    async {
-        zasync_executor_init!();
-    }
-    .await;
     let mut config = Config::default();
     config
         .insert_json5(

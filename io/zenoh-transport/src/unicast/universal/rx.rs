@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
+use std::{fmt::Debug, sync::MutexGuard};
 
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::{buffer::Buffer, reader::BacktrackableReader};
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::{zlock, zread};
+use zenoh_core::zlock;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -81,9 +81,9 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    fn handle_frame(
+    fn handle_frame<R: BacktrackableReader>(
         &self,
-        frame: FrameReader<ZSlice>,
+        frame: FrameReader<R>,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
@@ -108,8 +108,7 @@ impl TransportUnicastUniversal {
             // Drop invalid message and continue
             return Ok(());
         }
-        let callback = zread!(self.callback).clone();
-        if let Some(callback) = callback.as_ref() {
+        if let Some(callback) = self.callback.get() {
             for mut msg in frame {
                 self.trigger_callback(
                     callback.as_ref(),
@@ -190,8 +189,7 @@ impl TransportUnicastUniversal {
         if !more {
             // When shared-memory feature is disabled, msg does not need to be mutable
             if let Some(mut msg) = guard.defrag.defragment() {
-                let callback = zread!(self.callback).clone();
-                if let Some(callback) = callback.as_ref() {
+                if let Some(callback) = self.callback.get() {
                     return self.trigger_callback(
                         callback.as_ref(),
                         msg.as_mut(),
@@ -234,9 +232,9 @@ impl TransportUnicastUniversal {
         Ok(true)
     }
 
-    pub(super) fn read_messages(
+    pub(super) fn read_messages<TBuffer: BacktrackableReader + Buffer + Debug>(
         &self,
-        mut batch: RBatch,
+        mut batch: RBatch<TBuffer>,
         link: &Link,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {

@@ -25,6 +25,7 @@ use keyed_set::{KeyExtractor, KeyedSet};
 use crate::keyexpr_tree::*;
 
 #[cfg_attr(not(feature = "std"), allow(deprecated))]
+#[derive(Debug)]
 pub struct KeyedSetProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
     core::marker::PhantomData<Hash>,
 );

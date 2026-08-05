@@ -38,6 +38,23 @@ pub struct KeArcTreeInner<
     wildness: Wildness,
 }
 
+impl<Weight, Wildness, Children, Token> core::fmt::Debug
+    for KeArcTreeInner<Weight, Wildness, Children, Token>
+where
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+    Token: TokenTrait,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeArcTreeInner")
+            .field("children", &"..")
+            .field("is_wild", &self.wildness.get())
+            .finish()
+    }
+}
+
 token_cell::token!(pub DefaultToken);
 fn ketree_borrow<'a, T, Token: TokenTrait>(
     cell: &'a TokenCell<T, Token>,
@@ -69,6 +86,20 @@ pub struct KeArcTree<
     > = DefaultChildrenProvider,
 > {
     inner: TokenCell<KeArcTreeInner<Weight, Wildness, Children, Token>, Token>,
+}
+
+impl<Weight, Token, Wildness, Children> core::fmt::Debug
+    for KeArcTree<Weight, Token, Wildness, Children>
+where
+    Token: TokenTrait,
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("KeArcTree").field(&"..").finish()
+    }
 }
 
 impl<
@@ -458,6 +489,11 @@ pub(crate) mod sealed {
     use token_cell::prelude::{TokenCell, TokenTrait};
 
     pub struct Tokenized<A, B>(pub A, pub(crate) B);
+    impl<A, B> core::fmt::Debug for Tokenized<A, B> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_tuple("Tokenized").field(&"..").finish()
+        }
+    }
     impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &Token> {
         type Target = T;
         fn deref(&self) -> &Self::Target {
@@ -506,6 +542,12 @@ pub(crate) mod sealed {
     pub struct TokenPacker<I, T> {
         pub(crate) iter: I,
         pub(crate) token: T,
+    }
+
+    impl<I, T> core::fmt::Debug for TokenPacker<I, T> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.debug_struct("TokenPacker").finish_non_exhaustive()
+        }
     }
 
     impl<'a, I: Iterator, T> Iterator for TokenPacker<I, &'a T> {
@@ -583,6 +625,27 @@ pub struct KeArcTreeNode<
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
+}
+
+impl<Weight, Parent, Wildness, Children, Token> core::fmt::Debug
+    for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
+where
+    Weight: Debug,
+    Parent: IArcProvider,
+    Wildness: IWildness,
+    Children: IChildrenProvider<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+    Token: TokenTrait,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("KeArcTreeNode")
+            .field("has_parent", &self.parent.is_some())
+            .field("chunk", &self.chunk)
+            .field("children", &"..")
+            .field("weight", &self.weight)
+            .finish()
+    }
 }
 
 impl<

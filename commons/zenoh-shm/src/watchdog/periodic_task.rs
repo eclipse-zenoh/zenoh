@@ -27,7 +27,7 @@ use thread_priority::{
     ThreadSchedulePolicy::Realtime,
 };
 
-#[derive(PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TaskWakeReason {
     Timeout,
     Kick,

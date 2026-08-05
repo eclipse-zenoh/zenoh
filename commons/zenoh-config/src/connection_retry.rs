@@ -69,6 +69,7 @@ impl ConnectionRetryConf {
     }
 }
 
+#[derive(Debug)]
 pub struct ConnectionRetryPeriod {
     conf: ConnectionRetryConf,
     delay: i64,

@@ -39,7 +39,7 @@ pub const VSOCK_LOCATOR_PREFIX: &str = "vsock";
 
 const IS_RELIABLE: bool = true;
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct VsockLocatorInspector;
 #[async_trait]
 impl LocatorInspector for VsockLocatorInspector {
