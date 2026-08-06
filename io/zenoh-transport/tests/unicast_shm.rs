@@ -670,7 +670,10 @@ mod optimization_policy {
         },
         ShmBufInner,
     };
-    use zenoh_transport::common::shm::ProviderInitState;
+    use zenoh_transport::common::shm::{
+        interop::{map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ShmOptimizationPolicy},
+        ProviderInitState,
+    };
 
     // Implicit transport optimization only kicks in for payloads at or above this size.
     const MESSAGE_SIZE_THRESHOLD: usize = 3072;
@@ -756,8 +759,9 @@ mod optimization_policy {
         policy: ShmOptimizationPolicy,
     ) -> bool {
         {
+            let handoff = TxHandoffStorage::new_disabled();
             let mut m = msg.as_mut();
-            map_zmsg_to_partner(&mut m, &AllProtocols, provider, policy);
+            map_zmsg_to_partner(&mut m, &AllProtocols, provider, &handoff, policy);
         }
 
         let (payload, ext_shm_set) = match &msg.body {
