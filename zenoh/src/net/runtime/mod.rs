@@ -174,6 +174,7 @@ pub(crate) struct RuntimeState {
     manager: TransportManager,
     transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
     locators: std::sync::RwLock<Vec<Locator>>,
+    locators_noloopback: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     // TODO: lazy_hlc is added for timestamp instrumentation feature, in order to avoid breaking
     // existing logic that relies on state of hlc Option to check if timestamping is enabled or
@@ -206,6 +207,7 @@ pub trait IRuntime: Send + Sync {
     #[cfg(feature = "unstable")]
     fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool);
     fn get_locators(&self) -> Vec<Locator>;
+    fn get_locators_noloopback(&self) -> Vec<Locator>;
     fn get_zids(&self, whatami: WhatAmI) -> Box<dyn Iterator<Item = ZenohId> + Send + Sync>;
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>);
 
@@ -297,6 +299,10 @@ impl IRuntime for RuntimeState {
 
     fn get_locators(&self) -> Vec<Locator> {
         self.locators.read().unwrap().clone()
+    }
+
+    fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.locators_noloopback.read().unwrap().clone()
     }
 
     fn hlc(&self) -> Option<&HLC> {
@@ -816,6 +822,7 @@ impl RuntimeBuilder {
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
+                locators_noloopback: std::sync::RwLock::new(vec![]),
                 hlc,
                 #[cfg(feature = "unstable")]
                 lazy_hlc: OnceLock::new(),
@@ -949,6 +956,10 @@ impl Runtime {
 
     pub fn get_locators(&self) -> Vec<Locator> {
         self.state.get_locators()
+    }
+
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.state.get_locators_noloopback()
     }
 
     /// Spawns a task within runtime.

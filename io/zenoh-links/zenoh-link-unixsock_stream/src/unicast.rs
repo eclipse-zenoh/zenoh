@@ -479,6 +479,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             .map(|x| x.endpoint.to_locator())
             .collect()
     }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
+    }
 }
 
 async fn accept_task(

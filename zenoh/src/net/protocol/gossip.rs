@@ -197,7 +197,7 @@ impl Gossip {
             whatami: self.graph[idx].whatami,
             locators: if details.locators {
                 if idx == self.idx {
-                    Some(self.runtime.upgrade().unwrap().get_locators())
+                    Some(self.runtime.upgrade().unwrap().get_locators_noloopback())
                 } else {
                     self.graph[idx].locators.clone()
                 }

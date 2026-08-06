@@ -315,6 +315,63 @@ impl LinkManagerUnicastWs {
             listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
+
+    async fn get_locators_impl(&self, noloopback: bool) -> Vec<Locator> {
+        let mut locators = Vec::new();
+        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
+        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
+
+        let guard = zasyncread!(self.listeners);
+        for (key, value) in guard.iter() {
+            let listener_locator = value.endpoint.to_locator();
+            if key.ip() == default_ipv4 {
+                match zenoh_util::net::get_local_addresses(None) {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if (!noloopback || !ipaddr.is_loopback())
+                                && !ipaddr.is_multicast()
+                                && ipaddr.is_ipv4()
+                            {
+                                let l = Locator::new(
+                                    WS_LOCATOR_PREFIX,
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
+                }
+            } else if key.ip() == default_ipv6 {
+                match zenoh_util::net::get_local_addresses(None) {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if (!noloopback || !ipaddr.is_loopback())
+                                && !ipaddr.is_multicast()
+                                && ipaddr.is_ipv6()
+                            {
+                                let l = Locator::new(
+                                    WS_LOCATOR_PREFIX,
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
+                }
+            } else if !noloopback || !key.ip().is_loopback() {
+                locators.push(listener_locator.clone());
+            }
+        }
+        std::mem::drop(guard);
+
+        locators
+    }
 }
 
 #[async_trait]
@@ -434,54 +491,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
-        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
+        self.get_locators_impl(false).await
+    }
 
-        let guard = zasyncread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let listener_locator = value.endpoint.to_locator();
-            if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses(None) {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let l = Locator::new(
-                                    WS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses(None) {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let l = Locator::new(
-                                    WS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
-                }
-            } else {
-                locators.push(listener_locator.clone());
-            }
-        }
-        std::mem::drop(guard);
-
-        locators
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators_impl(true).await
     }
 }
 
