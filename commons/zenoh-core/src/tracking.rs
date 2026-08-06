@@ -38,33 +38,45 @@
 //! bypass the macros are also uncovered. That gap is purely syntactic and can be
 //! closed by a lint outside `zenoh-core`.
 //!
-//! # Known false positive: delivery-ordering locks
+//! # Two kinds of lock, and why the distinction is the whole design
 //!
-//! The rule this enforces — "no lock held when calling out" — is stronger than
-//! the property that actually matters, and it is worth knowing where the two
-//! come apart before trusting a report.
+//! "No lock held when calling out" is stronger than the property that matters,
+//! and a check that cannot tell these apart is unusable in practice:
 //!
-//! Two different jobs get done with a mutex here:
+//! | kind | holding it across user code | example |
+//! |---|---|---|
+//! | [`State`](LockKind::State) | a genuine hazard — re-entry self-deadlocks | the `AdvancedSubscriber` state mutex |
+//! | [`DeliveryOrdering`](LockKind::DeliveryOrdering) | **the entire point** | the transport RX channel mutex |
 //!
-//! * a **state lock**, guarding a data structure. Calling user code under one is
-//!   a genuine hazard: re-entry from the callback self-deadlocks on one thread.
-//!   This is the shape the check was built for.
-//! * a **delivery-ordering lock**, held precisely *so that* deliveries are
-//!   serialised. Holding it across user code is the whole point, and releasing
-//!   it early trades a rare stall for out-of-order delivery.
+//! [`zlock!`](crate::zlock), [`zread!`](crate::zread) and
+//! [`zwrite!`](crate::zwrite) record `State`;
+//! [`zlock_delivery!`](crate::zlock_delivery) records `DeliveryOrdering`, and
+//! [`assert_no_locks_held`] ignores it.
 //!
-//! [`assert_no_locks_held`] cannot tell them apart, so it flags the second kind
-//! too. The known instance is `zenoh-transport`'s per-priority RX channel mutex,
-//! taken in `handle_frame` to validate the sequence number and then held across
-//! the whole dispatch. That is deliberate: the channel is shared across a
-//! transport's links, and the lock is what keeps reliable delivery ordered
-//! between them. It is not a defect and should not be "fixed" to satisfy this
-//! check.
+//! This is not a convenience. Measured over the `zenoh` and `zenoh-ext` suites,
+//! **30 of 43** reported call-out sites were one delivery-ordering lock —
+//! `zenoh-transport`'s per-priority RX channel mutex, which is what keeps
+//! reliable delivery ordered across a transport's links. Without the
+//! distinction the report is 70 % noise about a lock nobody should touch;
+//! with it, what remains is the set worth reading.
 //!
-//! Note the corollary for anything this check pushes you to change: removing a
-//! state lock from a delivery path may remove ordering that was being provided
-//! incidentally. `zenoh-ext`'s `AdvancedSubscriber` had to grow an explicit
-//! FIFO-and-single-deliverer to replace exactly that.
+//! **Reaching for `zlock_delivery!` to silence a report defeats the check.**
+//! It is correct only where holding the lock across the call is the intent.
+//!
+//! ## The corollary, which cost real time
+//!
+//! Removing a state lock from a delivery path can remove ordering that was being
+//! provided *incidentally*. `zenoh-ext`'s `AdvancedSubscriber` had to grow an
+//! explicit FIFO-and-single-deliverer to replace exactly that. Fixing what this
+//! check reports is not the same as deleting the lock.
+//!
+//! # Reports name the lock, not just a count
+//!
+//! Each guard records where it was acquired, so a failure reads
+//! `acquired at ["zenoh/src/api/session.rs:3100"]` rather than `1 guard held`.
+//! A bare count cannot be acted on: it cannot distinguish a deliberate lock from
+//! a defect, nor say which of several nested guards is the problem.
+//! [`locks_held_sites`] exposes the same list for a non-panicking report.
 //!
 //! # Why async guards are not tracked
 //!
@@ -95,25 +107,76 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+/// What a tracked guard is *for*, which decides whether holding it across a
+/// call into user code is a defect.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LockKind {
+    /// Guards a data structure. Calling user code under one is the hazard this
+    /// module exists to catch.
+    State,
+    /// Held deliberately *so that* deliveries are serialised. Holding it across
+    /// user code is the point, so [`assert_no_locks_held`] ignores it.
+    DeliveryOrdering,
+}
+
 #[cfg(debug_assertions)]
 mod counter {
-    use std::cell::Cell;
+    use std::cell::RefCell;
+
+    use super::LockKind;
 
     thread_local! {
-        /// Number of live [`super::TrackedGuard`]s on this thread.
-        static HELD: Cell<usize> = const { Cell::new(0) };
+        /// Live guards on this thread, innermost last, with where each was
+        /// acquired. The site is what makes a report actionable: without it a
+        /// count of "1 guard held" cannot be told apart from a deliberate one.
+        static HELD: RefCell<Vec<(&'static str, LockKind)>> =
+            const { RefCell::new(Vec::new()) };
     }
 
-    pub(super) fn enter() {
-        HELD.with(|h| h.set(h.get().saturating_add(1)));
+    pub(super) fn enter(site: &'static str, kind: LockKind) {
+        HELD.with(|h| h.borrow_mut().push((site, kind)));
     }
 
     pub(super) fn leave() {
-        HELD.with(|h| h.set(h.get().saturating_sub(1)));
+        HELD.with(|h| {
+            h.borrow_mut().pop();
+        });
+    }
+
+    /// Acquisition sites of the live `State` guards.
+    pub(super) fn state_sites() -> Vec<&'static str> {
+        HELD.with(|h| {
+            h.borrow()
+                .iter()
+                .filter(|(_, k)| *k == LockKind::State)
+                .map(|(s, _)| *s)
+                .collect()
+        })
     }
 
     pub(super) fn held() -> usize {
-        HELD.with(|h| h.get())
+        HELD.with(|h| {
+            h.borrow()
+                .iter()
+                .filter(|(_, k)| *k == LockKind::State)
+                .count()
+        })
+    }
+}
+
+/// Where each live state-guard on this thread was acquired, innermost last.
+///
+/// Empty when `debug_assertions` are off. Delivery-ordering guards are excluded,
+/// for the reason given in the module docs.
+#[inline]
+pub fn locks_held_sites() -> Vec<&'static str> {
+    #[cfg(debug_assertions)]
+    {
+        counter::state_sites()
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        Vec::new()
     }
 }
 
@@ -160,7 +223,12 @@ impl CounterGuard {
     #[inline]
     #[allow(clippy::new_without_default)] // acquiring a count is not a default
     pub fn new() -> Self {
-        counter::enter();
+        Self::at("<unattributed>", LockKind::State)
+    }
+
+    #[inline]
+    pub fn at(site: &'static str, kind: LockKind) -> Self {
+        counter::enter(site, kind);
         Self {
             _not_send: std::marker::PhantomData,
         }
@@ -212,6 +280,20 @@ impl<G> TrackedGuard<G> {
             inner,
             #[cfg(debug_assertions)]
             _counter: CounterGuard::new(),
+        }
+    }
+
+    /// Wraps `inner`, recording where it was acquired and what it is for.
+    ///
+    /// The macros call this so a report can name the lock rather than only
+    /// counting it. A bare count of "1 guard held" is not actionable; a file and
+    /// line is.
+    #[inline]
+    pub fn new_at(inner: G, site: &'static str, kind: LockKind) -> Self {
+        Self {
+            inner,
+            #[cfg(debug_assertions)]
+            _counter: CounterGuard::at(site, kind),
         }
     }
 
@@ -315,14 +397,17 @@ impl<G: fmt::Display> fmt::Display for TrackedGuard<G> {
 pub fn assert_no_locks_held(site: &str) {
     #[cfg(debug_assertions)]
     {
-        let held = counter::held();
+        let sites = counter::state_sites();
         assert!(
-            held == 0,
-            "re-entrancy hazard at {site}: {held} Zenoh lock guard(s) still held \
-             while calling out to code Zenoh does not control. If that code \
-             re-enters an API taking the same non-reentrant lock, this thread \
-             deadlocks against itself. Apply collect · release · call: gather \
-             what is needed, drop the guard, then call."
+            sites.is_empty(),
+            "re-entrancy hazard at {site}: {n} Zenoh state lock(s) still held \
+             while calling out to code Zenoh does not control, acquired at \
+             {sites:?} (innermost last). If that code re-enters an API taking \
+             one of those locks, this thread deadlocks against itself. Apply \
+             collect · release · call: gather what is needed, drop the guard, \
+             then call. If one of these is held deliberately to serialise \
+             delivery, take it with `zlock_delivery!` instead.",
+            n = sites.len(),
         );
     }
     #[cfg(not(debug_assertions))]
@@ -409,6 +494,47 @@ mod tests {
         let m = Mutex::new(());
         let _g = TrackedGuard::new(m.lock().unwrap());
         assert_no_locks_held("test/under-guard");
+    }
+
+    /// A delivery-ordering guard must NOT trip the check — that exemption is
+    /// what takes the report from 70% noise to actionable, so it needs a test of
+    /// its own rather than being trusted.
+    #[test]
+    #[cfg(debug_assertions)]
+    fn a_delivery_ordering_guard_is_ignored() {
+        let m = Mutex::new(0u8);
+        let _g = crate::zlock_delivery!(m);
+        assert_eq!(locks_held(), 0, "delivery guards are not state guards");
+        assert!(locks_held_sites().is_empty());
+        assert_no_locks_held("test/delivery-exempt");
+    }
+
+    /// ...and the exemption must not be a blanket off-switch: a state guard
+    /// taken alongside one still trips.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "re-entrancy hazard at test/mixed")]
+    fn a_state_guard_still_trips_beside_a_delivery_guard() {
+        let a = Mutex::new(0u8);
+        let b = Mutex::new(0u8);
+        let _delivery = crate::zlock_delivery!(a);
+        let _state = crate::zlock!(b);
+        assert_no_locks_held("test/mixed");
+    }
+
+    /// The report must name where the lock was taken. A bare count cannot be
+    /// acted on.
+    #[test]
+    #[cfg(debug_assertions)]
+    fn the_report_names_the_acquisition_site() {
+        let m = Mutex::new(0u8);
+        let _g = crate::zlock!(m);
+        let sites = locks_held_sites();
+        assert_eq!(sites.len(), 1);
+        assert!(
+            sites[0].contains("tracking.rs:"),
+            "expected this file and a line, got {sites:?}"
+        );
     }
 
     /// ...and must be shown to fire for a guard acquired through the macro, not

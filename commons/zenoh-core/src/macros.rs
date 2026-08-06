@@ -28,7 +28,11 @@
 #[macro_export]
 macro_rules! zlock {
     ($var:expr) => {
-        $crate::tracking::TrackedGuard::new($var.lock().unwrap())
+        $crate::tracking::TrackedGuard::new_at(
+            $var.lock().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
     };
 }
 
@@ -38,7 +42,11 @@ macro_rules! zlock {
 #[macro_export]
 macro_rules! zread {
     ($var:expr) => {
-        $crate::tracking::TrackedGuard::new($var.read().unwrap())
+        $crate::tracking::TrackedGuard::new_at(
+            $var.read().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
     };
 }
 
@@ -48,7 +56,29 @@ macro_rules! zread {
 #[macro_export]
 macro_rules! zwrite {
     ($var:expr) => {
-        $crate::tracking::TrackedGuard::new($var.write().unwrap())
+        $crate::tracking::TrackedGuard::new_at(
+            $var.write().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
+    };
+}
+
+// Like `zlock!`, but marks the lock as one held deliberately to serialise
+// delivery rather than to guard state. `assert_no_locks_held` ignores these.
+//
+// Use it only where holding the lock across a call into user code is the
+// intent — the transport RX channel lock, whose whole job is keeping multi-link
+// delivery ordered. Using it to silence a report about a state lock defeats the
+// check.
+#[macro_export]
+macro_rules! zlock_delivery {
+    ($var:expr) => {
+        $crate::tracking::TrackedGuard::new_at(
+            $var.lock().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::DeliveryOrdering,
+        )
     };
 }
 

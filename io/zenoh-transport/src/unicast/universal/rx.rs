@@ -15,7 +15,7 @@ use std::fmt::Debug;
 
 use zenoh_buffers::{buffer::Buffer, reader::BacktrackableReader};
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::{tracking::TrackedMutexGuard, zlock};
+use zenoh_core::{tracking::TrackedMutexGuard, zlock_delivery};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -103,8 +103,8 @@ impl TransportUnicastUniversal {
         };
 
         let mut guard = match frame.reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zlock_delivery!(c.reliable),
+            Reliability::BestEffort => zlock_delivery!(c.best_effort),
         };
 
         if !self.verify_sn("Frame", frame.sn, &mut guard)? {
@@ -161,8 +161,8 @@ impl TransportUnicastUniversal {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zlock_delivery!(c.reliable),
+            Reliability::BestEffort => zlock_delivery!(c.best_effort),
         };
 
         if !self.verify_sn("Fragment", sn, &mut guard)? {
