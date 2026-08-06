@@ -28,8 +28,8 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct MulticastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
-    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
-    pub(super) shm_config: MulticastTransportShmConfig,
+    pub(crate) shm_provider: Option<Arc<LazyShmProvider>>,
+    pub(crate) shm_config: MulticastTransportShmConfig,
     pub(crate) policy: ShmOptimizationPolicy,
 }
 
@@ -51,8 +51,8 @@ impl MulticastTransportShmContext {
 #[derive(Clone)]
 pub(crate) struct UnicastTransportShmContext {
     pub(crate) shm_reader: ShmReader,
-    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
-    pub(super) shm_config: TransportShmConfig,
+    pub(crate) shm_provider: Option<Arc<LazyShmProvider>>,
+    pub(crate) shm_config: TransportShmConfig,
     pub(crate) policy: ShmOptimizationPolicy,
 }
 
