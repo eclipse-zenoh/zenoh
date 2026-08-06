@@ -45,7 +45,7 @@ use crate::{
 /*************************************/
 /*          Authenticator            */
 /*************************************/
-pub(crate) struct AuthUnicast {
+pub struct AuthUnicast {
     segment: Arc<TXAuthSegment>,
 }
 
