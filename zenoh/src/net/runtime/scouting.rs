@@ -500,7 +500,7 @@ fn get_best_match<'a>(addr: &IpAddr, sockets: &'a [ScoutSocket]) -> Option<&'a S
     fn matching_octets(addr: &IpAddr, sock: &ScoutSocket) -> usize {
         octets(addr)
             .iter()
-            .zip(octets(&sock.iface()))
+            .zip(octets(sock.iface()))
             .map(|(x, y)| x.cmp(&y))
             .position(|ord| ord != std::cmp::Ordering::Equal)
             .unwrap_or_else(|| octets(addr).len())
