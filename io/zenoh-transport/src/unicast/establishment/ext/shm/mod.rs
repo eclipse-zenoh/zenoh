@@ -12,5 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub(crate) mod auth;
-pub(crate) mod handoff;
+pub mod handoff;
 pub(crate) mod segment;

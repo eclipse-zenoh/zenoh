@@ -670,9 +670,14 @@ mod optimization_policy {
         },
         ShmBufInner,
     };
-    use zenoh_transport::common::shm::{
-        interop::{map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ShmOptimizationPolicy},
-        ProviderInitState,
+    use zenoh_transport::{
+        common::shm::{
+            interop::{
+                map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ShmOptimizationPolicy,
+            },
+            ProviderInitState,
+        },
+        unicast::establishment::ext::shm::handoff::TxHandoffStorage,
     };
 
     // Implicit transport optimization only kicks in for payloads at or above this size.
