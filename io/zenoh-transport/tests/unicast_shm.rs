@@ -670,7 +670,7 @@ mod optimization_policy {
         },
         ShmBufInner,
     };
-    use zenoh_transport::shm::{
+    use zenoh_transport::common::shm::{
         map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ProviderInitState,
         ShmOptimizationPolicy,
     };

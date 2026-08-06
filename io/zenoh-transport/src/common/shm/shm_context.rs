@@ -18,11 +18,10 @@ use zenoh_result::ZResult;
 use zenoh_shm::{api::client_storage::GLOBAL_CLIENT_STORAGE, reader::ShmReader};
 
 use crate::{
-    common::shm::interop::{LazyShmProvider, MulticastTransportShmConfig, TransportShmConfig},
-    shm::{
+    common::shm::interop::{
         LazyShmProvider, MulticastTransportShmConfig, ShmOptimizationPolicy, TransportShmConfig,
     },
-    unicast::establishment::ext::shm::{auth::AuthUnicast, AuthUnicast},
+    unicast::establishment::ext::shm::auth::AuthUnicast,
 };
 
 #[derive(Clone)]
@@ -34,7 +33,7 @@ pub(crate) struct MulticastTransportShmContext {
 }
 
 impl MulticastTransportShmContext {
-    pub(super) fn new(
+    pub(crate) fn new(
         shm_reader: ShmReader,
         shm_provider: Option<Arc<LazyShmProvider>>,
         policy: ShmOptimizationPolicy,
@@ -74,9 +73,9 @@ impl UnicastTransportShmContext {
 
 pub struct ShmContext {
     pub(crate) shm_reader: ShmReader,
-    pub(super) shm_provider: Option<Arc<LazyShmProvider>>,
+    pub(crate) shm_provider: Option<Arc<LazyShmProvider>>,
     pub(crate) policy: ShmOptimizationPolicy,
-    pub(super) auth: AuthUnicast,
+    pub(crate) auth: AuthUnicast,
 }
 
 impl std::fmt::Debug for ShmContext {
