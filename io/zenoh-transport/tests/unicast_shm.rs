@@ -670,10 +670,7 @@ mod optimization_policy {
         },
         ShmBufInner,
     };
-    use zenoh_transport::common::shm::{
-        map_zmsg_to_partner, LazyShmProvider, PartnerShmConfig, ProviderInitState,
-        ShmOptimizationPolicy,
-    };
+    use zenoh_transport::common::shm::ProviderInitState;
 
     // Implicit transport optimization only kicks in for payloads at or above this size.
     const MESSAGE_SIZE_THRESHOLD: usize = 3072;

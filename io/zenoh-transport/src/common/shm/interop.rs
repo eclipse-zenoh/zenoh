@@ -304,7 +304,7 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
         NetworkBodyMut::Response(Response {
             payload, ext_qos, ..
         }) => {
-            let p = if policy.query {
+            let p = if policy.reply {
                 shm_provider
             } else {
                 &no_provider
