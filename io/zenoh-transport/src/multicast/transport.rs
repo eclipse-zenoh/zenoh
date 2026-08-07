@@ -365,6 +365,7 @@ impl TransportMulticastInner {
             let tprx = TransportPriorityRx::make(
                 join.resolution.get(Field::FrameSN),
                 self.manager.config.defrag_buff_size,
+                0,
             )?;
             tprx.sync(*sn)?;
             priority_rx.push(tprx);
