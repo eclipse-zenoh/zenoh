@@ -12,6 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(feature = "shared-memory")]
+use std::time::Instant;
+
 #[cfg(feature = "unstable")]
 use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
@@ -23,7 +26,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::shm::{collect_shm_bufs, map_zmsg_to_partner, PendingShmBuf, SHM_PENDING_TTL};
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
@@ -117,6 +120,10 @@ impl TransportUnicastUniversal {
                 shm_context.policy,
             );
         }
+        // Collect SHM buffer clones before msg is shadowed as NetworkMessageRef.
+        // They are stored in shm_pending on successful push (lease model).
+        #[cfg(feature = "shared-memory")]
+        let shm_bufs = collect_shm_bufs(&msg);
         let msg = msg.as_ref();
         let transport_links = self
             .links
@@ -189,6 +196,19 @@ impl TransportUnicastUniversal {
                 }
                 let _ = block_first_notifier.notify();
             });
+            // BlockFirst returns true before the push completes. Add leases now so
+            // the ConfirmedDescriptor outlives this frame during the async push.
+            #[cfg(feature = "shared-memory")]
+            if !shm_bufs.is_empty() {
+                let now = Instant::now();
+                let deadline = now + SHM_PENDING_TTL;
+                let mut pending = self.shm_pending.lock().expect("shm_pending lock");
+                pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+                for buf in shm_bufs {
+                    let key = buf.info.metadata.clone();
+                    pending.insert(key, PendingShmBuf { buf, deadline });
+                }
+            }
             // Message should be sent as it is blocking.
             return Ok(true);
         }
@@ -199,6 +219,19 @@ impl TransportUnicastUniversal {
         drop(transport_links);
 
         let pushed = pipeline.push_network_message(msg)?;
+        // On success, insert into the per-connection lease map. On failure, msg has
+        // already dropped its ShmBufInner refs — no action needed.
+        #[cfg(feature = "shared-memory")]
+        if pushed && !shm_bufs.is_empty() {
+            let now = Instant::now();
+            let deadline = now + SHM_PENDING_TTL;
+            let mut pending = self.shm_pending.lock().expect("shm_pending lock");
+            pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+            for buf in shm_bufs {
+                let key = buf.info.metadata.clone();
+                pending.insert(key, PendingShmBuf { buf, deadline });
+            }
+        }
         self.handle_push_result(
             msg,
             pushed,

@@ -160,7 +160,10 @@ async fn test_session_pubsub<const NO_SHM_FOR_SECOND_PEER: bool>(
         tokio::time::sleep(SLEEP).await;
 
         // create SHM backend...
-        let backend = PosixShmProviderBackend::builder(size * MSG_COUNT / 10)
+        // Pool must hold all MSG_COUNT messages simultaneously: the lease model
+        // keeps ShmBufInner clones alive in shm_pending for up to SHM_PENDING_TTL
+        // (500 ms), preventing GC from reclaiming slots until the TTL fires.
+        let backend = PosixShmProviderBackend::builder(size * (MSG_COUNT + 10))
             .wait()
             .unwrap();
         // ...and SHM provider

@@ -174,11 +174,27 @@ impl ShmBufInner {
         self.metadata.owned.header().len()
     }
 
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         let header = self.metadata.owned.header();
 
         !header.watchdog_invalidated.load(Ordering::SeqCst)
             && header.generation.load(Ordering::SeqCst) == self.info.generation
+    }
+
+    /// Returns true if RX has installed its ConfirmedDescriptor for this buffer.
+    /// TX sweep uses this to release the pending lease before TTL expiry.
+    pub fn is_rx_acked(&self) -> bool {
+        self.metadata.owned.header().rx_ack.load(Ordering::Acquire)
+    }
+
+    /// Set rx_ack on this buffer. Called by `read_shmbuf` after the ConfirmedDescriptor
+    /// is installed; also available for testing the TX sweep path.
+    pub fn mark_rx_acked(&self) {
+        self.metadata
+            .owned
+            .header()
+            .rx_ack
+            .store(true, Ordering::Release);
     }
 
     fn is_unique(&self) -> bool {
