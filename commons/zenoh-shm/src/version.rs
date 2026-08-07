@@ -12,4 +12,4 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub const SHM_VERSION: u64 = 1;
+pub const SHM_VERSION: u64 = 2;

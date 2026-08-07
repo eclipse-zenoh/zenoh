@@ -30,7 +30,7 @@ use crate::{
         batch::{Decode, RBatch},
         priority::TransportChannelRx,
     },
-    unicast::transport_unicast_inner::TransportUnicastTrait,
+    unicast::{link::TransportLinkUnicastRx, transport_unicast_inner::TransportUnicastTrait},
     TransportPeerEventHandler,
 };
 
@@ -44,6 +44,7 @@ impl TransportUnicastUniversal {
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessageMut,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+        #[cfg(feature = "shared-memory")] link: &TransportLinkUnicastRx,
     ) -> ZResult<()> {
         #[cfg(feature = "stats")]
         stats.inc_network_message(
@@ -51,16 +52,17 @@ impl TransportUnicastUniversal {
             zenoh_protocol::network::NetworkMessageExt::as_ref(&msg),
         );
         #[cfg(feature = "shared-memory")]
-        {
-            if let Some(shm_context) = &self.shm_context {
-                if let Err(e) =
-                    crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
-                {
-                    tracing::debug!("Error receiving SHM buffer: {e}");
-                    return Ok(());
-                }
+        if let Some(shm_context) = &self.shm_context {
+            if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
+                msg.as_mut(),
+                &shm_context.shm_reader,
+                &link.shm,
+            ) {
+                tracing::debug!("Error receiving SHM buffer: {e}");
+                return Ok(());
             }
         }
+
         callback.handle_message(msg)
     }
 
@@ -85,6 +87,7 @@ impl TransportUnicastUniversal {
         &self,
         frame: FrameReader<R>,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+        #[cfg(feature = "shared-memory")] link: &TransportLinkUnicastRx,
     ) -> ZResult<()> {
         let priority = frame.ext_qos.priority();
         let c = if self.is_qos() {
@@ -115,6 +118,8 @@ impl TransportUnicastUniversal {
                     msg.as_mut(),
                     #[cfg(feature = "stats")]
                     stats,
+                    #[cfg(feature = "shared-memory")]
+                    link,
                 )?;
             }
         } else {
@@ -131,6 +136,7 @@ impl TransportUnicastUniversal {
         &self,
         fragment: Fragment,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+        #[cfg(feature = "shared-memory")] link: &TransportLinkUnicastRx,
     ) -> ZResult<()> {
         let Fragment {
             reliability,
@@ -195,6 +201,8 @@ impl TransportUnicastUniversal {
                         msg.as_mut(),
                         #[cfg(feature = "stats")]
                         stats,
+                        #[cfg(feature = "shared-memory")]
+                        link,
                     );
                 } else {
                     tracing::debug!(
@@ -235,7 +243,7 @@ impl TransportUnicastUniversal {
     pub(super) fn read_messages<TBuffer: BacktrackableReader + Buffer + Debug>(
         &self,
         mut batch: RBatch<TBuffer>,
-        link: &Link,
+        link: &TransportLinkUnicastRx,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
         while !batch.is_empty() {
@@ -249,12 +257,14 @@ impl TransportUnicastUniversal {
                     frame,
                     #[cfg(feature = "stats")]
                     stats,
+                    #[cfg(feature = "shared-memory")]
+                    link,
                 )?;
                 continue;
             }
             let msg: TransportMessage = batch
                 .decode()
-                .map_err(|_| zerror!("{}: decoding error", link))?;
+                .map_err(|_| zerror!("{}: decoding error", link.link))?;
 
             tracing::trace!("Received: {:?}", msg);
 
@@ -269,9 +279,16 @@ impl TransportUnicastUniversal {
                     fragment,
                     #[cfg(feature = "stats")]
                     stats,
+                    #[cfg(feature = "shared-memory")]
+                    link,
                 )?,
                 TransportBody::Close(Close { reason, session }) => {
-                    self.handle_close(link, reason, session)?
+                    let l = Link::new_unicast(
+                        &link.link,
+                        link.config.priorities.clone(),
+                        link.config.reliability,
+                    );
+                    self.handle_close(&l, reason, session)?
                 }
                 TransportBody::KeepAlive(KeepAlive { .. }) => {}
                 _ => {

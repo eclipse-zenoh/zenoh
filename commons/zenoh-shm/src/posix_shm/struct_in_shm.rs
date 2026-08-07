@@ -36,6 +36,23 @@ where
     _phantom: PhantomData<Elem>,
 }
 
+impl<ID, Elem: Sync> PartialEq for StructInSHM<ID, Elem>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: shm::SegmentID,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+
+impl<ID, Elem: Sync> Eq for StructInSHM<ID, Elem>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: shm::SegmentID,
+{
+}
+
 unsafe impl<ID, Elem: Sync> Sync for StructInSHM<ID, Elem>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
