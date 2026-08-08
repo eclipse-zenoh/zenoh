@@ -953,17 +953,36 @@ impl TransportManager {
         let c_manager = self.clone();
         self.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Acceptor, async move {
-                if tokio::time::timeout(
+                // accept_link takes the link by value. On an early handshake
+                // error (for example a malformed InitSyn) it returns before the
+                // FSM's graceful close runs, and on a timeout its future is
+                // dropped without closing at all. In both cases the socket is
+                // left open and lingers in CLOSE-WAIT, so keep a handle and
+                // close it on the failure paths, the same way the
+                // accept_pending branch above does. On success the established
+                // transport keeps its own handle to the link, so dropping this
+                // one is enough. Closing only runs after the timeout has
+                // returned, i.e. after accept_link's future is gone, so there
+                // is no concurrent access to the link.
+                let close_link = link.clone();
+                match tokio::time::timeout(
                     c_manager.config.unicast.accept_timeout,
                     super::establishment::accept::accept_link(link, &c_manager),
                 )
                 .await
-                .is_err()
                 {
-                    tracing::debug!(
-                        "Failed to accept link before deadline ({}ms)",
-                        c_manager.config.unicast.accept_timeout.as_millis()
-                    );
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => {
+                        tracing::debug!("Failed to accept link: {}", e);
+                        let _ = close_link.close().await;
+                    }
+                    Err(_) => {
+                        tracing::debug!(
+                            "Failed to accept link before deadline ({}ms)",
+                            c_manager.config.unicast.accept_timeout.as_millis()
+                        );
+                        let _ = close_link.close().await;
+                    }
                 }
                 incoming_counter.fetch_sub(1, SeqCst);
             });
