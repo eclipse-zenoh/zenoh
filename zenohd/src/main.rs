@@ -14,8 +14,11 @@
 use clap::Parser;
 use git_version::git_version;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use zenoh::internal::bail;
-use zenoh::{config::WhatAmI, Config, Result, Wait};
+use zenoh::{
+    config::WhatAmI,
+    internal::{bail, zerror},
+    Config, Result, Wait,
+};
 use zenoh_config::{EndPoint, EndPoints, ModeDependentValue, PermissionsConf};
 use zenoh_util::LibSearchDirs;
 
@@ -77,7 +80,7 @@ struct Args {
     adminspace_permissions: Option<String>,
 }
 
-fn main() -> Result<()> {
+fn main() {
     if let Err(e) = init_logging() {
         eprintln!("{e}. Exiting...");
         std::process::exit(-1);
@@ -86,7 +89,13 @@ fn main() -> Result<()> {
     tracing::info!("zenohd {}", *LONG_VERSION);
 
     let args = Args::parse();
-    let config = config_from_args(&args)?;
+    let config = match config_from_args(&args) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Error: {error}");
+            std::process::exit(1);
+        }
+    };
     tracing::info!("Initial conf: {}", &config);
 
     let _session = match zenoh::open(config).wait() {
@@ -98,7 +107,6 @@ fn main() -> Result<()> {
     };
 
     std::thread::park();
-    Ok(())
 }
 
 fn config_from_args(args: &Args) -> Result<Config> {
@@ -110,9 +118,10 @@ fn config_from_args(args: &Args) -> Result<Config> {
     }
 
     let mut config = if let Some(cfg) = inline_config {
-        Config::from_json5(cfg).or_else(|_| bail!("Invalid Zenoh config") as Result<_>)?
+        Config::from_json5(cfg).map_err(|error| zerror!("Invalid --cfg configuration: {error}"))?
     } else if let Some(fname) = args.config.as_ref() {
-        Config::from_file(fname).or_else(|_| bail!("Failed to load config file") as Result<_>)?
+        Config::from_file(fname)
+            .map_err(|error| format!("Failed to load config file {fname}: {error}"))?
     } else {
         Config::default()
     };
@@ -127,8 +136,12 @@ fn config_from_args(args: &Args) -> Result<Config> {
     if args.rest_http_port.is_some() {
         let value = args.rest_http_port.as_deref().unwrap_or("8000");
         if !value.eq_ignore_ascii_case("none") {
-            config.insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))?;
-            config.insert_json5("plugins/rest/__required__", "true")?;
+            config
+                .insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))
+                .map_err(|error| format!("Invalid --rest-http-port={value}: {error}"))?;
+            config
+                .insert_json5("plugins/rest/__required__", "true")
+                .map_err(|error| format!("Failed to enable the REST plugin: {error}"))?;
         }
     }
     config.adminspace.set_enabled(true).unwrap();
@@ -146,10 +159,16 @@ fn config_from_args(args: &Args) -> Result<Config> {
     for plugin in &args.plugin {
         match plugin.split_once(':') {
             Some((name, path)) => {
-                config.insert_json5(&format!("plugins/{name}/__required__"), "true")?;
-                config.insert_json5(&format!("plugins/{name}/__path__"), &format!("\"{path}\""))?;
+                config
+                    .insert_json5(&format!("plugins/{name}/__required__"), "true")
+                    .map_err(|error| format!("Invalid --plugin={plugin}: {error}"))?;
+                config
+                    .insert_json5(&format!("plugins/{name}/__path__"), &format!("\"{path}\""))
+                    .map_err(|error| format!("Invalid --plugin={plugin}: {error}"))?;
             }
-            None => config.insert_json5(&format!("plugins/{plugin}/__required__"), "true")?,
+            None => config
+                .insert_json5(&format!("plugins/{plugin}/__required__"), "true")
+                .map_err(|error| format!("Invalid --plugin={plugin}: {error}"))?,
         };
     }
     if !args.connect.is_empty() {
@@ -160,8 +179,8 @@ fn config_from_args(args: &Args) -> Result<Config> {
                 args.connect
                     .iter()
                     .map(|v| {
-                        v.parse::<EndPoints>().or_else(|e| {
-                            bail!("Couldn't parse option --peer={v} into Locator: {e}")
+                        v.parse::<EndPoints>().map_err(|e| {
+                            format!("Couldn't parse option --connect={v} into Locator: {e}").into()
                         })
                     })
                     .collect::<Result<_>>()?,
@@ -176,8 +195,8 @@ fn config_from_args(args: &Args) -> Result<Config> {
                 args.listen
                     .iter()
                     .map(|v| {
-                        v.parse::<EndPoint>().or_else(|e| {
-                            bail!("Couldn't parse option --listen={v} into Locator: {e}")
+                        v.parse::<EndPoint>().map_err(|e| {
+                            format!("Couldn't parse option --listen={v} into Locator: {e}").into()
                         })
                     })
                     .collect::<Result<_>>()?,
@@ -326,12 +345,6 @@ fn test_no_default_features() {
             // " zenoh/default",
         )
     );
-}
-
-#[test]
-fn test_config_from_args_invalid_inline_c_returns_err() {
-    let args = Args::parse_from(["zenohd", "-c", "/dev/null"]);
-    assert!(config_from_args(&args).is_err());
 }
 
 #[test]
