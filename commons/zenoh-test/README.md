@@ -27,7 +27,7 @@ own copy of helpers.  This caused:
 ### Free functions
 
 | Function | Description |
-|---|---|
+| --- | --- |
 | `get_free_tcp_port()` | Binds to a random TCP port and returns the port number.  ⚠️ Susceptible to TOCTOU races; prefer port `0` listeners when possible. |
 | `get_free_udp_port()` | Binds to a random UDP port and returns the port number.  ⚠️ Susceptible to TOCTOU races; prefer port `0` listeners when possible. |
 | `get_tcp_locator(&session)` | Returns the first `tcp/` endpoint from a session's locators. |

@@ -40,6 +40,8 @@ use super::{
     resource::{QueryTargetQablSet, Resource},
     tables::{NodeId, RoutingExpr, TablesLock},
 };
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::push_ts_interception;
 use crate::net::routing::{
     dispatcher::{
         face::Face,
@@ -330,7 +332,7 @@ impl Face {
                         #[cfg(feature = "unstable")]
                         {
                             let weak = weak_runtime.clone();
-                            crate::api::timestamp_stack::push_ts_interception(
+                            push_ts_interception(
                                 &mut msg.ext_ts_stack,
                                 move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                                 zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,
@@ -607,7 +609,7 @@ pub(crate) fn route_send_response(
                     #[cfg(feature = "unstable")]
                     {
                         let weak = weak_runtime.clone();
-                        crate::api::timestamp_stack::push_ts_interception(
+                        push_ts_interception(
                             &mut msg.ext_ts_stack,
                             move || weak.and_then(|w| w.upgrade()).map(|rt| rt.state),
                             zenoh_protocol::network::timestamp_stack::interception_point::ROUTE,

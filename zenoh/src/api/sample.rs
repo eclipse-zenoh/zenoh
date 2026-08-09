@@ -27,6 +27,8 @@ use zenoh_protocol::{
     zenoh::PushBody,
 };
 
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampStack;
 use crate::api::{
     builders::sample::QoSBuilderTrait, bytes::ZBytes, encoding::Encoding,
     handlers::CallbackParameter, key_expr::KeyExpr, publisher::Priority,
@@ -209,6 +211,8 @@ pub struct SampleFields {
     pub reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub timestamp_stack: Option<TimestampStack>,
     pub attachment: Option<ZBytes>,
 }
 
@@ -227,6 +231,8 @@ impl From<Sample> for SampleFields {
             reliability: sample.reliability,
             #[cfg(feature = "unstable")]
             source_info: sample.source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_stack: sample.timestamp_stack,
             attachment: sample.attachment,
         }
     }
@@ -251,7 +257,7 @@ pub struct Sample {
     pub(crate) source_info: Option<SourceInfo>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
-    pub(crate) timestamp_stack: Option<crate::api::timestamp_stack::TimestampStack>,
+    pub(crate) timestamp_stack: Option<TimestampStack>,
 }
 
 impl Sample {
@@ -325,7 +331,7 @@ impl Sample {
     /// collected along the message's path through the network.
     #[zenoh_macros::unstable]
     #[inline]
-    pub fn timestamp_stack(&self) -> Option<&crate::api::timestamp_stack::TimestampStack> {
+    pub fn timestamp_stack(&self) -> Option<&TimestampStack> {
         self.timestamp_stack.as_ref()
     }
 
@@ -371,8 +377,7 @@ impl Sample {
         >,
     ) -> Self {
         #[cfg(feature = "unstable")]
-        let timestamp_stack = timestamp_stack
-            .and_then(|ts| crate::api::timestamp_stack::TimestampStack::try_from(&ts).ok());
+        let timestamp_stack = timestamp_stack.and_then(|ts| TimestampStack::try_from(&ts).ok());
         match body {
             PushBody::Put(put) => Self {
                 key_expr,

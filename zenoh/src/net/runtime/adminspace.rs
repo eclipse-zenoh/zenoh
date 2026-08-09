@@ -50,6 +50,8 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, 
 use super::{routing::dispatcher::face::Face, Runtime};
 #[cfg(all(feature = "plugins", feature = "runtime_plugins"))]
 use crate::api::plugins::PluginsManager;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::push_ts_interception;
 use crate::{
     api::{
         bytes::ZBytes,
@@ -387,7 +389,7 @@ impl Primitives for AdminSpace {
         #[cfg(feature = "unstable")]
         {
             let state = self.context.runtime.state.clone();
-            crate::api::timestamp_stack::push_ts_interception(
+            push_ts_interception(
                 &mut msg.ext_ts_stack,
                 || Some(state),
                 zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -487,7 +489,7 @@ impl Primitives for AdminSpace {
         #[cfg(feature = "unstable")]
         {
             let state = self.context.runtime.state.clone();
-            crate::api::timestamp_stack::push_ts_interception(
+            push_ts_interception(
                 &mut msg.ext_ts_stack,
                 || Some(state),
                 zenoh_protocol::network::timestamp_stack::interception_point::RECEIVE,
@@ -637,7 +639,7 @@ fn local_data(prefix: &keyexpr, context: &AdminContext, query: Query) {
 
     // locators info
     let locators: Vec<serde_json::Value> = transport_mgr
-        .get_locators()
+        .get_locators_noloopback()
         .iter()
         .map(|locator| json!(locator.as_str()))
         .collect();

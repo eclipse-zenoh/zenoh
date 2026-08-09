@@ -765,4 +765,13 @@ impl TransportManager {
         lsu.append(&mut lsm);
         lsu
     }
+
+    // TODO(yuyuan): Can we make this async as above?
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        let mut lsu =
+            zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast_noloopback());
+        let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
+    }
 }

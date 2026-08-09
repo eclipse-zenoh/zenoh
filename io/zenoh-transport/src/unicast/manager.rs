@@ -481,6 +481,14 @@ impl TransportManager {
         vec
     }
 
+    pub async fn get_locators_unicast_noloopback(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
+            vec.extend_from_slice(&p.get_locators_noloopback().await);
+        }
+        vec
+    }
+
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
@@ -664,6 +672,7 @@ impl TransportManager {
                     context.shm_reader.clone(),
                     shm_provider,
                     shm_config.clone(),
+                    context.policy,
                 )
             }),
             None => None,

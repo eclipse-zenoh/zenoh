@@ -26,7 +26,7 @@ use std::{
 use nonempty_collections::nev;
 use zenoh::{key_expr::KeyExpr, query::ConsolidationMode, Wait};
 use zenoh_config::{
-    Config, DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf, InterceptorFlow,
+    Config, DataMessage, DownsamplingItemConf, DownsamplingRuleConf, InterceptorFlow,
 };
 use zenoh_test::TestSessions;
 
@@ -163,7 +163,7 @@ fn downsampling_by_keyexpr_impl(flow: InterceptorFlow) {
         flows: Some(nev![flow]),
         interfaces: None,
         link_protocols: None,
-        messages: nev![DownsamplingMessage::Put],
+        messages: nev![DataMessage::Put],
         rules: nev![
             DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
@@ -218,7 +218,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: Some(nev!["lo".to_string(), "lo0".to_string()]),
             link_protocols: None,
-            messages: nev![DownsamplingMessage::Put],
+            messages: nev![DataMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
@@ -229,7 +229,7 @@ fn downsampling_by_interface_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: Some(nev!["some_unknown_interface".to_string()]),
             link_protocols: None,
-            messages: nev![DownsamplingMessage::Put],
+            messages: nev![DataMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
@@ -276,7 +276,7 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: None,
             link_protocols: Some(nev![InterceptorLink::Tcp]),
-            messages: nev![DownsamplingMessage::Put],
+            messages: nev![DataMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_10hz.clone().into(),
                 freq: 10.0,
@@ -287,7 +287,7 @@ fn downsampling_by_protocol_impl(flow: InterceptorFlow) {
             flows: Some(nev![flow]),
             interfaces: None,
             link_protocols: Some(nev![InterceptorLink::Serial]),
-            messages: nev![DownsamplingMessage::Put],
+            messages: nev![DataMessage::Put],
             rules: nev![DownsamplingRuleConf {
                 key_expr: ke_no_effect.clone().into(),
                 freq: 10.0,
@@ -446,7 +446,7 @@ fn downsampling_query_rate_test(flow: InterceptorFlow) {
         flows: Some(nev![flow]),
         interfaces: None,
         link_protocols: None,
-        messages: nev![DownsamplingMessage::Query],
+        messages: nev![DataMessage::Query],
         rules: nev![DownsamplingRuleConf {
             key_expr: queryable_ke.try_into().unwrap(),
             freq: 0.01,
@@ -473,7 +473,7 @@ fn downsampling_reply_rate_test(flow: InterceptorFlow) {
         flows: Some(nev![flow]),
         interfaces: None,
         link_protocols: None,
-        messages: nev![DownsamplingMessage::Reply],
+        messages: nev![DataMessage::Reply],
         rules: nev![DownsamplingRuleConf {
             key_expr: queryable_ke.try_into().unwrap(),
             freq: 0.01,

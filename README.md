@@ -130,6 +130,7 @@ See more details and a directory of available plugins in the [zenohd](zenohd) re
 * **Kotlin** - [zenoh-kotlin](https://github.com/eclipse-zenoh/zenoh-kotlin)
 * **Java** - [zenoh-java](https://github.com/eclipse-zenoh/zenoh-java)
 * **TypeScript** - [zenoh-ts](https://github.com/eclipse-zenoh/zenoh-ts) - WebSocket client for the plugin in [zenohd](zenohd)
+* **Go** - [zenoh-go](https://github.com/eclipse-zenoh/zenoh-go)
 
 # Troubleshooting
 
