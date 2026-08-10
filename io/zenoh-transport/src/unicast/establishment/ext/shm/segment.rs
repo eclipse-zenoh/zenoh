@@ -52,7 +52,7 @@ struct ShmTransportMetadata {
 }
 
 impl ShmTransportMetadata {
-    fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+    fn validate(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
         if self.challenge != expected_challenge {
             tracing::debug!(
                 "{} Challenge mismatch: expected: {}, found in shm: {}.",
@@ -73,6 +73,16 @@ impl ShmTransportMetadata {
             return false;
         }
 
+        if self.id_count as usize > self.protocols.len() {
+            tracing::warn!(
+                "{} Protocol count mismatch: ours: {}, theirs: {}.",
+                s,
+                self.protocols.len(),
+                self.id_count
+            );
+            return false;
+        }
+
         true
     }
 
@@ -82,6 +92,10 @@ impl ShmTransportMetadata {
 
     fn counter(&self, id: ShmCounterID) -> &AtomicU32 {
         &self.shm_counters[id as usize]
+    }
+
+    pub fn validate_counter_index(&self, id: ShmCounterID) -> bool {
+        (id as usize) < self.shm_counters.len()
     }
 }
 
@@ -155,8 +169,8 @@ impl TXAuthSegment {
         })
     }
 
-    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
-        self.segment.data.validate_challenge(expected_challenge, s)
+    pub fn validate(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+        self.segment.data.validate(expected_challenge, s)
     }
 
     pub fn segment_id(&self) -> AuthSegmentID {
@@ -273,11 +287,16 @@ pub struct ShmRXCounterLease {
 }
 
 impl ShmRXCounterLease {
-    pub fn new(segment: Arc<RXAuthSegment>, counter_index: ShmCounterID) -> Self {
-        Self {
-            segment,
-            counter_index,
-        }
+    pub fn new(segment: Arc<RXAuthSegment>, counter_index: ShmCounterID) -> ZResult<Self> {
+        segment
+            .segment
+            .data
+            .validate_counter_index(counter_index)
+            .then_some(Self {
+                segment,
+                counter_index,
+            })
+            .ok_or_else(|| zerror!("Invalid counter index: {}", counter_index).into())
     }
 
     pub fn counter_decrease(&self) {

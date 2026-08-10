@@ -69,8 +69,8 @@ impl AuthUnicast {
         Ok(Self { segment })
     }
 
-    pub fn validate_challenge(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
-        self.segment.validate_challenge(expected_challenge, s)
+    pub fn validate(&self, expected_challenge: AuthChallenge, s: &str) -> bool {
+        self.segment.validate(expected_challenge, s)
     }
 
     pub fn segment_id(&self) -> AuthSegmentID {
@@ -346,7 +346,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Verify that Bob has correctly read Alice challenge
-        if !self.inner.validate_challenge(init_ack.alice_challenge, S) {
+        if !self.inner.validate(init_ack.alice_challenge, S) {
             return Ok(());
         }
 
@@ -430,7 +430,10 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        let rx_handoff = RxHandoffChannel::new_rx(segment, open_ack.bob_counters);
+        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_ack.bob_counters) else {
+            tracing::trace!("{} Handoff channel creation error.", S);
+            return Ok(());
+        };
 
         self.rx_lease
             .set(rx_handoff)
@@ -561,12 +564,15 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Verify that Alice has correctly read Bob challenge
-        if !self.inner.validate_challenge(open_syn.bob_challenge, S) {
+        if !self.inner.validate(open_syn.bob_challenge, S) {
             return Ok(());
         }
 
         // Allocate RX counter for this session
-        let rx_handoff = RxHandoffChannel::new_rx(segment, open_syn.alice_counters);
+        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_syn.alice_counters) else {
+            tracing::trace!("{} Handoff channel creation error.", S);
+            return Ok(());
+        };
 
         self.rx_lease
             .set(rx_handoff)

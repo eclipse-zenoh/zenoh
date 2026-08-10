@@ -70,15 +70,16 @@ impl<T: Sized> HandoffConfig<T> {
 pub type RxHandoffChannel = HandoffConfig<ShmRXCounterLease>;
 
 impl RxHandoffChannel {
-    pub fn new_rx(segment: &Arc<RXAuthSegment>, ids: HandoffCounterIds) -> Self {
-        match ids {
+    pub fn new_rx(segment: &Arc<RXAuthSegment>, ids: HandoffCounterIds) -> ZResult<Self> {
+        Ok(match ids {
             HandoffCounterIds::Disabled => Self::Disabled,
             HandoffCounterIds::PerPrio(prio_container) => {
-                let prio_container = prio_container
-                    .map(|counter_id| ShmRXCounterLease::new(segment.clone(), counter_id));
+                let prio_container = prio_container.map_fallable(|counter_id| {
+                    ShmRXCounterLease::new(segment.clone(), *counter_id)
+                })?;
                 Self::PerPrio(prio_container)
             }
-        }
+        })
     }
 
     pub fn on_rx(&self, priority: Priority) {

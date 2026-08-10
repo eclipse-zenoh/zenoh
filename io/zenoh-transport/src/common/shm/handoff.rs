@@ -53,6 +53,23 @@ impl<T: Sized> PriorityContainer<T> {
         PriorityContainer::new(self.per_prio_objects.map(map_fn))
     }
 
+    pub fn map_fallable<Tother: Sized, E>(
+        self,
+        mut map_fn: impl FnMut(&T) -> Result<Tother, E>,
+    ) -> Result<PriorityContainer<Tother>, E> {
+        let per_prio_objects = [
+            map_fn(&self.per_prio_objects[0])?,
+            map_fn(&self.per_prio_objects[1])?,
+            map_fn(&self.per_prio_objects[2])?,
+            map_fn(&self.per_prio_objects[3])?,
+            map_fn(&self.per_prio_objects[4])?,
+            map_fn(&self.per_prio_objects[5])?,
+            map_fn(&self.per_prio_objects[6])?,
+            map_fn(&self.per_prio_objects[7])?,
+        ];
+        Ok(PriorityContainer::new(per_prio_objects))
+    }
+
     pub fn map_ref<Tother: Sized>(
         &self,
         map_fn: impl Fn(&T) -> Tother,
