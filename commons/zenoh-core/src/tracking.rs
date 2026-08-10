@@ -54,11 +54,12 @@
 //! [`assert_no_locks_held`] ignores it.
 //!
 //! This is not a convenience. Measured over the `zenoh` and `zenoh-ext` suites,
-//! **30 of 43** reported call-out sites were one delivery-ordering lock —
-//! `zenoh-transport`'s per-priority RX channel mutex, which is what keeps
-//! reliable delivery ordered across a transport's links. Without the
-//! distinction the report is 70 % noise about a lock nobody should touch;
-//! with it, what remains is the set worth reading.
+//! 43 distinct call-out sites held a guard, and **30 of them held
+//! `zenoh-transport`'s per-priority RX channel mutex — 26 holding nothing
+//! else.** That mutex is what keeps reliable delivery ordered across a
+//! transport's links; it is not a defect and must not be "fixed" to satisfy
+//! this check. Exempting it therefore suppresses 26 of 43 reports outright,
+//! and what remains is the set worth reading.
 //!
 //! **Reaching for `zlock_delivery!` to silence a report defeats the check.**
 //! It is correct only where holding the lock across the call is the intent.
