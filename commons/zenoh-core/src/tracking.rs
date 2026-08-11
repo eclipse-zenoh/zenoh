@@ -53,13 +53,21 @@
 //! [`zlock_delivery!`](crate::zlock_delivery) records `DeliveryOrdering`, and
 //! [`assert_no_locks_held`] ignores it.
 //!
-//! This is not a convenience. Measured over the `zenoh` and `zenoh-ext` suites,
-//! 43 distinct call-out sites held a guard, and **30 of them held
-//! `zenoh-transport`'s per-priority RX channel mutex — 26 holding nothing
-//! else.** That mutex is what keeps reliable delivery ordered across a
-//! transport's links; it is not a defect and must not be "fixed" to satisfy
-//! this check. Exempting it therefore suppresses 26 of 43 reports outright,
-//! and what remains is the set worth reading.
+//! This is not a convenience. Measured over the `zenoh` and `zenoh-ext` suites:
+//!
+//! | | distinct call-out sites reported |
+//! |---|---|
+//! | every guard treated alike | **43** |
+//! | delivery-ordering guards exempted | **17** |
+//!
+//! The 26 suppressed all held `zenoh-transport`'s per-priority RX channel mutex
+//! and nothing else. That mutex is what keeps reliable delivery ordered across a
+//! transport's links; it is not a defect and must not be "fixed" to satisfy this
+//! check. The 17 that remain involve six distinct state locks, and **every one
+//! of them corresponds to a filed defect** — none is unexplained.
+//!
+//! That ratio is the difference between a check someone acts on and one they
+//! learn to ignore.
 //!
 //! **Reaching for `zlock_delivery!` to silence a report defeats the check.**
 //! It is correct only where holding the lock across the call is the intent.
