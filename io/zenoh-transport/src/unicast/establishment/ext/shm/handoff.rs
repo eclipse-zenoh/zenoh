@@ -212,8 +212,7 @@ impl TxHandoff {
         let inner = self.inner.clone();
         let lock = zlock!(self.inner.not_commit);
 
-        // SAFETY: this is safe because we store Arc to inner together with this reference. Should
-        // track that reference never leaves  LockedTxHandoff
+        // SAFETY: `inner` keeps the mutex alive. LockedTxHandoff drops the guard first.
         let lock: std::sync::MutexGuard<'static, VecDeque<ShmBufHardRef>> =
             unsafe { std::mem::transmute(lock) };
         LockedTxHandoff { inner, lock }
