@@ -21,6 +21,331 @@ use std::{
     sync::{Arc, RwLock, Weak},
 };
 
+pub(crate) mod resource_trace {
+    use super::Resource;
+    use std::{
+        collections::{HashMap, VecDeque},
+        fmt,
+        io::{self, Write},
+        panic,
+        sync::{
+            atomic::{AtomicBool, AtomicU64, Ordering},
+            Arc, Mutex, MutexGuard, OnceLock, Weak,
+        },
+    };
+
+    #[derive(Clone, Debug, Default)]
+    struct ResourceRecord {
+        expr: String,
+        parent: Option<usize>,
+        created_seq: u64,
+        context_seq: u64,
+        dropped_seq: u64,
+        last_seq: u64,
+        last_op: String,
+    }
+
+    struct TraceState {
+        enabled: bool,
+        max_events: usize,
+        seq: AtomicU64,
+        dumped: AtomicBool,
+        events: Mutex<VecDeque<String>>,
+        registry: Mutex<HashMap<usize, ResourceRecord>>,
+    }
+
+    static STATE: OnceLock<TraceState> = OnceLock::new();
+
+    fn init_state() -> TraceState {
+        let enabled = std::env::var("ZENOH_RESOURCE_TRACE")
+            .map(|v| !v.is_empty() && v != "0" && v.to_ascii_lowercase() != "false")
+            .unwrap_or(false);
+        let max_events = std::env::var("ZENOH_RESOURCE_TRACE_RING")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(100_000);
+        if enabled {
+            let previous_hook = panic::take_hook();
+            panic::set_hook(Box::new(move |info| {
+                dump("panic hook");
+                previous_hook(info);
+            }));
+        }
+        TraceState {
+            enabled,
+            max_events,
+            seq: AtomicU64::new(0),
+            dumped: AtomicBool::new(false),
+            events: Mutex::new(VecDeque::with_capacity(max_events.min(1024))),
+            registry: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn state() -> &'static TraceState {
+        STATE.get_or_init(init_state)
+    }
+
+    fn lock<'a, T>(mutex: &'a Mutex<T>) -> MutexGuard<'a, T> {
+        match mutex.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+
+    pub(crate) fn enabled() -> bool {
+        state().enabled
+    }
+
+    fn thread_label() -> String {
+        let thread = std::thread::current();
+        match thread.name() {
+            Some(name) => format!("{:?}/{}", thread.id(), name),
+            None => format!("{:?}", thread.id()),
+        }
+    }
+
+    fn next_seq() -> u64 {
+        state().seq.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    fn push_event(seq: u64, msg: String) {
+        let state = state();
+        let mut events = lock(&state.events);
+        if events.len() >= state.max_events {
+            events.pop_front();
+        }
+        events.push_back(format!(
+            "seq={} pid={} thread={} {}",
+            seq,
+            std::process::id(),
+            thread_label(),
+            msg
+        ));
+    }
+
+    pub(crate) fn event(args: fmt::Arguments<'_>) {
+        if !enabled() {
+            return;
+        }
+        let seq = next_seq();
+        push_event(seq, args.to_string());
+    }
+
+    fn resource_ptr(res: &Resource) -> usize {
+        res as *const Resource as usize
+    }
+
+    pub(crate) fn arc_ptr(res: &Arc<Resource>) -> usize {
+        Arc::as_ptr(res) as usize
+    }
+
+    pub(crate) fn weak_ptr(weak: &Weak<Resource>) -> usize {
+        Weak::as_ptr(weak) as usize
+    }
+
+    fn parent_ptr(res: &Resource) -> Option<usize> {
+        res.parent.as_ref().map(arc_ptr)
+    }
+
+    fn upsert_record(ptr: usize, expr: String, parent: Option<usize>, seq: u64, op: &str) {
+        let mut registry = lock(&state().registry);
+        let record = registry.entry(ptr).or_insert_with(ResourceRecord::default);
+        if !expr.is_empty() || record.expr.is_empty() {
+            record.expr = expr;
+        }
+        record.parent = parent;
+        record.last_seq = seq;
+        record.last_op = op.to_string();
+    }
+
+    pub(crate) fn mark_created(res: &Arc<Resource>, op: &str) {
+        if !enabled() {
+            return;
+        }
+        let seq = next_seq();
+        let ptr = arc_ptr(res);
+        let parent = parent_ptr(res);
+        {
+            let mut registry = lock(&state().registry);
+            let record = registry.entry(ptr).or_insert_with(ResourceRecord::default);
+            record.expr = res.expr.clone();
+            record.parent = parent;
+            record.created_seq = seq;
+            record.last_seq = seq;
+            record.last_op = op.to_string();
+        }
+        push_event(seq, format!("RESOURCE_CREATED op={} {}", op, arc_summary(res)));
+    }
+
+    pub(crate) fn mark_context_attached(res: &Arc<Resource>, op: &str) {
+        if !enabled() {
+            return;
+        }
+        let seq = next_seq();
+        let ptr = arc_ptr(res);
+        let parent = parent_ptr(res);
+        {
+            let mut registry = lock(&state().registry);
+            let record = registry.entry(ptr).or_insert_with(ResourceRecord::default);
+            record.expr = res.expr.clone();
+            record.parent = parent;
+            record.context_seq = seq;
+            record.last_seq = seq;
+            record.last_op = op.to_string();
+        }
+        push_event(seq, format!("RESOURCE_CONTEXT_ATTACHED op={} {}", op, arc_summary(res)));
+    }
+
+    pub(crate) fn mark_drop(res: &Resource) {
+        if !enabled() {
+            return;
+        }
+        let seq = next_seq();
+        let ptr = resource_ptr(res);
+        {
+            let mut registry = lock(&state().registry);
+            let record = registry.entry(ptr).or_insert_with(ResourceRecord::default);
+            record.expr = res.expr.clone();
+            record.parent = parent_ptr(res);
+            record.dropped_seq = seq;
+            record.last_seq = seq;
+            record.last_op = "drop".to_string();
+        }
+        push_event(
+            seq,
+            format!(
+                "RESOURCE_DROP ptr=0x{ptr:x} expr={:?} parent={} children={} context={} matches={} sessions={}",
+                res.expr,
+                parent_ptr(res)
+                    .map(|p| format!("0x{p:x}"))
+                    .unwrap_or_else(|| "none".to_string()),
+                res.children.iter().count(),
+                res.context.is_some(),
+                res.context.as_ref().map(|c| c.matches.len()).unwrap_or(0),
+                res.session_ctxs.len(),
+            ),
+        );
+    }
+
+    pub(crate) fn mark_resource_event(op: &str, res: &Arc<Resource>) {
+        if !enabled() {
+            return;
+        }
+        let seq = next_seq();
+        upsert_record(arc_ptr(res), res.expr.clone(), parent_ptr(res), seq, op);
+        push_event(seq, format!("{} {}", op, arc_summary(res)));
+    }
+
+    pub(crate) fn arc_summary(res: &Arc<Resource>) -> String {
+        format!(
+            "ptr=0x{:x} expr={:?} parent={} strong={} weak={} children={} context={} matches={} sessions={}",
+            arc_ptr(res),
+            res.expr,
+            parent_ptr(res)
+                .map(|p| format!("0x{p:x}"))
+                .unwrap_or_else(|| "none".to_string()),
+            Arc::strong_count(res),
+            Arc::weak_count(res),
+            res.children.iter().count(),
+            res.context.is_some(),
+            res.context.as_ref().map(|c| c.matches.len()).unwrap_or(0),
+            res.session_ctxs.len(),
+        )
+    }
+
+    pub(crate) fn weak_summary(weak: &Weak<Resource>) -> String {
+        let ptr = weak_ptr(weak);
+        match weak.upgrade() {
+            Some(res) => format!("weak=0x{ptr:x} live=true {}", arc_summary(&res)),
+            None => {
+                let registry = lock(&state().registry);
+                match registry.get(&ptr) {
+                    Some(record) => format!(
+                        "weak=0x{ptr:x} live=false expr={:?} parent={} created_seq={} context_seq={} dropped_seq={} last_seq={} last_op={}",
+                        record.expr,
+                        record
+                            .parent
+                            .map(|p| format!("0x{p:x}"))
+                            .unwrap_or_else(|| "none".to_string()),
+                        record.created_seq,
+                        record.context_seq,
+                        record.dropped_seq,
+                        record.last_seq,
+                        record.last_op,
+                    ),
+                    None => format!("weak=0x{ptr:x} live=false registry=missing"),
+                }
+            }
+        }
+    }
+
+    pub(crate) fn dump(reason: &str) {
+        if !enabled() {
+            return;
+        }
+        let state = state();
+        if state.dumped.swap(true, Ordering::Relaxed) {
+            let mut stderr = io::stderr().lock();
+            let _ = writeln!(
+                stderr,
+                "\n========== ZENOH RESOURCE TRACE DUMP: {} skipped; already dumped ==========" ,
+                reason
+            );
+            return;
+        }
+        let events: Vec<String> = lock(&state.events).iter().cloned().collect();
+        let mut records: Vec<(usize, ResourceRecord)> = lock(&state.registry)
+            .iter()
+            .map(|(ptr, record)| (*ptr, record.clone()))
+            .collect();
+        records.sort_by(|a, b| b.1.last_seq.cmp(&a.1.last_seq));
+
+        let mut stderr = io::stderr().lock();
+        let _ = writeln!(
+            stderr,
+            "\n========== ZENOH RESOURCE TRACE DUMP: {} ==========",
+            reason
+        );
+        let _ = writeln!(stderr, "----- recent events ({} kept) -----", events.len());
+        for event in events {
+            let _ = writeln!(stderr, "{}", event);
+        }
+        let _ = writeln!(stderr, "----- resource registry ({} records, newest 200) -----", records.len());
+        for (ptr, record) in records.into_iter().take(200) {
+            let _ = writeln!(
+                stderr,
+                "ptr=0x{ptr:x} expr={:?} parent={} created_seq={} context_seq={} dropped_seq={} last_seq={} last_op={}",
+                record.expr,
+                record
+                    .parent
+                    .map(|p| format!("0x{p:x}"))
+                    .unwrap_or_else(|| "none".to_string()),
+                record.created_seq,
+                record.context_seq,
+                record.dropped_seq,
+                record.last_seq,
+                record.last_op,
+            );
+        }
+        let _ = writeln!(stderr, "========== END ZENOH RESOURCE TRACE DUMP ==========");
+    }
+
+    pub(crate) fn dump_dead_weak(reason: &str, owner: Option<&Arc<Resource>>, weak: &Weak<Resource>) {
+        if !enabled() {
+            return;
+        }
+        event(format_args!(
+            "DEAD_WEAK reason={} owner={} {}",
+            reason,
+            owner
+                .map(arc_summary)
+                .unwrap_or_else(|| "none".to_string()),
+            weak_summary(weak),
+        ));
+        dump(reason);
+    }
+}
+
 use zenoh_collections::{IntHashMap, IntHashSet, SingleOrBoxHashSet};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
@@ -309,6 +634,12 @@ pub struct Resource {
     pub(crate) session_ctxs: IntHashMap<usize, Arc<SessionContext>>,
 }
 
+impl Drop for Resource {
+    fn drop(&mut self) {
+        resource_trace::mark_drop(self);
+    }
+}
+
 impl PartialEq for Resource {
     fn eq(&self, other: &Self) -> bool {
         self.expr() == other.expr()
@@ -441,7 +772,7 @@ impl Resource {
     }
 
     pub fn root() -> Arc<Resource> {
-        Arc::new(Resource {
+        let res = Arc::new(Resource {
             parent: None,
             expr: String::from(""),
             suffix: 0,
@@ -449,32 +780,133 @@ impl Resource {
             children: SingleOrBoxHashSet::new(),
             context: None,
             session_ctxs: IntHashMap::new(),
-        })
+        });
+        resource_trace::mark_created(&res, "root");
+        res
     }
 
+    #[track_caller]
     pub fn clean(res: &mut Arc<Resource>) {
+        let caller = std::panic::Location::caller();
+        if resource_trace::enabled() {
+            resource_trace::event(format_args!(
+                "CLEAN_ENTER caller={}:{} before_clone strong={} weak={} {}",
+                caller.file(),
+                caller.line(),
+                Arc::strong_count(res),
+                Arc::weak_count(res),
+                resource_trace::arc_summary(res),
+            ));
+        }
         let mut resclone = res.clone();
+        if resource_trace::enabled() {
+            resource_trace::event(format_args!(
+                "CLEAN_AFTER_CLONE caller={}:{} strong={} weak={} {}",
+                caller.file(),
+                caller.line(),
+                Arc::strong_count(res),
+                Arc::weak_count(res),
+                resource_trace::arc_summary(res),
+            ));
+        }
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
-            if Arc::strong_count(res) <= 3 && res.children.is_empty() {
+            let removable = Arc::strong_count(res) <= 3 && res.children.is_empty();
+            if resource_trace::enabled() {
+                resource_trace::event(format_args!(
+                    "CLEAN_DECISION caller={}:{} removable={} strong={} weak={} childless={} {}",
+                    caller.file(),
+                    caller.line(),
+                    removable,
+                    Arc::strong_count(res),
+                    Arc::weak_count(res),
+                    res.children.is_empty(),
+                    resource_trace::arc_summary(res),
+                ));
+            }
+            if removable {
                 // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 tracing::debug!("Unregister resource {}", res.expr());
+                resource_trace::mark_resource_event("CLEAN_REMOVING", res);
                 if let Some(context) = mutres.context.as_mut() {
-                    for match_ in &mut context.matches {
-                        let mut match_ = match_.upgrade().unwrap();
+                    for weak in &mut context.matches {
+                        if resource_trace::enabled() {
+                            resource_trace::event(format_args!(
+                                "CLEAN_MATCH_ITER owner={} {}",
+                                resource_trace::arc_summary(res),
+                                resource_trace::weak_summary(weak),
+                            ));
+                        }
+                        let mut match_ = match weak.upgrade() {
+                            Some(match_) => match_,
+                            None => {
+                                resource_trace::dump_dead_weak(
+                                    "dead weak in Resource::clean owner context.matches",
+                                    Some(res),
+                                    weak,
+                                );
+                                panic!(
+                                    "dead Weak<Resource> in Resource::clean owner context.matches weak=0x{:x} owner={}",
+                                    resource_trace::weak_ptr(weak),
+                                    res.expr()
+                                );
+                            }
+                        };
                         if !Arc::ptr_eq(&match_, res) {
+                            let match_summary = resource_trace::arc_summary(&match_);
+                            let match_expr = match_.expr().to_string();
                             let mutmatch = get_mut_unchecked(&mut match_);
                             if let Some(ctx) = mutmatch.context.as_mut() {
-                                ctx.matches
-                                    .retain(|x| !Arc::ptr_eq(&x.upgrade().unwrap(), res));
+                                let before = ctx.matches.len();
+                                ctx.matches.retain(|x| match x.upgrade() {
+                                    Some(upgraded) => !Arc::ptr_eq(&upgraded, res),
+                                    None => {
+                                        resource_trace::dump_dead_weak(
+                                            "dead weak in Resource::clean reciprocal retain",
+                                            None,
+                                            x,
+                                        );
+                                        panic!(
+                                            "dead Weak<Resource> in Resource::clean reciprocal retain weak=0x{:x} owner={}",
+                                            resource_trace::weak_ptr(x),
+                                            match_expr
+                                        );
+                                    }
+                                });
+                                if resource_trace::enabled() {
+                                    resource_trace::event(format_args!(
+                                        "CLEAN_RECIPROCAL_RETAIN owner={} removing={} before={} after={}",
+                                        match_summary,
+                                        resource_trace::arc_summary(res),
+                                        before,
+                                        ctx.matches.len(),
+                                    ));
+                                }
                             }
                         }
                     }
                 }
                 mutres.nonwild_prefix.take();
                 {
-                    get_mut_unchecked(parent).children.remove(res.suffix());
+                    let parent_mut = get_mut_unchecked(parent);
+                    let before = parent_mut.children.iter().count();
+                    parent_mut.children.remove(res.suffix());
+                    let after = parent_mut.children.iter().count();
+                    if resource_trace::enabled() {
+                        resource_trace::event(format_args!(
+                            "CLEAN_PARENT_CHILD_REMOVE child={} parent={} before={} after={}",
+                            resource_trace::arc_summary(res),
+                            resource_trace::arc_summary(parent),
+                            before,
+                            after,
+                        ));
+                    }
                 }
+                resource_trace::event(format_args!(
+                    "CLEAN_RECURSE_PARENT child={} parent={}",
+                    resource_trace::arc_summary(res),
+                    resource_trace::arc_summary(parent),
+                ));
                 Resource::clean(parent);
             }
         }
@@ -520,12 +952,33 @@ impl Resource {
         let mut from = from.clone();
         // do not use recursion as the tree may have arbitrary depth
         while let Some((chunk, rest)) = Self::split_first_chunk(suffix) {
-            if let Some(child) = get_mut_unchecked(&mut from).children.get(chunk) {
-                from = child.0.clone();
+            let existing_child = get_mut_unchecked(&mut from)
+                .children
+                .get(chunk)
+                .map(|child| child.0.clone());
+            if let Some(child) = existing_child {
+                if resource_trace::enabled() {
+                    resource_trace::event(format_args!(
+                        "MAKE_RESOURCE_EXISTING chunk={:?} from={} child={}",
+                        chunk,
+                        resource_trace::arc_summary(&from),
+                        resource_trace::arc_summary(&child),
+                    ));
+                }
+                from = child;
             } else {
                 let new = Arc::new(Resource::new(&from, chunk, None));
+                resource_trace::mark_created(&new, "make_resource_child");
                 if rest.is_empty() {
                     tracing::debug!("Register resource {}", new.expr());
+                }
+                if resource_trace::enabled() {
+                    resource_trace::event(format_args!(
+                        "MAKE_RESOURCE_CHILD_INSERT chunk={:?} parent={} child={}",
+                        chunk,
+                        resource_trace::arc_summary(&from),
+                        resource_trace::arc_summary(&new),
+                    ));
                 }
                 get_mut_unchecked(&mut from)
                     .children
@@ -814,27 +1267,89 @@ impl Resource {
         get_matches_from(key_expr, &tables.root_res, &mut matches);
         matches.sort_unstable_by_key(Weak::as_ptr);
         matches.dedup_by_key(|res| Weak::as_ptr(res));
+        if resource_trace::enabled() {
+            let summaries = matches
+                .iter()
+                .map(resource_trace::weak_summary)
+                .collect::<Vec<_>>()
+                .join(", ");
+            resource_trace::event(format_args!(
+                "GET_MATCHES key_expr={} count={} [{}]",
+                key_expr.as_str(),
+                matches.len(),
+                summaries,
+            ));
+        }
         matches
     }
 
+    #[track_caller]
     pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
+        let caller = std::panic::Location::caller();
         if res.context.is_some() {
-            for match_ in &matches {
-                let mut match_ = match_.upgrade().unwrap();
+            if resource_trace::enabled() {
+                let summaries = matches
+                    .iter()
+                    .map(resource_trace::weak_summary)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                resource_trace::event(format_args!(
+                    "MATCH_RESOURCE_BEGIN caller={}:{} target={} count={} [{}]",
+                    caller.file(),
+                    caller.line(),
+                    resource_trace::arc_summary(res),
+                    matches.len(),
+                    summaries,
+                ));
+            }
+            for weak in &matches {
+                let mut match_ = match weak.upgrade() {
+                    Some(match_) => match_,
+                    None => {
+                        resource_trace::dump_dead_weak(
+                            "dead weak in Resource::match_resource input matches",
+                            Some(res),
+                            weak,
+                        );
+                        panic!(
+                            "dead Weak<Resource> in Resource::match_resource weak=0x{:x} target={}",
+                            resource_trace::weak_ptr(weak),
+                            res.expr()
+                        );
+                    }
+                };
+                if resource_trace::enabled() {
+                    resource_trace::event(format_args!(
+                        "MATCH_RESOURCE_EDGE_PUSH matched={} target={}",
+                        resource_trace::arc_summary(&match_),
+                        resource_trace::arc_summary(res),
+                    ));
+                }
                 get_mut_unchecked(&mut match_)
                     .context_mut()
                     .matches
                     .push(Arc::downgrade(res));
             }
             get_mut_unchecked(res).context_mut().matches = matches;
+            resource_trace::mark_resource_event("MATCH_RESOURCE_ASSIGN_TARGET_MATCHES", res);
         } else {
             tracing::error!("Call match_resource() on context less res {}", res.expr());
+            resource_trace::event(format_args!(
+                "MATCH_RESOURCE_CONTEXTLESS caller={}:{} target={}",
+                caller.file(),
+                caller.line(),
+                resource_trace::arc_summary(res),
+            ));
         }
     }
 
     pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
+            resource_trace::mark_resource_event("RESOURCE_CONTEXT_ATTACH_BEGIN", res);
             get_mut_unchecked(res).context = Some(Box::new(ResourceContext::new(hat)));
+            resource_trace::mark_context_attached(res, "upgrade_resource");
+        } else {
+            resource_trace::mark_resource_event("RESOURCE_CONTEXT_ATTACH_SKIPPED_ALREADY_PRESENT", res);
         }
     }
 
@@ -865,6 +1380,13 @@ pub(crate) fn register_expr(
     expr_id: ExprId,
     expr: &WireExpr,
 ) {
+    resource_trace::event(format_args!(
+        "REGISTER_EXPR_ENTER face_id={} expr_id={} scope={} suffix={:?}",
+        face.id,
+        expr_id,
+        expr.scope,
+        expr.suffix.as_ref(),
+    ));
     let rtables = zread!(tables.tables);
     match rtables
         .get_mapping(face, &expr.scope, expr.mapping)
@@ -932,9 +1454,22 @@ pub(crate) fn register_expr(
 }
 
 pub(crate) fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
+    resource_trace::event(format_args!(
+        "UNREGISTER_EXPR_ENTER face_id={} expr_id={}",
+        face.id,
+        expr_id,
+    ));
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
-        Some(mut res) => Resource::clean(&mut res),
+        Some(mut res) => {
+            resource_trace::event(format_args!(
+                "UNREGISTER_EXPR_REMOVE_MAPPING face_id={} expr_id={} res={}",
+                face.id,
+                expr_id,
+                resource_trace::arc_summary(&res),
+            ));
+            Resource::clean(&mut res)
+        }
         None => tracing::error!("{} Undeclare unknown resource!", face),
     }
     drop(wtables);
@@ -946,6 +1481,13 @@ pub(crate) fn register_expr_interest(
     id: InterestId,
     expr: Option<&WireExpr>,
 ) {
+    resource_trace::event(format_args!(
+        "REGISTER_EXPR_INTEREST_ENTER face_id={} interest_id={} expr={}",
+        face.id,
+        id,
+        expr.map(|expr| format!("scope={} suffix={:?}", expr.scope, expr.suffix.as_ref()))
+            .unwrap_or_else(|| "none".to_string()),
+    ));
     if let Some(expr) = expr {
         let rtables = zread!(tables.tables);
         match rtables
@@ -1001,6 +1543,11 @@ pub(crate) fn unregister_expr_interest(
     face: &mut Arc<FaceState>,
     id: InterestId,
 ) {
+    resource_trace::event(format_args!(
+        "UNREGISTER_EXPR_INTEREST_ENTER face_id={} interest_id={}",
+        face.id,
+        id,
+    ));
     let wtables = zwrite!(tables.tables);
     get_mut_unchecked(face).remote_key_interests.remove(&id);
     drop(wtables);

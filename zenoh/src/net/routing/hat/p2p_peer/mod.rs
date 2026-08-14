@@ -51,6 +51,7 @@ use self::{
 use super::{
     super::dispatcher::{
         face::FaceState,
+        resource::resource_trace,
         tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
     },
     HatBaseTrait, HatTrait, SendDeclare,
@@ -260,8 +261,29 @@ impl HatBaseTrait for HatCode {
             undeclare_simple_subscription(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
+                for weak in &res.context().matches {
+                    if resource_trace::enabled() {
+                        resource_trace::event(format_args!(
+                            "HAT_P2P_CLOSE_SUB_MATCH_ITER owner={} {}",
+                            resource_trace::arc_summary(&res),
+                            resource_trace::weak_summary(weak),
+                        ));
+                    }
+                    let mut match_ = match weak.upgrade() {
+                        Some(match_) => match_,
+                        None => {
+                            resource_trace::dump_dead_weak(
+                                "dead weak in p2p_peer close_face remote_subs",
+                                Some(&res),
+                                weak,
+                            );
+                            panic!(
+                                "dead Weak<Resource> in p2p_peer close_face remote_subs weak=0x{:x} owner={}",
+                                resource_trace::weak_ptr(weak),
+                                res.expr()
+                            );
+                        }
+                    };
                     if !Arc::ptr_eq(&match_, &res) {
                         get_mut_unchecked(&mut match_)
                             .context_mut()
@@ -282,8 +304,29 @@ impl HatBaseTrait for HatCode {
             undeclare_simple_queryable(&mut wtables, &mut face_clone, &mut res, send_declare);
 
             if res.context.is_some() {
-                for match_ in &res.context().matches {
-                    let mut match_ = match_.upgrade().unwrap();
+                for weak in &res.context().matches {
+                    if resource_trace::enabled() {
+                        resource_trace::event(format_args!(
+                            "HAT_P2P_CLOSE_QABL_MATCH_ITER owner={} {}",
+                            resource_trace::arc_summary(&res),
+                            resource_trace::weak_summary(weak),
+                        ));
+                    }
+                    let mut match_ = match weak.upgrade() {
+                        Some(match_) => match_,
+                        None => {
+                            resource_trace::dump_dead_weak(
+                                "dead weak in p2p_peer close_face remote_qabls",
+                                Some(&res),
+                                weak,
+                            );
+                            panic!(
+                                "dead Weak<Resource> in p2p_peer close_face remote_qabls weak=0x{:x} owner={}",
+                                resource_trace::weak_ptr(weak),
+                                res.expr()
+                            );
+                        }
+                    };
                     if !Arc::ptr_eq(&match_, &res) {
                         get_mut_unchecked(&mut match_)
                             .context_mut()

@@ -1,0 +1,3 @@
+[2m2026-08-14T11:21:19.466861Z[0m [32m INFO[0m ThreadId(02) [2mzenoh::net::runtime[0m[2m:[0m Using ZID: c8d0b06b8d96b7123ea23a1563a6930e
+[2m2026-08-14T11:21:19.505914Z[0m [32m INFO[0m ThreadId(02) [2mzenoh::net::runtime::orchestrator[0m[2m:[0m Zenoh can be reached at: tcp/172.17.0.3:7447
+Started Zenoh router with id c8d0b06b8d96b7123ea23a1563a6930e
