@@ -221,8 +221,10 @@ impl TxHandoff {
 }
 
 struct LockedTxHandoff {
-    inner: Arc<TxHandoffInner>,
+    // SAFETY: `lock` borrows into the mutex that `inner` owns. Rust drops fields in
+    // declaration order. Keep `lock` first, or `inner` frees the mutex too early.
     lock: std::sync::MutexGuard<'static, VecDeque<ShmBufHardRef>>,
+    inner: Arc<TxHandoffInner>,
 }
 
 impl LockedTxHandoff {
