@@ -36,14 +36,13 @@ use super::{
     link::{TransportLinkMulticastConfigUniversal, TransportLinkMulticastUniversal},
 };
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::MulticastTransportShmContext;
+use crate::common::shm::shm_context::MulticastTransportShmContext;
 use crate::{
     multicast::{
         link::TransportLinkMulticast, TransportConfigMulticast, TransportMulticastEventHandler,
     },
     TransportManager, TransportPeer, TransportPeerEventHandler,
 };
-// use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
 /*             TRANSPORT             */
