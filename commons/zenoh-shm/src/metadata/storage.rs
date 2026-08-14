@@ -93,10 +93,14 @@ impl MetadataStorage {
 
     pub fn reclaim(&self, descriptor: OwnedMetadataDescriptor) {
         // header deallocated - increment it's generation to invalidate any existing references
-        descriptor
-            .header()
+        let header = descriptor.header();
+        header
             .generation
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        // clear rx_ack so the next use of this slot starts with a clean state
+        header
+            .rx_ack
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let mut guard = self.available.lock().unwrap();
         guard.push_back(descriptor);
     }

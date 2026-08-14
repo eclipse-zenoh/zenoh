@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use std::time::Instant;
+
 use zenoh_protocol::{
     network::{NetworkMessageExt, NetworkMessageMut},
     transport::{TransportBodyLowLatencyRef, TransportMessageLowLatencyRef},
@@ -19,7 +22,7 @@ use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
+use crate::shm::{collect_shm_bufs, map_zmsg_to_partner, PendingShmBuf, SHM_PENDING_TTL};
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
@@ -36,11 +39,27 @@ impl TransportUnicastLowlatency {
             );
         }
 
+        // Collect before msg is re-bound as NetworkMessageRef.
+        #[cfg(feature = "shared-memory")]
+        let shm_bufs = collect_shm_bufs(&msg);
+
         let msg = msg.as_ref();
         let tmsg = TransportMessageLowLatencyRef {
             body: TransportBodyLowLatencyRef::Network(msg),
         };
         let res = self.send(tmsg);
+
+        #[cfg(feature = "shared-memory")]
+        if res.is_ok() && !shm_bufs.is_empty() {
+            let now = Instant::now();
+            let deadline = now + SHM_PENDING_TTL;
+            let mut pending = self.shm_pending.lock().expect("shm_pending lock");
+            pending.retain(|_, v| !v.buf.is_rx_acked() && v.deadline > now);
+            for buf in shm_bufs {
+                let key = buf.info.metadata.clone();
+                pending.insert(key, PendingShmBuf { buf, deadline });
+            }
+        }
 
         #[cfg(feature = "stats")]
         if res.is_ok() {
