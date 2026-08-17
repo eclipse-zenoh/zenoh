@@ -38,7 +38,7 @@ use crate::net::{
     routing::{
         dispatcher::{face::FaceId, region::RegionMap},
         hat::{HatTrait, Sources},
-        interceptor::{interceptor_factories, InterceptorFactory},
+        interceptor::{interceptors, InterceptorFactory, InterceptorState},
     },
     runtime::WeakRuntime,
 };
@@ -134,7 +134,10 @@ pub(crate) struct TablesData {
     pub(crate) face_counter: FaceId,
 
     pub(crate) next_interceptor_version: AtomicUsize,
-    pub(crate) interceptors: Vec<InterceptorFactory>,
+    pub(crate) interceptors: Arc<Vec<InterceptorFactory>>,
+    /// Shared so that a caller can read or refresh them once the routing tables are
+    /// unlocked again, since both are allowed to block.
+    pub(crate) interceptor_states: Arc<HashMap<&'static str, Arc<dyn InterceptorState>>>,
 
     pub(crate) faces: HashMap<FaceId, Arc<FaceState>>,
 
@@ -191,6 +194,7 @@ impl TablesData {
             &mut stats_keys,
             config.stats.filters().iter().map(|f| &*f.key),
         );
+        let built_interceptors = interceptors(config)?;
 
         Ok(TablesData {
             zid,
@@ -200,7 +204,8 @@ impl TablesData {
             queries_default_timeout,
             interests_timeout,
             root_res: Resource::root(),
-            interceptors: interceptor_factories(config)?,
+            interceptors: Arc::new(built_interceptors.factories),
+            interceptor_states: Arc::new(built_interceptors.states),
             next_interceptor_version: AtomicUsize::new(0),
             hats: hat,
             face_counter: 0,
@@ -533,8 +538,37 @@ impl TablesLock {
                 config.stats.filters().iter().map(|k| &*k.key),
             );
         }
-        tables.data.interceptors = interceptor_factories(config)?;
+        let built_interceptors = interceptors(config)?;
+        tables.data.interceptors = Arc::new(built_interceptors.factories);
+        tables.data.interceptor_states = Arc::new(built_interceptors.states);
         drop(tables);
+
+        // The new interceptors hold nothing yet about the transports already admitted, so
+        // they are given a chance to read it before those transports are handed over. Left
+        // out, an interceptor enforcing per-transport state would apply its empty self.
+        let (states, transports) = {
+            let tables = zread!(self.tables);
+            (
+                tables.data.interceptor_states.clone(),
+                tables
+                    .data
+                    .faces
+                    .values()
+                    .filter_map(|face| face.unicast_transport().cloned())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        for state in states.values() {
+            for transport in &transports {
+                if let Err(e) = state.prepare(transport) {
+                    tracing::error!(
+                        "Cannot prepare interceptor state for an already admitted transport: {}",
+                        e
+                    );
+                }
+            }
+        }
+
         let tables = zread!(self.tables);
         let version = tables
             .data

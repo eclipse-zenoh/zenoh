@@ -61,7 +61,10 @@ use crate::{
     bytes::Encoding,
     net::{
         primitives::Primitives,
-        routing::{dispatcher::tables::Tables, gateway::Resource, hat::Sources},
+        routing::{
+            dispatcher::tables::Tables, gateway::Resource, hat::Sources,
+            interceptor::ACCESS_CONTROL,
+        },
         runtime::{region, DynamicRuntime},
     },
     LONG_VERSION,
@@ -348,6 +351,17 @@ impl AdminSpace {
                 wire_expr: [&root_key, "/config/**"].concat().into(),
             }),
         });
+
+        primitives.send_declare(&mut Declare {
+            interest_id: None,
+            ext_qos: ext::QoSType::DECLARE,
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::DEFAULT,
+            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                id: runtime.next_id(),
+                wire_expr: [&root_key, "/", ACCESS_CONTROL, "/refresh"].concat().into(),
+            }),
+        });
     }
 
     pub fn key_expr_to_string<'a>(&self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
@@ -413,6 +427,39 @@ impl Primitives for AdminSpace {
                 return;
             }
         };
+
+        // Writing an identity here tells the router that what access control holds for it
+        // went stale, and is answered by reading it again. Handled off this thread because
+        // reading it can block, and this one is routing messages.
+        let local_access_control_refresh_key: OwnedKeyExpr = format!(
+            "@/{}/{}/{}/refresh",
+            self.zid, self.context.runtime.state.whatami, ACCESS_CONTROL,
+        )
+        .try_into()
+        .unwrap();
+        if local_access_control_refresh_key.intersects(&key_expr) {
+            if let PushBody::Put(put) = &msg.payload {
+                match std::str::from_utf8(&put.payload.contiguous()) {
+                    Ok(identity) if !identity.trim().is_empty() => {
+                        let identity = identity.trim().to_string();
+                        let router = self.context.runtime.state.router.clone();
+                        zenoh_runtime::ZRuntime::Net.spawn(async move {
+                            router.refresh_interceptor_state(ACCESS_CONTROL, &identity);
+                        });
+                    }
+                    Ok(_) => tracing::error!(
+                        "Received a PUT on '{}' without an identity to refresh",
+                        key_expr
+                    ),
+                    Err(e) => tracing::error!(
+                        "Received a PUT on '{}' whose identity is not valid utf8: {}",
+                        key_expr,
+                        e
+                    ),
+                }
+            }
+            return;
+        }
 
         static CONFIG_FORMAT: OnceLock<KeFormat<'static, [Segment<'static>; 3]>> = OnceLock::new();
         let config_format = CONFIG_FORMAT.get_or_init(|| {

@@ -499,7 +499,55 @@
   //       "rules": ["rule2"],
   //       "subjects": ["subject3", "subject4"],
   //     },
-  //   ]
+  //   ],
+  //   /// An ACL document for each peer identity can additionally be read from a policy
+  //   /// store, where an external process is responsible for keeping it up to date. The
+  //   /// lists declared above then hold what applies to everyone.
+  //   /// Redis requires zenoh to be built with the `acl_redis` feature, Postgres with
+  //   /// `acl_postgres`.
+  //   "policy_store": {
+  //     /// Authentication attribute used as the peer identity: "cert_common_name",
+  //     /// "username" or "zenoh_id".
+  //     "identity": "cert_common_name",
+  //     /// Delay after which the document for a still connected identity is read again.
+  //     /// Set to null to never read it again on its own, leaving explicit refreshes as
+  //     /// the only way a change reaches a connected identity.
+  //     "entry_ttl_ms": 300000,
+  //     /// Largest number of identity documents kept in memory. Defaults to
+  //     /// transport.unicast.max_sessions so every admitted session can stay cached.
+  //     /// Raise both together. When full, the least recently fetched identity is
+  //     /// dropped; live interceptors are unchanged. If interceptor config reload is used,
+  //     /// keep it at that size: reload rebuilds every interceptor from the cache and
+  //     /// would deny faces evicted while the others were prepared.
+  //     "cache_capacity": 1000,
+  //     /// "redis" or "postgres".
+  //     "type": "redis",
+  //     /// A username may be part of the url, e.g. `redis://user@127.0.0.1:6379` or
+  //     /// `postgres://user@127.0.0.1:5432/zenoh`, but the password must be set separately
+  //     /// so that it is never serialized back out. Use `rediss://` for Redis TLS.
+  //     /// Postgres: add `sslmode=verify-full` to encrypt and verify the server
+  //     /// certificate.
+  //     /// `root_ca_certificate` is a PEM file for a private CA (Redis or Postgres);
+  //     /// omit it to use the native certificate store.
+  //     "url": "redis://127.0.0.1:6379",
+  //     "password": "the-store-password",
+  //     /// Redis: the value stored at "<key_prefix><identity>" is a JSON object holding
+  //     /// the same "rules", "subjects" and "policies" fields as above. Postgres: that
+  //     /// JSON lives in `document_column` of the row whose `identity_column` matches,
+  //     /// in `table` (`name` or `schema.name`).
+  //     /// An identity with no document is enforced with "default_permission"; one
+  //     /// whose document cannot be read is refused at connection. Ids must not collide
+  //     /// with the lists declared here.
+  //     "key_prefix": "zenoh:acl:",
+  //     "table": "zenoh_acl",
+  //     "identity_column": "identity",
+  //     "document_column": "document",
+  //     "root_ca_certificate": "./store-ca.pem",
+  //     /// Timeout of a single store operation.
+  //     "timeout_ms": 3000,
+  //     /// Postgres: largest number of connections to the worker database.
+  //     "pool_size": 8,
+  //   },
   // },
 
   // low_pass_filter: [

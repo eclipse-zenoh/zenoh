@@ -40,15 +40,19 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
+    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorState, InterceptorTrait,
 };
 use crate::{
     key_expr::KeyExpr,
     net::routing::interceptor::{authorization::SubjectQuery, InterceptorContext},
 };
 pub struct AclEnforcer {
-    enforcer: Arc<PolicyEnforcer>,
+    /// Rules applying to everyone, and to identities for which the policy store holds none.
+    default_policy_enforcer: Arc<PolicyEnforcer>,
+    #[cfg(feature = "acl_policy_store")]
+    policy_cache: Option<Arc<super::acl_policy_store::PolicyCache>>,
 }
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AuthSubject {
     id: usize,
@@ -694,27 +698,59 @@ impl IngressAclEnforcer {
     }
 }
 
-pub(crate) fn acl_interceptor_factories(
-    acl_config: &AclConfig,
-) -> ZResult<Vec<InterceptorFactory>> {
-    let mut res: Vec<InterceptorFactory> = vec![];
+type AclInterceptor = (InterceptorFactory, Option<Arc<dyn InterceptorState>>);
 
-    if acl_config.enabled {
-        let mut policy_enforcer = PolicyEnforcer::new();
-        match policy_enforcer.init(acl_config) {
-            Ok(_) => {
-                tracing::debug!("Access control is enabled");
-                res.push(Box::new(AclEnforcer {
-                    enforcer: Arc::new(policy_enforcer),
-                }))
-            }
-            Err(e) => bail!("Access control not enabled due to: {}", e),
+pub(crate) fn acl_interceptor_factories(acl_config: &AclConfig) -> ZResult<Option<AclInterceptor>> {
+    if !acl_config.enabled {
+        if acl_config.policy_store.is_some() {
+            tracing::warn!("Access control is disabled, the configured policy store is ignored");
         }
-    } else {
         tracing::debug!("Access control is disabled");
+        return Ok(None);
     }
 
-    Ok(res)
+    #[cfg(not(feature = "acl_policy_store"))]
+    if acl_config.policy_store.is_some() {
+        bail!("Access control is configured with a policy store, but zenoh was built without a policy store feature (`acl_redis` or `acl_postgres`)");
+    }
+
+    // The policy store holds the rules for each identity, leaving the configuration
+    // file free to declare only what applies to everyone, or nothing at all.
+    #[cfg(feature = "acl_policy_store")]
+    let from_config;
+    #[cfg(feature = "acl_policy_store")]
+    let (acl_config, policy_cache, state) = match &acl_config.policy_store {
+        Some(_) => {
+            from_config = super::acl_policy_store::with_empty_lists(acl_config);
+            let cache = Arc::new(super::acl_policy_store::PolicyCache::new(
+                from_config.clone(),
+            )?);
+            (
+                &from_config,
+                Some(cache.clone()),
+                Some(cache as Arc<dyn InterceptorState>),
+            )
+        }
+        None => (acl_config, None, None),
+    };
+    #[cfg(not(feature = "acl_policy_store"))]
+    let state = None;
+
+    let mut policy_enforcer = PolicyEnforcer::new();
+    match policy_enforcer.init(acl_config) {
+        Ok(_) => {
+            tracing::debug!("Access control is enabled");
+            Ok(Some((
+                Box::new(AclEnforcer {
+                    default_policy_enforcer: Arc::new(policy_enforcer),
+                    #[cfg(feature = "acl_policy_store")]
+                    policy_cache,
+                }),
+                state,
+            )))
+        }
+        Err(e) => bail!("Access control not enabled due to: {}", e),
+    }
 }
 
 impl InterceptorFactoryTrait for AclEnforcer {
@@ -722,6 +758,18 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
+        // This runs while the routing tables are locked for writing. The store was already
+        // read in `prepare`; this only looks up what that left in the cache.
+        #[cfg(feature = "acl_policy_store")]
+        let enforcer = match &self.policy_cache {
+            Some(cache) => cache
+                .held_for(transport)
+                .unwrap_or_else(|| self.default_policy_enforcer.clone()),
+            None => self.default_policy_enforcer.clone(),
+        };
+        #[cfg(not(feature = "acl_policy_store"))]
+        let enforcer = self.default_policy_enforcer.clone();
+
         let auth_ids = match transport.get_auth_ids() {
             Ok(auth_ids) => auth_ids,
             Err(err) => {
@@ -789,7 +837,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
                 zid,
             };
 
-            for entry in self.enforcer.subject_store.query(&query) {
+            for entry in enforcer.subject_store.query(&query) {
                 auth_subjects.insert(AuthSubject {
                     id: entry.id,
                     name: format!("{query}"),
@@ -809,7 +857,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
         if auth_subjects.is_empty() {
             tracing::info!(
                 "{zid} did not match any configured ACL subject. Default permission `{:?}` will be applied on all messages",
-                self.enforcer.default_permission
+                enforcer.default_permission
             );
         }
         #[cfg(feature = "stats")]
@@ -821,25 +869,25 @@ impl InterceptorFactoryTrait for AclEnforcer {
             return (None, None);
         };
         let ingress_interceptor = Box::new(IngressAclEnforcer {
-            policy_enforcer: self.enforcer.clone(),
+            policy_enforcer: enforcer.clone(),
             zid,
             subject: auth_subjects.clone(),
             #[cfg(feature = "stats")]
             stats: stats.clone(),
         });
         let egress_interceptor = Box::new(EgressAclEnforcer {
-            policy_enforcer: self.enforcer.clone(),
+            policy_enforcer: enforcer.clone(),
             zid,
             subject: auth_subjects,
             #[cfg(feature = "stats")]
             stats: stats.clone(),
         });
         (
-            self.enforcer
+            enforcer
                 .interface_enabled
                 .ingress
                 .then_some(ingress_interceptor),
-            self.enforcer
+            enforcer
                 .interface_enabled
                 .egress
                 .then_some(egress_interceptor),

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
+    collections::HashSet,
     str::FromStr,
     sync::{atomic::Ordering, Arc, Mutex, RwLock},
 };
@@ -24,6 +25,7 @@ use zenoh_config::{
 };
 use zenoh_protocol::core::{Bound, Region, WhatAmI, ZenohIdProto};
 use zenoh_result::ZResult;
+use zenoh_runtime::ZRuntime;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast, TransportPeer};
 
 pub use super::dispatcher::{pubsub::*, resource::*};
@@ -33,7 +35,7 @@ use super::{
         tables::{TablesData, TablesLock},
     },
     hat,
-    interceptor::InterceptorsChain,
+    interceptor::{InterceptorState, InterceptorsChain, RefreshOutcome},
     runtime::Runtime,
 };
 use crate::net::{
@@ -261,6 +263,19 @@ impl Gateway {
         Arc::new(face)
     }
 
+    /// Lets the interceptors read what they keep about a transport before
+    /// [`Self::new_transport_unicast`] locks the routing tables to admit it.
+    ///
+    /// Their state is taken out from under the lock first, because reading it is allowed
+    /// to block. An error refuses the transport.
+    pub(crate) fn prepare_transport_unicast(&self, transport: &TransportUnicast) -> ZResult<()> {
+        let states = zread!(self.tables.tables).data.interceptor_states.clone();
+        for state in states.values() {
+            state.prepare(transport)?;
+        }
+        Ok(())
+    }
+
     pub fn new_transport_unicast(
         &self,
         transport: TransportUnicast,
@@ -464,5 +479,136 @@ impl Gateway {
             interceptor,
             this_zid,
         )))
+    }
+
+    /// Whether any interceptor keeps state that can go stale.
+    pub(crate) fn keeps_interceptor_state(&self) -> bool {
+        !zread!(self.tables.tables)
+            .data
+            .interceptor_states
+            .is_empty()
+    }
+
+    /// Reads again what interceptor `name` keeps for `identity` and hands it to the
+    /// transports it applies to.
+    pub(crate) fn refresh_interceptor_state(&self, name: &str, identity: &str) {
+        let Some(state) = zread!(self.tables.tables)
+            .data
+            .interceptor_states
+            .get(name)
+            .cloned()
+        else {
+            return;
+        };
+        self.refresh_interceptor_state_identities(state, HashSet::from([identity.to_string()]));
+    }
+
+    /// Reads again whatever each interceptor keeps that has grown too old.
+    ///
+    /// Only the interceptor that reported an identity stale is refreshed for it.
+    /// Nothing else refreshes a transport that stays connected, since its interceptors are
+    /// built once when it is admitted.
+    pub(crate) fn refresh_stale_interceptor_state(&self) {
+        let (states, transports) = {
+            let tables = zread!(self.tables.tables);
+            (
+                tables.data.interceptor_states.clone(),
+                tables
+                    .data
+                    .faces
+                    .values()
+                    .filter_map(|face| face.unicast_transport().cloned())
+                    .collect::<Vec<_>>(),
+            )
+        };
+
+        for state in states.values() {
+            // Only what a connected transport is still using. What a transport left behind
+            // when it went away is dropped when next asked for, rather than read again for
+            // as long as it is held.
+            let connected = transports
+                .iter()
+                .filter_map(|transport| state.identity_of(transport))
+                .collect::<HashSet<_>>();
+            let stale = state
+                .stale_identities()
+                .into_iter()
+                .filter(|identity| connected.contains(identity))
+                .collect::<HashSet<_>>();
+            if !stale.is_empty() {
+                self.refresh_interceptor_state_identities(state.clone(), stale);
+            }
+        }
+    }
+
+    /// Only the transports the given identities apply to on `state` are rebuilt.
+    /// Rebuilding the others would hand them a policy compiled from state that may
+    /// meanwhile have expired, and so cut off transports that nothing was said about.
+    ///
+    /// Transports whose refresh failed are closed outside the tables lock: fail-closed,
+    /// same as refusing them on connect.
+    fn refresh_interceptor_state_identities(
+        &self,
+        state: Arc<dyn InterceptorState>,
+        identities: HashSet<String>,
+    ) {
+        let mut updated = HashSet::new();
+        let mut failed = HashSet::new();
+        for identity in identities {
+            match state.refresh(&identity) {
+                RefreshOutcome::Updated => {
+                    updated.insert(identity);
+                }
+                RefreshOutcome::Failed => {
+                    failed.insert(identity);
+                }
+            }
+        }
+        if updated.is_empty() && failed.is_empty() {
+            return;
+        }
+
+        let mut to_close = Vec::new();
+        {
+            let tables = zread!(self.tables.tables);
+            let version = (!updated.is_empty()).then(|| {
+                tables
+                    .data
+                    .next_interceptor_version
+                    .fetch_add(1, Ordering::SeqCst)
+                    + 1
+            });
+            for face in tables.data.faces.values() {
+                let Some(transport) = face.unicast_transport() else {
+                    continue;
+                };
+                let Some(identity) = state.identity_of(transport) else {
+                    continue;
+                };
+                if failed.contains(&identity) {
+                    to_close.push((identity, transport.clone()));
+                    continue;
+                }
+                let Some(version) = version else {
+                    continue;
+                };
+                if updated.contains(&identity) {
+                    face.set_interceptors_from_factories(&tables.data.interceptors, version);
+                }
+            }
+        }
+
+        for (identity, transport) in to_close {
+            tracing::warn!(
+                "Closing transport for identity '{}': interceptor state could not be refreshed",
+                identity
+            );
+            if let Err(e) = ZRuntime::Application.block_in_place(transport.close()) {
+                tracing::error!(
+                    "Failed to close transport after interceptor refresh failure: {}",
+                    e
+                );
+            }
+        }
     }
 }
