@@ -157,6 +157,20 @@ impl TransportUnicast {
     /// If the transport has multiple links (multilink), only the specified
     /// link is closed and the transport remains alive. If this is the last
     /// link, the entire transport is closed.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use zenoh_transport::TransportManager;
+    /// # let manager = TransportManager::builder().build_test(std::sync::Arc::new(
+    /// #   zenoh_transport::TransportEventHandlerStub)).unwrap();
+    /// # let endpoint = "tcp/127.0.0.1:7447".parse().unwrap();
+    /// # let transport = manager.open_transport_unicast(endpoint).await.unwrap();
+    /// // Close a specific link while keeping the transport alive
+    /// let links = transport.get_links().unwrap();
+    /// if links.len() > 1 {
+    ///     transport.close_link(links[0].clone()).await.unwrap();
+    /// }
+    /// ```
     #[inline(always)]
     pub async fn close_link(&self, link: Link) -> ZResult<()> {
         let transport = self.get_inner()?;
