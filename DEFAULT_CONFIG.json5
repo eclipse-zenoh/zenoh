@@ -73,6 +73,50 @@
       /// increase factor for the next timeout until next connect try
       period_increase_factor: 2,
     },
+
+    /// Transport link rotation configuration.
+    /// When enabled, the orchestrator periodically closes and re-establishes
+    /// transport links to configured endpoints using a make-before-break
+    /// strategy: the new link is opened before the old one is closed.
+    /// This is useful for cloud-native scenarios where connections need to
+    /// be cycled to pick up DNS changes, redistribute across load balancers,
+    /// or connect to fresh endpoints after auto-scaling.
+    rotation: {
+      /// Enable/disable rotation globally. Default: false.
+      enabled: false,
+
+      /// Rotation policy. Only "interval" is implemented.
+      policy: {
+        type: "interval",
+        /// Rotation interval in milliseconds. Default: 300000 (5 minutes).
+        interval_ms: 300000,
+        /// Random jitter in milliseconds (±) to avoid synchronized rotation
+        /// across clients. Default: 30000 (±30s).
+        jitter_ms: 30000,
+      },
+
+      /// Rotation mode. Only "make_before_break" is user-selectable.
+      /// "break_before_make" is NOT a user-selectable mode — it is used
+      /// internally as a fallback when make-before-break fails, to avoid
+      /// redeclaration storms on every rotation cycle.
+      mode: "make_before_break",
+
+      /// Fallback configuration for when make-before-break fails.
+      fallback: {
+        /// Enable break-before-make as a fallback when make-before-break fails.
+        /// If disabled and make-before-break fails, the rotation is simply
+        /// skipped and the old connection remains untouched.
+        enabled: true,
+        /// Number of retries before falling back to break-before-make.
+        max_retries: 3,
+        /// Initial backoff between retries in milliseconds.
+        retry_backoff_ms: 1000,
+      },
+
+      /// Whether to rotate to a different locator in the same group
+      /// (only meaningful with OneOf strategy).
+      rotate_across_locators: true,
+    },
   },
 
   /// Which endpoints to listen on. E.g. tcp/0.0.0.0:7447.
