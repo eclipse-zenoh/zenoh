@@ -198,16 +198,13 @@ impl RotationEngine {
             .ok_or_else(|| zerror!("Unexpected callback type"))?;
 
         // If we now have more than one link to the same peer, close the old one(s).
-        // TODO: This requires a `close_link` method on `TransportUnicast`.
-        // See: https://github.com/eclipse-zenoh/zenoh — transport layer API
-        // needs to expose per-link closure without tearing down the transport.
         let links = new_transport.get_links().unwrap_or_default();
         if links.len() > 1 {
             let locator = endpoint.to_locator();
-            let old_links: Vec<_> = links.iter().filter(|l| l.dst == locator).collect();
+            let old_links: Vec<_> = links.into_iter().filter(|l| l.dst == locator).collect();
             for old_link in old_links.iter().take(old_links.len().saturating_sub(1)) {
                 tracing::debug!("Closing old link {old_link} during rotation for {endpoint}");
-                // TODO: close_link(old_link) — needs TransportUnicast API
+                new_transport.close_link(old_link.clone()).await?;
             }
         }
 
