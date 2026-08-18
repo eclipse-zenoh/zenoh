@@ -152,6 +152,17 @@ impl TransportUnicast {
         }
     }
 
+    /// Close a specific link within this transport.
+    ///
+    /// If the transport has multiple links (multilink), only the specified
+    /// link is closed and the transport remains alive. If this is the last
+    /// link, the entire transport is closed.
+    #[inline(always)]
+    pub async fn close_link(&self, link: Link) -> ZResult<()> {
+        let transport = self.get_inner()?;
+        transport.close_link(link).await
+    }
+
     /// Returns the transport stats, or an error if the transport is closed.
     ///
     /// Warning: returning an error prevents interceptors to initialize;

@@ -105,6 +105,13 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     async fn close(&self, reason: u8) -> ZResult<()>;
 
+    /// Close a specific link within this transport.
+    ///
+    /// If the transport has multiple links (multilink), only the specified
+    /// link is closed and the transport remains alive. If this is the last
+    /// link, the entire transport is closed.
+    async fn close_link(&self, link: Link) -> ZResult<()>;
+
     fn add_debug_fields<'a, 'b: 'a, 'c>(
         &self,
         s: &'c mut DebugStruct<'a, 'b>,

@@ -423,6 +423,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         self.delete().await
     }
 
+    async fn close_link(&self, link: Link) -> ZResult<()> {
+        self.del_link(link).await
+    }
+
     fn get_links(&self) -> Vec<Link> {
         zread!(self.links)
             .get_links()
