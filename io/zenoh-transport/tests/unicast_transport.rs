@@ -3273,3 +3273,44 @@ async fn transport_unicast_close_link_single_link() {
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 }
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_close_link_lowlatency() {
+    zenoh_util::init_log_from_env_or("error");
+
+    // Set up a single endpoint with lowlatency transport
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    let endpoints = vec![endpoint.clone()];
+
+    let (router_manager, _router_handler, client_manager, client_transport) =
+        open_transport_unicast(&endpoints, &endpoints, true, 1, 1).await;
+
+    // Verify we have 1 link
+    let links = client_transport.get_links().unwrap();
+    assert_eq!(links.len(), 1);
+
+    // Close the only link via close_link — should close the entire transport
+    // (lowlatency transport has at most one link)
+    ztimeout!(client_transport.close_link(links[0].clone())).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    // Verify transport is closed
+    assert!(
+        client_transport.get_links().is_err(),
+        "lowlatency transport should be closed after closing the only link"
+    );
+
+    // Clean up
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
