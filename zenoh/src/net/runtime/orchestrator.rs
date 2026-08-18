@@ -877,10 +877,29 @@ impl Runtime {
             let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
+            let rotation_conf =
+                super::rotation::get_rotation_config(config, &peer);
             drop(config_guard);
             self.spawn(async move {
-                if let Ok(zid) = this.peer_connector_retry(peer).await {
-                    this.state.start_conditions.set_peer_connector_zid(idx, zid);
+                if let Ok(zid) = this.peer_connector_retry(peer.clone()).await {
+                    this.state
+                        .start_conditions
+                        .set_peer_connector_zid(idx, zid);
+
+                    // Start rotation engine if configured
+                    if let Some(rot_conf) = rotation_conf {
+                        tracing::info!(
+                            "Starting rotation engine for {} with interval {:?}",
+                            peer,
+                            rot_conf.interval_ms()
+                        );
+                        super::rotation::RotationEngine::start(
+                            this.clone(),
+                            peer.clone(),
+                            rot_conf,
+                        );
+                    }
+
                 }
                 if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
                     this.state.start_conditions.terminate_peer_connector(idx);
