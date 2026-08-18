@@ -45,11 +45,7 @@ impl RotationEngine {
     /// If make fails, it retries up to `fallback.max_retries` times.
     /// If all retries fail and fallback is enabled, it falls back to
     /// break-before-make (which causes a redeclaration burst).
-    pub(crate) fn start(
-        runtime: Runtime,
-        endpoint: EndPoint,
-        config: RotationConf,
-    ) -> Self {
+    pub(crate) fn start(runtime: Runtime, endpoint: EndPoint, config: RotationConf) -> Self {
         let cancellation_token = runtime.get_cancellation_token();
 
         runtime.spawn({
@@ -105,11 +101,7 @@ impl RotationEngine {
     }
 
     /// Perform a single rotation cycle for an endpoint.
-    async fn rotate(
-        runtime: &Runtime,
-        endpoint: &EndPoint,
-        config: &RotationConf,
-    ) -> ZResult<()> {
+    async fn rotate(runtime: &Runtime, endpoint: &EndPoint, config: &RotationConf) -> ZResult<()> {
         tracing::debug!("Rotating transport link for {endpoint}");
 
         match Self::try_make_before_break(runtime, endpoint).await {
