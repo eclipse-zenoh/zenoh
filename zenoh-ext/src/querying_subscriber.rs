@@ -481,6 +481,102 @@ impl Iterator for MergeQueueValues {
 struct InnerState {
     pending_fetches: u64,
     merge_queue: MergeQueue,
+    /// Samples staged under this mutex, in the order the state machine produced
+    /// them. Drained by [`dispatch_outbox`] with the mutex released.
+    outbox: VecDeque<Sample>,
+    /// Which thread, if any, is draining `outbox`. At most one at a time, so
+    /// the callback stays mutually excluded and delivery stays ordered.
+    delivering: Option<std::thread::ThreadId>,
+}
+
+/// Marks the calling thread as the one draining [`InnerState::outbox`].
+///
+/// Held for the duration of a drain so the flag clears even if a user callback
+/// unwinds. Otherwise delivery would stop silently for the rest of the
+/// subscriber's life.
+struct DeliveringRole<'a> {
+    state: &'a Arc<Mutex<InnerState>>,
+    released: bool,
+}
+
+impl DeliveringRole<'_> {
+    /// Gives up the role while `state` is already locked.
+    ///
+    /// The caller passes the live borrow on purpose: the "outbox is empty" test
+    /// and the release have to be one atomic step. Split them, and a sample
+    /// staged in between would find `delivering` still set, decline to deliver,
+    /// and sit in the outbox until some later sample happened to flush it.
+    fn release(&mut self, state: &mut InnerState) {
+        state.delivering = None;
+        self.released = true;
+    }
+}
+
+impl Drop for DeliveringRole<'_> {
+    fn drop(&mut self) {
+        if self.released {
+            return;
+        }
+        // Only reached when a user callback unwound. Deliberately not `zlock!`:
+        // this runs on the unwind path, and a panic in a destructor aborts the
+        // process, so a poisoned mutex must not be unwrapped here.
+        if let Ok(mut state) = self.state.lock() {
+            state.delivering = None;
+        }
+    }
+}
+
+/// Delivers everything staged in [`InnerState::outbox`], with the lock released.
+///
+/// This is the only place in this file that calls into code Zenoh does not
+/// control. Both call sites record samples into the outbox while they hold the
+/// state mutex, then come here once the guard is gone. That is what stops a
+/// callback which re-enters a `FetchingSubscriber` API from deadlocking against
+/// the guard its own caller holds: `FetchingSubscriber::fetch` resolves to
+/// `register_handler`, which takes the same mutex.
+///
+/// # Why a shared outbox rather than a per-call-site buffer
+///
+/// Collecting into a local buffer at each call site would fix the deadlock and
+/// **break ordering**, which is the feature this subscriber exists to provide.
+/// It merges fetched replies with live samples, and the state mutex is what
+/// serialises that merge. `Callback` is `Send + Sync`, so two threads can be in
+/// the sample callback at once; with local buffers one could stage a live sample
+/// and another drain the merge queue, and the live sample could overtake the
+/// replies it was meant to follow.
+///
+/// A single FIFO plus a single active deliverer restores it: samples leave the
+/// outbox in the order the state machine produced them, whichever thread drains
+/// them. A thread that finds another already draining returns immediately; the
+/// active deliverer picks that work up on its next lap, so nothing is dropped
+/// and callbacks stay mutually excluded exactly as before.
+fn dispatch_outbox(state: &Arc<Mutex<InnerState>>, callback: &Callback<Sample>) {
+    // Claim the role and take the first batch in one acquisition.
+    let mut samples = {
+        let guard = &mut *zlock!(state);
+        if guard.delivering.is_some() || guard.outbox.is_empty() {
+            return;
+        }
+        guard.delivering = Some(std::thread::current().id());
+        std::mem::take(&mut guard.outbox)
+    };
+    let mut role = DeliveringRole {
+        state,
+        released: false,
+    };
+    loop {
+        for sample in samples {
+            callback.call(sample);
+        }
+        samples = {
+            let guard = &mut *zlock!(state);
+            if guard.outbox.is_empty() {
+                role.release(guard);
+                return;
+            }
+            std::mem::take(&mut guard.outbox)
+        };
+    }
 }
 
 /// The builder of [`FetchingSubscriber`], allowing to configure it.
@@ -909,6 +1005,8 @@ impl<Handler> FetchingSubscriber<Handler> {
         let state = Arc::new(Mutex::new(InnerState {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
+            outbox: VecDeque::new(),
+            delivering: None,
         }));
         let (callback, receiver) = conf.handler.into_handler();
 
@@ -916,25 +1014,29 @@ impl<Handler> FetchingSubscriber<Handler> {
             let state = state.clone();
             let callback = callback.clone();
             move |s| {
-                let state = &mut zlock!(state);
-                if state.pending_fetches == 0 {
-                    callback.call(s);
-                } else {
-                    tracing::trace!(
-                        "Sample received while fetch in progress: push it to merge_queue"
-                    );
+                {
+                    let guard = &mut *zlock!(state);
+                    if guard.pending_fetches == 0 {
+                        guard.outbox.push_back(s);
+                    } else {
+                        tracing::trace!(
+                            "Sample received while fetch in progress: push it to merge_queue"
+                        );
 
-                    // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
-                    // after any timestamped Sample possibly coming from a fetch reply.
-                    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
-                    let timestamp = s
-                        .timestamp()
-                        .cloned()
-                        .unwrap_or(Timestamp::new(now, session_id.into()));
-                    state
-                        .merge_queue
-                        .push(SampleBuilder::from(s).timestamp(timestamp).into());
+                        // ensure the sample has a timestamp, thus it will always be sorted into the MergeQueue
+                        // after any timestamped Sample possibly coming from a fetch reply.
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().into(); // UNIX_EPOCH is Returns a Timespec::zero(), Unwrap Should be permissible here
+                        let timestamp = s
+                            .timestamp()
+                            .cloned()
+                            .unwrap_or(Timestamp::new(now, session_id.into()));
+                        guard
+                            .merge_queue
+                            .push(SampleBuilder::from(s).timestamp(timestamp).into());
+                    }
                 }
+                // The guard is gone before any user code runs.
+                dispatch_outbox(&state, &callback);
             }
         };
 
@@ -1059,21 +1161,28 @@ struct RepliesHandler {
 
 impl Drop for RepliesHandler {
     fn drop(&mut self) {
-        let mut state = zlock!(self.state);
-        state.pending_fetches -= 1;
-        tracing::trace!(
-            "Fetch done - {} fetches still in progress",
-            state.pending_fetches
-        );
-        if state.pending_fetches == 0 {
-            tracing::debug!(
-                "All fetches done. Replies and live publications merged - {} samples to propagate",
-                state.merge_queue.len()
+        {
+            let state = &mut *zlock!(self.state);
+            state.pending_fetches -= 1;
+            tracing::trace!(
+                "Fetch done - {} fetches still in progress",
+                state.pending_fetches
             );
-            for s in state.merge_queue.drain() {
-                self.callback.call(s);
+            if state.pending_fetches == 0 {
+                tracing::debug!(
+                    "All fetches done. Replies and live publications merged - {} samples to propagate",
+                    state.merge_queue.len()
+                );
+                // Staged, not delivered. `drain` hands back an owning iterator,
+                // so the merge order is fixed here and preserved by the FIFO.
+                let merged = state.merge_queue.drain();
+                state.outbox.extend(merged);
             }
         }
+        // The guard is gone before any user code runs. Dropping a value inside a
+        // callback is not something a user reads as re-entering the middleware,
+        // so this path is the one most likely to reach someone unannounced.
+        dispatch_outbox(&self.state, &self.callback);
     }
 }
 

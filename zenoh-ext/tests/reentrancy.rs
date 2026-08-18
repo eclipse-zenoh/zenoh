@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Re-entrancy of `AdvancedSubscriber`'s sample callback.
+//! Re-entrancy of the zenoh-ext subscribers' sample callbacks.
+//!
+//! Two files carried the same defect, and this file covers both.
+//! `AdvancedSubscriber` comes first; the `QueryingSubscriber` scenarios are at
+//! the end, behind their own banner.
 //!
 //! `advanced_subscriber.rs` used to take `zlock!(statesref)` and call the user's
 //! sample callback while that guard was live. Any callback re-entering an
@@ -57,6 +61,8 @@ use std::{
 
 use zenoh::{sample::Sample, Wait};
 use zenoh_ext::{AdvancedSubscriber, AdvancedSubscriberBuilderExt, Miss};
+#[allow(deprecated)]
+use zenoh_ext::{FetchingSubscriber, SubscriberBuilderExt};
 
 /// Generous by design. The deadlock is deterministic and immediate, so any wait
 /// that survives scheduler noise proves the point; the work being done is
@@ -278,4 +284,151 @@ fn the_callback_guard_fires_when_the_callback_never_runs() {
             "expected the in-callback guard to fire when nothing is delivered, got {other:?}"
         ),
     }
+}
+
+// ---------------------------------------------------------------------------
+// `QueryingSubscriber` / `FetchingSubscriber`
+//
+// Same defect class, different file. `querying_subscriber.rs` took
+// `zlock!(state)` and called the user's callback under it at two sites: the
+// sample callback, and `RepliesHandler::drop` draining the merge queue.
+//
+// The reachable re-entrant surface here is `FetchingSubscriber::fetch`, which
+// resolves to `register_handler` and takes the same mutex. A callback that
+// publishes re-enters through zenoh's synchronous local delivery instead.
+// ---------------------------------------------------------------------------
+
+/// The querying subscriber under test, parked so its own callback can re-enter
+/// it. `.callback(..)` consumes the sample stream, so the handler is `()`.
+#[allow(deprecated)]
+type QSubSlot = Arc<Mutex<Option<FetchingSubscriber<()>>>>;
+
+/// Calling `fetch` from inside the sample callback.
+///
+/// `FetchBuilder::wait` → `register_handler` → `zlock!(state)`, which the caller
+/// of this very callback is holding.
+#[allow(deprecated)]
+fn fetch_in_querying_callback() -> Outcome {
+    run_scenario(|| {
+        let session = zenoh::open(isolated_config()).wait().unwrap();
+
+        let sub_slot: QSubSlot = Arc::new(Mutex::new(None));
+        let in_callback = Arc::new(AtomicBool::new(false));
+        let fetched_once = Arc::new(AtomicBool::new(false));
+
+        // Set only on the branch that actually re-enters. Without it, an empty
+        // slot would skip the fetch and the scenario would pass vacuously —
+        // against the unfixed code too.
+        let did_fetch = Arc::new(AtomicBool::new(false));
+
+        let sub_slot_cb = sub_slot.clone();
+        let flag = in_callback.clone();
+        let once = fetched_once.clone();
+        let fetch_session = session.clone();
+        let did_fetch_cb = did_fetch.clone();
+
+        let sub = session
+            .declare_subscriber("test/reentrancy/querying-fetch")
+            .callback(move |_s: Sample| {
+                flag.store(true, Ordering::SeqCst);
+                // Once only: a fetch reply is itself delivered through this
+                // subscriber, so an unconditional fetch would recurse.
+                if once.swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                if let Some(sub) = sub_slot_cb.lock().unwrap().as_ref() {
+                    let _ = sub
+                        .fetch(|cb| {
+                            fetch_session
+                                .get("test/reentrancy/querying-fetch")
+                                .callback(cb)
+                                .wait()
+                        })
+                        .wait();
+                    did_fetch_cb.store(true, Ordering::SeqCst);
+                }
+            })
+            .querying()
+            .wait()
+            .unwrap();
+
+        *sub_slot.lock().unwrap() = Some(sub);
+
+        session
+            .put("test/reentrancy/querying-fetch", "trigger")
+            .wait()
+            .unwrap();
+
+        assert_callback_ran(&in_callback);
+        assert!(
+            did_fetch.load(Ordering::SeqCst),
+            "the callback ran but never reached `fetch`, so nothing re-entered \
+             the subscriber and this scenario proves nothing"
+        );
+    })
+}
+
+/// Publishing from inside the sample callback.
+///
+/// Zenoh delivers a sample published on the same session synchronously, on the
+/// publishing thread, so the subscriber re-enters `zlock!(state)` on the thread
+/// that already holds it.
+#[allow(deprecated)]
+fn publish_in_querying_callback() -> Outcome {
+    run_scenario(|| {
+        let session = zenoh::open(isolated_config()).wait().unwrap();
+
+        let in_callback = Arc::new(AtomicBool::new(false));
+        let published_once = Arc::new(AtomicBool::new(false));
+
+        let flag = in_callback.clone();
+        let once = published_once.clone();
+        let echo_session = session.clone();
+
+        let _sub = session
+            .declare_subscriber("test/reentrancy/querying-publish")
+            .callback(move |_s: Sample| {
+                flag.store(true, Ordering::SeqCst);
+                // Once only: the echo matches the same key expression.
+                if once.swap(true, Ordering::SeqCst) {
+                    return;
+                }
+                let _ = echo_session
+                    .put("test/reentrancy/querying-publish", "echo")
+                    .wait();
+            })
+            .querying()
+            .wait()
+            .unwrap();
+
+        session
+            .put("test/reentrancy/querying-publish", "trigger")
+            .wait()
+            .unwrap();
+
+        assert_callback_ran(&in_callback);
+    })
+}
+
+#[test]
+fn fetching_from_inside_a_querying_subscriber_callback_is_safe() {
+    let outcome = fetch_in_querying_callback();
+    assert!(
+        matches!(outcome, Outcome::Completed),
+        "`FetchBuilder::wait` reaches `register_handler`, which takes the same \
+         `state` mutex the sample callback used to be invoked under. A \
+         `Deadlocked` here means the staged-then-drained delivery in \
+         `querying_subscriber.rs` has been undone. Got {outcome:?}."
+    );
+}
+
+#[test]
+fn publishing_from_inside_a_querying_subscriber_callback_is_safe() {
+    let outcome = publish_in_querying_callback();
+    assert!(
+        matches!(outcome, Outcome::Completed),
+        "Zenoh delivers a locally published sample synchronously, so this \
+         re-enters the subscriber on the publishing thread. A `Deadlocked` here \
+         means the callback is being invoked under `state` again. Got {outcome:?}."
+    );
 }
