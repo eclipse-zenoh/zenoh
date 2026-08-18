@@ -19,8 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 mod adminspace;
 pub mod orchestrator;
-pub(crate) mod rotation;
 mod region;
+pub(crate) mod rotation;
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
