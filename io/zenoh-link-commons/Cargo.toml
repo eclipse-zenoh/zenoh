@@ -40,7 +40,7 @@ quic = [
   "dep:zenoh-config",
   "tls",
 ]
-tls = ["dep:rustls", "dep:rustls-webpki"]
+tls = ["dep:rustls", "dep:rustls-webpki", "dep:rustls-pemfile"]
 unsecure_quic = ["quic"]
 uring = []
 
