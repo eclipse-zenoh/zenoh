@@ -160,16 +160,13 @@ impl TransportUnicast {
     ///
     /// # Example
     /// ```no_run
-    /// # use zenoh_transport::TransportManager;
-    /// # let manager = TransportManager::builder().build_test(std::sync::Arc::new(
-    /// #   zenoh_transport::TransportEventHandlerStub)).unwrap();
-    /// # let endpoint = "tcp/127.0.0.1:7447".parse().unwrap();
-    /// # let transport = manager.open_transport_unicast(endpoint).await.unwrap();
+    /// # async fn example(transport: zenoh_transport::unicast::TransportUnicast) {
     /// // Close a specific link while keeping the transport alive
     /// let links = transport.get_links().unwrap();
     /// if links.len() > 1 {
     ///     transport.close_link(links[0].clone()).await.unwrap();
     /// }
+    /// # }
     /// ```
     #[inline(always)]
     pub async fn close_link(&self, link: Link) -> ZResult<()> {
