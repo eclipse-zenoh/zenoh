@@ -47,6 +47,9 @@
 //! `the_callback_guard_fires_when_the_callback_never_runs` is the control that
 //! proves that guard is live rather than decorative.
 
+// Every type under test is `#[zenoh_macros::unstable]`. Without this gate the
+// file does not compile when that feature is off, and CI builds exactly that
+// configuration.
 #![cfg(feature = "unstable")]
 
 use std::{
@@ -61,6 +64,12 @@ use std::{
 
 use zenoh::{sample::Sample, Wait};
 use zenoh_ext::{AdvancedSubscriber, AdvancedSubscriberBuilderExt, Miss};
+// Both of these are deprecated in favour of the advanced API, and CI denies
+// warnings, so importing them without the allow is a hard error.
+//
+// They keep their own `use` on purpose. The attribute covers a whole statement,
+// so merging them with the line above would silence a future deprecation of the
+// advanced types too, which should still fail the build.
 #[allow(deprecated)]
 use zenoh_ext::{FetchingSubscriber, SubscriberBuilderExt};
 
@@ -296,6 +305,10 @@ fn the_callback_guard_fires_when_the_callback_never_runs() {
 // The reachable re-entrant surface here is `FetchingSubscriber::fetch`, which
 // resolves to `register_handler` and takes the same mutex. A callback that
 // publishes re-enters through zenoh's synchronous local delivery instead.
+//
+// The type is deprecated, not removed. It still ships and still compiles, so a
+// user who has not migrated gets a hang rather than a warning. That is why
+// these scenarios exist despite the `#[allow(deprecated)]` they cost.
 // ---------------------------------------------------------------------------
 
 /// The querying subscriber under test, parked so its own callback can re-enter

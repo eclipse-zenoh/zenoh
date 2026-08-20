@@ -528,12 +528,16 @@ impl Drop for DeliveringRole<'_> {
 
 /// Delivers everything staged in [`InnerState::outbox`], with the lock released.
 ///
-/// This is the only place in this file that calls into code Zenoh does not
-/// control. Both call sites record samples into the outbox while they hold the
-/// state mutex, then come here once the guard is gone. That is what stops a
-/// callback which re-enters a `FetchingSubscriber` API from deadlocking against
-/// the guard its own caller holds: `FetchingSubscriber::fetch` resolves to
-/// `register_handler`, which takes the same mutex.
+/// This is the only place in this file that invokes a callback. Both call sites
+/// record samples into the outbox while they hold the state mutex, then come
+/// here once the guard is gone. That is what stops a callback which re-enters a
+/// `FetchingSubscriber` API from deadlocking against the guard its own caller
+/// holds: `FetchingSubscriber::fetch` resolves to `register_handler`, which
+/// takes the same mutex.
+///
+/// Invoking a callback is not the only way this file reaches user code:
+/// *dropping* a `Callback` runs the user's `Drop`. `RepliesHandler` owns one,
+/// and it falls out of scope after `drop` has released the guard.
 ///
 /// # Why a shared outbox rather than a per-call-site buffer
 ///

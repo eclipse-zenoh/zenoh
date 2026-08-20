@@ -677,12 +677,18 @@ impl Drop for DeliveringRole<'_> {
 
 /// Delivers everything staged in [`State::outbox`], with the lock released.
 ///
-/// This is the *only* place in this file that calls into code Zenoh does not
-/// control. Everything upstream of it records calls into the outbox while
-/// holding `statesref` and then comes here once the guard is gone, which is what
-/// stops a callback re-entering an `AdvancedSubscriber` API — both
-/// `SampleMissListener::drop` and `SampleMissListenerBuilder::wait` take
-/// `statesref` — from deadlocking against the guard its own caller holds.
+/// This is the *only* place in this file that invokes a callback. Everything
+/// upstream of it records calls into the outbox while holding `statesref` and
+/// then comes here once the guard is gone, which is what stops a callback
+/// re-entering an `AdvancedSubscriber` API — both `SampleMissListener::drop`
+/// and `SampleMissListenerBuilder::wait` take `statesref` — from deadlocking
+/// against the guard its own caller holds.
+///
+/// Invoking a callback is not the only way this file reaches user code:
+/// *dropping* a `Callback` runs the user's `Drop`. Those sites are handled
+/// separately, by taking the value out of the state and releasing the guard
+/// before it falls out of scope — see `unregister_miss_callback` and the
+/// subscriber's drop callback.
 ///
 /// # Why a shared outbox rather than a per-call-site buffer
 ///
