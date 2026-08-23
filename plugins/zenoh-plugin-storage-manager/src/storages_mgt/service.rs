@@ -139,11 +139,20 @@ impl StorageService {
         let storage_key_expr = &self.configuration.key_expr;
 
         // subscribe on key_expr
-        let storage_sub = match self.session.declare_subscriber(storage_key_expr).await {
-            Ok(storage_sub) => storage_sub,
-            Err(e) => {
-                tracing::error!("Error starting storage '{}': {}", self.name, e);
-                return;
+        let storage_sub = if self.capability.read_only {
+            tracing::debug!(
+                "Storage '{}' is read-only; not subscribing to writes on keyexpr '{}'",
+                self.name,
+                storage_key_expr
+            );
+            None
+        } else {
+            match self.session.declare_subscriber(storage_key_expr).await {
+                Ok(storage_sub) => Some(storage_sub),
+                Err(e) => {
+                    tracing::error!("Error starting storage '{}': {}", self.name, e);
+                    return;
+                }
             }
         };
 
@@ -171,7 +180,7 @@ impl StorageService {
             loop {
                 tokio::select!(
                     // on sample for key_expr
-                    sample = storage_sub.recv_async() => {
+                    sample = async { storage_sub.as_ref().unwrap().recv_async().await }, if storage_sub.is_some() => {
                         let sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
