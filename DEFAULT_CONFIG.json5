@@ -107,10 +107,6 @@
         /// If disabled and make-before-break fails, the rotation is simply
         /// skipped and the old connection remains untouched.
         enabled: true,
-        /// Number of retries before falling back to break-before-make.
-        max_retries: 3,
-        /// Initial backoff between retries in milliseconds.
-        retry_backoff_ms: 1000,
       },
 
       /// Whether to rotate to a different locator in the same group
