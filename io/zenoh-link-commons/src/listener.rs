@@ -140,7 +140,7 @@ impl ListenersUnicastIP {
 
     /// Returns the set of listener locators across all listener endpoints.
     ///
-    /// When resolving unspecified addresses, loopback addreses are excluded if
+    /// When resolving unspecified addresses, loopback addresses are excluded if
     /// and only if `exclude_unspecified_lo` is set to `true`.
     ///
     /// Note that `exclude_unspecified_lo` does not impact "explicit" loopback locators
