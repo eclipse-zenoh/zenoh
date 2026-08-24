@@ -38,7 +38,7 @@ pub(crate) type LinkError = (
 );
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
 pub(crate) enum InitTransportError {
-    Link(LinkError),
+    Link(Box<LinkError>),
     Transport(TransportError),
 }
 
