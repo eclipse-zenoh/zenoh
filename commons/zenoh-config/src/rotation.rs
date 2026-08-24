@@ -53,32 +53,16 @@ pub struct RotationFallbackConf {
     /// skipped and the old connection remains untouched.
     #[serde(default = "default_fallback_enabled")]
     pub enabled: bool,
-    /// Number of retries before falling back to break-before-make.
-    #[serde(default = "default_max_retries")]
-    pub max_retries: u32,
-    /// Initial backoff between retries in milliseconds.
-    #[serde(default = "default_retry_backoff_ms")]
-    pub retry_backoff_ms: u64,
 }
 
 fn default_fallback_enabled() -> bool {
     true
 }
 
-fn default_max_retries() -> u32 {
-    3
-}
-
-fn default_retry_backoff_ms() -> u64 {
-    1000
-}
-
 impl Default for RotationFallbackConf {
     fn default() -> Self {
         Self {
             enabled: default_fallback_enabled(),
-            max_retries: default_max_retries(),
-            retry_backoff_ms: default_retry_backoff_ms(),
         }
     }
 }
