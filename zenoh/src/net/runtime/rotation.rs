@@ -42,9 +42,10 @@ impl RotationEngine {
     /// 2. Close the old link (break)
     /// 3. Update endpoint tracking
     ///
-    /// If make fails, it retries up to `fallback.max_retries` times.
-    /// If all retries fail and fallback is enabled, it falls back to
-    /// break-before-make (which causes a redeclaration burst).
+    /// If make fails (e.g. because `max_links` is reached), the rotation
+    /// is skipped and the old connection is kept untouched. If fallback
+    /// is enabled, the old transport is closed and the orchestrator's
+    /// existing `closed_session()` reconnect logic handles reconnection.
     pub(crate) fn start(runtime: Runtime, endpoint: EndPoint, config: RotationConf) -> Self {
         let cancellation_token = runtime.get_cancellation_token();
 
@@ -82,12 +83,19 @@ impl RotationEngine {
         );
 
         loop {
-            let jitter = (jitter_ms > 0)
-                .then(|| Duration::from_millis(rand::thread_rng().gen_range(0..=jitter_ms)))
-                .unwrap_or(Duration::ZERO);
+            // Jitter is ±jitter_ms: subtract a random offset from the base interval
+            // (clamped at a minimum of 1ms to avoid zero-duration sleeps).
+            let jitter = if jitter_ms > 0 {
+                let j = rand::thread_rng().gen_range(0..=jitter_ms);
+                base_interval
+                    .checked_sub(Duration::from_millis(j))
+                    .unwrap_or(Duration::from_millis(1))
+            } else {
+                base_interval
+            };
 
             tokio::select! {
-                _ = tokio::time::sleep(base_interval + jitter) => {}
+                _ = tokio::time::sleep(jitter) => {}
                 _ = cancellation_token.cancelled() => {
                     tracing::debug!("Rotation engine for {endpoint} cancelled.");
                     return;
@@ -108,56 +116,26 @@ impl RotationEngine {
             Ok(()) => {
                 tracing::debug!(
                     "Rotation make-before-break succeeded for {endpoint}. \
-                     Old link will be closed without triggering closed_session()."
+                     Old link closed without triggering closed_session()."
                 );
                 Ok(())
             }
             Err(e) => {
-                tracing::warn!(
-                    "Rotation make-before-break failed for {endpoint}: {e}. \
-                     Retrying up to {} times...",
-                    config.fallback.max_retries
-                );
-
+                // Make-before-break failed. This typically happens when
+                // max_links=1 (no multilink) and the connection lands on
+                // the same router. In this case, skip the rotation and
+                // keep the old connection — do not retry, since retrying
+                // would likely hit the same max_links limit.
                 if config.fallback.enabled {
-                    let mut backoff = Duration::from_millis(config.fallback.retry_backoff_ms);
-                    for attempt in 1..=config.fallback.max_retries {
-                        tokio::time::sleep(backoff).await;
-                        tracing::debug!(
-                            "Rotation retry {}/{} for {endpoint}",
-                            attempt,
-                            config.fallback.max_retries
-                        );
-                        match Self::try_make_before_break(runtime, endpoint).await {
-                            Ok(()) => {
-                                tracing::debug!(
-                                    "Rotation retry {}/{} succeeded for {endpoint}",
-                                    attempt,
-                                    config.fallback.max_retries
-                                );
-                                return Ok(());
-                            }
-                            Err(re) => {
-                                tracing::debug!(
-                                    "Rotation retry {}/{} failed for {endpoint}: {re}",
-                                    attempt,
-                                    config.fallback.max_retries
-                                );
-                                backoff *= 2;
-                            }
-                        }
-                    }
-
                     tracing::warn!(
-                        "Rotation failed after {} retries for {endpoint}. \
-                         Falling back to break-before-make (may cause redeclaration burst).",
-                        config.fallback.max_retries
+                        "Rotation make-before-break failed for {endpoint}: {e}. \
+                         Falling back to break-before-make (orchestrator will reconnect)."
                     );
                     Self::fallback_break_before_make(runtime, endpoint).await
                 } else {
                     tracing::warn!(
-                        "Rotation failed for {endpoint} and fallback is disabled. \
-                         Keeping old connection."
+                        "Rotation failed for {endpoint}: {e}. \
+                         Keeping old connection (fallback disabled)."
                     );
                     Ok(())
                 }
@@ -167,7 +145,7 @@ impl RotationEngine {
 
     /// Attempt make-before-break: open a new link to the endpoint.
     ///
-    /// If successful, the old link is closed via `del_link` on the
+    /// If successful, the old link is closed via `close_link` on the
     /// transport, which does NOT trigger `closed_session()` because
     /// the transport still has the new link.
     async fn try_make_before_break(runtime: &Runtime, endpoint: &EndPoint) -> ZResult<()> {
@@ -190,10 +168,19 @@ impl RotationEngine {
             .ok_or_else(|| zerror!("Unexpected callback type"))?;
 
         // If we now have more than one link to the same peer, close the old one(s).
+        // Compare locators without metadata, since Link.dst may have patched
+        // metadata (reliability/priorities) that endpoint.to_locator() does not.
         let links = new_transport.get_links().unwrap_or_default();
         if links.len() > 1 {
-            let locator = endpoint.to_locator();
-            let old_links: Vec<_> = links.into_iter().filter(|l| l.dst == locator).collect();
+            let target_proto = endpoint.protocol().to_string();
+            let target_addr = endpoint.address().to_string();
+            let old_links: Vec<_> = links
+                .into_iter()
+                .filter(|l| {
+                    l.dst.protocol().as_str() == target_proto
+                        && l.dst.address().as_str() == target_addr
+                })
+                .collect();
             for old_link in old_links.iter().take(old_links.len().saturating_sub(1)) {
                 tracing::debug!("Closing old link {old_link} during rotation for {endpoint}");
                 new_transport.close_link(old_link.clone()).await?;
@@ -206,30 +193,35 @@ impl RotationEngine {
 
     /// Fallback: break-before-make.
     ///
-    /// Closes the old transport entirely, which triggers `closed_session()`
-    /// and redeclarations. The orchestrator's existing retry logic will
-    /// then re-establish the connection.
+    /// Closes the old transport entirely. This triggers `closed_session()`
+    /// which causes the orchestrator's existing retry logic to re-establish
+    /// the connection. We do NOT call `open_transport_unicast` ourselves
+    /// to avoid racing with the orchestrator's reconnect logic.
     async fn fallback_break_before_make(runtime: &Runtime, endpoint: &EndPoint) -> ZResult<()> {
         let transports = runtime.manager().get_transports_unicast().await;
-        let locator = endpoint.to_locator();
+        let target_proto = endpoint.protocol().to_string();
+        let target_addr = endpoint.address().to_string();
 
         for transport in transports {
             if let Ok(links) = transport.get_links() {
-                if links.iter().any(|l| l.dst == locator) {
+                // Match without metadata (same as try_make_before_break)
+                if links.iter().any(|l| {
+                    l.dst.protocol().as_str() == target_proto
+                        && l.dst.address().as_str() == target_addr
+                }) {
                     tracing::info!("Closing transport for {endpoint} (break-before-make fallback)");
                     let _ = transport.close().await;
-                    break;
+                    // The orchestrator's closed_session() callback will handle
+                    // reconnection via peers_connector_retry(). Do not attempt
+                    // to reconnect here to avoid duplicate connection races.
+                    return Ok(());
                 }
             }
         }
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        runtime
-            .manager()
-            .open_transport_unicast(endpoint.clone())
-            .await?;
-
+        tracing::warn!(
+            "No existing transport found for {endpoint} during break-before-make fallback"
+        );
         Ok(())
     }
 }

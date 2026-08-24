@@ -55,8 +55,6 @@ pub mod rotation {
     pub const interval_ms: u64 = 300_000;
     pub const jitter_ms: u64 = 30_000;
     pub const fallback_enabled: bool = true;
-    pub const fallback_max_retries: u32 = 3;
-    pub const fallback_retry_backoff_ms: u64 = 1_000;
     pub const rotate_across_locators: bool = true;
 }
 
