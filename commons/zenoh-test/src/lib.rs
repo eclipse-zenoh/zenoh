@@ -312,7 +312,7 @@ impl TestSessions {
         listener_runtime.start().await.unwrap();
 
         let locators = listener_runtime
-            .get_locators()
+            .get_locators_noloopback()
             .into_iter()
             .map(|l| l.to_endpoint())
             .collect();
