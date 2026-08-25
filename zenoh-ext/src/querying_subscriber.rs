@@ -494,6 +494,12 @@ struct InnerState {
 /// Held for the duration of a drain so the flag clears even if a user callback
 /// unwinds. Otherwise delivery would stop silently for the rest of the
 /// subscriber's life.
+///
+/// `advanced_subscriber.rs` carries a type of the same name and shape. They are
+/// kept separate on purpose: this one has no condition variable, because
+/// `FetchingSubscriber` has no `wait_callbacks`-style API to make one mean
+/// anything, and this type is deprecated. Sharing them would tie a deprecated
+/// type's lifetime to the current one's.
 struct DeliveringRole<'a> {
     state: &'a Arc<Mutex<InnerState>>,
     released: bool,
@@ -554,6 +560,20 @@ impl Drop for DeliveringRole<'_> {
 /// them. A thread that finds another already draining returns immediately; the
 /// active deliverer picks that work up on its next lap, so nothing is dropped
 /// and callbacks stay mutually excluded exactly as before.
+///
+/// A callback that publishes to its own subscriber is therefore safe as long as
+/// it publishes *conditionally*. One that republishes on every sample now spins
+/// in the refill loop below rather than deadlocking — livelock instead of
+/// deadlock, and still the callback's own recursion.
+///
+/// # The outbox is not backpressure
+///
+/// The state mutex used to throttle producers: a thread arriving while a
+/// callback ran blocked on the guard until it finished. Staging returns
+/// immediately, so a producer faster than the callback grows the outbox instead
+/// of being slowed by it. Nothing here bounds that. Bounding it would mean
+/// dropping samples or reintroducing a block, both larger semantic changes than
+/// removing the deadlock, so it is documented rather than decided here.
 fn dispatch_outbox(state: &Arc<Mutex<InnerState>>, callback: &Callback<Sample>) {
     // Claim the role and take the first batch in one acquisition.
     let mut samples = {
