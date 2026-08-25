@@ -526,9 +526,16 @@ impl Drop for DeliveringRole<'_> {
         // Only reached when a user callback unwound. Deliberately not `zlock!`:
         // this runs on the unwind path, and a panic in a destructor aborts the
         // process, so a poisoned mutex must not be unwrapped here.
-        if let Ok(mut state) = self.state.lock() {
-            state.delivering = None;
-        }
+        //
+        // Poisoning is recovered from rather than skipped. This guard exists to
+        // clear the marker unconditionally, so a case where it silently does not
+        // would defeat it — the role would stay claimed for the rest of the
+        // subscriber's life. `into_inner` hands back the state either way.
+        let state = &mut *match self.state.lock() {
+            Ok(state) => state,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        state.delivering = None;
     }
 }
 

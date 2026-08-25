@@ -682,10 +682,17 @@ impl Drop for DeliveringRole<'_> {
         // Only reached when a user callback unwound. Deliberately not `zlock!`:
         // this runs on the unwind path, and panicking in a destructor aborts the
         // process, so a poisoned mutex must not be unwrapped here.
-        if let Ok(mut states) = self.statesref.lock() {
-            states.delivering = None;
-            states.delivery_done.notify_all();
-        }
+        //
+        // Poisoning is recovered from rather than skipped. This guard exists to
+        // clear the marker unconditionally, so a case where it silently does not
+        // would defeat it — the role would stay claimed for the rest of the
+        // subscriber's life. `into_inner` hands back the state either way.
+        let states = &mut *match self.statesref.lock() {
+            Ok(states) => states,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        states.delivering = None;
+        states.delivery_done.notify_all();
     }
 }
 
@@ -805,7 +812,13 @@ fn dispatch_outbox(statesref: &Arc<Mutex<State>>) {
 #[zenoh_macros::unstable]
 fn wait_for_delivery(statesref: &Arc<Mutex<State>>) {
     let me = std::thread::current().id();
-    let mut guard = zlock!(statesref);
+    // Deliberately not `zlock!`. The subscriber's drop callback calls this, and
+    // that runs inside `CallbackDrop`'s destructor — unwrapping a poisoned mutex
+    // there is a panic in a `Drop`, which aborts the process. The wait loop below
+    // already treats poisoning as "nothing to wait for"; so does this.
+    let Ok(mut guard) = statesref.lock() else {
+        return;
+    };
     let condvar = guard.delivery_done.clone();
     loop {
         match guard.delivering {
@@ -1255,8 +1268,16 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 // Take the handles out under the lock and drop them outside it:
                 // dropping a user callback runs user `Drop` code, and that must
                 // not happen while `statesref` is held.
+                //
+                // Deliberately not `zlock!`: this closure runs inside
+                // `CallbackDrop`'s destructor, so unwrapping a poisoned mutex here
+                // is a panic in a `Drop`, which aborts. Recover the state instead —
+                // the handles still have to be released.
                 let (callback, miss_handlers) = {
-                    let states = &mut *zlock!(statesref);
+                    let states = &mut *match statesref.lock() {
+                        Ok(states) => states,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
                     (
                         states.callback.take(),
                         std::mem::take(&mut states.miss_handlers),
