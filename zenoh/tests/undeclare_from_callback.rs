@@ -125,6 +125,12 @@ enum Outcome {
     /// Still blocked after [`WAIT`]. This is the self-join.
     Deadlocked,
     /// Unwound. Carries the message so a test can assert *which* failure.
+    ///
+    /// Read only through the derived `Debug` in assertion messages, which
+    /// dead-code analysis deliberately ignores. Keeping the payload is the
+    /// point: a scenario that fails an inner assertion must say so rather than
+    /// be reported as a deadlock.
+    #[allow(dead_code)]
     Panicked(String),
 }
 
@@ -263,7 +269,9 @@ fn undeclaring_a_queryable_with_wait_callbacks_from_its_own_callback_deadlocks()
             .declare_queryable("test/undeclare_from_callback/queryable")
             .callback(move |q: Query| {
                 entered.store(true, Ordering::SeqCst);
-                let _ = q.reply("test/undeclare_from_callback/queryable", "answer").wait();
+                let _ = q
+                    .reply("test/undeclare_from_callback/queryable", "answer")
+                    .wait();
                 if let Some(qa) = take(&slot_cb) {
                     let _ = qa.undeclare().wait_callbacks().wait();
                 }
