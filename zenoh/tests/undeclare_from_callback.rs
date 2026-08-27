@@ -68,6 +68,24 @@
 //! callback runs elsewhere. Nothing is self-held, so the barrier is achievable
 //! and `main` honours it. A fix keyed on "am I inside any callback?" cannot see
 //! the difference and drops it; one keyed on "do I hold this permit?" keeps it.
+//!
+//! # Two that pin the fix rather than the defect
+//!
+//! The two ways a per-entity registration goes quietly wrong are losing an
+//! outer frame on nested delivery, and leaking a frame on unwind. The second is
+//! the nastier: it drops barriers silently for the rest of the thread's life,
+//! so nothing ever reports it.
+//!
+//! **Their failing baselines are different, and the second one matters.**
+//!
+//! * [`nesting_does_not_lose_the_outer_entity`] fails on unfixed `main`, where
+//!   that path simply deadlocks.
+//! * [`a_panicking_callback_releases_its_registration`] **passes on unfixed
+//!   `main`, vacuously** — there is no registration there, so there is nothing
+//!   to leak and the wait blocks correctly. Its real baseline is a build whose
+//!   guard skips the unwind path: against that it fails with *"returned after
+//!   0 ms ... the registration guard did not release"*. Measured, not assumed.
+//!   Read as a regression test, not a reproduction.
 
 // `wait_callbacks` is `#[zenoh_macros::internal_or_unstable]`. Without this gate
 // the file does not compile in the default configuration, which CI builds.
@@ -490,6 +508,166 @@ fn undeclaring_an_unrelated_entity_from_a_callback_still_waits_for_it() {
     assert!(
         b_finished.load(Ordering::SeqCst),
         "B's callback never finished, so this scenario proves nothing"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Properties of the fix itself
+//
+// Unlike everything above, these two fail on unfixed `main`: they exercise
+// paths that simply deadlock there. They exist to pin how the fix keeps its
+// bookkeeping, which is where a plausible implementation goes wrong quietly.
+// ---------------------------------------------------------------------------
+
+/// Nesting must not lose the outer entity.
+///
+/// A callback may deliver into another entity, so more than one group can be
+/// executing on a thread at once. Here **A**'s callback publishes to **B**, and
+/// B's callback tears down **A** — so at the moment of the wait the thread is
+/// running a callback of A *and* one of B, with A's the outer.
+///
+/// A's permit is held on this stack, so this is a genuine self-join and the
+/// wait must not block. Bookkeeping that *sets* the executing group rather than
+/// pushing it would have overwritten A with B on entry, lost the outer frame,
+/// and parked the thread forever. A stack keeps it.
+#[test]
+fn nesting_does_not_lose_the_outer_entity() {
+    let report = run_scenario(|entered| {
+        let session = zenoh::open(isolated_config()).wait().unwrap();
+        let slot_a: Slot<zenoh::pubsub::Subscriber<()>> = Arc::new(Mutex::new(None));
+
+        // B: tears down A from one frame deeper than A's own callback.
+        let slot_a_cb = slot_a.clone();
+        let _sub_b = session
+            .declare_subscriber("test/undeclare_from_callback/nesting/b")
+            .callback(move |_s: Sample| {
+                if let Some(a) = take(&slot_a_cb) {
+                    let _ = a.undeclare().wait_callbacks().wait();
+                }
+            })
+            .wait()
+            .unwrap();
+
+        // A: its callback delivers into B, inline on this same thread.
+        let inner = session.clone();
+        let sub_a = session
+            .declare_subscriber("test/undeclare_from_callback/nesting/a")
+            .callback(move |_s: Sample| {
+                entered.store(true, Ordering::SeqCst);
+                inner
+                    .put("test/undeclare_from_callback/nesting/b", "nested")
+                    .wait()
+                    .unwrap();
+            })
+            .wait()
+            .unwrap();
+        *slot_a.lock().unwrap() = Some(sub_a);
+
+        session
+            .put("test/undeclare_from_callback/nesting/a", "trigger")
+            .wait()
+            .unwrap();
+    });
+
+    report.assert_entered_callback();
+    assert!(
+        matches!(report.outcome, Outcome::Completed),
+        "undeclaring the outer entity from a nested callback parked the thread — the \
+         outer frame was lost, so the self-join went undetected. Got {:?}",
+        report.outcome
+    );
+}
+
+/// A panicking callback must not leave its entity registered.
+///
+/// The registration is an RAII guard, so it has to be released on the unwind
+/// path too. If it were not, that entity would look permanently "executing" on
+/// the thread, and every later wait on it would take the asynchronous path —
+/// silently dropping barriers for the rest of the thread's life. That is a
+/// worse failure than the deadlock, because nothing would ever report it.
+///
+/// The observable is the same as the unrelated-entity test: whether the wait
+/// actually waited. The subscriber's callback panics the first time and sleeps
+/// the second, so one entity serves as both the unwinding frame and the barrier
+/// target.
+#[test]
+fn a_panicking_callback_releases_its_registration() {
+    let finished = Arc::new(AtomicBool::new(false));
+    let finished_when_wait_returned = Arc::new(AtomicBool::new(false));
+    let wait_took_ms = Arc::new(AtomicU64::new(u64::MAX));
+
+    let finished_body = finished.clone();
+    let observed_body = finished_when_wait_returned.clone();
+    let took_body = wait_took_ms.clone();
+
+    let report = run_scenario(move |entered| {
+        let session = zenoh::open(isolated_config()).wait().unwrap();
+        let already_panicked = Arc::new(AtomicBool::new(false));
+        let running = Arc::new(AtomicBool::new(false));
+
+        let already_panicked_cb = already_panicked.clone();
+        let running_cb = running.clone();
+        let finished_cb = finished_body.clone();
+        let sub = session
+            .declare_subscriber("test/undeclare_from_callback/unwind")
+            .callback(move |_s: Sample| {
+                entered.store(true, Ordering::SeqCst);
+                if !already_panicked_cb.swap(true, Ordering::SeqCst) {
+                    panic!("deliberate panic, unwinding through the registration guard");
+                }
+                running_cb.store(true, Ordering::SeqCst);
+                std::thread::sleep(UNRELATED_CALLBACK_WORK);
+                finished_cb.store(true, Ordering::SeqCst);
+            })
+            .wait()
+            .unwrap();
+
+        // First delivery: panics, and unwinds back through `Callback::call`.
+        let panicking = session.clone();
+        let unwound = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let _ = panicking
+                .put("test/undeclare_from_callback/unwind", "boom")
+                .wait();
+        }));
+        assert!(unwound.is_err(), "the callback was expected to panic");
+
+        // Second delivery, on another thread: the slow path, so there is a
+        // real in-flight callback for the wait below to wait on.
+        let publisher = session.clone();
+        std::thread::spawn(move || {
+            let _ = publisher
+                .put("test/undeclare_from_callback/unwind", "slow")
+                .wait();
+        });
+        while !running.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        // If the panic leaked the registration, this thread still looks like it
+        // is running a callback of this entity, and the wait returns at once.
+        let started = Instant::now();
+        let _ = sub.undeclare().wait_callbacks().wait();
+        took_body.store(started.elapsed().as_millis() as u64, Ordering::SeqCst);
+        observed_body.store(finished_body.load(Ordering::SeqCst), Ordering::SeqCst);
+    });
+
+    report.assert_entered_callback();
+    assert!(
+        matches!(report.outcome, Outcome::Completed),
+        "the unwind scenario did not run to completion, got {:?}",
+        report.outcome
+    );
+
+    let took = wait_took_ms.load(Ordering::SeqCst);
+    assert!(
+        finished_when_wait_returned.load(Ordering::SeqCst),
+        "wait_callbacks() returned after {took} ms without waiting, on a thread whose \
+         only callback of this entity had already panicked. The registration guard did \
+         not release on the unwind path, so the entity looks permanently in flight here"
+    );
+    assert!(
+        finished.load(Ordering::SeqCst),
+        "the second callback never finished, so this scenario proves nothing"
     );
 }
 
