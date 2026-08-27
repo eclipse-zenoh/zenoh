@@ -307,6 +307,7 @@ fn test_default_features() {
             " zenoh/transport_unixsock-stream",
             " zenoh/transport_ws",
             // " zenoh/transport_vsock",
+            // " zenoh/transport_isotp",
             " zenoh/unstable",
             " zenoh/default",
         )
@@ -334,6 +335,7 @@ fn test_no_default_features() {
             // " zenoh/transport_unixsock-stream",
             // " zenoh/transport_ws",
             // " zenoh/transport_vsock",
+            // " zenoh/transport_isotp",
             " zenoh/unstable",
             // " zenoh/default",
         )

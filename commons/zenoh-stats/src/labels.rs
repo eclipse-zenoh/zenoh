@@ -219,6 +219,7 @@ impl LinkLabels {
             "serial",
             "unixpipe",
             "vsock",
+            "isotp",
         ];
         let protocol = self.dst_locator.protocol().as_str();
         match KNOWN_PROTOCOLS.iter().find(|p| **p == protocol) {

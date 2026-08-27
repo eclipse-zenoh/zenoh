@@ -26,6 +26,7 @@ version = { workspace = true }
 
 [features]
 transport_can = ["zenoh-link-can"]
+transport_isotp = ["zenoh-link-isotp"]
 transport_quic = ["zenoh-link-quic"]
 transport_quic_datagram = ["zenoh-link-quic_datagram"]
 transport_serial = ["zenoh-link-serial"]
@@ -41,6 +42,7 @@ transport_vsock = ["zenoh-link-vsock"]
 transport_ws = ["zenoh-link-ws"]
 uring = [
   "zenoh-link-commons/uring",
+  "zenoh-link-isotp/uring",
   "zenoh-link-quic/uring",
   "zenoh-link-quic_datagram/uring",
   "zenoh-link-serial/uring",
@@ -57,6 +59,7 @@ uring = [
 zenoh-config = { workspace = true }
 zenoh-link-can = { workspace = true, optional = true }
 zenoh-link-commons = { workspace = true }
+zenoh-link-isotp = { workspace = true, optional = true }
 zenoh-link-quic = { workspace = true, optional = true }
 zenoh-link-quic_datagram = { workspace = true, optional = true }
 zenoh-link-serial = { workspace = true, optional = true }

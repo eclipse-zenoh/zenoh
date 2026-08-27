@@ -25,6 +25,10 @@ pub use zenoh_link_can as can;
 #[cfg(feature = "transport_can")]
 use zenoh_link_can::{CanLocatorInspector, LinkManagerMulticastCan, CAN_LOCATOR_PREFIX};
 pub use zenoh_link_commons::*;
+#[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+pub use zenoh_link_isotp as isotp;
+#[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+use zenoh_link_isotp::{IsotpLocatorInspector, LinkManagerUnicastIsotp, ISOTP_LOCATOR_PREFIX};
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
 #[cfg(feature = "transport_quic")]
@@ -88,6 +92,7 @@ use zenoh_result::{bail, ZResult};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LinkKind {
     Can,
+    Isotp,
     Quic,
     QuicDatagram,
     Serial,
@@ -133,6 +138,8 @@ impl LinkKind {
                 VSOCK_LOCATOR_PREFIX => supported_links.push(LinkKind::Vscock),
                 #[cfg(feature = "transport_can")]
                 CAN_LOCATOR_PREFIX => supported_links.push(LinkKind::Can),
+                #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+                ISOTP_LOCATOR_PREFIX => supported_links.push(LinkKind::Isotp),
                 _ => {}
             }
         }
@@ -189,6 +196,8 @@ impl TryFrom<&Locator> for LinkKind {
             VSOCK_LOCATOR_PREFIX => Ok(LinkKind::Vscock),
             #[cfg(feature = "transport_can")]
             CAN_LOCATOR_PREFIX => Ok(LinkKind::Can),
+            #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+            ISOTP_LOCATOR_PREFIX => Ok(LinkKind::Isotp),
             _ => bail!(
                 "Unicast not supported for {} protocol",
                 locator.protocol().as_str()
@@ -228,6 +237,8 @@ pub const ALL_SUPPORTED_LINKS: &[LinkKind] = &[
     LinkKind::Vscock,
     #[cfg(feature = "transport_can")]
     LinkKind::Can,
+    #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+    LinkKind::Isotp,
 ];
 
 #[derive(Default, Clone)]
@@ -254,6 +265,8 @@ pub struct LocatorInspector {
     vsock_inspector: VsockLocatorInspector,
     #[cfg(feature = "transport_can")]
     can_inspector: CanLocatorInspector,
+    #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+    isotp_inspector: IsotpLocatorInspector,
 }
 
 impl fmt::Debug for LocatorInspector {
@@ -289,6 +302,8 @@ impl LocatorInspector {
             LinkKind::Vscock => self.vsock_inspector.is_reliable(locator),
             #[cfg(feature = "transport_can")]
             LinkKind::Can => self.can_inspector.is_reliable(locator),
+            #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+            LinkKind::Isotp => self.isotp_inspector.is_reliable(locator),
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }
@@ -320,6 +335,8 @@ impl LocatorInspector {
             LinkKind::Vscock => self.vsock_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_can")]
             LinkKind::Can => self.can_inspector.is_multicast(locator).await,
+            #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+            LinkKind::Isotp => self.isotp_inspector.is_multicast(locator).await,
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }
@@ -433,6 +450,8 @@ impl LinkManagerBuilderUnicast {
             LinkKind::Unixpipe => Ok(std::sync::Arc::new(LinkManagerUnicastPipe::new(_manager))),
             #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
             LinkKind::Vscock => Ok(std::sync::Arc::new(LinkManagerUnicastVsock::new(_manager))),
+            #[cfg(all(feature = "transport_isotp", target_os = "linux"))]
+            LinkKind::Isotp => Ok(std::sync::Arc::new(LinkManagerUnicastIsotp::new(_manager))),
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }

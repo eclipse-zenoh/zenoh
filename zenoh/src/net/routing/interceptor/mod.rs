@@ -87,6 +87,7 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
             LinkAuthId::Udp => Self(InterceptorLink::Udp),
             LinkAuthId::Serial => Self(InterceptorLink::Serial),
             LinkAuthId::Unixpipe => Self(InterceptorLink::Unixpipe),
+            LinkAuthId::Isotp => Self(InterceptorLink::Isotp),
             LinkAuthId::UnixsockStream => Self(InterceptorLink::UnixsockStream),
             LinkAuthId::Vsock => Self(InterceptorLink::Vsock),
             LinkAuthId::Ws => Self(InterceptorLink::Ws),

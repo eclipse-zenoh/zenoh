@@ -342,6 +342,7 @@ impl Link {
             | LinkAuthId::Udp
             | LinkAuthId::Serial
             | LinkAuthId::Unixpipe
+            | LinkAuthId::Isotp
             | LinkAuthId::UnixsockStream
             | LinkAuthId::Vsock
             | LinkAuthId::Ws

@@ -321,6 +321,7 @@ pub enum InterceptorLink {
     Quic,
     Serial,
     Unixpipe,
+    Isotp,
     UnixsockStream,
     Vsock,
     Ws,
