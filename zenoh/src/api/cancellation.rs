@@ -33,7 +33,26 @@ use zenoh_runtime::ZRuntime;
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) struct SyncGroupNotifier(OwnedSemaphorePermit);
+pub(crate) struct SyncGroupNotifier {
+    #[allow(dead_code)]
+    permit: OwnedSemaphorePermit,
+    /// Identity of the `SyncGroup` this permit belongs to.
+    ///
+    /// The address of the group's `Semaphore` allocation. It is only ever
+    /// compared, never dereferenced, and the `Arc` inside the permit keeps that
+    /// allocation alive for as long as this value can be read — so the identity
+    /// cannot be recycled while it is in use.
+    group: GroupId,
+}
+
+impl SyncGroupNotifier {
+    pub(crate) fn group(&self) -> GroupId {
+        self.group
+    }
+}
+
+/// Identity of a [`SyncGroup`], comparable but not dereferenceable.
+pub(crate) type GroupId = usize;
 
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Clone)]
@@ -55,11 +74,18 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
+        let group = self.id();
         self.semaphore
             .clone()
             .try_acquire_owned()
             .ok()
-            .map(SyncGroupNotifier)
+            .map(|permit| SyncGroupNotifier { permit, group })
+    }
+
+    /// This group's identity, for comparison against the groups whose
+    /// callbacks are executing on the current thread.
+    pub(crate) fn id(&self) -> GroupId {
+        Arc::as_ptr(&self.semaphore) as GroupId
     }
 
     pub(crate) fn close(&self) {
@@ -72,6 +98,30 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
+        // Waiting for *this* group to drain, from inside a callback that
+        // belongs to *this* group, can never complete: that callback pins a
+        // live `Callback` clone — and therefore one of the very permits awaited
+        // below — a few frames beneath us on this thread's own stack. The "no
+        // callback of this entity is running once this returns" contract is
+        // unsatisfiable by definition there, because the caller is one of them.
+        //
+        // The question is deliberately narrow. Being inside *some* callback is
+        // not enough: undeclaring entity B from inside entity A's callback pins
+        // none of B's permits, so B's barrier is achievable and is honoured.
+        // Asking the wider question would drop it silently.
+        //
+        // Observed in production as rmw_zenoh's ~SubscriptionData →
+        // ze_undeclare_advanced_subscriber parking a transport rx thread
+        // forever, freezing the whole session.
+        if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
+            tracing::warn!(
+                "SyncGroup::wait called from inside a callback of the same entity; \
+                 draining asynchronously to avoid self-deadlock"
+            );
+            let this = self.clone();
+            ZRuntime::Application.spawn(async move { this.wait_async().await });
+            return;
+        }
         let s = self.semaphore.clone();
         let _p = ZRuntime::Application.block_in_place(s.acquire_many(Self::max_permits()));
         self.close();

@@ -14,9 +14,52 @@
 
 //! Callback handler trait.
 
-use std::{fmt, sync::Arc};
+use std::{cell::RefCell, fmt, sync::Arc};
 
-use crate::api::handlers::IntoHandler;
+use crate::api::{cancellation::GroupId, handlers::IntoHandler};
+
+thread_local! {
+    /// The `SyncGroup`s whose user callbacks are currently on this thread's
+    /// stack, innermost last.
+    ///
+    /// A `Vec` rather than a counter, because the question `SyncGroup::wait`
+    /// needs answered is not "am I inside a callback?" but "am I inside a
+    /// callback of *this* group?". Only the second is a self-join; the first
+    /// also catches the case where the barrier is achievable, and dropping it
+    /// there loses a guarantee the API promises.
+    ///
+    /// Nesting is real — a callback may deliver to another entity — so entries
+    /// are pushed and popped rather than set and cleared. Depth is bounded by
+    /// the user's own re-entrancy, and the common case is zero or one.
+    static EXECUTING_GROUPS: RefCell<Vec<GroupId>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Whether a callback belonging to `group` is executing on the current thread.
+pub(crate) fn callback_of_group_running_on_this_thread(group: GroupId) -> bool {
+    EXECUTING_GROUPS.with_borrow(|groups| groups.contains(&group))
+}
+
+/// Pushes a callback's groups for the duration of one invocation.
+///
+/// The `Drop` is what makes this unwind-safe: a user callback that panics must
+/// not leave its groups registered, or every later `wait` on them would take
+/// the asynchronous path forever.
+struct ExecutingGroups(usize);
+
+impl ExecutingGroups {
+    fn enter(groups: &[GroupId]) -> Self {
+        EXECUTING_GROUPS.with_borrow_mut(|stack| stack.extend_from_slice(groups));
+        Self(groups.len())
+    }
+}
+
+impl Drop for ExecutingGroups {
+    fn drop(&mut self) {
+        EXECUTING_GROUPS.with_borrow_mut(|stack| {
+            stack.truncate(stack.len().saturating_sub(self.0));
+        });
+    }
+}
 
 /// A function that can transform an [`FnMut`]`(T)` into
 /// an [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
@@ -72,6 +115,12 @@ impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 pub struct Callback<T> {
     callable: Arc<dyn CallbackImpl<T>>,
     drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
+    /// The `SyncGroup`s this callback holds an on-drop permit in.
+    ///
+    /// Shared with every clone, because every clone holds the same permits:
+    /// the permit is released by the dropper, which runs when the last clone
+    /// dies. Empty for a callback that was never registered with a group.
+    groups: Arc<[GroupId]>,
 }
 
 impl<T> fmt::Debug for Callback<T> {
@@ -88,6 +137,7 @@ impl<T> Clone for Callback<T> {
         Self {
             callable: self.callable.clone(),
             drop: self.drop.clone(),
+            groups: self.groups.clone(),
         }
     }
 }
@@ -105,6 +155,7 @@ impl<T> Callback<T> {
     /// Call the inner callback.
     #[inline]
     pub fn call(&self, arg: T) {
+        let _executing = ExecutingGroups::enter(&self.groups);
         self.callable.call(arg)
     }
 
@@ -112,12 +163,19 @@ impl<T> Callback<T> {
     where
         T: CallbackParameter,
     {
+        let _executing = ExecutingGroups::enter(&self.groups);
         self.callable.call_with_message(msg)
     }
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
         self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
+    }
+
+    /// Records which `SyncGroup`s this callback holds a permit in, so that a
+    /// `wait` on one of them can recognise its own callback on this thread.
+    pub(crate) fn set_groups(&mut self, groups: impl IntoIterator<Item = GroupId>) {
+        self.groups = groups.into_iter().collect();
     }
 }
 
@@ -126,6 +184,7 @@ impl<T, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
         Self {
             callable: Arc::new(value),
             drop: None,
+            groups: Arc::from([]),
         }
     }
 }
