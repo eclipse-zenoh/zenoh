@@ -59,6 +59,15 @@
 //!   wait works normally, and the harness can report `Completed` at all.
 //! * [`the_callback_guard_fires_when_the_callback_never_runs`] — the
 //!   entered-the-callback assertion is live rather than decorative.
+//!
+//! # The one that separates the candidate fixes
+//!
+//! [`undeclaring_an_unrelated_entity_from_a_callback_still_waits_for_it`] is not
+//! a control. It pins a guarantee that holds today and that only *some* fixes
+//! keep: tearing down entity B from inside entity A's callback, while B's own
+//! callback runs elsewhere. Nothing is self-held, so the barrier is achievable
+//! and `main` honours it. A fix keyed on "am I inside any callback?" cannot see
+//! the difference and drops it; one keyed on "do I hold this permit?" keeps it.
 
 // `wait_callbacks` is `#[zenoh_macros::internal_or_unstable]`. Without this gate
 // the file does not compile in the default configuration, which CI builds.
@@ -67,10 +76,10 @@
 use std::{
     panic::AssertUnwindSafe,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use zenoh::{query::Query, sample::Sample, Wait};
@@ -82,6 +91,13 @@ const WAIT: Duration = Duration::from_secs(10);
 
 /// How long to give local delivery before concluding the callback never ran.
 const DELIVERY_GRACE: Duration = Duration::from_millis(500);
+
+/// How long the unrelated entity's callback stays in flight.
+///
+/// Long enough that "the wait honoured the barrier" and "the wait returned
+/// immediately" are hundreds of milliseconds apart, so the verdict does not
+/// rest on scheduler noise.
+const UNRELATED_CALLBACK_WORK: Duration = Duration::from_millis(800);
 
 /// An isolated session: no multicast, no gossip, no listeners.
 ///
@@ -348,6 +364,124 @@ fn undeclaring_with_wait_callbacks_from_another_thread_completes() {
         matches!(report.outcome, Outcome::Completed),
         "wait_callbacks from an unrelated thread must complete, got {:?}",
         report.outcome
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The discriminator between the two candidate fixes
+// ---------------------------------------------------------------------------
+
+/// Undeclaring an **unrelated** entity from inside a callback, while that
+/// entity's own callback is in flight on another thread.
+///
+/// This is the case the rest of the file does not reach, and the only one that
+/// separates the two designs on the table.
+///
+/// Nothing is self-held here. The waiting stack is inside subscriber **A**'s
+/// callback and holds a permit in *A*'s `SyncGroup`; the entity being torn down
+/// is **B**, whose only permit is held by a callback running on a different
+/// thread. That permit will be released when B's callback returns, so the
+/// barrier `wait_callbacks()` promises is **achievable** — and today it is
+/// honoured.
+///
+/// A thread-local callback-depth counter cannot tell this apart from the
+/// self-join. It sees "this thread is inside some callback" and drains
+/// asynchronously, so the wait returns while B's callback is still running and
+/// the promise is quietly dropped. A check on the *identity* of the permit
+/// holder keeps it.
+///
+/// So this test pins behaviour that is correct on `main` and that the coarse
+/// fix regresses. It is not evidence against that fix on its own — the
+/// guarantee may be judged not worth its cost — but the trade should be made
+/// deliberately rather than discovered later.
+#[test]
+fn undeclaring_an_unrelated_entity_from_a_callback_still_waits_for_it() {
+    // Written by B's callback when it finishes.
+    let b_finished = Arc::new(AtomicBool::new(false));
+    // Read the instant `wait()` returned: did it wait for B or not?
+    let b_finished_when_wait_returned = Arc::new(AtomicBool::new(false));
+    // Secondary evidence, and what the failure message quotes.
+    let wait_took_ms = Arc::new(AtomicU64::new(u64::MAX));
+
+    let b_finished_body = b_finished.clone();
+    let observed_body = b_finished_when_wait_returned.clone();
+    let took_body = wait_took_ms.clone();
+
+    let report = run_scenario(move |entered| {
+        let session = zenoh::open(isolated_config()).wait().unwrap();
+        let b_running = Arc::new(AtomicBool::new(false));
+
+        // Entity B: unrelated to A, with a deliberately slow callback.
+        let b_running_cb = b_running.clone();
+        let b_finished_cb = b_finished_body.clone();
+        let sub_b = session
+            .declare_subscriber("test/undeclare_from_callback/unrelated/b")
+            .callback(move |_s: Sample| {
+                b_running_cb.store(true, Ordering::SeqCst);
+                std::thread::sleep(UNRELATED_CALLBACK_WORK);
+                b_finished_cb.store(true, Ordering::SeqCst);
+            })
+            .wait()
+            .unwrap();
+        let slot_b: Slot<zenoh::pubsub::Subscriber<()>> = Arc::new(Mutex::new(Some(sub_b)));
+
+        // Entity A: its callback tears B down and records what it saw.
+        let slot_b_cb = slot_b.clone();
+        let b_finished_probe = b_finished_body.clone();
+        let observed_cb = observed_body.clone();
+        let took_cb = took_body.clone();
+        let _sub_a = session
+            .declare_subscriber("test/undeclare_from_callback/unrelated/a")
+            .callback(move |_s: Sample| {
+                entered.store(true, Ordering::SeqCst);
+                if let Some(b) = take(&slot_b_cb) {
+                    let started = Instant::now();
+                    let _ = b.undeclare().wait_callbacks().wait();
+                    took_cb.store(started.elapsed().as_millis() as u64, Ordering::SeqCst);
+                    // The whole experiment is this one read.
+                    observed_cb.store(b_finished_probe.load(Ordering::SeqCst), Ordering::SeqCst);
+                }
+            })
+            .wait()
+            .unwrap();
+
+        // Put B's callback in flight on a thread that is not this one.
+        let publisher = session.clone();
+        std::thread::spawn(move || {
+            publisher
+                .put("test/undeclare_from_callback/unrelated/b", "slow")
+                .wait()
+                .unwrap();
+        });
+        while !b_running.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        // Now run A's callback on this thread, with B's still running.
+        session
+            .put("test/undeclare_from_callback/unrelated/a", "trigger")
+            .wait()
+            .unwrap();
+    });
+
+    report.assert_entered_callback();
+    assert!(
+        matches!(report.outcome, Outcome::Completed),
+        "undeclaring an unrelated entity must not deadlock, got {:?}",
+        report.outcome
+    );
+
+    let took = wait_took_ms.load(Ordering::SeqCst);
+    assert!(
+        b_finished_when_wait_returned.load(Ordering::SeqCst),
+        "wait_callbacks() on an unrelated entity returned after {took} ms while that \
+         entity's callback was still running. No permit of B's was held by the waiting \
+         stack, so the barrier was achievable and has been dropped — the signature of a \
+         fix that asks \"am I inside any callback?\" instead of \"do I hold this permit?\""
+    );
+    assert!(
+        b_finished.load(Ordering::SeqCst),
+        "B's callback never finished, so this scenario proves nothing"
     );
 }
 
