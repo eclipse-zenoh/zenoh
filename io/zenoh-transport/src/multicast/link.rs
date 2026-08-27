@@ -132,7 +132,11 @@ pub(crate) struct TransportLinkMulticastTx {
 }
 
 impl TransportLinkMulticastTx {
-    pub(crate) async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
+    pub(crate) async fn send_batch(
+        &mut self,
+        batch: &mut WBatch,
+        priority: Priority,
+    ) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
         let res = batch
@@ -148,8 +152,12 @@ impl TransportLinkMulticastTx {
                 .as_slice(),
         };
 
-        // Send the message on the link
-        self.inner.link.write_all(bytes).await?;
+        // Send the message on the link, telling it which priority this batch
+        // belongs to. Links that do not arbitrate ignore it.
+        self.inner
+            .link
+            .write_all_with_priority(bytes, priority)
+            .await?;
 
         Ok(())
     }
@@ -161,7 +169,9 @@ impl TransportLinkMulticastTx {
         let mut batch = WBatch::new(self.inner.config.batch);
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
-        self.send_batch(&mut batch).await?;
+        // Join, KeepAlive and Close keep a session alive; on an arbitrated bus
+        // they must not lose to bulk data, so they go out at the top priority.
+        self.send_batch(&mut batch, Priority::Control).await?;
         Ok(len)
     }
 }
@@ -434,7 +444,7 @@ async fn tx_task(
                 match res {
                     Some((mut batch, priority)) => {
                         // Send the buffer on the link
-                        link.send_batch(&mut batch).await?;
+                        link.send_batch(&mut batch, priority).await?;
                         // Keep track of next SNs
                         if let Some(sn) = batch.codec.latest_sn.reliable {
                             last_sns[priority as usize].reliable = sn;
@@ -453,8 +463,10 @@ async fn tx_task(
                     None => {
                         // Drain the transmission pipeline and write remaining bytes on the wire
                         let mut batches = pipeline.drain();
-                        for (mut b, _) in batches.drain(..) {
-                            tokio::time::timeout(config.join_interval, link.send_batch(&mut b))
+                        for (mut b, p) in batches.drain(..) {
+                            // `drain` reports the priority as its queue index.
+                            let p = Priority::try_from(p as u8).unwrap_or(Priority::DEFAULT);
+                            tokio::time::timeout(config.join_interval, link.send_batch(&mut b, p))
                                 .await
                                 .map_err(|_| {
                                     zerror!(

@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
-    core::{EndPoint, Locator},
+    core::{EndPoint, Locator, Priority},
     transport::{BatchSize, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
@@ -54,6 +54,19 @@ pub trait LinkMulticastTrait: Send + Sync {
     fn is_reliable(&self) -> bool;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
+
+    /// Write a batch that belongs to `priority`.
+    ///
+    /// Defaults to [`LinkMulticastTrait::write_all`], discarding the priority,
+    /// which is right for every medium that does not arbitrate. A medium that
+    /// does -- CAN, where the frame identifier **is** the bus priority -- can
+    /// override this to carry zenoh's QoS onto the wire.
+    ///
+    /// The transmission pipeline batches per priority, so a batch belongs to
+    /// exactly one; this is not an average over mixed traffic.
+    async fn write_all_with_priority(&self, buffer: &[u8], _priority: Priority) -> ZResult<()> {
+        self.write_all(buffer).await
+    }
     async fn read<'a>(&'a self, buffer: &mut [u8]) -> ZResult<(usize, Cow<'a, Locator>)>;
     async fn close(&self) -> ZResult<()>;
 }

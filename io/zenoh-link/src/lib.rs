@@ -20,6 +20,10 @@
 use std::{collections::HashMap, fmt};
 
 use zenoh_config::Config;
+#[cfg(feature = "transport_can")]
+pub use zenoh_link_can as can;
+#[cfg(feature = "transport_can")]
+use zenoh_link_can::{CanLocatorInspector, LinkManagerMulticastCan, CAN_LOCATOR_PREFIX};
 pub use zenoh_link_commons::*;
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
@@ -83,6 +87,7 @@ use zenoh_result::{bail, ZResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LinkKind {
+    Can,
     Quic,
     QuicDatagram,
     Serial,
@@ -126,6 +131,8 @@ impl LinkKind {
                 UNIXPIPE_LOCATOR_PREFIX => supported_links.push(LinkKind::Unixpipe),
                 #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
                 VSOCK_LOCATOR_PREFIX => supported_links.push(LinkKind::Vscock),
+                #[cfg(feature = "transport_can")]
+                CAN_LOCATOR_PREFIX => supported_links.push(LinkKind::Can),
                 _ => {}
             }
         }
@@ -180,6 +187,8 @@ impl TryFrom<&Locator> for LinkKind {
             UNIXPIPE_LOCATOR_PREFIX => Ok(LinkKind::Unixpipe),
             #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
             VSOCK_LOCATOR_PREFIX => Ok(LinkKind::Vscock),
+            #[cfg(feature = "transport_can")]
+            CAN_LOCATOR_PREFIX => Ok(LinkKind::Can),
             _ => bail!(
                 "Unicast not supported for {} protocol",
                 locator.protocol().as_str()
@@ -217,6 +226,8 @@ pub const ALL_SUPPORTED_LINKS: &[LinkKind] = &[
     LinkKind::Unixpipe,
     #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
     LinkKind::Vscock,
+    #[cfg(feature = "transport_can")]
+    LinkKind::Can,
 ];
 
 #[derive(Default, Clone)]
@@ -241,6 +252,8 @@ pub struct LocatorInspector {
     unixpipe_inspector: UnixPipeLocatorInspector,
     #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
     vsock_inspector: VsockLocatorInspector,
+    #[cfg(feature = "transport_can")]
+    can_inspector: CanLocatorInspector,
 }
 
 impl fmt::Debug for LocatorInspector {
@@ -274,6 +287,8 @@ impl LocatorInspector {
             LinkKind::Unixpipe => self.unixpipe_inspector.is_reliable(locator),
             #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
             LinkKind::Vscock => self.vsock_inspector.is_reliable(locator),
+            #[cfg(feature = "transport_can")]
+            LinkKind::Can => self.can_inspector.is_reliable(locator),
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }
@@ -303,6 +318,8 @@ impl LocatorInspector {
             LinkKind::Unixpipe => self.unixpipe_inspector.is_multicast(locator).await,
             #[cfg(all(feature = "transport_vsock", target_os = "linux"))]
             LinkKind::Vscock => self.vsock_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_can")]
+            LinkKind::Can => self.can_inspector.is_multicast(locator).await,
             #[allow(unreachable_patterns)]
             _ => unreachable!(),
         }
@@ -434,6 +451,8 @@ impl LinkManagerBuilderMulticast {
         match link_kind {
             #[cfg(feature = "transport_udp")]
             LinkKind::Udp => Ok(std::sync::Arc::new(LinkManagerMulticastUdp)),
+            #[cfg(feature = "transport_can")]
+            LinkKind::Can => Ok(std::sync::Arc::new(LinkManagerMulticastCan)),
             _ => bail!("Multicast not supported for link {link_kind:?}"),
         }
     }

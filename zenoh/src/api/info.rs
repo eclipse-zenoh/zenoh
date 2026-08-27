@@ -344,7 +344,8 @@ impl Link {
             | LinkAuthId::Unixpipe
             | LinkAuthId::UnixsockStream
             | LinkAuthId::Vsock
-            | LinkAuthId::Ws => None, // avoid using _ wildcard to ensure that new protocols are correctly handled
+            | LinkAuthId::Ws
+            | LinkAuthId::Can => None, // avoid using _ wildcard to ensure that new protocols are correctly handled
         };
         let priorities = if is_qos {
             link.priorities

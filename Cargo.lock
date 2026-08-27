@@ -5124,6 +5124,7 @@ name = "zenoh-link"
 version = "1.10.0"
 dependencies = [
  "zenoh-config",
+ "zenoh-link-can",
  "zenoh-link-commons",
  "zenoh-link-quic",
  "zenoh-link-quic_datagram",
@@ -5135,6 +5136,20 @@ dependencies = [
  "zenoh-link-unixsock_stream",
  "zenoh-link-vsock",
  "zenoh-link-ws",
+ "zenoh-protocol",
+ "zenoh-result",
+]
+
+[[package]]
+name = "zenoh-link-can"
+version = "1.10.0"
+dependencies = [
+ "async-trait",
+ "libc",
+ "tokio",
+ "tracing",
+ "zenoh-core",
+ "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
 ]

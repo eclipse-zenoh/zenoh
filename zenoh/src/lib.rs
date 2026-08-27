@@ -193,8 +193,9 @@
 //!
 //!   Enable multiple link connection for unicast transports. Maximum number of connections is configurable in [`Config`]
 //!
-//! * `transport_quic`, `transport_quic_datagram`, `transport_serial`, `transport_tcp`, `transport_tls`,
-//!   `transport_udp`, `transport_unixpipe`, `transport_unixsock-stream`, `transport_vsock`, `transport_ws`
+//! * `transport_can`, `transport_quic`, `transport_quic_datagram`, `transport_serial`, `transport_tcp`,
+//!   `transport_tls`, `transport_udp`, `transport_unixpipe`, `transport_unixsock-stream`, `transport_vsock`,
+//!   `transport_ws`
 //!
 //!   Enable specific transports
 //!
@@ -257,6 +258,7 @@ pub const FEATURES: &str = zenoh_util::concat_enabled_features!(
         "auth_usrpwd",
         "shared-memory",
         "stats",
+        "transport_can",
         "transport_multilink",
         "transport_quic",
         "transport_serial",

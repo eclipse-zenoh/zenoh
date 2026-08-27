@@ -90,6 +90,7 @@ impl From<&LinkAuthId> for InterceptorLinkWrapper {
             LinkAuthId::UnixsockStream => Self(InterceptorLink::UnixsockStream),
             LinkAuthId::Vsock => Self(InterceptorLink::Vsock),
             LinkAuthId::Ws => Self(InterceptorLink::Ws),
+            LinkAuthId::Can => Self(InterceptorLink::Can),
         }
     }
 }
