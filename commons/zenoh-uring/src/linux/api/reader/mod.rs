@@ -328,28 +328,26 @@ impl Reader {
                     bail!("Task-related uring error: {}, task {:?}", unexpected, index);
                 }
             }
-        } else {
-            if let Some(buf_id) = io_uring::cqueue::buffer_select(e.flags()) {
-                #[cfg(feature = "uring_trace")]
-                tracing::trace!("Read multishot entry: {:?}", e);
+        } else if let Some(buf_id) = io_uring::cqueue::buffer_select(e.flags()) {
+            #[cfg(feature = "uring_trace")]
+            tracing::trace!("Read multishot entry: {:?}", e);
 
-                if !io_uring::cqueue::more(e.flags()) {
-                    tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
+            if !io_uring::cqueue::more(e.flags()) {
+                tracing::debug!("IORING_CQE_F_BUFFER: Restart multishot receive!!!");
 
-                    let recv =
-                        opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
-                            .build()
-                            .flags(io_uring::squeue::Flags::ASYNC)
-                            .user_data(index.into());
+                let recv =
+                    opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
+                        .build()
+                        .flags(io_uring::squeue::Flags::ASYNC)
+                        .user_data(index.into());
 
-                    unsafe { sq.push(&recv)? };
-                    need_submit = true;
-                }
-
-                let buf_len = e.result() as usize;
-                let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
-                context.run_callback(buffer);
+                unsafe { sq.push(&recv)? };
+                need_submit = true;
             }
+
+            let buf_len = e.result() as usize;
+            let buffer = Arc::new(context.buffer_group().read_buffer(buf_id, buf_len, sq)?);
+            context.run_callback(buffer);
         }
         Ok(need_submit)
     }
