@@ -263,11 +263,15 @@ const _: () = {
             buf.map(Into::into).filter(|_| zslices.next().is_none())
         }
 
-        pub fn as_shm_mut(&mut self) -> Option<&mut zshm> {
+        /// # Safety
+        ///
+        /// Destructor of the returned guard must be executed.
+        pub unsafe fn as_shm_mut(&mut self) -> Option<zenoh_buffers::BufferMutGuard<'_, zshm>> {
             let mut zslices = self.0.zslices_mut();
             // SAFETY: ShmBufInner cannot change the size of the slice
-            let buf = unsafe { zslices.next()?.downcast_mut::<ShmBufInner>() };
-            buf.map(Into::into).filter(|_| zslices.next().is_none())
+            let buf = unsafe { zslices.next()?.downcast_mut::<ShmBufInner>() }
+                .filter(|_| zslices.next().is_none())?;
+            Some(unsafe { buf.map(|buf: &mut _| buf.into()) })
         }
     }
 };
