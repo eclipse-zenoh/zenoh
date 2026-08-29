@@ -21,7 +21,8 @@ use std::{
     ptr::NonNull,
 };
 
-use advisory_lock::{AdvisoryFileLock, FileLockMode};
+// advisory-lock disabled for Android compatibility (avoid syncfs symbol)
+// use advisory_lock::{AdvisoryFileLock, FileLockMode};
 #[cfg(shm_external_lockfile)]
 use nix::fcntl::open;
 use nix::{
