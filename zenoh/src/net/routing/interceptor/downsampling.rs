@@ -27,7 +27,7 @@ use std::{
 };
 
 use nonempty_collections::NEVec;
-use zenoh_config::{DownsamplingItemConf, DownsamplingMessage, DownsamplingRuleConf};
+use zenoh_config::{DataMessage, DownsamplingItemConf, DownsamplingRuleConf};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
     impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
@@ -169,19 +169,14 @@ pub(crate) struct DownsamplingFilters {
 }
 
 impl DownsamplingFilters {
-    fn new<T: IntoIterator<Item = DownsamplingMessage>>(iter: T) -> Self {
+    fn new<T: IntoIterator<Item = DataMessage>>(iter: T) -> Self {
         let mut filters = Self::default();
         for m in iter {
             match m {
-                DownsamplingMessage::Delete => filters.delete = true,
-                #[allow(deprecated)]
-                DownsamplingMessage::Push => {
-                    filters.put = true;
-                    filters.delete = true;
-                }
-                DownsamplingMessage::Put => filters.put = true,
-                DownsamplingMessage::Query => filters.query = true,
-                DownsamplingMessage::Reply => filters.reply = true,
+                DataMessage::Delete => filters.delete = true,
+                DataMessage::Put => filters.put = true,
+                DataMessage::Query => filters.query = true,
+                DataMessage::Reply => filters.reply = true,
             }
         }
         filters

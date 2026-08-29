@@ -11,10 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#![no_main]
 
-use libfuzzer_sys::fuzz_target;
+use std::{os::fd::RawFd, sync::Arc};
 
-fuzz_target!(|data: &[u8]| {
-    zenoh_codec_fuzz::exercise_frame(data);
-});
+use tokio::sync::mpsc::UnboundedSender;
+
+use crate::reader::{index::IndexGeneration, rx_context::RxCallback};
+
+#[derive(Debug)]
+pub(crate) enum ReactorCmd {
+    StartRx(
+        RawFd,
+        RxCallback,
+        Arc<tokio::sync::SetOnce<IndexGeneration>>,
+        UnboundedSender<zenoh_result::Error>,
+    ),
+    StopRx(IndexGeneration),
+}

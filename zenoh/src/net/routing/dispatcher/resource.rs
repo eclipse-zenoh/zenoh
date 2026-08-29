@@ -795,9 +795,9 @@ impl Resource {
                 if let Some(wire_expr) = get_wire_expr(parent, parent_suffix, sid) {
                     return Some(wire_expr);
                 }
-                match parent.parent.as_ref() {
-                    Some(p) => parent = p,
-                    None => return None,
+                {
+                    let p = parent.parent.as_ref()?;
+                    parent = p
                 }
             }
         }

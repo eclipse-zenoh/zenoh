@@ -21,6 +21,7 @@ version = "0.0.0"
 cargo-fuzz = true
 
 [dependencies]
+arbitrary = "1"
 libfuzzer-sys = "0.4"
 zenoh-buffers = { path = "../../zenoh-buffers" }
 zenoh-codec = { path = ".." }
@@ -41,13 +42,6 @@ bench = false
 doc = false
 name = "network_message"
 path = "fuzz_targets/network_message.rs"
-test = false
-
-[[bin]]
-bench = false
-doc = false
-name = "frame"
-path = "fuzz_targets/frame.rs"
 test = false
 
 [[bin]]

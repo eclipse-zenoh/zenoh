@@ -48,7 +48,7 @@ use crate::net::{
     routing::{
         dispatcher::{interests::RemoteInterest, queries::LocalQueryables, region::RegionMap},
         gateway::{FaceContext, LocalSubscribers, DEFAULT_NODE_ID},
-        hat::{DispatcherContext, Remote},
+        hat::{DispatcherContext, Remote, UnregisterFaceEntitiesResult},
     },
     runtime::Runtime,
 };
@@ -278,6 +278,60 @@ impl HatFace {
     }
 }
 
-impl HatTrait for Hat {}
+impl HatTrait for Hat {
+    #[tracing::instrument(level = "debug", skip(ctx), ret)]
+    fn unregister_face_entities(
+        &mut self,
+        ctx: DispatcherContext,
+    ) -> super::UnregisterFaceEntitiesResult {
+        debug_assert!(self.owns(ctx.src_face));
+
+        let fid = ctx.src_face.id;
+
+        let removed_subscribers = self
+            .face_hat_mut(ctx.src_face)
+            .remote_subs
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).subs = None;
+                }
+
+                res
+            })
+            .collect();
+
+        let removed_queryables = self
+            .face_hat_mut(ctx.src_face)
+            .remote_qabls
+            .drain()
+            .map(|(_, (mut res, _))| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).qabl = None;
+                }
+
+                res
+            })
+            .collect();
+
+        let removed_tokens = self
+            .face_hat_mut(ctx.src_face)
+            .remote_tokens
+            .drain()
+            .map(|(_, mut res)| {
+                if let Some(ctx) = get_mut_unchecked(&mut res).face_ctxs.get_mut(&fid) {
+                    get_mut_unchecked(ctx).token = false;
+                }
+
+                res
+            })
+            .collect();
+        UnregisterFaceEntitiesResult {
+            removed_subscribers,
+            removed_queryables,
+            removed_tokens,
+        }
+    }
+}
 
 type HatRemote = Arc<FaceState>;

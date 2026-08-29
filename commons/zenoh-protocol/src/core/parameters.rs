@@ -146,11 +146,15 @@ pub fn insert_sort<'s>(s: &'s str, k: &'s str, v: &'s str) -> (String, Option<&'
     (from_iter(sort(iter)), item)
 }
 
-/// Remove a key-value `(&str, &str)` pair from `s` preserving the insertion order.
+/// Remove every entry for a `&str`-key from `s` preserving the insertion order of the
+/// remaining entries. Returns the value of the first removed entry, if any.
 pub fn remove<'s>(s: &'s str, k: &str) -> (String, Option<&'s str>) {
-    let mut iter = iter(s);
-    let item = iter.find(|(key, _)| *key == k).map(|(_, v)| v);
-    let iter = iter.filter(|x| x.0 != k);
+    // NOTE: `item` must be looked up on a fresh iterator — calling `find` on the
+    // iterator that later feeds `filter` would consume every entry up to and
+    // including the first match, dropping the entries preceding it from the result
+    // (and dropping everything when the key is absent).
+    let item = get(s, k);
+    let iter = iter(s).filter(|x| x.0 != k);
     (concat(iter), item)
 }
 
@@ -228,6 +232,14 @@ pub fn rand(into: &mut String) {
 /// It can be parsed from a `String`, using `;` as separator between each parameter and `=` as separator between a key and its value.
 ///
 /// Keys can have multiple values, using `|` as a separator between them. An iterator for these can be obtained with [`Parameters::values`].
+///
+/// Construction from a string accepts ANY input: trailing `;`, `=`, and `|` characters are
+/// trimmed, the rest is stored verbatim. Empty `;`-separated chunks are skipped on iteration,
+/// a chunk is split into key and value on its FIRST `=` (a chunk without `=` has the empty
+/// string as its value), and no percent-decoding is applied. Duplicate keys are allowed:
+/// [`Parameters::get`] returns the value of the first occurrence, and duplicates are preserved
+/// (including across mutations of other keys). Mutating that key via [`Parameters::insert`] or
+/// [`Parameters::remove`] rebuilds the string and thus collapses/removes its entries.
 ///
 /// Example:
 /// ```
@@ -360,6 +372,8 @@ impl<'s> Parameters<'s> {
 }
 
 impl<'s> From<&'s str> for Parameters<'s> {
+    /// Infallible: trailing `;`, `=`, and `|` characters are trimmed, the rest is
+    /// stored verbatim (no validation, no percent-decoding).
     fn from(mut value: &'s str) -> Self {
         value = value.trim_end_matches(|c| {
             c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
@@ -369,6 +383,8 @@ impl<'s> From<&'s str> for Parameters<'s> {
 }
 
 impl From<String> for Parameters<'_> {
+    /// Infallible: trailing `;`, `=`, and `|` characters are trimmed, the rest is
+    /// stored verbatim (no validation, no percent-decoding).
     fn from(mut value: String) -> Self {
         let s = value.trim_end_matches(|c| {
             c == LIST_SEPARATOR || c == FIELD_SEPARATOR || c == VALUE_SEPARATOR
@@ -540,5 +556,25 @@ mod tests {
         let params = Parameters::from("p1=1");
 
         assert_eq!(params.values("p2").next(), None);
+    }
+
+    #[test]
+    fn test_remove() {
+        // Entries preceding the removed key are preserved.
+        assert_eq!(remove("b=2;a=1;c=3", "a"), ("b=2;c=3".into(), Some("1")));
+        // Every entry for the key is removed; the first value is returned.
+        assert_eq!(remove("a=1;b=2;a=3", "a"), ("b=2".into(), Some("1")));
+        // Removing an absent key leaves the parameters untouched.
+        assert_eq!(remove("x=1;y=2", "missing"), ("x=1;y=2".into(), None));
+        // Removing the only entry empties the parameters.
+        assert_eq!(remove("a=1", "a"), ("".into(), Some("1")));
+        // A value-less entry is removed and reported with an empty value.
+        assert_eq!(remove("flag;a=1", "flag"), ("a=1".into(), Some("")));
+
+        let mut params = Parameters::from("b=2;a=1;c=3");
+        assert_eq!(params.remove("a"), Some("1".to_string()));
+        assert_eq!(params.as_str(), "b=2;c=3");
+        assert_eq!(params.remove("missing"), None);
+        assert_eq!(params.as_str(), "b=2;c=3");
     }
 }

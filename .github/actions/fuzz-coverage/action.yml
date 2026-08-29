@@ -1,0 +1,107 @@
+#
+# Copyright (c) 2026 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+name: Fuzz coverage report
+description: >
+  Run cargo-fuzz coverage for a target, publish an llvm-cov summary to the
+  job summary, and upload the coverage artifacts.
+
+inputs:
+  working-directory:
+    description: Directory containing the fuzz crate (relative to repo root)
+    required: true
+  target:
+    description: Fuzz target name
+    required: true
+  toolchain:
+    description: Rust toolchain to run cargo-fuzz/llvm-cov with
+    required: true
+  source-paths:
+    description: Newline-separated list of source paths (relative to working-directory) to restrict the report to
+    required: true
+  title:
+    description: Human-readable title used in the job summary heading (e.g. "Codec fuzz", "Protocol fuzz")
+    required: true
+  artifact-prefix:
+    description: Prefix used in the uploaded artifact name (e.g. "codec", "protocol")
+    required: true
+  label:
+    description: Fuzzing profile label (daily/weekly), used in the artifact name
+    required: true
+  ignore-filename-regex:
+    description: --ignore-filename-regex value passed to llvm-cov
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Generate coverage report
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+
+        target="${{ inputs.target }}"
+        cargo +${{ inputs.toolchain }} fuzz coverage -s none "$target" "corpus/$target"
+
+        llvm_bin="$(dirname "$(rustc +${{ inputs.toolchain }} --print target-libdir)")/bin"
+        host_triple="$(rustc +${{ inputs.toolchain }} -vV | sed -n 's/^host: //p')"
+        binary="target/${host_triple}/coverage/${host_triple}/release/${target}"
+        profdata="coverage/${target}/coverage.profdata"
+        report_dir="coverage/${target}/html"
+        report_txt="coverage/${target}/report.txt"
+
+        source_paths=()
+        while IFS= read -r path; do
+          [ -n "$path" ] && source_paths+=("$path")
+        done <<< "${{ inputs.source-paths }}"
+
+        "$llvm_bin/llvm-cov" report "$binary" \
+          -instr-profile="$profdata" \
+          --ignore-filename-regex="${{ inputs.ignore-filename-regex }}" \
+          "${source_paths[@]}" | tee "$report_txt"
+
+        "$llvm_bin/llvm-cov" show "$binary" \
+          -instr-profile="$profdata" \
+          --format=html \
+          --output-dir="$report_dir" \
+          --ignore-filename-regex="${{ inputs.ignore-filename-regex }}" \
+          "${source_paths[@]}"
+
+    - name: Publish coverage summary
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+
+        target="${{ inputs.target }}"
+        report_txt="coverage/${target}/report.txt"
+
+        {
+          echo "## ${{ inputs.title }} coverage: \`$target\`"
+          echo
+          echo "<details><summary>Full llvm-cov report</summary>"
+          echo
+          echo '```text'
+          cat "$report_txt"
+          echo '```'
+          echo "</details>"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: fuzz-coverage-${{ inputs.artifact-prefix }}-${{ inputs.label }}-${{ inputs.target }}
+        path: ${{ inputs.working-directory }}/coverage/${{ inputs.target }}
+        if-no-files-found: error
+        retention-days: 14

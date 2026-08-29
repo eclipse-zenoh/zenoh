@@ -26,7 +26,10 @@ use zenoh::{
     internal::{
         bail,
         runtime::ZRuntime,
-        traits::{EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait},
+        traits::{
+            EncodingBuilderTrait, QoSBuilderTrait, TimestampBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
+        },
         TerminatableTask,
     },
     key_expr::{keyexpr, KeyExpr},
@@ -119,8 +122,7 @@ pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     sequencing: Sequencing,
     miss_config: Option<MissDetectionConfig>,
     liveliness: bool,
-    cache: bool,
-    history: CacheConfig,
+    history: Option<CacheConfig>,
 }
 
 #[zenoh_macros::unstable]
@@ -139,7 +141,6 @@ impl fmt::Debug for AdvancedPublisherBuilder<'_, '_, '_> {
             .field("sequencing", &self.sequencing)
             .field("miss_config", &self.miss_config)
             .field("liveliness", &self.liveliness)
-            .field("cache", &self.cache)
             .field("history", &self.history)
             .finish()
     }
@@ -162,8 +163,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
             sequencing: Sequencing::None,
             miss_config: None,
             liveliness: false,
-            cache: false,
-            history: CacheConfig::default(),
+            history: None,
         }
     }
 
@@ -207,11 +207,10 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
     /// The cache can be used for history and/or recovery.
     #[zenoh_macros::unstable]
     pub fn cache(mut self, config: CacheConfig) -> Self {
-        self.cache = true;
         if self.sequencing == Sequencing::None {
             self.sequencing = Sequencing::Timestamp;
         }
-        self.history = config;
+        self.history = Some(config);
         self
     }
 
@@ -416,16 +415,15 @@ impl<'a> AdvancedPublisher<'a> {
             _ => None,
         };
 
-        let cache = if conf.cache {
-            Some(
+        let cache = conf
+            .history
+            .map(|h| {
                 AdvancedCacheBuilder::new(conf.session, Ok(key_expr.clone()))
-                    .history(conf.history)
+                    .history(h)
                     .queryable_suffix(&suffix)
-                    .wait()?,
-            )
-        } else {
-            None
-        };
+                    .wait()
+            })
+            .transpose()?;
 
         let token = if conf.liveliness {
             tracing::debug!(
@@ -770,6 +768,23 @@ impl<P> TimestampBuilderTrait for AdvancedPublicationBuilder<'_, P> {
     fn timestamp<TS: Into<Option<uhlc::Timestamp>>>(self, timestamp: TS) -> Self {
         Self {
             builder: self.builder.timestamp(timestamp),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
+impl<P> TimestampInstrumentationBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    #[zenoh_macros::unstable]
+    fn timestamp_instrumentation<
+        TS: Into<Option<zenoh::timestamp_stack::TimestampInstrumentation>>,
+    >(
+        self,
+        instrumentation: TS,
+    ) -> Self {
+        Self {
+            builder: self.builder.timestamp_instrumentation(instrumentation),
             ..self
         }
     }

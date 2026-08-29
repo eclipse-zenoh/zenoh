@@ -683,6 +683,7 @@ fn test_response_wireexpr() {
         ext_target: QueryTarget::All,
         ext_budget: None,
         ext_timeout: None,
+        ext_ts_stack: None,
     });
 
     route_send_response(
@@ -703,6 +704,7 @@ fn test_response_wireexpr() {
             ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
             ext_tstamp: None,
             ext_respid: None,
+            ext_ts_stack: None,
         },
     );
     assert_eq!(
@@ -749,6 +751,7 @@ fn test_response_wireexpr() {
             ext_qos: zenoh_protocol::network::response::ext::QoSType::default(),
             ext_tstamp: None,
             ext_respid: None,
+            ext_ts_stack: None,
         },
     );
     assert_eq!(

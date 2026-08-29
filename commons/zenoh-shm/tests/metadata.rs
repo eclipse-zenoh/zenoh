@@ -171,7 +171,7 @@ fn watchdog_confirmed_concurrent() {
 }
 
 // TODO: confirmation to dangling watchdog actually writes to potentially-existing
-// other watchdog instance from other test running in the same process and changes it's behaviour,
+// other watchdog instance from other test running in the same process and changes its behaviour,
 // so we cannot run dangling test in parallel with anything else
 #[test]
 #[ignore]

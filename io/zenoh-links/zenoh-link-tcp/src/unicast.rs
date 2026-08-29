@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -197,6 +199,14 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Tcp
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 // // WARN: This sometimes causes timeout in routing test
@@ -379,6 +389,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
     }
 }
 

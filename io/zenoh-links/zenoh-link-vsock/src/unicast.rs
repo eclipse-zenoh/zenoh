@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::{AsRawFd, RawFd};
 use std::{cell::UnsafeCell, collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
@@ -194,6 +196,14 @@ impl LinkUnicastTrait for LinkUnicastVsock {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Vsock
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 impl fmt::Display for LinkUnicastVsock {
@@ -337,6 +347,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastVsock {
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
     }
 }
 

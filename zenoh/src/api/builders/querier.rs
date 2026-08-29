@@ -28,9 +28,13 @@ use super::sample::QoSBuilderTrait;
 use crate::api::cancellation::CancellationTokenBuilderTrait;
 #[cfg(feature = "unstable")]
 use crate::api::sample::SourceInfo;
+#[cfg(feature = "unstable")]
+use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
     api::{
-        builders::sample::{EncodingBuilderTrait, SampleBuilderTrait},
+        builders::sample::{
+            EncodingBuilderTrait, SampleBuilderTrait, TimestampInstrumentationBuilderTrait,
+        },
         bytes::ZBytes,
         cancellation::SyncGroup,
         encoding::Encoding,
@@ -244,6 +248,8 @@ pub struct QuerierGetBuilder<'a, 'b, Handler> {
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")]
+    pub(crate) timestamp_instrumentation: Option<TimestampInstrumentation>,
+    #[cfg(feature = "unstable")]
     pub(crate) cancellation_token: Option<crate::api::cancellation::CancellationToken>,
 }
 
@@ -307,6 +313,20 @@ impl<Handler> SampleBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
         let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+impl<Handler> TimestampInstrumentationBuilderTrait for QuerierGetBuilder<'_, '_, Handler> {
+    #[zenoh_macros::unstable]
+    fn timestamp_instrumentation<TS: Into<Option<TimestampInstrumentation>>>(
+        self,
+        instrumentation: TS,
+    ) -> Self {
+        Self {
+            timestamp_instrumentation: instrumentation.into(),
             ..self
         }
     }
@@ -424,6 +444,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation,
             handler: _,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -435,6 +457,8 @@ impl<'a, 'b> QuerierGetBuilder<'a, 'b, DefaultHandler> {
             attachment,
             #[cfg(feature = "unstable")]
             source_info,
+            #[cfg(feature = "unstable")]
+            timestamp_instrumentation,
             handler,
             #[cfg(feature = "unstable")]
             cancellation_token,
@@ -503,6 +527,8 @@ where
             self.cancellation_token,
             Some(self.querier.id),
             self.querier.callback_sync_group.notifier(),
+            #[cfg(feature = "unstable")]
+            self.timestamp_instrumentation,
         )?;
         Ok(receiver)
     }

@@ -17,6 +17,7 @@ mod oam;
 mod push;
 mod request;
 mod response;
+mod timestamp_stack;
 
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},

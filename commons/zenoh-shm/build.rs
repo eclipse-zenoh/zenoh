@@ -12,38 +12,31 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use cfg_aliases::cfg_aliases;
-
 fn main() {
-    // these aliases should at least be included in the same aliases of Nix crate:
-    // ___________________
-    // |                 |
-    // |  Nix aliases    |
-    // |  ___________    |
-    // |  |   Our   |    |
-    // |  | aliases |    |
-    // |  |_________|    |
-    // |_________________|
-    cfg_aliases! {
-        dragonfly: { target_os = "dragonfly" },
-        ios: { target_os = "ios" },
-        freebsd: { target_os = "freebsd" },
-        macos: { target_os = "macos" },
-        netbsd: { target_os = "netbsd" },
-        openbsd: { target_os = "openbsd" },
-        watchos: { target_os = "watchos" },
-        tvos: { target_os = "tvos" },
-        visionos: { target_os = "visionos" },
+    // `shm_external_lockfile` is the only cfg alias this crate actually
+    // queries (see src/posix_shm/cleanup.rs, src/shm/unix.rs) -- it marks
+    // platforms that don't support advisory file locking on tmpfs: the BSD
+    // family (including all Apple targets, which are BSD-derived) plus
+    // Redox. Computed directly instead of pulling in the `cfg_aliases`
+    // crate for a single derived flag.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS")
+        .expect("CARGO_CFG_TARGET_OS must be set by Cargo when running build scripts");
+    let shm_external_lockfile = matches!(
+        target_os.as_str(),
+        "freebsd"
+            | "dragonfly"
+            | "netbsd"
+            | "openbsd"
+            | "ios"
+            | "macos"
+            | "watchos"
+            | "tvos"
+            | "visionos"
+            | "redox"
+    );
 
-        apple_targets: { any(ios, macos, watchos, tvos, visionos) },
-        bsd: { any(freebsd, dragonfly, netbsd, openbsd, apple_targets) },
-
-        // we use this alias to detect platforms that
-        // don't support advisory file locking on tmpfs
-        shm_external_lockfile: { any(bsd, target_os = "redox") },
-    }
-
-    println!("cargo:rustc-check-cfg=cfg(apple_targets)");
-    println!("cargo:rustc-check-cfg=cfg(bsd)");
     println!("cargo:rustc-check-cfg=cfg(shm_external_lockfile)");
+    if shm_external_lockfile {
+        println!("cargo:rustc-cfg=shm_external_lockfile");
+    }
 }

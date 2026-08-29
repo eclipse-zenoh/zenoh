@@ -77,6 +77,10 @@ async fn test_reply_preserves_optimized_ke() {
         #[cfg(feature = "unstable")]
         source_info: None,
         primitives: ReplyPrimitives::new_remote(Some(session.downgrade()), primitives.clone()),
+        #[cfg(feature = "unstable")]
+        runtime: None,
+        #[cfg(feature = "unstable")]
+        query_ts_stack: None,
     };
     let query = Query {
         inner: Arc::new(query_inner),

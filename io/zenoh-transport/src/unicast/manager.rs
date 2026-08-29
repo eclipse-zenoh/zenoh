@@ -481,6 +481,14 @@ impl TransportManager {
         vec
     }
 
+    pub async fn get_locators_unicast_noloopback(&self) -> Vec<Locator> {
+        let mut vec: Vec<Locator> = vec![];
+        for p in zasynclock!(self.state.unicast.link_managers).values() {
+            vec.extend_from_slice(&p.get_locators_noloopback().await);
+        }
+        vec
+    }
+
     /*************************************/
     /*             TRANSPORT             */
     /*************************************/
@@ -652,7 +660,9 @@ impl TransportManager {
             Some(shm_config) => self.state.shm_context.as_ref().map(|context| {
                 use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
 
-                use crate::{shm::PartnerShmConfig, shm_context::UnicastTransportShmContext};
+                use crate::common::shm::{
+                    interop::PartnerShmConfig, shm_context::UnicastTransportShmContext,
+                };
 
                 let shm_provider = if shm_config.supports_protocol(POSIX_PROTOCOL_ID) {
                     context.shm_provider.clone()
@@ -664,6 +674,7 @@ impl TransportManager {
                     context.shm_reader.clone(),
                     shm_provider,
                     shm_config.clone(),
+                    context.policy,
                 )
             }),
             None => None,
@@ -689,7 +700,7 @@ impl TransportManager {
                     #[cfg(feature = "shared-memory")]
                     shm_context,
                     #[cfg(feature = "stats")]
-                    stats
+                    stats,
                 ).await,
                 close::reason::INVALID
             )
@@ -828,9 +839,23 @@ impl TransportManager {
         }
     }
 
-    pub async fn open_transport_unicast(
+    pub async fn open_transport_unicast(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, None).await
+    }
+
+    pub async fn open_transport_unicast_with_zid(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: &ZenohIdProto,
+    ) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, Some(expected_zid))
+            .await
+    }
+
+    async fn open_transport_unicast_inner(
         &self,
         mut endpoint: EndPoint,
+        expected_zid: Option<&ZenohIdProto>,
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
@@ -865,7 +890,9 @@ impl TransportManager {
         // Open the link
         tokio::time::timeout(self.config.unicast.open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
-                Ok(link) => super::establishment::open::open_link(endpoint, link, self).await,
+                Ok(link) => {
+                    super::establishment::open::open_link(endpoint, link, self, expected_zid).await
+                }
                 Err(e) => Err(e),
             }
         })

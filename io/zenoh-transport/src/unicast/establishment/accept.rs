@@ -35,9 +35,7 @@ use zenoh_result::ZResult;
 #[cfg(feature = "auth_usrpwd")]
 use super::ext::auth::UsrPwdId;
 #[cfg(feature = "shared-memory")]
-use super::ext::shm::AuthSegment;
-#[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use crate::common::shm::interop::LinkShmHandoffConfig;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -60,7 +58,7 @@ struct StateTransport {
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::StateAccept,
+    ext_shm: ext::shm::auth::StateAccept,
     ext_lowlatency: ext::lowlatency::StateAccept,
     ext_patch: ext::patch::StateAccept,
     ext_region_name: ext::region_name::StateAccept,
@@ -87,8 +85,6 @@ struct RecvInitSynIn {
 struct RecvInitSynOut {
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
 }
 
 // InitAck
@@ -98,13 +94,9 @@ struct SendInitAckIn {
     mine_whatami: WhatAmI,
     other_zid: ZenohIdProto,
     other_whatami: WhatAmI,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
 }
 struct SendInitAckOut {
     cookie_nonce: u64,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: Option<AuthSegment>,
 }
 
 // OpenSyn
@@ -142,7 +134,7 @@ struct AcceptLink<'a> {
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
     #[cfg(feature = "shared-memory")]
     // Will be None if SHM operation is disabled by Config
-    ext_shm: Option<ext::shm::ShmFsm<'a>>,
+    ext_shm: Option<ext::shm::auth::ShmFsm<'a>>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
@@ -241,13 +233,12 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 
         // Extension Shm
         #[cfg(feature = "shared-memory")]
-        let ext_shm = match &self.ext_shm {
-            Some(my_shm) => my_shm
+        if let Some(my_shm) = &self.ext_shm {
+            my_shm
                 .recv_init_syn(init_syn.ext_shm)
                 .await
-                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
-            _ => None,
-        };
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        }
 
         // Extension Auth
         #[cfg(feature = "transport_auth")]
@@ -294,8 +285,6 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let output = RecvInitSynOut {
             other_zid: init_syn.zid,
             other_whatami: init_syn.whatami,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
         };
         Ok(output)
     }
@@ -320,7 +309,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_init_ack(&input.ext_shm)
+                .send_init_ack(())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             _ => None,
@@ -451,11 +440,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
             msg
         );
 
-        let output = SendInitAckOut {
-            cookie_nonce,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: input.ext_shm,
-        };
+        let output = SendInitAckOut { cookie_nonce };
         Ok(output)
     }
 
@@ -559,7 +544,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         if let Some(my_shm) = self.ext_shm.as_ref() {
             my_shm
-                .recv_open_syn((&mut state.transport.ext_shm, open_syn.ext_shm))
+                .recv_open_syn(open_syn.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?;
         }
@@ -637,7 +622,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = match self.ext_shm.as_ref() {
             Some(my_shm) => my_shm
-                .send_open_ack(&state.transport.ext_shm)
+                .send_open_ack(self.link.link.is_reliable().into())
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None => None,
@@ -747,7 +732,12 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: None,
         reliability: None,
     };
-    let mut link_unicast = TransportLinkUnicast::new(link.clone(), config);
+    let mut link_unicast = TransportLinkUnicast::new(
+        link.clone(),
+        config,
+        #[cfg(feature = "shared-memory")]
+        LinkShmHandoffConfig::new_disabled().into(),
+    );
     let mut fsm = AcceptLink {
         link: &mut link_unicast,
         prng: &manager.prng,
@@ -758,7 +748,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             .state
             .shm_context
             .as_ref()
-            .map(|ctx| ext::shm::ShmFsm::new(&ctx.auth)),
+            .map(|ctx| ext::shm::auth::ShmFsm::new(&ctx.auth)),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "transport_auth")]
@@ -807,7 +797,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                         .multilink
                         .accept(manager.config.unicast.max_links > 1),
                     #[cfg(feature = "shared-memory")]
-                    ext_shm: ext::shm::StateAccept::new(),
+                    ext_shm: ext::shm::auth::StateAccept::new(),
                     ext_lowlatency: ext::lowlatency::StateAccept::new(
                         manager.config.unicast.is_lowlatency,
                     ),
@@ -840,8 +830,6 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
             mine_whatami: manager.config.whatami,
             other_zid: isyn_out.other_zid,
             other_whatami: isyn_out.other_whatami,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: isyn_out.ext_shm,
         };
         step!(fsm.send_init_ack((state, iack_in)).await)
     };
@@ -861,6 +849,15 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     };
     let oack_out = step!(fsm.send_open_ack((&mut state, oack_in)).await);
 
+    // extract SHM configuration if available
+    #[cfg(feature = "shared-memory")]
+    let (transport_shm, link_shm) = fsm
+        .ext_shm
+        .take()
+        .map_or((None, LinkShmHandoffConfig::new_disabled()), |shm| {
+            shm.shm_init_result()
+        });
+
     // Initialize the transport
     let config = TransportConfigUnicast {
         zid: osyn_out.other_zid,
@@ -872,10 +869,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        shm: match state.transport.ext_shm.negotiated_to_use_shm() {
-            true => iack_out.ext_shm.map(TransportShmConfig::new),
-            false => None,
-        },
+        shm: transport_shm,
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
         #[cfg(feature = "auth_usrpwd")]
         auth_id: osyn_out.other_auth_id,
@@ -894,7 +888,11 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
     };
-    let a_link = link_unicast.reconfigure(a_config);
+    let a_link = link_unicast.reconfigure(
+        a_config,
+        #[cfg(feature = "shared-memory")]
+        link_shm.into(),
+    );
     let s_link = format!("{a_link:?}");
     // Handle MixedReliability links
     let best_effort_link = match link.0 {
@@ -918,7 +916,12 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 // Do not apply reliability override to MixedReliability associated links
                 reliability: None,
             };
-            let link = TransportLinkUnicast::new(LinkUnicast::from(best_effort), o_config);
+            let link = TransportLinkUnicast::new(
+                LinkUnicast::from(best_effort),
+                o_config,
+                #[cfg(feature = "shared-memory")]
+                LinkShmHandoffConfig::new_disabled().into(),
+            );
             Some(link)
         }
         zenoh_link::NewLink::Single(_) => None,

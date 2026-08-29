@@ -52,6 +52,14 @@ pub struct Segment<ID: SegmentID> {
     inner: platform::SegmentImpl<ID>,
 }
 
+impl<ID: SegmentID> Eq for Segment<ID> {}
+
+impl<ID: SegmentID> PartialEq for Segment<ID> {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner.id() == other.inner.id()
+    }
+}
+
 impl<ID: SegmentID> std::fmt::Debug for Segment<ID> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Segment").field(&self.inner).finish()
@@ -60,17 +68,23 @@ impl<ID: SegmentID> std::fmt::Debug for Segment<ID> {
 
 impl<ID: SegmentID> Segment<ID> {
     pub fn create(id: ID, len: NonZeroUsize) -> ShmCreateResult<Self> {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         let inner = platform::SegmentImpl::create(id, len)?;
         Ok(Self { inner })
     }
 
     pub fn open(id: ID) -> ShmOpenResult<Self> {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         let inner = platform::SegmentImpl::open(id)?;
         Ok(Self { inner })
     }
 
     #[allow(unused_variables)]
     pub fn ensure_not_persistent(id: ID) {
+        crate::init::raise_nofile_soft_limit_to_hard_limit_once();
+
         #[cfg(not(target_os = "windows"))]
         platform::SegmentImpl::ensure_not_persistent(id);
     }

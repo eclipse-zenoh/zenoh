@@ -17,7 +17,6 @@ use std::{
     sync::Arc,
 };
 
-use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use zenoh_protocol::{
     core::{Region, ZenohIdProto},
@@ -244,33 +243,6 @@ impl Hat {
             ),
         }
     }
-
-    pub(super) fn unregister_node_subscribers(
-        &mut self,
-        zid: &ZenohIdProto,
-    ) -> HashSet<Arc<Resource>> {
-        let removed_routers = self
-            .net_mut()
-            .remove_link(zid)
-            .into_iter()
-            .map(|(_, node)| node)
-            .collect::<HashSet<_>>();
-
-        let mut resources = HashSet::new();
-
-        for mut res in self.router_subs.iter().cloned().collect_vec() {
-            self.res_hat_mut(&mut res)
-                .router_subs
-                .retain(|router| !removed_routers.contains(router));
-
-            if self.res_hat(&res).router_subs.is_empty() {
-                self.router_subs.retain(|r| !Arc::ptr_eq(r, &res));
-                resources.insert(res);
-            }
-        }
-
-        resources
-    }
 }
 
 impl HatPubSubTrait for Hat {
@@ -450,11 +422,6 @@ impl HatPubSubTrait for Hat {
         self.propagate_forget_sourced_subscriber(ctx.tables, &res, Some(ctx.src_face), &router);
 
         Some(res)
-    }
-
-    #[tracing::instrument(level = "debug", skip(ctx), ret)]
-    fn unregister_face_subscribers(&mut self, ctx: DispatcherContext) -> HashSet<Arc<Resource>> {
-        self.unregister_node_subscribers(&ctx.src_face.zid)
     }
 
     #[tracing::instrument(level = "debug", skip(ctx), ret)]

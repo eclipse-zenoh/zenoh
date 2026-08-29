@@ -100,7 +100,7 @@ impl InterceptorTrait for TestInterceptor {
             ..
         }) = &mut msg.body
         {
-            let out = format!("Cache hit: {cache_hit}, data: {}", &self.data);
+            let out = format!("Cache hit: {cache_hit}, data: {}", self.data);
             p.payload = ZBuf::from(out.as_bytes().to_owned());
         }
         true

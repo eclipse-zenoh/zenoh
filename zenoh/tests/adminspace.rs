@@ -393,6 +393,66 @@ async fn test_adminspace_write() {
         .unwrap();
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_adminspace_write_with_zid_and_mode_wildcards() {
+    const TIMEOUT: Duration = Duration::from_secs(60);
+
+    async fn wait_config_value(session: &zenoh::Session, key: &str, expected: Option<&str>) {
+        loop {
+            let value = session.config().get(key);
+            let matches = match (value.as_deref(), expected) {
+                (Ok(value), Some(expected)) => value == expected,
+                (Err(_), None) => true,
+                _ => false,
+            };
+            if matches {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let router = {
+        let mut c = zenoh_config::Config::default();
+        c.set_mode(Some(WhatAmI::Router)).unwrap();
+        c.listen.endpoints.set(vec![]).unwrap();
+        c.scouting.multicast.set_enabled(Some(false)).unwrap();
+        c.adminspace.set_enabled(true).unwrap();
+        c.adminspace.permissions.set_read(true).unwrap();
+        c.adminspace.permissions.set_write(true).unwrap();
+        let s = ztimeout!(zenoh::open(c)).unwrap();
+        s
+    };
+    let zid = router.zid();
+    let key = "plugins/adminspace_wildcard/value";
+
+    router
+        .put("@/*/router/config/plugins/adminspace_wildcard/value", "1")
+        .await
+        .unwrap();
+    ztimeout!(wait_config_value(&router, key, Some("1")));
+
+    router
+        .delete(format!("@/{zid}/*/config/plugins/adminspace_wildcard"))
+        .await
+        .unwrap();
+    ztimeout!(wait_config_value(
+        &router,
+        "plugins/adminspace_wildcard",
+        None
+    ));
+
+    router
+        .put("@/*/*/config/plugins/adminspace_wildcard/value", "2")
+        .await
+        .unwrap();
+    ztimeout!(wait_config_value(&router, key, Some("2")));
+
+    ztimeout!(router.close()).unwrap();
+}
+
 /// Helper macro to navigate JSON path and return the value at that path
 macro_rules! navigate_json_path {
     ($json:expr, $field_path:expr) => {{

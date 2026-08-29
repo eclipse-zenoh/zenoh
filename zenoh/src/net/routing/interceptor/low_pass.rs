@@ -24,7 +24,7 @@ use ahash::HashMap;
 use itertools::Itertools;
 use nonempty_collections::nev;
 use zenoh_buffers::buffer::Buffer;
-use zenoh_config::{InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage};
+use zenoh_config::{DataMessage, InterceptorFlow, InterceptorLink, LowPassFilterConf};
 use zenoh_keyexpr::{
     keyexpr,
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
@@ -259,7 +259,7 @@ impl LowPassInterceptor {
     ) -> bool {
         let payload_size: usize;
         let attachment_size: usize;
-        let message_type: LowPassFilterMessage;
+        let message_type: DataMessage;
         let max_allowed_size: Option<usize>;
 
         match &msg.body {
@@ -267,7 +267,7 @@ impl LowPassInterceptor {
                 payload: RequestBody::Query(query),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Query;
+                message_type = DataMessage::Query;
                 payload_size = query
                     .ext_body
                     .as_ref()
@@ -288,7 +288,7 @@ impl LowPassInterceptor {
                     }),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Reply;
+                message_type = DataMessage::Reply;
                 payload_size = put.payload.len();
                 attachment_size = put
                     .ext_attachment
@@ -305,7 +305,7 @@ impl LowPassInterceptor {
                     }),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Reply;
+                message_type = DataMessage::Reply;
                 payload_size = 0;
                 attachment_size = delete
                     .ext_attachment
@@ -318,7 +318,7 @@ impl LowPassInterceptor {
                 payload: PushBody::Put(put),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Put;
+                message_type = DataMessage::Put;
                 payload_size = put.payload.len();
                 attachment_size = put
                     .ext_attachment
@@ -331,7 +331,7 @@ impl LowPassInterceptor {
                 payload: PushBody::Del(delete),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Delete;
+                message_type = DataMessage::Delete;
                 payload_size = 0;
                 attachment_size = delete
                     .ext_attachment
@@ -344,7 +344,7 @@ impl LowPassInterceptor {
                 payload: ResponseBody::Err(zenoh_protocol::zenoh::Err { payload, .. }),
                 ..
             }) => {
-                message_type = LowPassFilterMessage::Reply;
+                message_type = DataMessage::Reply;
                 payload_size = payload.len();
                 attachment_size = 0;
                 max_allowed_size = cache.map(|c| c.reply);
@@ -366,11 +366,7 @@ impl LowPassInterceptor {
             .is_some_and(|s| s <= max_allowed_size)
     }
 
-    fn get_max_allowed_message_size(
-        &self,
-        message: LowPassFilterMessage,
-        key_expr: &keyexpr,
-    ) -> usize {
+    fn get_max_allowed_message_size(&self, message: DataMessage, key_expr: &keyexpr) -> usize {
         match self
             .subjects
             .iter()
@@ -406,10 +402,10 @@ struct Cache {
 impl InterceptorTrait for LowPassInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
         Some(Box::new(Cache {
-            put: self.get_max_allowed_message_size(LowPassFilterMessage::Put, key_expr),
-            delete: self.get_max_allowed_message_size(LowPassFilterMessage::Delete, key_expr),
-            query: self.get_max_allowed_message_size(LowPassFilterMessage::Query, key_expr),
-            reply: self.get_max_allowed_message_size(LowPassFilterMessage::Reply, key_expr),
+            put: self.get_max_allowed_message_size(DataMessage::Put, key_expr),
+            delete: self.get_max_allowed_message_size(DataMessage::Delete, key_expr),
+            query: self.get_max_allowed_message_size(DataMessage::Query, key_expr),
+            reply: self.get_max_allowed_message_size(DataMessage::Reply, key_expr),
         }))
     }
 
@@ -491,21 +487,21 @@ struct LowPassFilterMessages {
 }
 
 impl LowPassFilterMessages {
-    fn message(&self, message: &LowPassFilterMessage) -> &LowPassFilterTree {
+    fn message(&self, message: &DataMessage) -> &LowPassFilterTree {
         match message {
-            LowPassFilterMessage::Put => &self.put,
-            LowPassFilterMessage::Delete => &self.delete,
-            LowPassFilterMessage::Query => &self.query,
-            LowPassFilterMessage::Reply => &self.reply,
+            DataMessage::Put => &self.put,
+            DataMessage::Delete => &self.delete,
+            DataMessage::Query => &self.query,
+            DataMessage::Reply => &self.reply,
         }
     }
 
-    fn message_mut(&mut self, message: &LowPassFilterMessage) -> &mut LowPassFilterTree {
+    fn message_mut(&mut self, message: &DataMessage) -> &mut LowPassFilterTree {
         match message {
-            LowPassFilterMessage::Put => &mut self.put,
-            LowPassFilterMessage::Delete => &mut self.delete,
-            LowPassFilterMessage::Query => &mut self.query,
-            LowPassFilterMessage::Reply => &mut self.reply,
+            DataMessage::Put => &mut self.put,
+            DataMessage::Delete => &mut self.delete,
+            DataMessage::Query => &mut self.query,
+            DataMessage::Reply => &mut self.reply,
         }
     }
 }

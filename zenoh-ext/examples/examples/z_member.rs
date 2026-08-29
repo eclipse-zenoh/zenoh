@@ -29,7 +29,7 @@ async fn main() {
     let rx = group.subscribe().await;
     let mut stream = rx.stream();
     while let Some(evt) = stream.next().await {
-        println!(">>> {:?}", &evt);
+        println!(">>> {:?}", evt);
         println!(">> Group View <<");
         let v = group.view().await;
         println!(

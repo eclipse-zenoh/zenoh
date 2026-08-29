@@ -63,6 +63,7 @@ pub struct Request {
     pub ext_target: ext::QueryTarget,
     pub ext_budget: Option<ext::BudgetType>,
     pub ext_timeout: Option<ext::TimeoutType>,
+    pub ext_ts_stack: Option<ext::TsStackType>,
     pub payload: RequestBody,
 }
 
@@ -129,6 +130,9 @@ pub mod ext {
     // The timeout of the request
     pub type Timeout = zextz64!(0x6, false);
     pub type TimeoutType = Duration;
+
+    pub type TsStack = zextzbuf!(0x7, false);
+    pub type TsStackType = crate::network::timestamp_stack::TsStackType<{ TsStack::ID }>;
 }
 
 impl Request {
@@ -166,6 +170,7 @@ impl Request {
         } else {
             None
         };
+        let ext_ts_stack = rng.gen_bool(0.5).then(ext::TsStackType::rand);
 
         Self {
             wire_expr,
@@ -177,6 +182,7 @@ impl Request {
             ext_target,
             ext_budget,
             ext_timeout,
+            ext_ts_stack,
         }
     }
 }

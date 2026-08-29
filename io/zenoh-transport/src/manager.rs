@@ -37,7 +37,19 @@ use super::{
     TransportEventHandler,
 };
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::ShmContext;
+use crate::common::shm::shm_context::ShmContext;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use crate::uring::Uring;
 use crate::{
     multicast::manager::{
         TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
@@ -173,6 +185,18 @@ pub struct TransportManagerState {
     pub multicast: TransportManagerStateMulticast,
     #[cfg(feature = "shared-memory")]
     pub shm_context: Option<ShmContext>,
+    #[cfg(all(
+        feature = "uring",
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "loongarch64",
+            target_arch = "powerpc64"
+        )
+    ))]
+    pub uring: Option<Uring>,
 }
 
 impl fmt::Debug for TransportManagerState {
@@ -494,11 +518,46 @@ impl TransportManagerBuilder {
             region_name: self.region_name,
         };
 
+        if cfg!(feature = "uring")
+            && !cfg!(all(
+                target_os = "linux",
+                any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv64",
+                    target_arch = "loongarch64",
+                    target_arch = "powerpc64"
+                )
+            ))
+        {
+            tracing::warn!(
+                "The `uring` feature is enabled, but io_uring is only supported with Linux on x86_64, \
+                 aarch64, riscv64, loongarch64 or powerpc64; falling back to tokio RX."
+            );
+        }
+
         let state = TransportManagerState {
             unicast: unicast.state,
             multicast: multicast.state,
             #[cfg(feature = "shared-memory")]
             shm_context,
+            #[cfg(all(
+                feature = "uring",
+                target_os = "linux",
+                any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv64",
+                    target_arch = "loongarch64",
+                    target_arch = "powerpc64"
+                )
+            ))]
+            uring: Uring::new(config.batch_size as usize, config.link_rx_buffer_size)
+                .map_err(|e| {
+                    tracing::warn!("io_uring reactor init failed, falling back to tokio RX: {e}");
+                    e
+                })
+                .ok(),
         };
 
         let params = TransportManagerParams { config, state };
@@ -702,6 +761,15 @@ impl TransportManager {
     // TODO(yuyuan): Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
         let mut lsu = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
+    }
+
+    // TODO(yuyuan): Can we make this async as above?
+    pub fn get_locators_noloopback(&self) -> Vec<Locator> {
+        let mut lsu =
+            zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_unicast_noloopback());
         let mut lsm = zenoh_runtime::ZRuntime::Net.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu

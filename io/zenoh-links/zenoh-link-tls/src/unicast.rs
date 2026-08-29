@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 use std::{
     cell::UnsafeCell,
     convert::TryInto,
@@ -259,6 +261,11 @@ impl LinkUnicastTrait for LinkUnicastTls {
     fn get_auth_id(&self) -> &LinkAuthId {
         &self.auth_identifier
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        bail!("Correct FD unavailable for TLS extension")
+    }
 }
 
 #[async_trait]
@@ -477,6 +484,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.listeners.get_locators_noloopback()
     }
 }
 

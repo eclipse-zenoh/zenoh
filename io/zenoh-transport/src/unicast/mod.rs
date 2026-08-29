@@ -41,7 +41,7 @@ use zenoh_result::{zerror, ZResult};
 use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use crate::common::shm::interop::TransportShmConfig;
 use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;

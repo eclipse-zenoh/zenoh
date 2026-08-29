@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::RawFd;
 use std::{
     collections::HashMap,
     fmt,
@@ -230,6 +232,11 @@ impl LinkUnicastTrait for LinkUnicastWs {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::Ws
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        bail!("Not supported");
+    }
 }
 
 impl Drop for LinkUnicastWs {
@@ -307,6 +314,63 @@ impl LinkManagerUnicastWs {
             manager,
             listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
+    }
+
+    async fn get_locators_impl(&self, noloopback: bool) -> Vec<Locator> {
+        let mut locators = Vec::new();
+        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
+        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
+
+        let guard = zasyncread!(self.listeners);
+        for (key, value) in guard.iter() {
+            let listener_locator = value.endpoint.to_locator();
+            if key.ip() == default_ipv4 {
+                match zenoh_util::net::get_local_addresses(None) {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if (!noloopback || !ipaddr.is_loopback())
+                                && !ipaddr.is_multicast()
+                                && ipaddr.is_ipv4()
+                            {
+                                let l = Locator::new(
+                                    WS_LOCATOR_PREFIX,
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
+                }
+            } else if key.ip() == default_ipv6 {
+                match zenoh_util::net::get_local_addresses(None) {
+                    Ok(ipaddrs) => {
+                        for ipaddr in ipaddrs {
+                            if (!noloopback || !ipaddr.is_loopback())
+                                && !ipaddr.is_multicast()
+                                && ipaddr.is_ipv6()
+                            {
+                                let l = Locator::new(
+                                    WS_LOCATOR_PREFIX,
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
+                                locators.push(l);
+                            }
+                        }
+                    }
+                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
+                }
+            } else if !noloopback || !key.ip().is_loopback() {
+                locators.push(listener_locator.clone());
+            }
+        }
+        std::mem::drop(guard);
+
+        locators
     }
 }
 
@@ -427,54 +491,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn get_locators(&self) -> Vec<Locator> {
-        let mut locators = Vec::new();
-        let default_ipv4 = Ipv4Addr::UNSPECIFIED;
-        let default_ipv6 = Ipv6Addr::UNSPECIFIED;
+        self.get_locators_impl(false).await
+    }
 
-        let guard = zasyncread!(self.listeners);
-        for (key, value) in guard.iter() {
-            let listener_locator = value.endpoint.to_locator();
-            if key.ip() == default_ipv4 {
-                match zenoh_util::net::get_local_addresses(None) {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let l = Locator::new(
-                                    WS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
-                }
-            } else if key.ip() == default_ipv6 {
-                match zenoh_util::net::get_local_addresses(None) {
-                    Ok(ipaddrs) => {
-                        for ipaddr in ipaddrs {
-                            if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let l = Locator::new(
-                                    WS_LOCATOR_PREFIX,
-                                    SocketAddr::new(ipaddr, key.port()).to_string(),
-                                    value.endpoint.metadata(),
-                                )
-                                .unwrap();
-                                locators.push(l);
-                            }
-                        }
-                    }
-                    Err(err) => tracing::error!("Unable to get local addresses: {}", err),
-                }
-            } else {
-                locators.push(listener_locator.clone());
-            }
-        }
-        std::mem::drop(guard);
-
-        locators
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators_impl(true).await
     }
 }
 
@@ -536,13 +557,13 @@ async fn accept_task(
             dst_addr
         );
 
-        let stream = accept_async(MaybeTlsStream::Plain(stream))
-            .await
-            .map_err(|e| {
-                let e = zerror!("Error when creating the WebSocket session: {}", e);
-                tracing::trace!("{}", e);
-                e
-            })?;
+        let stream = match accept_async(MaybeTlsStream::Plain(stream)).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                tracing::trace!("Error when creating the WebSocket session: {e}");
+                continue;
+            }
+        };
         // Create the new link object
         let link: Arc<dyn LinkUnicastTrait> =
             Arc::new(LinkUnicastWs::new(stream, src_addr, dst_addr));

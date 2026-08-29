@@ -24,9 +24,7 @@ use nonempty_collections::{nev, NEVec};
 #[cfg(feature = "unstable")]
 use zenoh::query::{ConsolidationMode, Reply};
 use zenoh::{bytes::ZBytes, Wait};
-use zenoh_config::{
-    Config, InterceptorFlow, InterceptorLink, LowPassFilterConf, LowPassFilterMessage,
-};
+use zenoh_config::{Config, DataMessage, InterceptorFlow, InterceptorLink, LowPassFilterConf};
 use zenoh_test::{get_locators_from_session_sync, TestSessions};
 
 static SMALL_MSG_STR: &str = "S";
@@ -321,7 +319,7 @@ fn lowpass_query_filter_test(
         flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: nev![LowPassFilterMessage::Query],
+        messages: nev![DataMessage::Query],
         key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
@@ -345,7 +343,7 @@ fn lowpass_reply_filter_test(
         flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: nev![LowPassFilterMessage::Reply],
+        messages: nev![DataMessage::Reply],
         key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
@@ -369,7 +367,7 @@ fn lowpass_put_filter_test(
         flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: nev![LowPassFilterMessage::Put],
+        messages: nev![DataMessage::Put],
         key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };
@@ -393,7 +391,7 @@ fn lowpass_del_filter_test(
         flows: Some(nev![flow]),
         interfaces,
         link_protocols,
-        messages: nev![LowPassFilterMessage::Delete],
+        messages: nev![DataMessage::Delete],
         key_exprs: nev![format!("{prefix}/**").try_into().unwrap()],
         size_limit: LOWPASS_RULE_BYTES,
     };

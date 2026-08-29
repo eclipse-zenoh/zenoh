@@ -23,8 +23,6 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 
 use super::transport::TransportUnicastUniversal;
-#[cfg(feature = "shared-memory")]
-use crate::shm::map_zmsg_to_partner;
 use crate::unicast::transport_unicast_inner::TransportUnicastTrait;
 
 impl TransportUnicastUniversal {
@@ -108,16 +106,14 @@ impl TransportUnicastUniversal {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) async fn internal_schedule<'a>(
+        pub(crate) async fn internal_schedule<'a>(
         &self,
         mut msg: NetworkMessageMut<'a>,
     ) -> ZResult<bool> {
-        #[cfg(feature = "shared-memory")]
-        if let Some(shm_context) = &self.shm_context {
-            map_zmsg_to_partner(&mut msg, &shm_context.shm_config, &shm_context.shm_provider);
-        }
-        let msg = msg.as_ref();
-        let transport_links = zasyncread!(self.links);
+        let transport_links = self
+            .links
+            .read()
+            .expect("reading `TransportUnicastUniversal::links` should not fail");
 
         let Some(transport_link_index) = Self::select(
             transport_links.get_links().iter().map(|tl| {
@@ -138,7 +134,7 @@ impl TransportUnicastUniversal {
             );
             // No Link found
             #[cfg(feature = "stats")]
-            self.stats.tx_observe_no_link(msg);
+            self.stats.tx_observe_no_link(msg.as_ref());
             return Ok(false);
         };
 
@@ -146,6 +142,19 @@ impl TransportUnicastUniversal {
             .get_links()
             .get(transport_link_index)
             .expect("transport link index should be valid");
+
+        #[cfg(feature = "shared-memory")]
+        let shm_handoff_transaction = self.shm_context.as_ref().map(|shm_context| {
+            crate::common::shm::interop::map_zmsg_to_partner(
+                &mut msg,
+                &shm_context.shm_config,
+                &shm_context.shm_provider,
+                &transport_link.link.shm_handoff.tx,
+                shm_context.policy,
+            )
+        });
+
+        let msg = msg.as_ref();
 
         let pipeline = transport_link.pipeline.clone();
         tracing::trace!(
@@ -195,7 +204,19 @@ impl TransportUnicastUniversal {
         // block for fairly long time
         drop(transport_links);
 
+<<<<<<< HEAD
         let pushed = pipeline.push_network_message(msg).await?;
+=======
+        let pushed = pipeline.push_network_message(msg)?;
+
+        #[cfg(feature = "shared-memory")]
+        if pushed {
+            if let Some(mut transaction) = shm_handoff_transaction {
+                transaction.commit();
+            }
+        }
+
+>>>>>>> c5d4760e33848be5fc1e4fa76a81fb87799f7379
         self.handle_push_result(
             msg,
             pushed,

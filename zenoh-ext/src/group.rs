@@ -237,12 +237,9 @@ async fn watchdog_task(s: Arc<GroupState>, period: Duration) {
 }
 
 async fn query_handler(z: Arc<Session>, state: Arc<GroupState>) {
-    let qres: KeyExpr = format!(
-        "{}/{}/{}",
-        GROUP_PREFIX, &state.gid, &state.local_member.mid
-    )
-    .try_into()
-    .unwrap();
+    let qres: KeyExpr = format!("{}/{}/{}", GROUP_PREFIX, state.gid, state.local_member.mid)
+        .try_into()
+        .unwrap();
     tracing::debug!("Started query handler for: {}", &qres);
     let buf = bincode::serialize(&state.local_member).unwrap();
     let queryable = z.declare_queryable(&qres).await.unwrap();
@@ -309,7 +306,7 @@ async fn net_event_handler(z: Arc<Session>, state: Arc<GroupState>) {
                                     "Received Keep Alive from unknown member: {}",
                                     &kae.mid
                                 );
-                                let qres = format!("{}/{}/{}", GROUP_PREFIX, &state.gid, kae.mid);
+                                let qres = format!("{}/{}/{}", GROUP_PREFIX, state.gid, kae.mid);
                                 // @TODO: we could also send this member info
                                 let qc = zenoh::query::ConsolidationMode::None;
                                 tracing::trace!("Issuing Query for {}", &qres);

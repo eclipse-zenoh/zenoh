@@ -11,6 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use std::fmt::Debug;
 use std::{
     future::poll_fn,
     sync::{
@@ -24,6 +36,22 @@ use std::{
 use futures::{future::select_all, task::AtomicWaker};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use zenoh_buffers::ZSlice;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use zenoh_buffers::{
+    buffer::Buffer,
+    reader::{BacktrackableReader, HasReader},
+};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::Priority,
@@ -34,6 +62,21 @@ use zenoh_sync::RecyclingObjectPool;
 #[cfg(feature = "unstable")]
 use zenoh_sync::{event, Notifier, Waiter};
 use zenoh_task::TaskController;
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use zenoh_uring::api::reader::{
+    fragmented_batch::{DefragmentationState, FragmentedBatch},
+    rx_buffer::RxBuffer,
+};
 
 use super::transport::TransportUnicastUniversal;
 use crate::{
@@ -176,20 +219,19 @@ impl TransportLinkUnicastUniversal {
         let stats = self.stats.clone();
         let task = async move {
             // Start the consume task
-            let res = cancellation_token
-                .run_until_cancelled(rx_task(
-                    &mut rx,
-                    transport.clone(),
-                    lease,
-                    transport.manager.config.link_rx_buffer_size,
-                    cancellation_token.clone(),
-                    #[cfg(feature = "stats")]
-                    stats,
-                ))
-                .await;
+            let res = rx_task(
+                &mut rx,
+                transport.clone(),
+                lease,
+                transport.manager.config.link_rx_buffer_size,
+                cancellation_token,
+                #[cfg(feature = "stats")]
+                stats,
+            )
+            .await;
 
             // TODO(yuyuan): improve this callback
-            if let Some(Err(e)) = res {
+            if let Err(e) = res {
                 // process error if task was not cancelled
                 tracing::debug!("RX task failed: {}", e);
 
@@ -358,6 +400,52 @@ async fn rx_task(
     cancellation_token: CancellationToken,
     #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
 ) -> ZResult<()> {
+    #[cfg(all(
+        feature = "uring",
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "loongarch64",
+            target_arch = "powerpc64"
+        )
+    ))]
+    if transport.manager.state.uring.is_some() && link.link.get_fd().is_ok() {
+        return rx_task_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            #[cfg(feature = "stats")]
+            stats,
+            cancellation_token,
+        )
+        .await;
+    }
+
+    cancellation_token
+        .run_until_cancelled(rx_task_non_uring(
+            link,
+            transport.clone(),
+            lease,
+            rx_buffer_size,
+            cancellation_token.clone(),
+            #[cfg(feature = "stats")]
+            stats,
+        ))
+        .await
+        .unwrap_or(Ok(()))
+}
+
+async fn rx_task_non_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    cancellation_token: CancellationToken,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+) -> ZResult<()> {
     // The pool of buffers
     let mtu = link.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
@@ -420,18 +508,13 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
         link: &mut TransportLinkUnicastRx,
         priority: Option<Priority>,
         pool: &RecyclingObjectPool<Box<[u8]>, F>,
-    ) -> ZResult<RBatch> {
+    ) -> ZResult<RBatch<ZSlice>> {
         let batch = link
             .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()), priority)
             .await?;
         Ok(batch)
     }
 
-    let l = Link::new_unicast(
-        &link.link,
-        link.config.priorities.clone(),
-        link.config.reliability,
-    );
     loop {
         tokio::select! {
             batch = read(link, priority, pool) => {
@@ -439,10 +522,10 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                 lease_tracker.reset();
                 #[cfg(feature = "stats")]
                 {
-                    let header_bytes = if l.is_streamed { 2 } else { 0 };
+                    let header_bytes = if link.link.is_streamed() { 2 } else { 0 };
                     stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                 }
-                transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
+                transport.read_messages(batch, link, #[cfg(feature = "stats")] &stats)?;
             }
             _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());
@@ -521,4 +604,160 @@ impl Drop for TimeoutTracker {
     fn drop(&mut self) {
         self.0.task.get().unwrap().abort();
     }
+}
+
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+async fn rx_task_uring(
+    link: &mut TransportLinkUnicastRx,
+    transport: TransportUnicastUniversal,
+    lease: Duration,
+    rx_buffer_size: usize,
+    #[cfg(feature = "stats")] stats: zenoh_stats::LinkStats,
+    cancellation_token: CancellationToken,
+) -> ZResult<()> {
+    // The pool of buffers
+    let mtu = link.config.batch.mtu as usize;
+    let mut n = rx_buffer_size / mtu;
+    if n == 0 {
+        tracing::debug!("RX configured buffer of {rx_buffer_size} bytes is too small for {link} that has an MTU of {mtu} bytes. Defaulting to {mtu} bytes for RX buffer.");
+        n = 1;
+    }
+
+    let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
+
+    let c_link = link.clone();
+
+    let batch_config = link.config.batch;
+
+    let r = transport
+        .manager
+        .state
+        .uring
+        .as_ref()
+        .expect("uring is Some: checked by caller")
+        .reader
+        .clone();
+
+    let lease_tracker = TimeoutTracker::new(lease);
+
+    fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
+        transport: &TransportUnicastUniversal,
+        link: &TransportLinkUnicastRx,
+        batch: RBatch<TBuffer>,
+        #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
+    ) -> ZResult<()> {
+        #[cfg(feature = "stats")]
+        {
+            let header_bytes = 2;
+            stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
+        }
+        transport.read_messages(
+            batch,
+            link,
+            #[cfg(feature = "stats")]
+            stats,
+        )
+    }
+
+    let mut uring_read_task = {
+        match link.link.is_streamed() {
+            true => {
+                let lt = lease_tracker.clone();
+                let ring_cb = move |data: FragmentedBatch| {
+                    lt.reset();
+                    match data.defragment()? {
+                        DefragmentationState::Single(slice) => {
+                            let mut batch = RBatch::new(batch_config, slice);
+                            batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })?;
+                            read_batch(
+                                &transport,
+                                &c_link,
+                                batch,
+                                #[cfg(feature = "stats")]
+                                &stats,
+                            )
+                        }
+                        DefragmentationState::Fragmented(buf) => {
+                            let mut batch = RBatch::new(batch_config, buf.reader());
+                            match batch.initialize_uring(|| {
+                                pool.try_take().unwrap_or_else(|| pool.alloc())
+                            })? {
+                                Some(decompressed_batch) => read_batch(
+                                    &transport,
+                                    &c_link,
+                                    decompressed_batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                                None => read_batch(
+                                    &transport,
+                                    &c_link,
+                                    batch,
+                                    #[cfg(feature = "stats")]
+                                    &stats,
+                                ),
+                            }
+                        }
+                    }
+                };
+
+                r.setup_fragmented_read(link.link.get_fd()?, ring_cb)
+                    .await?
+            }
+            false => {
+                let lt = lease_tracker.clone();
+                let ring_cb = move |data: Arc<RxBuffer>| {
+                    lt.reset();
+                    let slice: ZSlice = data.into();
+                    let mut batch = RBatch::new(batch_config, slice);
+                    batch.initialize_uring(|| pool.try_take().unwrap_or_else(|| pool.alloc()))?;
+
+                    read_batch(
+                        &transport,
+                        &c_link,
+                        batch,
+                        #[cfg(feature = "stats")]
+                        &stats,
+                    )
+                };
+
+                r.setup_read(link.link.get_fd()?, ring_cb).await?
+            }
+        }
+    };
+
+    let result = tokio::select! {
+        e = uring_read_task.read_error() => {
+            tracing::debug!("Uring RX task stopped by uring task error event");
+            Err(e)
+        },
+        finished = r.wait_finished() => {
+            tracing::debug!("Uring RX task stopped by uring finished event: {:?}", finished);
+            finished
+        }
+        _ = lease_tracker.wait_if(true) => {
+            tracing::debug!("Uring RX task stopped by lease timeout");
+            bail!("{link}: expired after {} milliseconds", lease.as_millis());
+        }
+        _ = cancellation_token.cancelled() => {
+            tracing::debug!("Uring RX task stopped by cancellation event");
+            Ok(())
+        }
+    };
+
+    uring_read_task.stop().await;
+
+    result
 }

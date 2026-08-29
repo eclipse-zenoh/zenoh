@@ -110,13 +110,14 @@ pub enum InterceptorFlow {
     Ingress,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+/// A category of data message that carries a payload. Used by downsampling, low-pass
+/// filtering, and SHM transport optimization to select which messages a configuration
+/// applies to.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum DownsamplingMessage {
-    Delete,
-    #[deprecated = "Use `Put` or `Delete` instead."]
-    Push,
+pub enum DataMessage {
     Put,
+    Delete,
     Query,
     Reply,
 }
@@ -143,24 +144,11 @@ pub struct DownsamplingItemConf {
     /// Downsampling will be applied for all link types if the parameter is None
     pub link_protocols: Option<NEVec<InterceptorLink>>,
     // list of message types on which the downsampling will be applied
-    pub messages: NEVec<DownsamplingMessage>,
+    pub messages: NEVec<DataMessage>,
     /// A list of downsampling rules: key_expression and the maximum frequency in Hertz
     pub rules: NEVec<DownsamplingRuleConf>,
     /// Downsampling flow directions: egress and/or ingress
     pub flows: Option<NEVec<InterceptorFlow>>,
-}
-
-fn downsampling_validator(d: &Vec<DownsamplingItemConf>) -> bool {
-    for item in d {
-        if item
-            .messages
-            .iter()
-            .any(|m| *m == DownsamplingMessage::Push)
-        {
-            tracing::warn!("In 'downsampling/messages' configuration: 'push' is deprecated and may not be supported in future versions, use 'put' and/or 'delete' instead");
-        }
-    }
-    true
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -170,18 +158,9 @@ pub struct LowPassFilterConf {
     pub interfaces: Option<NEVec<String>>,
     pub link_protocols: Option<NEVec<InterceptorLink>>,
     pub flows: Option<NEVec<InterceptorFlow>>,
-    pub messages: NEVec<LowPassFilterMessage>,
+    pub messages: NEVec<DataMessage>,
     pub key_exprs: NEVec<OwnedKeyExpr>,
     pub size_limit: usize,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum LowPassFilterMessage {
-    Put,
-    Delete,
-    Query,
-    Reply,
 }
 
 #[derive(Serialize, Debug, Deserialize, Clone)]
@@ -860,6 +839,12 @@ validated_struct::validator! {
                     pool_size: NonZeroUsize,
                     /// Allow optimization for messages equal or larger than this threshold in bytes (default `3072`).
                     message_size_threshold: usize,
+                    /// The categories of messages the *implicit* SHM optimization is applied
+                    /// to, i.e. for which a large enough regular payload is automatically
+                    /// copied into shared memory (default: `put`, `query`, `reply`).
+                    /// Payloads the application already allocated in shared memory are always
+                    /// sent over SHM when the peer supports it, regardless of this list.
+                    messages: Vec<DataMessage>,
                 },
             },
             pub auth: #[derive(Default)]
@@ -920,7 +905,7 @@ validated_struct::validator! {
         pub namespace: Option<OwnedNonWildKeyExpr>,
 
         /// Configuration of the downsampling.
-        downsampling: Vec<DownsamplingItemConf> where (downsampling_validator),
+        downsampling: Vec<DownsamplingItemConf>,
 
         /// Configuration of the access control (ACL)
         pub access_control: AclConfig {
@@ -1302,6 +1287,75 @@ impl Config {
         <Self as ValidatedMap>::insert_json5(self, key, value)
     }
 
+    /// Tries to insert or update a JSON5 object in an array using a field filter
+    /// in the last key segment.
+    ///
+    /// A key of the form `<array-key>/<field-name>=<field-value>` addresses an
+    /// object inside the array stored at `<array-key>`. The `<field-name>` part
+    /// is not a config child key; it is a filter applied to objects contained in
+    /// the array. For example, `qos/network/id=rule1` loads the array at
+    /// `qos/network` and matches objects whose `id` field is the string `rule1`.
+    ///
+    /// When a field filter is present, `value` must be a single JSON5 object
+    /// containing the same string field value. The object replaces the first
+    /// matching array element, or is appended if none exists.
+    ///
+    /// Returns `true` if the field-filter operation was applied. If `key` does
+    /// not contain a field filter, this returns `false` and leaves the config
+    /// unchanged.
+    pub fn try_insert_json5_array_item(
+        &mut self,
+        key: &str,
+        value: &str,
+    ) -> Result<bool, validated_struct::InsertionError> {
+        let Some((prefix, field_value)) = key.split_once('=') else {
+            return Ok(false);
+        };
+        let (array_key, field_name) =
+            prefix
+                .rsplit_once('/')
+                .ok_or(validated_struct::InsertionError::Str(
+                    "missing field filter",
+                ))?;
+        let new_item = json5::from_str::<serde_json::Value>(value)?;
+        if new_item
+            .as_object()
+            .and_then(|map| map.get(field_name))
+            .and_then(|v| v.as_str())
+            != Some(field_value)
+        {
+            return Err(validated_struct::InsertionError::String(format!(
+                "field filter mismatch: value must be an object containing {field_name}=\"{field_value}\""
+            )));
+        }
+        let current = serde_json::from_str::<serde_json::Value>(
+            &self
+                .get_json(array_key)
+                .map_err(|err| validated_struct::InsertionError::String(err.to_string()))?,
+        )?;
+        let serde_json::Value::Array(mut list) = current else {
+            return Err(validated_struct::InsertionError::Str("not an array"));
+        };
+        let mut new_item = Some(new_item);
+        for item in list.iter_mut() {
+            let serde_json::Value::Object(map) = item else {
+                return Err(validated_struct::InsertionError::Str(
+                    "array item is not an object",
+                ));
+            };
+
+            if map.get(field_name).and_then(|v| v.as_str()) == Some(field_value) {
+                *item = new_item.take().unwrap();
+                break;
+            }
+        }
+        if let Some(new_item) = new_item {
+            list.push(new_item);
+        }
+        <Self as ValidatedMap>::insert_json5(self, array_key, &serde_json::to_string(&list)?)?;
+        Ok(true)
+    }
+
     pub fn keys(&self) -> impl Iterator<Item = String> {
         <Self as ValidatedMap>::keys(self).into_iter()
     }
@@ -1330,6 +1384,44 @@ impl Config {
             )
         }
         self.plugins.remove(&key["plugins/".len()..])
+    }
+
+    /// Tries to remove objects from an array using a field filter in the last
+    /// key segment.
+    ///
+    /// A key of the form `<array-key>/<field-name>=<field-value>` removes every
+    /// object from the array stored at `<array-key>` whose `<field-name>` field
+    /// is the string `<field-value>`. The `<field-name>` part is not a config
+    /// child key; it is a filter applied to objects contained in the array. For
+    /// example, `qos/network/id=rule1` removes objects from `qos/network` where
+    /// `id == "rule1"`.
+    ///
+    /// Returns `true` if the field-filter operation was applied. If `key` does
+    /// not contain a field filter, this returns `false` and leaves the config
+    /// unchanged.
+    pub fn try_remove_json5_array_item<K: AsRef<str>>(&mut self, key: K) -> ZResult<bool> {
+        let key = key.as_ref();
+        let Some((prefix, field_value)) = key.split_once('=') else {
+            return Ok(false);
+        };
+        let (array_key, field_name) = prefix.rsplit_once('/').ok_or("missing field filter")?;
+        let current = serde_json::from_str::<serde_json::Value>(
+            &self.get_json(array_key).map_err(|err| zerror!("{err}"))?,
+        )?;
+        let serde_json::Value::Array(mut list) = current else {
+            bail!("not an array")
+        };
+        let prev_len = list.len();
+        list.retain(|item| match item {
+            serde_json::Value::Object(map) => {
+                map.get(field_name).and_then(|v| v.as_str()) != Some(field_value)
+            }
+            _ => true,
+        });
+        if list.len() != prev_len {
+            self.insert_json5(array_key, &serde_json::to_string(&list)?)?;
+        }
+        Ok(true)
     }
 
     pub fn get_retry_config(
@@ -2007,5 +2099,48 @@ mod tests {
             Config::from_file(&path).unwrap().to_string(),
             expected_config.to_string()
         );
+    }
+
+    #[test]
+    fn insert_remove_json5_array_item_by_id() {
+        let mut config = Config::default();
+
+        assert!(config
+            .try_insert_json5_array_item(
+                "qos/network/id=item1",
+                r#"{
+                        id: "item1",
+                        messages: ["put"],
+                        key_exprs: ["**"],
+                        overwrite: { priority: "data" },
+                        flows: ["egress"]
+                    }"#,
+            )
+            .unwrap());
+        assert!(config
+            .try_insert_json5_array_item(
+                "qos/network/id=item1",
+                r#"{
+                        id: "item1",
+                        messages: ["put"],
+                        key_exprs: ["**"],
+                        overwrite: { priority: "data_high" },
+                        flows: ["egress"]
+                    }"#,
+            )
+            .unwrap());
+
+        let items: serde_json::Value =
+            serde_json::from_str(&config.get_json("qos/network").unwrap()).unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 1);
+        assert_eq!(items[0]["id"], "item1");
+        assert_eq!(items[0]["overwrite"]["priority"], "data_high");
+
+        assert!(config
+            .try_remove_json5_array_item("qos/network/id=item1")
+            .unwrap());
+        let items: serde_json::Value =
+            serde_json::from_str(&config.get_json("qos/network").unwrap()).unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 0);
     }
 }

@@ -61,9 +61,9 @@ pub mod init;
 pub mod metadata;
 pub mod posix_shm;
 pub mod reader;
+pub mod shm;
 pub mod version;
 pub mod watchdog;
-tested_crate_module!(shm);
 
 /// Information about a [`ShmBufInner`].
 ///
@@ -92,6 +92,37 @@ impl ShmBufInfo {
             metadata,
             generation,
         }
+    }
+}
+
+/// A hard shared reference to SHM buffer
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct ShmBufHardRef(ConfirmedDescriptor);
+
+impl From<&ShmBufInner> for ShmBufHardRef {
+    fn from(value: &ShmBufInner) -> Self {
+        Self(value.metadata.clone())
+    }
+}
+impl From<&ZShm> for ShmBufHardRef {
+    fn from(value: &ZShm) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&zshm> for ShmBufHardRef {
+    fn from(value: &zshm) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&ZShmMut> for ShmBufHardRef {
+    fn from(value: &ZShmMut) -> Self {
+        (&value.inner).into()
+    }
+}
+impl From<&zshmmut> for ShmBufHardRef {
+    fn from(value: &zshmmut) -> Self {
+        (&value.inner).into()
     }
 }
 

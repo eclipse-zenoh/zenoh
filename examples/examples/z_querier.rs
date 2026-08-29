@@ -58,7 +58,7 @@ async fn main() {
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {}", payload.clone().unwrap_or_default());
-        println!("Querying '{}' with payload: '{}'...", &selector, buf);
+        println!("Querying '{}' with payload: '{}'...", selector, buf);
         let replies = querier
             .get()
             // // By default get receives replies from a FIFO.

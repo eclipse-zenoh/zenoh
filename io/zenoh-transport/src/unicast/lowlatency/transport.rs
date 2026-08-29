@@ -33,7 +33,7 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::UnicastTransportShmContext;
+use crate::common::shm::shm_context::UnicastTransportShmContext;
 use crate::{
     unicast::{
         authentication::TransportAuthId,
@@ -246,8 +246,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*                TX                 */
     /*************************************/
     async fn schedule<'a>(&self, msg: NetworkMessageMut<'a>) -> ZResult<bool> {
-        self.internal_schedule(msg).await?;
-        Ok(true)
+        self.send(msg).map(|_| true).await
     }
 
     /*************************************/

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use std::os::fd::AsRawFd;
 use std::{
     cell::UnsafeCell, collections::HashMap, fmt, fs::remove_file, os::unix::io::RawFd,
     path::PathBuf, sync::Arc, time::Duration,
@@ -25,6 +27,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+#[cfg(all(feature = "uring", target_os = "linux"))]
+use zenoh_core::bail;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
@@ -148,6 +152,14 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     fn get_auth_id(&self) -> &LinkAuthId {
         &LinkAuthId::UnixsockStream
     }
+
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    fn get_fd(&self) -> ZResult<RawFd> {
+        match unsafe { &*self.socket.get() }.as_raw_fd() {
+            fd if fd < 0 => bail!("FD unavailable"),
+            fd => Ok(fd),
+        }
+    }
 }
 
 impl Drop for LinkUnicastUnixSocketStream {
@@ -160,7 +172,7 @@ impl Drop for LinkUnicastUnixSocketStream {
 
 impl fmt::Display for LinkUnicastUnixSocketStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} => {}", &self.src_locator, &self.dst_locator)?;
+        write!(f, "{} => {}", self.src_locator, self.dst_locator)?;
         Ok(())
     }
 }
@@ -466,6 +478,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()
+    }
+
+    async fn get_locators_noloopback(&self) -> Vec<Locator> {
+        self.get_locators().await
     }
 }
 

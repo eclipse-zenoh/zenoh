@@ -33,7 +33,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::UnicastTransportShmContext;
+use crate::common::shm::shm_context::UnicastTransportShmContext;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{

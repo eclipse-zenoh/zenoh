@@ -18,6 +18,7 @@
 use zenoh_protocol::{
     core::{Bound, Region, Reliability, WhatAmI, WireExpr},
     network::{
+        declare::queryable::ext::QueryableInfoType,
         interest::{InterestMode, InterestOptions},
         Mapping, Push,
     },
@@ -111,8 +112,8 @@ fn test_p2p_inter_subregion_query_routing() {
 
     let ke = "k";
 
-    p0.declare_queryable(None, 1, ke);
-    p1.declare_queryable(None, 1, ke);
+    p0.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
+    p1.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
 
     p0.query(1, ke);
     p1.query(1, ke);
@@ -249,8 +250,8 @@ fn test_r2r_inter_subregion_query_routing() {
 
     let ke = "k";
 
-    r0s.declare_queryable(None, 1, ke);
-    r1s.declare_queryable(None, 1, ke);
+    r0s.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
+    r1s.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     r0s.query(1, ke);
@@ -323,8 +324,8 @@ fn test_c2c_inter_subregion_query_routing() {
 
     let ke = "k";
 
-    c0.declare_queryable(None, 1, ke);
-    c1.declare_queryable(None, 1, ke);
+    c0.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
+    c1.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
 
     c0.query(1, ke);
     c1.query(1, ke);
@@ -491,7 +492,7 @@ fn test_multiple_gateways_query_routing_r2p_downstream() {
 
     let ke = "k";
 
-    ps.declare_queryable(None, 1, ke);
+    ps.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     rs.query(1, ke);
@@ -667,7 +668,7 @@ fn test_multiple_gateways_query_routing_r2r_downstream() {
 
     let ke = "k";
 
-    ss.declare_queryable(None, 1, ke);
+    ss.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ns.query(1, ke);
@@ -934,7 +935,7 @@ fn test_multiple_gateways_query_routing_p2r_upstream() {
 
     let ke = "k";
 
-    rs.declare_queryable(None, 1, ke);
+    rs.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     // The peer routes the query upstream unconditionally without having sent an interest.
@@ -1021,7 +1022,7 @@ fn test_multiple_gateways_query_routing_p2r_upstream_with_interest() {
 
     let ke = "k";
 
-    rs.declare_queryable(None, 1, ke);
+    rs.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ps.interest(
@@ -1201,7 +1202,7 @@ fn test_multiple_gateways_query_routing_r2r_upstream() {
 
     let ke = "k";
 
-    ns.declare_queryable(None, 1, ke);
+    ns.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ss.query(1, ke);
@@ -1394,7 +1395,7 @@ fn test_multiple_gateways_query_routing_p2p_downstream() {
 
     let ke = "k";
 
-    ss.declare_queryable(None, 1, ke);
+    ss.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ns.query(1, ke);
@@ -1693,7 +1694,7 @@ fn test_multiple_gateways_query_routing_p2p_upstream() {
 
     let ke = "k";
 
-    ns.declare_queryable(None, 1, ke);
+    ns.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ss.query(1, ke);
@@ -1790,7 +1791,7 @@ fn test_multiple_gateways_query_routing_p2p_upstream_with_interest() {
 
     let ke = "k";
 
-    ns.declare_queryable(None, 1, ke);
+    ns.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     ss.interest(
@@ -1985,7 +1986,7 @@ fn test_multiple_gateways_query_routing_r2r_upstream_gateway_source() {
 
     let ke = "k";
 
-    ns.declare_queryable(None, 1, ke);
+    ns.declare_queryable(None, 1, ke, QueryableInfoType::DEFAULT);
     bi_fwd_all();
 
     g1s.query(1, ke);
@@ -2045,4 +2046,105 @@ fn test_push_message_consumption() {
         push, push_clone,
         "the push message should not be modified as `consume` is false"
     );
+}
+
+/// Test that query routes in router networks are disabled even if queryable info doesn't change upon some queryable undeclaration.
+#[test]
+fn test_complete_queryable_failover() {
+    let r0 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .start_runtime(true)
+        .build();
+
+    let r1 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .start_runtime(true)
+        .build();
+
+    let r2 = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local])
+        .start_runtime(true)
+        .build();
+
+    let mut r0_r1 = Connection {
+        a: &r0,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b: &r1,
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    let mut r0_r2 = Connection {
+        a: &r0,
+        a2b: FaceDef::default().mode(WhatAmI::Router),
+        b: &r2,
+        b2a: FaceDef::default().mode(WhatAmI::Router),
+    }
+    .establish();
+
+    let mut bi_fwd_all = || {
+        EstablishedConnection::bi_fwd_many_unbounded([&mut r0_r1, &mut r0_r2]);
+        assert!(r0_r1.is_bi_complete());
+        assert!(r0_r2.is_bi_complete());
+    };
+
+    bi_fwd_all();
+
+    let s0 = r0.new_session();
+    let s1 = r1.new_session();
+    let s2 = r2.new_session();
+
+    let ke = "k";
+
+    s1.declare_queryable(
+        None,
+        1,
+        ke,
+        QueryableInfoType {
+            complete: true,
+            distance: 0,
+        },
+    );
+
+    s2.declare_queryable(
+        None,
+        1,
+        ke,
+        QueryableInfoType {
+            complete: true,
+            distance: 0,
+        },
+    );
+
+    bi_fwd_all();
+
+    s0.query(1, ke);
+
+    bi_fwd_all();
+
+    let is_reqs1_empty = s1.recorder().requests().is_empty();
+    let is_reqs2_empty = s2.recorder().requests().is_empty();
+
+    assert!(
+        is_reqs1_empty || is_reqs2_empty,
+        "exactly one queryable should receive the query"
+    );
+
+    if !is_reqs1_empty {
+        s1.undeclare_queryable(1);
+    } else {
+        s2.undeclare_queryable(1);
+    }
+
+    bi_fwd_all();
+
+    s0.query(2, ke);
+
+    bi_fwd_all();
+
+    assert_eq!(r0_r1.a2b.recorder().requests().len(), 1);
+    assert_eq!(r0_r2.a2b.recorder().requests().len(), 1);
 }
