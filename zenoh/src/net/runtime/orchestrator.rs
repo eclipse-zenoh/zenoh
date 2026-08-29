@@ -1116,6 +1116,7 @@ impl Runtime {
                 "Already connecting to locators of {} (connect configuration). Ignore.",
                 zid
             );
+            self.remove_pending_connection(zid).await;
             return false;
         }
 
@@ -1472,6 +1473,20 @@ mod tests {
     use tokio::time::{timeout, Duration};
 
     use super::*;
+    use crate::{net::runtime::RuntimeBuilder, Config};
+
+    #[tokio::test]
+    async fn empty_scouted_locators_do_not_leave_connection_pending() {
+        let runtime = RuntimeBuilder::new(Config::default())
+            .build()
+            .await
+            .unwrap();
+        let zid = ZenohIdProto::rand();
+
+        assert!(!runtime.connect(&zid, &[]).await);
+        assert!(runtime.insert_pending_connection(zid).await);
+        runtime.remove_pending_connection(&zid).await;
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn scout_sender_can_multicast_on_loopback() {
