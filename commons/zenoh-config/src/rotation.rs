@@ -115,10 +115,9 @@ impl Default for RotationConf {
 impl RotationConf {
     /// Get the rotation interval in milliseconds, if configured.
     pub fn interval_ms(&self) -> Option<u64> {
-        match &self.policy {
-            Some(RotationPolicyConf::Interval { interval_ms, .. }) => Some(*interval_ms),
-            None => None,
-        }
+        self.policy
+            .as_ref()
+            .map(|RotationPolicyConf::Interval { interval_ms, .. }| *interval_ms)
     }
 
     /// Get the jitter in milliseconds, if configured.
