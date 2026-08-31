@@ -413,8 +413,9 @@ impl Runtime {
                         retry_config
                     );
                     // try to connect directly when there is no timeout configuration
-                    if self.peer_connector(endpoint).await.is_ok() {
+                    if self.peer_connector(endpoint.clone()).await.is_ok() {
                         success_flag = true;
+                        self.start_rotation_engine(&endpoint);
                     }
                 } else {
                     peers_to_retry.push(endpoint);
@@ -422,12 +423,18 @@ impl Runtime {
             }
             // sequentially try to connect to one of the remaining peers
             // respecting connection retry delays
-            if self
-                .peers_connector_retry(peers_to_retry, false)
-                .await
-                .is_ok()
-            {
-                success_flag = true;
+            if !peers_to_retry.is_empty() {
+                // rotation config lookup does not depend on which specific
+                // endpoint in the connect list eventually succeeds
+                let rotation_probe = peers_to_retry[0].clone();
+                if self
+                    .peers_connector_retry(peers_to_retry, false)
+                    .await
+                    .is_ok()
+                {
+                    success_flag = true;
+                    self.start_rotation_engine(&rotation_probe);
+                }
             }
             // any endpoint in the group is available, it's marked as success and break
             if success_flag {
@@ -459,14 +466,16 @@ impl Runtime {
                 );
                 if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
                     // try to connect and exit immediately without retry
-                    if let Err(e) = self.peer_connector(endpoint).await {
-                        if retry_config.exit_on_failure {
-                            return Err(e);
-                        }
+                    match self.peer_connector(endpoint.clone()).await {
+                        Ok(()) => self.start_rotation_engine(&endpoint),
+                        Err(e) if retry_config.exit_on_failure => return Err(e),
+                        Err(_) => {}
                     }
                 } else if retry_config.exit_on_failure {
                     // try to connect with retry waiting
-                    let _ = self.peer_connector_retry(endpoint).await;
+                    if self.peer_connector_retry(endpoint.clone()).await.is_ok() {
+                        self.start_rotation_engine(&endpoint);
+                    }
                 } else {
                     // try to connect in background
                     if let Err(e) = self.spawn_peer_connector(endpoint.clone()).await {
@@ -861,6 +870,21 @@ impl Runtime {
         })
     }
 
+    fn start_rotation_engine(&self, endpoint: &EndPoint) {
+        let config_guard = self.config().lock();
+        let rotation_conf = super::rotation::get_rotation_config(&config_guard, endpoint);
+        drop(config_guard);
+
+        if let Some(rotation_conf) = rotation_conf {
+            tracing::info!(
+                "Starting rotation engine for {} with interval {:?}",
+                endpoint,
+                rotation_conf.interval_ms()
+            );
+            super::rotation::RotationEngine::start(self.clone(), endpoint.clone(), rotation_conf);
+        }
+    }
+
     async fn spawn_peer_connector(&self, peer: EndPoint) -> ZResult<()> {
         if !LocatorInspector::default()
             .is_multicast(&peer.to_locator())
@@ -881,18 +905,8 @@ impl Runtime {
                         .set_peer_connector_zid(idx, zid)
                         .await;
 
-                    // Start rotation engine if configured
-                    if let Some(rot_conf) = rotation_conf {
-                        tracing::info!(
-                            "Starting rotation engine for {} with interval {:?}",
-                            peer,
-                            rot_conf.interval_ms()
-                        );
-                        super::rotation::RotationEngine::start(
-                            this.clone(),
-                            peer.clone(),
-                            rot_conf,
-                        );
+                    if rotation_conf.is_some() {
+                        this.start_rotation_engine(&peer);
                     }
                 }
                 if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
