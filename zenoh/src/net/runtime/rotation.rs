@@ -237,3 +237,85 @@ pub(crate) fn get_rotation_config(
     let rotation = config.connect().rotation().as_ref()?;
     rotation.enabled.then(|| rotation.clone())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use zenoh_config::Config;
+
+    use super::*;
+
+    fn expanded_config_with_rotation(rotation_json5: Option<&str>) -> zenoh_config::ExpandedConfig {
+        let mut config = Config::default();
+        if let Some(json5) = rotation_json5 {
+            config.insert_json5("connect/rotation", json5).unwrap();
+        }
+        config.expanded()
+    }
+
+    fn probe_endpoint() -> EndPoint {
+        EndPoint::from_str("tcp/127.0.0.1:7447").unwrap()
+    }
+
+    #[test]
+    fn returns_none_when_rotation_is_absent() {
+        let config = expanded_config_with_rotation(None);
+        assert!(get_rotation_config(&config, &probe_endpoint()).is_none());
+    }
+
+    #[test]
+    fn returns_none_when_rotation_is_present_but_disabled() {
+        let config = expanded_config_with_rotation(Some(
+            r#"{
+                enabled: false,
+                policy: { type: "interval", interval_ms: 1000 },
+            }"#,
+        ));
+        assert!(get_rotation_config(&config, &probe_endpoint()).is_none());
+    }
+
+    #[test]
+    fn returns_some_when_rotation_is_enabled() {
+        let config = expanded_config_with_rotation(Some(
+            r#"{
+                enabled: true,
+                policy: { type: "interval", interval_ms: 1000, jitter_ms: 100 },
+            }"#,
+        ));
+        let rotation_conf = get_rotation_config(&config, &probe_endpoint())
+            .expect("rotation config must be Some when enabled");
+        assert!(rotation_conf.enabled);
+        assert_eq!(rotation_conf.interval_ms(), Some(1000));
+        assert_eq!(rotation_conf.jitter_ms(), Some(100));
+    }
+
+    #[test]
+    fn ignores_the_endpoint_argument_since_rotation_is_global() {
+        // `get_rotation_config` is documented as global (not per-endpoint):
+        // any two distinct endpoints must yield the same result for a given config.
+        let config = expanded_config_with_rotation(Some(
+            r#"{
+                enabled: true,
+                policy: { type: "interval", interval_ms: 1000 },
+            }"#,
+        ));
+        let a = EndPoint::from_str("tcp/127.0.0.1:7447").unwrap();
+        let b = EndPoint::from_str("tcp/192.168.1.1:7000").unwrap();
+        assert_eq!(
+            get_rotation_config(&config, &a),
+            get_rotation_config(&config, &b)
+        );
+    }
+
+    #[test]
+    fn enabled_without_a_policy_yields_a_config_with_no_interval() {
+        // The engine itself disables the loop when there is no interval configured
+        // (see `RotationEngine::run`), but `get_rotation_config` should still
+        // surface the config as enabled so the caller can decide.
+        let config = expanded_config_with_rotation(Some(r#"{ enabled: true }"#));
+        let rotation_conf = get_rotation_config(&config, &probe_endpoint()).unwrap();
+        assert!(rotation_conf.enabled);
+        assert_eq!(rotation_conf.interval_ms(), None);
+    }
+}
