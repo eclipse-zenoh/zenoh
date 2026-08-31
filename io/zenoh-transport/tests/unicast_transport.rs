@@ -3165,3 +3165,152 @@ async fn transport_unicast_with_zid_multilink() {
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 }
+
+#[cfg(all(feature = "transport_tcp", feature = "transport_multilink"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_close_link_multilink() {
+    zenoh_util::init_log_from_env_or("error");
+
+    // Set up two endpoints on the router
+    let ep1: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    let ep2: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    let endpoints = vec![ep1.clone(), ep2.clone()];
+
+    // Open a multilink transport (max_links=2)
+    let (router_manager, _router_handler, client_manager, client_transport) =
+        open_transport_unicast(&endpoints, &endpoints, false, 2, 2).await;
+
+    // Verify we have 2 links
+    let links = client_transport.get_links().unwrap();
+    assert_eq!(links.len(), 2, "should have 2 links after multilink open");
+
+    // Close one link via close_link — transport should survive
+    let link_to_close = links[0].clone();
+    ztimeout!(client_transport.close_link(link_to_close)).unwrap();
+
+    // Give the transport time to process the link closure
+    tokio::time::sleep(SLEEP).await;
+
+    // Verify transport is still alive (not closed)
+    assert!(
+        client_transport.get_links().is_ok(),
+        "transport should still be alive after closing one of two links"
+    );
+
+    // Verify only 1 link remains
+    let remaining_links = client_transport.get_links().unwrap();
+    assert_eq!(
+        remaining_links.len(),
+        1,
+        "should have 1 remaining link after close_link"
+    );
+
+    // Close the last link — transport should be fully closed now
+    let last_link = remaining_links[0].clone();
+    ztimeout!(client_transport.close_link(last_link)).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    // Verify transport is closed
+    assert!(
+        client_transport.get_links().is_err(),
+        "transport should be closed after last link removed"
+    );
+
+    // Clean up
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    for e in endpoints.iter() {
+        ztimeout!(router_manager.del_listener(e)).unwrap();
+    }
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_close_link_single_link() {
+    zenoh_util::init_log_from_env_or("error");
+
+    // Set up a single endpoint (no multilink)
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    let endpoints = vec![endpoint.clone()];
+
+    let (router_manager, _router_handler, client_manager, client_transport) =
+        open_transport_unicast(&endpoints, &endpoints, false, 1, 1).await;
+
+    // Verify we have 1 link
+    let links = client_transport.get_links().unwrap();
+    assert_eq!(links.len(), 1);
+
+    // Close the only link — should close the entire transport
+    ztimeout!(client_transport.close_link(links[0].clone())).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    // Verify transport is closed
+    assert!(
+        client_transport.get_links().is_err(),
+        "transport should be closed after closing the only link"
+    );
+
+    // Clean up
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_close_link_lowlatency() {
+    zenoh_util::init_log_from_env_or("error");
+
+    // Set up a single endpoint with lowlatency transport
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    let endpoints = vec![endpoint.clone()];
+
+    let (router_manager, _router_handler, client_manager, client_transport) =
+        open_transport_unicast(&endpoints, &endpoints, true, 1, 1).await;
+
+    // Verify we have 1 link
+    let links = client_transport.get_links().unwrap();
+    assert_eq!(links.len(), 1);
+
+    // Close the only link via close_link — should close the entire transport
+    // (lowlatency transport has at most one link)
+    ztimeout!(client_transport.close_link(links[0].clone())).unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+
+    // Verify transport is closed
+    assert!(
+        client_transport.get_links().is_err(),
+        "lowlatency transport should be closed after closing the only link"
+    );
+
+    // Clean up
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
