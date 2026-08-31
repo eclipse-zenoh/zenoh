@@ -632,7 +632,7 @@ impl Network {
 
     fn connect_discovered_peer(&self, zid: ZenohIdProto, locators: Vec<Locator>) {
         let runtime = self.runtime.upgrade().unwrap();
-        self.runtime.upgrade().unwrap().spawn(async move {
+        self.runtime.upgrade().unwrap().spawn_abortable(async move {
             if runtime
                 .manager()
                 .get_transport_unicast(&zid)
