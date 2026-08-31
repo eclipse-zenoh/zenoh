@@ -769,7 +769,7 @@ fn metrics(prefix: &keyexpr, context: &AdminContext, query: Query) {
         ),
         zid = context.runtime.state.zid,
         whatami = context.runtime.state.whatami,
-        version = &*LONG_VERSION,
+        version = *LONG_VERSION,
     );
     #[cfg(feature = "stats")]
     let mut metrics = String::new();
