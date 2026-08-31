@@ -26,32 +26,18 @@ use tokio::{
     sync::{futures::Notified, Mutex, Notify},
 };
 use tokio_util::sync::CancellationToken;
-use zenoh_buffers::{
-    reader::{DidntRead, HasReader},
-    writer::HasWriter,
-};
-use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{
     get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default,
     ConnectionRetryPeriod, ModeDependent,
 };
 use zenoh_link::{Locator, LocatorInspector};
-use zenoh_protocol::{
-    core::{
-        whatami::WhatAmIMatcher, EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange,
-        WhatAmI, ZenohIdProto,
-    },
-    scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
+use zenoh_protocol::core::{
+    EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange, WhatAmI, ZenohIdProto,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
 use super::{Runtime, RuntimeSession};
-use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo};
-
-const RCV_BUF_SIZE: usize = u16::MAX as usize;
-const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
-const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
-const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo, runtime::scouting::Scouting};
 
 // TODO(fuzzypixelz): collapse per-interface scout sockets into one wildcard socket
 // per address family. Select egress with `set_multicast_if_*` before send;
@@ -71,8 +57,27 @@ pub(crate) struct ScoutSocket {
 
 impl ScoutSocket {
     /// Sends a multicast datagram through this socket's egress interface.
-    async fn send_multicast(&self, buffer: &[u8], dst: SocketAddr) -> std::io::Result<usize> {
+    pub(crate) async fn send_multicast(
+        &self,
+        buffer: &[u8],
+        dst: SocketAddr,
+    ) -> std::io::Result<usize> {
         self.socket.send_to(buffer, dst).await
+    }
+
+    pub(crate) async fn recv_from(
+        &self,
+        buffer: &mut [u8],
+    ) -> std::io::Result<(usize, SocketAddr)> {
+        self.socket.recv_from(buffer).await
+    }
+
+    pub(crate) fn iface(&self) -> &IpAddr {
+        &self.iface
+    }
+
+    pub(crate) fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.socket.local_addr()
     }
 }
 
@@ -198,33 +203,21 @@ impl Runtime {
 
         if scouting {
             if listen || peers.is_empty() {
-                let ifaces = Runtime::get_interfaces(&ifaces);
-                let mcast_socket = if listen {
-                    Some(Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?)
-                } else {
-                    None
-                };
-                if ifaces.is_empty() {
-                    bail!("Unable to find multicast interface!")
-                } else {
-                    let sockets: Vec<ScoutSocket> = ifaces
-                        .into_iter()
-                        .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                        .collect();
-                    if sockets.is_empty() {
-                        bail!("Unable to bind UDP port to any multicast interface!")
-                    } else {
-                        if peers.is_empty() {
-                            self.connect_first(&sockets, autoconnect, &addr, timeout)
-                                .await?
-                        }
-                        if let Some(mcast_socket) = mcast_socket {
-                            let this = self.clone();
-                            self.spawn_abortable(async move {
-                                this.responder(&mcast_socket, &sockets).await;
-                            });
-                        }
-                    }
+                let scout = Scouting::new(
+                    listen,
+                    AutoConnect::disabled(),
+                    addr,
+                    ifaces.clone(),
+                    multicast_ttl,
+                    self.clone(),
+                )
+                .await?;
+                if peers.is_empty() {
+                    scout.connect_first(autoconnect, timeout).await?
+                }
+                if listen {
+                    scout.start().await?;
+                    *self.state.scouting.lock().await = Some(scout);
                 }
             }
             if !peers.is_empty() {
@@ -329,42 +322,19 @@ impl Runtime {
             let config = &config_guard;
             unwrap_or_default!(config.scouting().multicast().ttl())
         };
-        let ifaces = Runtime::get_interfaces(&ifaces);
-        let mcast_socket = Runtime::bind_mcast_port(&addr, &ifaces, multicast_ttl).await?;
-        if !ifaces.is_empty() {
-            let sockets: Vec<ScoutSocket> = ifaces
-                .into_iter()
-                .filter_map(|iface| Runtime::bind_ucast_port(iface, multicast_ttl).ok())
-                .collect();
-            if !sockets.is_empty() {
-                let this = self.clone();
-                match (listen, autoconnect.is_enabled()) {
-                    (true, true) => {
-                        self.spawn_abortable(async move {
-                            tokio::select! {
-                                _ = this.responder(&mcast_socket, &sockets) => {},
-                                _ = this.autoconnect_all(
-                                    &sockets,
-                                    autoconnect,
-                                    &addr
-                                ) => {},
-                            }
-                        });
-                    }
-                    (true, false) => {
-                        self.spawn_abortable(async move {
-                            this.responder(&mcast_socket, &sockets).await;
-                        });
-                    }
-                    (false, true) => {
-                        self.spawn_abortable(async move {
-                            this.autoconnect_all(&sockets, autoconnect, &addr).await
-                        });
-                    }
-                    _ => {}
-                }
-            }
-        }
+
+        let scouting = Scouting::new(
+            listen,
+            autoconnect,
+            addr,
+            ifaces,
+            multicast_ttl,
+            self.clone(),
+        )
+        .await?;
+        scouting.start().await?;
+        *self.state.scouting.lock().await = Some(scouting.clone());
+
         Ok(())
     }
 
@@ -565,7 +535,7 @@ impl Runtime {
                 self.spawn_add_listener(endpoint, retry_config).await
             }
         }
-        self.print_locators();
+        self.update_locators();
         Ok(())
     }
 
@@ -577,7 +547,7 @@ impl Runtime {
         let this = self.clone();
         self.spawn(async move {
             this.add_listener_retry(listener, retry_config).await;
-            this.print_locators();
+            this.update_locators();
         });
     }
 
@@ -607,14 +577,33 @@ impl Runtime {
         Ok(())
     }
 
-    fn print_locators(&self) {
-        let locators = self.manager().get_locators();
-        let locators_noloopback = self.manager().get_locators_noloopback();
-        *self.state.locators.write().unwrap() = locators;
-        *self.state.locators_noloopback.write().unwrap() = locators_noloopback.clone();
-        for locator in &locators_noloopback {
-            tracing::info!("Zenoh can be reached at: {}", locator);
+    pub fn update_locators(&self) -> bool {
+        let mut locators = self.state.locators.write().unwrap();
+        let mut locators_noloopback = self.state.locators_noloopback.write().unwrap();
+        let new_locators = self.manager().get_locators();
+        let new_locators_noloopback = self.manager().get_locators_noloopback();
+
+        if are_locators_equal(&locators, &new_locators)
+            && are_locators_equal(&locators_noloopback, &new_locators_noloopback)
+        {
+            return false;
         }
+
+        if tracing::enabled!(tracing::Level::INFO) {
+            for locator in &new_locators_noloopback {
+                if !locators.contains(locator) {
+                    tracing::info!("Zenoh can be reached at: {}", locator);
+                }
+            }
+            for old_locator in &*locators_noloopback {
+                if !new_locators.contains(old_locator) {
+                    tracing::info!("Zenoh can no longer be reached at: {}", old_locator);
+                }
+            }
+        }
+        *locators = new_locators;
+        *locators_noloopback = new_locators_noloopback;
+        true
     }
 
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
@@ -994,98 +983,9 @@ impl Runtime {
             .map(|peers| peers[0])
     }
 
-    pub(crate) async fn scout<Fut, F>(
-        sockets: &[ScoutSocket],
-        matcher: WhatAmIMatcher,
-        mcast_addr: &SocketAddr,
-        f: F,
-    ) where
-        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
-        Fut: Future<Output = Loop> + std::marker::Send,
-        Self: Sized,
-    {
-        let send = async {
-            let mut delay = SCOUT_INITIAL_PERIOD;
-
-            let scout: ScoutingMessage = Scout {
-                version: zenoh_protocol::VERSION,
-                what: matcher,
-                zid: None,
-            }
-            .into();
-            let mut wbuf = vec![];
-            let mut writer = wbuf.writer();
-            let codec = Zenoh080::new();
-            codec.write(&mut writer, &scout).unwrap();
-
-            loop {
-                for socket in sockets {
-                    tracing::trace!(
-                        "Send {:?} to {} on interface {}",
-                        scout.body,
-                        mcast_addr,
-                        socket.iface
-                    );
-                    if let Err(err) = socket.send_multicast(wbuf.as_slice(), *mcast_addr).await {
-                        tracing::debug!(
-                            "Unable to send {:?} to {} on interface {}: {}",
-                            scout.body,
-                            mcast_addr,
-                            socket.iface,
-                            err
-                        );
-                    }
-                }
-                tokio::time::sleep(delay).await;
-                if delay * SCOUT_PERIOD_INCREASE_FACTOR <= SCOUT_MAX_PERIOD {
-                    delay *= SCOUT_PERIOD_INCREASE_FACTOR;
-                }
-            }
-        };
-        let recvs = futures::future::select_all(sockets.iter().map(move |socket| {
-            let f = f.clone();
-            async move {
-                let mut buf = vec![0; RCV_BUF_SIZE];
-                loop {
-                    match socket.socket.recv_from(&mut buf).await {
-                        Ok((n, peer)) => {
-                            let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh080::new();
-                            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-                            if let Ok(msg) = res {
-                                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                                if let ScoutingBody::Hello(hello) = &msg.body {
-                                    if matcher.matches(hello.whatami) {
-                                        if let Loop::Break = f(hello.clone()).await {
-                                            break;
-                                        }
-                                    } else {
-                                        tracing::warn!("Received unexpected Hello: {:?}", msg.body);
-                                    }
-                                }
-                            } else {
-                                tracing::trace!(
-                                    "Received unexpected UDP datagram from {}: {:?}",
-                                    peer,
-                                    &buf.as_slice()[..n]
-                                );
-                            }
-                        }
-                        Err(e) => tracing::debug!("Error receiving UDP datagram: {}", e),
-                    }
-                }
-            }
-            .boxed()
-        }));
-        tokio::select! {
-            _ = send => {},
-            _ = recvs => {},
-        }
-    }
-
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
-    async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+    pub(super) async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
         if !self.insert_pending_connection(*zid).await {
             tracing::debug!("Already connecting to {}. Ignore.", zid);
             return false;
@@ -1222,158 +1122,6 @@ impl Runtime {
         }
     }
 
-    async fn connect_first(
-        &self,
-        sockets: &[ScoutSocket],
-        what: WhatAmIMatcher,
-        addr: &SocketAddr,
-        timeout: std::time::Duration,
-    ) -> ZResult<()> {
-        let scout = async {
-            Runtime::scout(sockets, what, addr, move |hello| async move {
-                tracing::info!("Found {:?}", hello);
-                if !hello.locators.is_empty() {
-                    if self.connect(&hello.zid, &hello.locators).await {
-                        return Loop::Break;
-                    }
-                } else {
-                    tracing::debug!("Received Hello with no locators: {:?}", hello);
-                }
-                Loop::Continue
-            })
-            .await;
-            Ok(())
-        };
-        let timeout = async {
-            tokio::time::sleep(timeout).await;
-            bail!("timeout")
-        };
-        tokio::select! {
-            res = scout => { res },
-            res = timeout => { res }
-        }
-    }
-
-    async fn autoconnect_all(
-        &self,
-        ucast_sockets: &[ScoutSocket],
-        autoconnect: AutoConnect,
-        addr: &SocketAddr,
-    ) {
-        Runtime::scout(
-            ucast_sockets,
-            autoconnect.matcher(),
-            addr,
-            move |hello| async move {
-                if hello.locators.is_empty() {
-                    tracing::debug!("Received Hello with no locators: {:?}", hello);
-                } else if autoconnect.should_autoconnect(hello.zid, hello.whatami) {
-                    self.connect_peer(&hello.zid, &hello.locators).await;
-                }
-                Loop::Continue
-            },
-        )
-        .await
-    }
-
-    /// Locators advertised in a scouting [`HelloProto`] to `peer`.
-    ///
-    /// Loopback peers get loopback locators; public locators intentionally
-    /// exclude loopback.
-    fn get_hello_locators(&self, peer: &SocketAddr) -> Vec<Locator> {
-        if peer.ip().is_loopback() {
-            self.get_locators()
-        } else {
-            self.get_locators_noloopback()
-        }
-    }
-
-    async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[ScoutSocket]) {
-        fn get_best_match<'a>(
-            addr: &IpAddr,
-            sockets: &'a [ScoutSocket],
-        ) -> Option<&'a ScoutSocket> {
-            fn octets(addr: &IpAddr) -> Vec<u8> {
-                match addr {
-                    IpAddr::V4(addr) => addr.octets().to_vec(),
-                    IpAddr::V6(addr) => addr.octets().to_vec(),
-                }
-            }
-            fn matching_octets(addr: &IpAddr, sock: &ScoutSocket) -> usize {
-                octets(addr)
-                    .iter()
-                    .zip(octets(&sock.iface))
-                    .map(|(x, y)| x.cmp(&y))
-                    .position(|ord| ord != std::cmp::Ordering::Equal)
-                    .unwrap_or_else(|| octets(addr).len())
-            }
-            sockets.iter().max_by(|sock1, sock2| {
-                matching_octets(addr, sock1).cmp(&matching_octets(addr, sock2))
-            })
-        }
-
-        let mut buf = vec![0; RCV_BUF_SIZE];
-        let local_addrs: Vec<SocketAddr> = ucast_sockets
-            .iter()
-            .filter_map(|sock| {
-                sock.socket
-                    .local_addr()
-                    .ok()
-                    .map(|addr| (sock.iface, addr.port()))
-            })
-            .map(|(iface, port)| SocketAddr::new(iface, port))
-            .collect();
-        tracing::debug!("Waiting for UDP datagram...");
-        loop {
-            let (n, peer) = mcast_socket.recv_from(&mut buf).await.unwrap();
-            if local_addrs.contains(&peer) {
-                tracing::trace!("Ignore UDP datagram from own socket");
-                continue;
-            }
-
-            let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh080::new();
-            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
-            if let Ok(msg) = res {
-                tracing::trace!("Received {:?} from {}", msg.body, peer);
-                if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
-                    if what.matches(self.whatami()) {
-                        let mut wbuf = vec![];
-                        let mut writer = wbuf.writer();
-                        let codec = Zenoh080::new();
-
-                        let zid = self.manager().zid();
-                        let hello: ScoutingMessage = HelloProto {
-                            version: zenoh_protocol::VERSION,
-                            whatami: self.whatami(),
-                            zid,
-                            locators: self.get_hello_locators(&peer),
-                        }
-                        .into();
-                        let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
-                        tracing::trace!(
-                            "Send {:?} to {} on interface {}",
-                            hello.body,
-                            peer,
-                            socket.iface
-                        );
-                        codec.write(&mut writer, &hello).unwrap();
-
-                        if let Err(err) = socket.socket.send_to(wbuf.as_slice(), peer).await {
-                            tracing::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
-                        }
-                    }
-                }
-            } else {
-                tracing::trace!(
-                    "Received unexpected UDP datagram from {}: {:?}",
-                    peer,
-                    &buf.as_slice()[..n]
-                );
-            }
-        }
-    }
-
     pub(super) fn closed_session(session: &RuntimeSession) {
         if session.runtime.is_closed() {
             return;
@@ -1465,6 +1213,12 @@ impl Runtime {
             .flat_map(|hat| hat.links_info().into_iter())
             .collect()
     }
+}
+
+fn are_locators_equal(a: &[Locator], b: &[Locator]) -> bool {
+    use std::collections::hash_map::RandomState;
+    a.len() == b.len()
+        && HashSet::<&Locator, RandomState>::from_iter(a.iter()) == HashSet::from_iter(b.iter())
 }
 
 #[cfg(test)]
