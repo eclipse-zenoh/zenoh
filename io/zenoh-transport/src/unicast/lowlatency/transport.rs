@@ -330,4 +330,14 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         tracing::trace!("Closing transport with peer: {}", self.config.zid);
         self.finalize(reason).await
     }
+
+    async fn close_link(&self, link: Link) -> ZResult<()> {
+        // Lowlatency transport has at most one link, so closing the link
+        // is equivalent to closing the entire transport.
+        tracing::trace!(
+            "Closing link {link} on lowlatency transport with peer: {}",
+            self.config.zid
+        );
+        self.finalize(close::reason::GENERIC).await
+    }
 }
