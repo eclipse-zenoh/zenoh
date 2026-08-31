@@ -22,7 +22,7 @@ use zenoh::config::WhatAmI;
 use zenoh::sample::SampleKind;
 use zenoh_config::{Config, ModeDependentValue, WhatAmIMatcher};
 use zenoh_link::EndPoint;
-use zenoh_test::{get_free_tcp_port, get_free_udp_port};
+use zenoh_test::get_free_udp_port;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn multicast_scouting_works_on_loopback() {
