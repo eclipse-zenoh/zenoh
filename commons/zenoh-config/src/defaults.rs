@@ -351,6 +351,7 @@ impl Default for AclConfig {
             rules: None,
             subjects: None,
             policies: None,
+            policy_store: None,
         }
     }
 }

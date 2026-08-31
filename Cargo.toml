@@ -155,6 +155,9 @@ quote = "1.0.40"
 rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
 rand_chacha = "0.3.1"
 rcgen = "0.14.7"
+redis = { version = "0.32.2", default-features = false, features = [
+  "tokio-rustls-comp",
+] }
 regex = "1.11.2"
 ringbuffer-spsc = "0.1.15"
 rlimit = "0.10.2"
@@ -182,6 +185,11 @@ sha3 = "0.10.8"
 shellexpand = "3.1.1"
 smallvec = "1.15.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+sqlx = { version = "0.8", default-features = false, features = [
+  "postgres",
+  "runtime-tokio",
+  "tls-rustls-ring-native-roots",
+] }
 stabby = "72.1.8"
 static_assertions = "1.1.0"
 static_init = "1.0.3"

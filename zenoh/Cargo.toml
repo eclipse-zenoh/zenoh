@@ -29,6 +29,9 @@ version = { workspace = true }
 maintenance = { status = "actively-developed" }
 
 [features]
+acl_policy_store = ["dep:lru", "dep:secrecy"]
+acl_postgres = ["acl_policy_store", "dep:sqlx"]
+acl_redis = ["acl_policy_store", "dep:redis"]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 default = [
@@ -97,14 +100,18 @@ git-version = { workspace = true }
 itertools = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
+lru = { workspace = true, optional = true }
 nonempty-collections = { workspace = true }
 once_cell = { workspace = true }
 petgraph = { workspace = true }
 phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
+redis = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
+sqlx = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros", "rt", "time"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }

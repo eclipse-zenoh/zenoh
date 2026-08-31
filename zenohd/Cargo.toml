@@ -27,6 +27,8 @@ version = { workspace = true }
 
 [features]
 default = ["zenoh/default"]
+acl_postgres = ["zenoh/acl_postgres"]
+acl_redis = ["zenoh/acl_redis"]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]

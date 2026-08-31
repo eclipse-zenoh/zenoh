@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 //!
 mod access_control;
+#[cfg(feature = "acl_policy_store")]
+mod acl_policy_store;
 use access_control::acl_interceptor_factories;
 use nonempty_collections::NEVec;
 use zenoh_link::LinkAuthId;
@@ -26,6 +28,7 @@ use zenoh_link::LinkAuthId;
 mod authorization;
 use std::{
     any::Any,
+    collections::HashMap,
     sync::{
         atomic::{AtomicPtr, Ordering},
         Arc,
@@ -127,8 +130,61 @@ pub(crate) trait InterceptorFactoryTrait {
 
 pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorFactory>> {
+/// Result of [`InterceptorState::refresh`].
+///
+/// The gateway rebuilds interceptors for [`Self::Updated`] identities and closes matching
+/// unicast transports for [`Self::Failed`] ones. Whether a given interceptor reports
+/// [`Self::Failed`] (drop the session) or keeps the last policy and reports [`Self::Updated`]
+/// can later be made configurable on that interceptor. An interceptor that cannot
+/// re-read the store reports [`Self::Failed`].
+#[cfg_attr(not(feature = "acl_policy_store"), allow(dead_code))]
+pub(crate) enum RefreshOutcome {
+    Updated,
+    Failed,
+}
+
+/// State an interceptor keeps for transport identities, read from somewhere the router
+/// does not control.
+///
+/// Held by the routing tables rather than by the factory, because it is reached both when
+/// a transport is admitted and when the router is told that what it holds went stale.
+pub(crate) trait InterceptorState: Send + Sync {
+    /// Gets whatever is needed for a transport that is about to be admitted.
+    ///
+    /// [`InterceptorFactoryTrait::new_transport_unicast`] runs while the routing tables
+    /// are held for writing, so anything that can block belongs here instead. Called once
+    /// per transport, before those tables are locked. Returning an error refuses the
+    /// transport.
+    fn prepare(&self, transport: &TransportUnicast) -> ZResult<()>;
+
+    /// Reads again what is held for `identity`.
+    ///
+    /// Allowed to block, and never called while the routing tables are locked.
+    /// [`RefreshOutcome::Updated`] rebuilds interceptors for matching transports;
+    /// [`RefreshOutcome::Failed`] closes them.
+    fn refresh(&self, identity: &str) -> RefreshOutcome;
+
+    /// Identity this state uses for a transport, so that the router can tell which
+    /// transports a refresh applies to.
+    fn identity_of(&self, transport: &TransportUnicast) -> Option<String>;
+
+    /// Identities whose state has grown too old to be trusted and should be read again.
+    fn stale_identities(&self) -> Vec<String>;
+}
+
+/// Admin-space path segment and key in [`Interceptors::states`] for access control.
+pub(crate) const ACCESS_CONTROL: &str = "access_control";
+
+/// The interceptors a configuration asks for, and the state they keep.
+pub(crate) struct Interceptors {
+    pub(crate) factories: Vec<InterceptorFactory>,
+    /// By interceptor name, so that a caller can address one of them.
+    pub(crate) states: HashMap<&'static str, Arc<dyn InterceptorState>>,
+}
+
+pub(crate) fn interceptors(config: &Config) -> ZResult<Interceptors> {
     let mut res: Vec<InterceptorFactory> = vec![];
+    let mut states = HashMap::new();
     // Uncomment to log the interceptors initialisation
     // res.push(Box::new(LoggerInterceptor {}));
     #[cfg(test)]
@@ -139,10 +195,18 @@ pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorF
         }
     }
     res.extend(downsampling_interceptor_factories(config.downsampling())?);
-    res.extend(acl_interceptor_factories(config.access_control())?);
+    if let Some((factory, state)) = acl_interceptor_factories(config.access_control())? {
+        res.push(factory);
+        if let Some(state) = state {
+            states.insert(ACCESS_CONTROL, state);
+        }
+    }
     res.extend(qos_overwrite_interceptor_factories(config.qos().network())?);
     res.extend(low_pass_interceptor_factories(config.low_pass_filter())?);
-    Ok(res)
+    Ok(Interceptors {
+        factories: res,
+        states,
+    })
 }
 
 pub(crate) struct InterceptorsChain {

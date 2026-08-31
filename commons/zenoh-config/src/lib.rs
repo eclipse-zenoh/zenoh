@@ -340,6 +340,180 @@ pub struct AclConfigPolicyEntry {
     pub subjects: Vec<String>,
 }
 
+/// Redis backend of [`AclPolicyStoreConf`].
+///
+/// An identity's document is stored at `<key_prefix><identity>` as a JSON object with the
+/// same `rules`, `subjects` and `policies` fields as the `access_control` section.
+#[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct AclRedisConf {
+    /// Connection url, e.g. `redis://127.0.0.1:6379` or `rediss://` for TLS.
+    /// A username may be part of it, but the password must be set separately so that it
+    /// is not exposed when the configuration is serialized.
+    pub url: String,
+    // Skip serializing field because it contains a secret
+    #[serde(default, skip_serializing)]
+    pub password: Option<SecretValue>,
+    /// Prefix of the key holding an identity's document.
+    #[serde(default = "default_acl_redis_key_prefix")]
+    pub key_prefix: String,
+    /// PEM file of the CA that signed the server certificate. Used with `rediss://`.
+    #[serde(default)]
+    pub root_ca_certificate: Option<String>,
+    /// Timeout of a single Redis operation.
+    #[serde(default = "default_acl_redis_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+/// Postgres backend of [`AclPolicyStoreConf`].
+///
+/// An identity's document is the column named by `document_column` of the row whose
+/// `identity_column` matches, as a JSON object with the same `rules`, `subjects` and
+/// `policies` fields as the `access_control` section. The document column may be `text`
+/// or `jsonb`.
+#[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct AclPostgresConf {
+    /// Connection url, e.g. `postgres://user@127.0.0.1:5432/zenoh`.
+    /// A username may be part of it, but the password must be set separately so that it
+    /// is not exposed when the configuration is serialized. Add `sslmode=verify-full` to
+    /// encrypt and verify the server certificate; `root_ca_certificate` is the PEM of a
+    /// private CA, or omit it to use the native store.
+    pub url: String,
+    // Skip serializing field because it contains a secret
+    #[serde(default, skip_serializing)]
+    pub password: Option<SecretValue>,
+    /// Table holding identity documents. `name` or `schema.name`.
+    #[serde(default = "default_acl_postgres_table")]
+    pub table: String,
+    /// Column matched against the peer identity.
+    #[serde(default = "default_acl_postgres_identity_column")]
+    pub identity_column: String,
+    /// Column holding the ACL JSON document.
+    #[serde(default = "default_acl_postgres_document_column")]
+    pub document_column: String,
+    /// PEM file of the CA that signed the server certificate.
+    #[serde(default)]
+    pub root_ca_certificate: Option<String>,
+    /// Timeout of a single Postgres operation.
+    #[serde(default = "default_acl_postgres_timeout_ms")]
+    pub timeout_ms: u64,
+    /// Largest number of connections kept to the database. Must not be zero.
+    #[serde(default = "default_acl_postgres_pool_size")]
+    pub pool_size: usize,
+}
+
+/// How an ACL document is fetched. Flattened into [`AclPolicyStoreConf`] so the
+/// configuration stays a single object with a `type` field.
+#[derive(Serialize, Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AclPolicyStoreBackend {
+    Redis(AclRedisConf),
+    Postgres(AclPostgresConf),
+}
+
+/// External store of per-identity ACL documents.
+///
+/// Each document is read when a transport carrying that identity connects and merged with
+/// the lists declared in the configuration file, which therefore hold the rules applying to
+/// everyone. Ids must not collide between the two.
+///
+/// An identity whose key is absent is enforced with `default_permission`, the same as a
+/// transport that matches no ACL subject. An identity whose document cannot be read,
+/// because the store is unreachable for instance, is refused at connection.
+///
+/// Redis requires zenoh to be built with the `acl_redis` feature, Postgres with
+/// `acl_postgres`.
+#[derive(Serialize, Debug, Deserialize, Clone)]
+pub struct AclPolicyStoreConf {
+    /// Authentication attribute identifying a peer, used to build the key holding its
+    /// document.
+    pub identity: AclIdentitySource,
+    /// Delay after which the document for a still connected identity is read again.
+    /// Set to `null` to never read it again on its own, leaving explicit refreshes as the
+    /// only way a change reaches a connected identity.
+    #[serde(default = "default_acl_policy_store_entry_ttl_ms")]
+    pub entry_ttl_ms: Option<u64>,
+    /// Largest number of identity documents kept in memory. Defaults to
+    /// `transport.unicast.max_sessions` so every admitted session can stay cached. Raise
+    /// both together. When full, the least recently fetched identity is dropped; live
+    /// interceptors are unchanged. If interceptor config reload is used, keep it at that
+    /// size: reload rebuilds every interceptor from the cache and would deny faces
+    /// evicted while the others were prepared.
+    #[serde(default = "default_acl_policy_store_cache_capacity")]
+    pub cache_capacity: usize,
+    #[serde(flatten)]
+    pub backend: AclPolicyStoreBackend,
+}
+
+impl AclPolicyStoreConf {
+    pub fn redis(&self) -> &AclRedisConf {
+        match &self.backend {
+            AclPolicyStoreBackend::Redis(conf) => conf,
+            AclPolicyStoreBackend::Postgres(_) => {
+                panic!("policy store backend is postgres, not redis")
+            }
+        }
+    }
+
+    pub fn postgres(&self) -> &AclPostgresConf {
+        match &self.backend {
+            AclPolicyStoreBackend::Postgres(conf) => conf,
+            AclPolicyStoreBackend::Redis(_) => {
+                panic!("policy store backend is redis, not postgres")
+            }
+        }
+    }
+}
+
+/// Authentication attribute used as a peer identity in the policy store.
+#[derive(Serialize, Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AclIdentitySource {
+    /// Common name of the peer's TLS or QUIC certificate.
+    CertCommonName,
+    /// Name the peer authenticated with.
+    Username,
+    /// Zenoh id of the peer.
+    ZenohId,
+}
+
+fn default_acl_redis_key_prefix() -> String {
+    "zenoh:acl:".to_string()
+}
+
+fn default_acl_policy_store_entry_ttl_ms() -> Option<u64> {
+    Some(300_000)
+}
+
+fn default_acl_policy_store_cache_capacity() -> usize {
+    1_000
+}
+
+fn default_acl_redis_timeout_ms() -> u64 {
+    3_000
+}
+
+fn default_acl_postgres_table() -> String {
+    "zenoh_acl".to_string()
+}
+
+fn default_acl_postgres_identity_column() -> String {
+    "identity".to_string()
+}
+
+fn default_acl_postgres_document_column() -> String {
+    "document".to_string()
+}
+
+fn default_acl_postgres_timeout_ms() -> u64 {
+    3_000
+}
+
+fn default_acl_postgres_pool_size() -> usize {
+    8
+}
+
 #[derive(Clone, Serialize, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyRule {
@@ -914,6 +1088,7 @@ validated_struct::validator! {
             pub rules: Option<Vec<AclConfigRule>>,
             pub subjects: Option<Vec<AclConfigSubjects>>,
             pub policies: Option<Vec<AclConfigPolicyEntry>>,
+            pub policy_store: Option<AclPolicyStoreConf>,
         },
 
         /// Configuration of the low-pass filter
@@ -969,6 +1144,231 @@ fn set_true() -> bool {
 }
 fn set_false() -> bool {
     false
+}
+
+#[test]
+fn access_control_policy_store_deser() {
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          enabled: true,
+          policy_store: {
+            type: "redis",
+            url: "redis://127.0.0.1:6379",
+            identity: "cert_common_name",
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let store = config.access_control().policy_store.as_ref().unwrap();
+    assert_eq!(store.identity, AclIdentitySource::CertCommonName);
+    // Omitted fields fall back to their defaults.
+    assert_eq!(store.entry_ttl_ms, Some(300_000));
+    assert_eq!(store.cache_capacity, 1_000);
+    let redis = store.redis();
+    assert_eq!(redis.url, "redis://127.0.0.1:6379");
+    assert!(redis.password.is_none());
+    assert_eq!(redis.key_prefix, "zenoh:acl:");
+    assert!(redis.root_ca_certificate.is_none());
+    assert_eq!(redis.timeout_ms, 3_000);
+
+    // An explicit null disables the periodic read, for deployments that refresh an identity
+    // themselves rather than waiting for its entry to expire.
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          policy_store: {
+            type: "redis",
+            url: "redis://127.0.0.1:6379",
+            identity: "zenoh_id",
+            entry_ttl_ms: null,
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .access_control()
+            .policy_store
+            .as_ref()
+            .unwrap()
+            .entry_ttl_ms,
+        None
+    );
+
+    // No policy store unless one is configured.
+    assert!(Config::default().access_control().policy_store.is_none());
+
+    // The password is read from the configuration but never serialized back out,
+    // so it cannot leak through the admin space.
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          policy_store: {
+            type: "redis",
+            url: "redis://127.0.0.1:6379",
+            identity: "username",
+            password: "hunter2",
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let password = config
+        .access_control()
+        .policy_store
+        .as_ref()
+        .unwrap()
+        .redis()
+        .password
+        .as_ref()
+        .unwrap();
+    assert_eq!(
+        secrecy::ExposeSecret::expose_secret(password).as_str(),
+        "hunter2"
+    );
+    let serialized = serde_json::to_string(&config).unwrap();
+    assert!(serialized.contains("redis://127.0.0.1:6379"));
+    assert!(!serialized.contains("hunter2"));
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          policy_store: {
+            type: "redis",
+            url: "rediss://127.0.0.1:6379",
+            identity: "username",
+            root_ca_certificate: "./redis-ca.pem",
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .access_control()
+            .policy_store
+            .as_ref()
+            .unwrap()
+            .redis()
+            .root_ca_certificate
+            .as_deref(),
+        Some("./redis-ca.pem")
+    );
+
+    // A misspelled field is reported rather than silently ignored.
+    assert!(Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{access_control: {policy_store: {type: "redis", url: "redis://x", key: "k", pol_interval_ms: 1}}}"#,
+        )
+        .unwrap(),
+    )
+    .is_err());
+
+    // An unknown store type is reported rather than silently ignored.
+    assert!(Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{access_control: {policy_store: {type: "mysql", url: "mysql://x"}}}"#,
+        )
+        .unwrap(),
+    )
+    .is_err());
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          enabled: true,
+          policy_store: {
+            type: "postgres",
+            url: "postgres://zenoh@127.0.0.1:5432/zenoh?sslmode=verify-full",
+            identity: "cert_common_name",
+            root_ca_certificate: "./postgres-ca.pem",
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let store = config.access_control().policy_store.as_ref().unwrap();
+    assert_eq!(store.identity, AclIdentitySource::CertCommonName);
+    let postgres = store.postgres();
+    assert_eq!(
+        postgres.url,
+        "postgres://zenoh@127.0.0.1:5432/zenoh?sslmode=verify-full"
+    );
+    assert!(postgres.password.is_none());
+    assert_eq!(postgres.table, "zenoh_acl");
+    assert_eq!(postgres.identity_column, "identity");
+    assert_eq!(postgres.document_column, "document");
+    assert_eq!(
+        postgres.root_ca_certificate.as_deref(),
+        Some("./postgres-ca.pem")
+    );
+    assert_eq!(postgres.timeout_ms, 3_000);
+    assert_eq!(postgres.pool_size, 8);
+
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{
+        access_control: {
+          policy_store: {
+            type: "postgres",
+            url: "postgres://zenoh@127.0.0.1:5432/zenoh",
+            identity: "username",
+            password: "hunter2",
+            table: "acl.policies",
+            identity_column: "robot_id",
+            document_column: "acl",
+          }
+        }
+      }"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let postgres = config
+        .access_control()
+        .policy_store
+        .as_ref()
+        .unwrap()
+        .postgres();
+    assert_eq!(postgres.table, "acl.policies");
+    assert_eq!(postgres.identity_column, "robot_id");
+    assert_eq!(postgres.document_column, "acl");
+    assert!(postgres.root_ca_certificate.is_none());
+    let password = postgres.password.as_ref().unwrap();
+    assert_eq!(
+        secrecy::ExposeSecret::expose_secret(password).as_str(),
+        "hunter2"
+    );
+    let serialized = serde_json::to_string(&config).unwrap();
+    assert!(serialized.contains("postgres://zenoh@127.0.0.1:5432/zenoh"));
+    assert!(!serialized.contains("hunter2"));
+
+    // Redis-only fields are rejected on a postgres store rather than silently ignored.
+    assert!(Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{access_control: {policy_store: {type: "postgres", url: "postgres://x", identity: "username", key_prefix: "k"}}}"#,
+        )
+        .unwrap(),
+    )
+    .is_err());
 }
 
 #[test]

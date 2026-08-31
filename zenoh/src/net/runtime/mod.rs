@@ -37,6 +37,7 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc, Weak,
     },
+    time::Duration,
 };
 
 pub use adminspace::AdminSpace;
@@ -847,6 +848,26 @@ impl RuntimeBuilder {
             AdminSpace::start(&runtime).await;
         }
 
+        // How often the state the interceptors keep is looked over for entries too old to
+        // be trusted. Kept well under the shortest expiry an interceptor is likely to be
+        // given, so that staleness is bounded by that expiry plus one tick.
+        const INTERCEPTOR_STATE_SWEEP_INTERVAL: Duration = Duration::from_secs(10);
+
+        // only started when an interceptor already keeps state, so one added by
+        // a later configuration reload is not swept until the next restart. Asking the
+        // gateway on every tick instead would trade that for a timer in every session.
+        if runtime.router().keeps_interceptor_state() {
+            let router = runtime.router();
+            runtime.spawn_abortable(async move {
+                let mut interval = tokio::time::interval(INTERCEPTOR_STATE_SWEEP_INTERVAL);
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                loop {
+                    interval.tick().await;
+                    router.refresh_stale_interceptor_state();
+                }
+            });
+        }
+
         // Start plugins
         #[cfg(feature = "plugins")]
         start_plugins(&runtime);
@@ -1139,6 +1160,11 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                 {
                     bail!("Client runtimes only accept one north-bound transport");
                 }
+
+                // Anything the interceptors have to get for this transport is fetched
+                // here, because `new_transport_unicast` below holds the routing tables
+                // for writing and would stall the router for as long as it takes.
+                runtime.state.router.prepare_transport_unicast(&transport)?;
 
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),

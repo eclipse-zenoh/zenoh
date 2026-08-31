@@ -34,7 +34,7 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_task::TaskController;
-use zenoh_transport::multicast::TransportMulticast;
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
     super::gateway::*, interests::PendingCurrentInterest, resource::*, tables::TablesLock,
@@ -247,6 +247,14 @@ impl FaceState {
             id += 1;
         }
         id
+    }
+
+    /// Unicast transport of this face, if it has one.
+    pub(crate) fn unicast_transport(&self) -> Option<&TransportUnicast> {
+        self.primitives
+            .as_any()
+            .downcast_ref::<Mux>()
+            .map(|mux| &mux.handler)
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
