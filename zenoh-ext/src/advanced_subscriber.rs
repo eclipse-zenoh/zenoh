@@ -687,12 +687,33 @@ impl Drop for DeliveringRole<'_> {
         // clear the marker unconditionally, so a case where it silently does not
         // would defeat it — the role would stay claimed for the rest of the
         // subscriber's life. `into_inner` hands back the state either way.
-        let states = &mut *match self.statesref.lock() {
-            Ok(states) => states,
-            Err(poisoned) => poisoned.into_inner(),
+        //
+        // The outbox is emptied here, not left for a later staging thread.
+        // `wait_for_delivery` treats a non-empty outbox as work that some thread
+        // is on its way to drain, which holds at every staging site but not
+        // here: this thread was that drainer and it is unwinding. Anything a
+        // concurrent thread staged while the callback ran would otherwise sit
+        // with `delivering` cleared and nobody coming, and the next
+        // `wait_callbacks` — or the subscriber's own drop — would block on it
+        // forever. Discarding is the honest option: the calls cannot be
+        // delivered from an unwinding destructor, and before delivery moved out
+        // from under this mutex a panicking callback poisoned it and lost them
+        // anyway.
+        let calls = {
+            let states = &mut *match self.statesref.lock() {
+                Ok(states) => states,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            states.delivering = None;
+            states.delivery_done.notify_all();
+            std::mem::take(&mut states.outbox)
         };
-        states.delivering = None;
-        states.delivery_done.notify_all();
+        // Dropped with the guard released, and behind `catch_unwind`. Each
+        // `Call` owns a `Callback` clone, so dropping the last one runs the
+        // user's `Drop`: that must not re-enter the state lock, and must not
+        // panic while this thread is already unwinding, which would abort the
+        // process.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(calls)));
     }
 }
 
@@ -797,6 +818,11 @@ fn dispatch_outbox(statesref: &Arc<Mutex<State>>) {
 /// because every site that stages calls `dispatch_outbox` on the way out, with
 /// nothing between the two that can fail: a non-empty outbox always has a thread
 /// on its way to drain it.
+///
+/// The one path that could break that invariant is a user callback unwinding
+/// out of `dispatch_outbox`, which leaves the drainer gone and anything staged
+/// meanwhile unclaimed. `DeliveringRole::drop` empties the outbox for exactly
+/// this reason — see the comment there.
 ///
 /// # Never waits on this thread's own delivery
 ///
