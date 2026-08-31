@@ -81,17 +81,41 @@
     /// This is useful for cloud-native scenarios where connections need to
     /// be cycled to pick up DNS changes, redistribute across load balancers,
     /// or connect to fresh endpoints after auto-scaling.
+    ///
+    /// NOTE: make-before-break needs to open a second link to the peer before
+    /// closing the old one, so `transport.unicast.max_links` must be set to at
+    /// least 2 on BOTH ends of the connection (the default is 1). If the peer
+    /// rejects the extra link (e.g. its own `max_links` is still 1), the
+    /// make-before-break attempt fails for that cycle and the `fallback`
+    /// settings below decide what happens next.
+    ///
+    /// Example: rotate every 5 minutes (+/- up to 30s of random jitter) with the
+    /// break-before-make fallback enabled, allowing 2 links per unicast transport:
+    /// {
+    ///   connect: {
+    ///     endpoints: ["tcp/10.10.10.10:7447"],
+    ///     rotation: {
+    ///       enabled: true,
+    ///       policy: { type: "interval", interval_ms: 300000, jitter_ms: 30000 },
+    ///       mode: "make_before_break",
+    ///       fallback: { enabled: true },
+    ///     },
+    ///   },
+    ///   transport: { unicast: { max_links: 2 } },
+    /// }
     rotation: {
       /// Enable/disable rotation globally. Default: false.
       enabled: false,
 
       /// Rotation policy. Only "interval" is implemented.
+      /// `jitter_ms` may be omitted, in which case rotation happens at
+      /// exactly `interval_ms` without randomization.
       policy: {
         type: "interval",
         /// Rotation interval in milliseconds. Default: 300000 (5 minutes).
         interval_ms: 300000,
-        /// Random jitter in milliseconds (±) to avoid synchronized rotation
-        /// across clients. Default: 30000 (±30s).
+        /// Random jitter in milliseconds (+/-) to avoid synchronized rotation
+        /// across clients. Default: 30000 (+/-30s).
         jitter_ms: 30000,
       },
 
@@ -111,6 +135,8 @@
 
       /// Whether to rotate to a different locator in the same group
       /// (only meaningful with OneOf strategy).
+      /// NOTE: the OneOf locator strategy is not implemented yet, so this
+      /// flag has no effect today and is reserved for future use.
       rotate_across_locators: true,
     },
   },
