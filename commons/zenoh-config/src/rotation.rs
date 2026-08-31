@@ -128,3 +128,136 @@ impl RotationConf {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_is_disabled_with_no_policy() {
+        let conf = RotationConf::default();
+        assert!(!conf.enabled);
+        assert_eq!(conf.policy, None);
+        assert_eq!(conf.mode, None);
+        assert!(conf.fallback.enabled);
+        assert!(conf.rotate_across_locators);
+    }
+
+    #[test]
+    fn interval_and_jitter_are_none_without_a_policy() {
+        let conf = RotationConf::default();
+        assert_eq!(conf.interval_ms(), None);
+        assert_eq!(conf.jitter_ms(), None);
+    }
+
+    #[test]
+    fn interval_and_jitter_reflect_the_interval_policy() {
+        let conf = RotationConf {
+            enabled: true,
+            policy: Some(RotationPolicyConf::Interval {
+                interval_ms: 300_000,
+                jitter_ms: Some(30_000),
+            }),
+            ..RotationConf::default()
+        };
+        assert_eq!(conf.interval_ms(), Some(300_000));
+        assert_eq!(conf.jitter_ms(), Some(30_000));
+    }
+
+    #[test]
+    fn jitter_defaults_to_none_when_omitted_from_the_policy() {
+        let conf = RotationConf {
+            enabled: true,
+            policy: Some(RotationPolicyConf::Interval {
+                interval_ms: 60_000,
+                jitter_ms: None,
+            }),
+            ..RotationConf::default()
+        };
+        assert_eq!(conf.interval_ms(), Some(60_000));
+        assert_eq!(conf.jitter_ms(), None);
+    }
+
+    #[test]
+    fn fallback_conf_default_is_enabled() {
+        assert!(RotationFallbackConf::default().enabled);
+    }
+
+    #[test]
+    fn deserializes_from_json5_matching_default_config() {
+        // Mirrors the `connect.rotation` block documented in DEFAULT_CONFIG.json5.
+        let json5 = r#"
+            {
+              enabled: false,
+              policy: {
+                type: "interval",
+                interval_ms: 300000,
+                jitter_ms: 30000,
+              },
+              mode: "make_before_break",
+              fallback: {
+                enabled: true,
+              },
+              rotate_across_locators: true,
+            }
+        "#;
+
+        let conf: RotationConf =
+            json5::from_str(json5).expect("DEFAULT_CONFIG.json5 rotation block must deserialize");
+
+        assert!(!conf.enabled);
+        assert_eq!(
+            conf.policy,
+            Some(RotationPolicyConf::Interval {
+                interval_ms: 300_000,
+                jitter_ms: Some(30_000),
+            })
+        );
+        assert_eq!(conf.mode, Some(RotationModeConf::MakeBeforeBreak));
+        assert!(conf.fallback.enabled);
+        assert!(conf.rotate_across_locators);
+    }
+
+    #[test]
+    fn deserializes_with_all_fields_defaulted_when_only_enabled_is_set() {
+        let json5 = r#"{ enabled: true }"#;
+
+        let conf: RotationConf = json5::from_str(json5).unwrap();
+
+        assert!(conf.enabled);
+        assert_eq!(conf.policy, None);
+        assert_eq!(conf.mode, None);
+        assert!(conf.fallback.enabled);
+        assert!(conf.rotate_across_locators);
+        // Without a policy, the engine has nothing to schedule on.
+        assert_eq!(conf.interval_ms(), None);
+    }
+
+    #[test]
+    fn policy_type_tag_rejects_unknown_variants() {
+        let json5 = r#"{ type: "byte_threshold", interval_ms: 1000 }"#;
+        let result: Result<RotationPolicyConf, _> = json5::from_str(json5);
+        assert!(result.is_err(), "unknown policy types must be rejected");
+    }
+
+    #[test]
+    fn mode_serde_rename_round_trips() {
+        let mode = RotationModeConf::MakeBeforeBreak;
+        let serialized = serde_json::to_string(&mode).unwrap();
+        assert_eq!(serialized, "\"make_before_break\"");
+
+        let back: RotationModeConf = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(back, RotationModeConf::MakeBeforeBreak);
+    }
+
+    #[test]
+    fn interval_policy_round_trips_through_json() {
+        let policy = RotationPolicyConf::Interval {
+            interval_ms: 45_000,
+            jitter_ms: Some(5_000),
+        };
+        let serialized = serde_json::to_string(&policy).unwrap();
+        let back: RotationPolicyConf = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(back, policy);
+    }
+}
