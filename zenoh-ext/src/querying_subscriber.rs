@@ -484,36 +484,32 @@ struct InnerState {
     /// Samples staged under this mutex, in the order the state machine produced
     /// them. Drained by [`dispatch_outbox`] with the mutex released.
     outbox: VecDeque<Sample>,
-    /// Which thread, if any, is draining `outbox`. At most one at a time, so
-    /// the callback stays mutually excluded and delivery stays ordered.
-    delivering: Option<std::thread::ThreadId>,
+    /// Set while a thread is draining `outbox`. One at a time, so the callback
+    /// stays mutually excluded and delivery stays ordered.
+    delivering: bool,
 }
 
 /// Marks the calling thread as the one draining [`InnerState::outbox`].
 ///
-/// Held for the duration of a drain so the flag clears even if a user callback
-/// unwinds. Otherwise delivery would stop silently for the rest of the
-/// subscriber's life.
+/// RAII, so the marker clears even if a user callback unwinds.
 ///
-/// `advanced_subscriber.rs` carries a type of the same name and shape. They are
-/// kept separate on purpose: this one has no condition variable, because
+/// `advanced_subscriber.rs` has a type of the same name and shape. They are kept
+/// separate on purpose: this one needs no condition variable, because
 /// `FetchingSubscriber` has no `wait_callbacks`-style API to make one mean
-/// anything, and this type is deprecated. Sharing them would tie a deprecated
-/// type's lifetime to the current one's.
+/// anything, and this type is deprecated.
 struct DeliveringRole<'a> {
     state: &'a Arc<Mutex<InnerState>>,
     released: bool,
 }
 
 impl DeliveringRole<'_> {
-    /// Gives up the role while `state` is already locked.
+    /// Gives up the role.
     ///
-    /// The caller passes the live borrow on purpose: the "outbox is empty" test
-    /// and the release have to be one atomic step. Split them, and a sample
-    /// staged in between would find `delivering` still set, decline to deliver,
-    /// and sit in the outbox until some later sample happened to flush it.
+    /// Takes the live borrow so the empty-outbox test and the release are one
+    /// atomic step: split them, and a sample staged in between sits in the
+    /// outbox until some later sample flushes it.
     fn release(&mut self, state: &mut InnerState) {
-        state.delivering = None;
+        state.delivering = false;
         self.released = true;
     }
 }
@@ -523,72 +519,45 @@ impl Drop for DeliveringRole<'_> {
         if self.released {
             return;
         }
-        // Only reached when a user callback unwound. Deliberately not `zlock!`:
-        // this runs on the unwind path, and a panic in a destructor aborts the
-        // process, so a poisoned mutex must not be unwrapped here.
-        //
-        // Poisoning is recovered from rather than skipped. This guard exists to
-        // clear the marker unconditionally, so a case where it silently does not
-        // would defeat it — the role would stay claimed for the rest of the
-        // subscriber's life. `into_inner` hands back the state either way.
+        // Only reached when a user callback unwound. Not `zlock!`: unwrapping a
+        // poisoned mutex here would panic in a destructor, which aborts.
         let state = &mut *match self.state.lock() {
             Ok(state) => state,
             Err(poisoned) => poisoned.into_inner(),
         };
-        state.delivering = None;
+        state.delivering = false;
     }
 }
 
 /// Delivers everything staged in [`InnerState::outbox`], with the lock released.
 ///
-/// This is the only place in this file that invokes a callback. Both call sites
-/// record samples into the outbox while they hold the state mutex, then come
-/// here once the guard is gone. That is what stops a callback which re-enters a
-/// `FetchingSubscriber` API from deadlocking against the guard its own caller
-/// holds: `FetchingSubscriber::fetch` resolves to `register_handler`, which
-/// takes the same mutex.
+/// The only place in this file that invokes a callback. Both call sites stage
+/// while holding the state mutex and come here once the guard is gone, so a
+/// callback that re-enters a `FetchingSubscriber` API cannot deadlock against
+/// its own caller's guard — `fetch` resolves to `register_handler`, which takes
+/// the same mutex.
 ///
-/// Invoking a callback is not the only way this file reaches user code:
-/// *dropping* a `Callback` runs the user's `Drop`. `RepliesHandler` owns one,
-/// and it falls out of scope after `drop` has released the guard.
+/// Dropping a `Callback` also runs user code; `RepliesHandler` owns one and it
+/// falls out of scope after `drop` has released the guard.
 ///
-/// # Why a shared outbox rather than a per-call-site buffer
+/// One shared FIFO, one active deliverer. Per-call-site buffers would fix the
+/// deadlock and break the merge ordering this subscriber exists to provide:
+/// `Callback` is `Send + Sync`, so a live sample could overtake the replies it
+/// was meant to follow. A thread that finds another draining stages and returns;
+/// the deliverer takes the work on its next lap.
 ///
-/// Collecting into a local buffer at each call site would fix the deadlock and
-/// **break ordering**, which is the feature this subscriber exists to provide.
-/// It merges fetched replies with live samples, and the state mutex is what
-/// serialises that merge. `Callback` is `Send + Sync`, so two threads can be in
-/// the sample callback at once; with local buffers one could stage a live sample
-/// and another drain the merge queue, and the live sample could overtake the
-/// replies it was meant to follow.
-///
-/// A single FIFO plus a single active deliverer restores it: samples leave the
-/// outbox in the order the state machine produced them, whichever thread drains
-/// them. A thread that finds another already draining returns immediately; the
-/// active deliverer picks that work up on its next lap, so nothing is dropped
-/// and callbacks stay mutually excluded exactly as before.
-///
-/// A callback that publishes to its own subscriber is therefore safe as long as
-/// it publishes *conditionally*. One that republishes on every sample now spins
-/// in the refill loop below rather than deadlocking — livelock instead of
-/// deadlock, and still the callback's own recursion.
-///
-/// # The outbox is not backpressure
-///
-/// The state mutex used to throttle producers: a thread arriving while a
-/// callback ran blocked on the guard until it finished. Staging returns
-/// immediately, so a producer faster than the callback grows the outbox instead
-/// of being slowed by it. Nothing here bounds that. Bounding it would mean
-/// dropping samples or reintroducing a block, both larger semantic changes than
-/// removing the deadlock, so it is documented rather than decided here.
+/// Two consequences worth knowing. A re-entrant publish is safe only if it is
+/// *conditional* — republishing on every sample livelocks in the refill loop
+/// instead of deadlocking. And the outbox is not backpressure: the mutex used to
+/// throttle producers, staging does not, and nothing bounds the queue.
 fn dispatch_outbox(state: &Arc<Mutex<InnerState>>, callback: &Callback<Sample>) {
     // Claim the role and take the first batch in one acquisition.
     let mut samples = {
         let guard = &mut *zlock!(state);
-        if guard.delivering.is_some() || guard.outbox.is_empty() {
+        if guard.delivering || guard.outbox.is_empty() {
             return;
         }
-        guard.delivering = Some(std::thread::current().id());
+        guard.delivering = true;
         std::mem::take(&mut guard.outbox)
     };
     let mut role = DeliveringRole {
@@ -1037,7 +1006,7 @@ impl<Handler> FetchingSubscriber<Handler> {
             pending_fetches: 0,
             merge_queue: MergeQueue::new(),
             outbox: VecDeque::new(),
-            delivering: None,
+            delivering: false,
         }));
         let (callback, receiver) = conf.handler.into_handler();
 

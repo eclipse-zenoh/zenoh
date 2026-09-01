@@ -459,12 +459,9 @@ struct State {
     /// Calls into user code staged by the state machine, in the order it
     /// produced them. Drained by `dispatch_outbox` with this mutex released.
     outbox: VecDeque<Call>,
-    /// Which thread, if any, is currently draining `outbox`. Exactly one at a
-    /// time, which is what keeps delivery ordered and mutually excluded.
-    ///
-    /// The thread id — rather than a bool — lets `wait_for_delivery` avoid
-    /// waiting on itself, which a callback that undeclares from inside delivery
-    /// would otherwise turn into a self-deadlock.
+    /// Which thread, if any, is draining `outbox`. One at a time, which keeps
+    /// delivery ordered and mutually excluded. An id rather than a bool so
+    /// `wait_for_delivery` can tell its own delivery apart and not wait on it.
     delivering: Option<std::thread::ThreadId>,
     /// Signalled when `delivering` clears. `wait_callbacks` blocks on it.
     delivery_done: Arc<Condvar>,
@@ -626,18 +623,13 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
 
 /// One deferred call into user code.
 ///
-/// Each variant carries its own target. Staging is a commitment to deliver, and
-/// resolving the target later would break that: an undeclare landing between
-/// the stage and the drain would take `State::callback` away and the staged
-/// sample would be discarded without ever reaching the callback that was
-/// registered when it arrived. Before delivery was deferred that could not
-/// happen, because a sample that entered `handle_sample` was delivered under the
-/// same guard. The cost is one handle clone per staged call.
+/// Each variant carries its own target, at the cost of a handle clone per call:
+/// staging is a commitment to deliver, and an undeclare landing before the drain
+/// would otherwise take `State::callback` away and discard the sample.
 ///
-/// `Sample` is ~272 bytes against `Miss`'s ~56, so every queue slot is sized for
-/// the larger. Boxing it, as `clippy::large_enum_variant` suggests, would trade
-/// that for a heap allocation on every delivered sample — the hot path — to save
-/// memory in a queue that is empty whenever delivery keeps up.
+/// `clippy::large_enum_variant` wants `Sample` (~272 bytes, against `Miss`'s
+/// ~56) boxed. That trades a queue slot for a heap allocation on every delivered
+/// sample, to save memory in a queue that is empty whenever delivery keeps up.
 #[zenoh_macros::unstable]
 #[allow(clippy::large_enum_variant)]
 enum Call {
@@ -649,9 +641,8 @@ enum Call {
 
 /// Marks the calling thread as the one draining [`State::outbox`].
 ///
-/// Held for the duration of a drain so that the flag is cleared even if a user
-/// callback unwinds — otherwise delivery would stop silently for the rest of the
-/// subscriber's life.
+/// RAII, so the marker clears even if a user callback unwinds; otherwise the
+/// subscriber would stop delivering for the rest of its life.
 #[zenoh_macros::unstable]
 struct DeliveringRole<'a> {
     statesref: &'a Arc<Mutex<State>>,
@@ -660,12 +651,11 @@ struct DeliveringRole<'a> {
 
 #[zenoh_macros::unstable]
 impl DeliveringRole<'_> {
-    /// Gives up the role while `states` is already locked.
+    /// Gives up the role.
     ///
-    /// The caller passes the live borrow on purpose: the "outbox is empty" test
-    /// and the release have to be one atomic step. Split them, and a sample
-    /// queued in between would find `delivering` still set, decline to deliver,
-    /// and sit in the outbox until some later sample happened to flush it.
+    /// Takes the live borrow so the empty-outbox test and the release are one
+    /// atomic step: split them, and a call staged in between sits in the outbox
+    /// until some later call flushes it.
     fn release(&mut self, states: &mut State) {
         states.delivering = None;
         states.delivery_done.notify_all();
@@ -679,26 +669,15 @@ impl Drop for DeliveringRole<'_> {
         if self.released {
             return;
         }
-        // Only reached when a user callback unwound. Deliberately not `zlock!`:
-        // this runs on the unwind path, and panicking in a destructor aborts the
-        // process, so a poisoned mutex must not be unwrapped here.
+        // Only reached when a user callback unwound. Not `zlock!`: unwrapping a
+        // poisoned mutex here would panic in a destructor, which aborts.
         //
-        // Poisoning is recovered from rather than skipped. This guard exists to
-        // clear the marker unconditionally, so a case where it silently does not
-        // would defeat it — the role would stay claimed for the rest of the
-        // subscriber's life. `into_inner` hands back the state either way.
-        //
-        // The outbox is emptied here, not left for a later staging thread.
-        // `wait_for_delivery` treats a non-empty outbox as work that some thread
-        // is on its way to drain, which holds at every staging site but not
-        // here: this thread was that drainer and it is unwinding. Anything a
-        // concurrent thread staged while the callback ran would otherwise sit
-        // with `delivering` cleared and nobody coming, and the next
-        // `wait_callbacks` — or the subscriber's own drop — would block on it
-        // forever. Discarding is the honest option: the calls cannot be
-        // delivered from an unwinding destructor, and before delivery moved out
-        // from under this mutex a panicking callback poisoned it and lost them
-        // anyway.
+        // The outbox is emptied, not left. `wait_for_delivery` waits on a
+        // non-empty outbox because a staging thread is always on its way to
+        // drain it — untrue here, where this thread was the drainer, so anything
+        // staged during the callback would wedge the next `wait_callbacks`.
+        // Undeliverable from an unwinding destructor, and a panicking callback
+        // used to poison this mutex and lose them anyway.
         let calls = {
             let states = &mut *match self.statesref.lock() {
                 Ok(states) => states,
@@ -708,61 +687,35 @@ impl Drop for DeliveringRole<'_> {
             states.delivery_done.notify_all();
             std::mem::take(&mut states.outbox)
         };
-        // Dropped with the guard released, and behind `catch_unwind`. Each
-        // `Call` owns a `Callback` clone, so dropping the last one runs the
-        // user's `Drop`: that must not re-enter the state lock, and must not
-        // panic while this thread is already unwinding, which would abort the
-        // process.
+        // Guard released, and `catch_unwind`: the last `Callback` clone drops
+        // user code, which must not re-enter the lock nor panic mid-unwind.
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(calls)));
     }
 }
 
 /// Delivers everything staged in [`State::outbox`], with the lock released.
 ///
-/// This is the *only* place in this file that invokes a callback. Everything
-/// upstream of it records calls into the outbox while holding `statesref` and
-/// then comes here once the guard is gone, which is what stops a callback
-/// re-entering an `AdvancedSubscriber` API — both `SampleMissListener::drop`
-/// and `SampleMissListenerBuilder::wait` take `statesref` — from deadlocking
-/// against the guard its own caller holds.
+/// The only place in this file that invokes a callback. Callers stage while
+/// holding `statesref` and come here once the guard is gone, so a callback that
+/// re-enters an `AdvancedSubscriber` API — `SampleMissListener::drop` and
+/// `SampleMissListenerBuilder::wait` both take `statesref` — cannot deadlock
+/// against its own caller's guard.
 ///
-/// Invoking a callback is not the only way this file reaches user code:
-/// *dropping* a `Callback` runs the user's `Drop`. Those sites are handled
-/// separately, by taking the value out of the state and releasing the guard
-/// before it falls out of scope — see `unregister_miss_callback` and the
-/// subscriber's drop callback.
+/// Dropping a `Callback` also runs user code; those sites release the guard
+/// first instead — see `unregister_miss_callback` and the drop callback.
 ///
-/// # Why a shared outbox rather than a per-call-site buffer
+/// One shared FIFO, one active deliverer. Per-call-site buffers would fix the
+/// deadlock and break ordering: `Callback` is `Send + Sync`, so two threads can
+/// advance the state to sn=5 and sn=6 and deliver them out of order. A thread
+/// that finds another draining stages and returns; the deliverer takes the work
+/// on its next lap, so callbacks stay mutually excluded as before.
 ///
-/// Collecting into a local buffer at each call site would fix the deadlock and
-/// **break ordering**, which is the feature `AdvancedSubscriber` exists to
-/// provide. Two threads can be in the sample callback at once (`Callback` is
-/// `Send + Sync`), so with a local buffer one could advance the state to sn=5,
-/// the other to sn=6, and then deliver 6 before 5. Previously the state mutex
-/// made advance-and-deliver atomic, so that could not happen.
-///
-/// A single FIFO plus a single active deliverer restores it: calls leave the
-/// outbox in the order the state machine produced them no matter which thread
-/// drains them. A thread that finds another already draining returns
-/// immediately; the active deliverer picks its work up on the next lap, so
-/// nothing is dropped and callbacks stay mutually excluded exactly as before.
-///
-/// It also makes a re-entrant *publish* safe: a callback that publishes to its
-/// own subscriber queues into the outbox and returns, and the outer lap delivers
-/// it, instead of recursing. That holds for a callback that publishes
-/// *conditionally*. One that republishes on every sample now spins in the refill
-/// loop below rather than deadlocking — the failure is livelock instead of
-/// deadlock, and it is still the callback's own recursion.
-///
-/// # The outbox is not backpressure
-///
-/// The state mutex used to throttle producers: a thread that arrived while a
-/// callback was running blocked on the guard until it finished. Staging returns
-/// immediately, so a producer faster than the callback grows the outbox instead
-/// of being slowed by it. Nothing here bounds that. Bounding it would mean
-/// either dropping samples or reintroducing a block, both of which are larger
-/// semantic changes than removing the deadlock, so this is left as a documented
-/// property rather than decided here.
+/// Two consequences worth knowing. A re-entrant publish is safe only if it is
+/// *conditional* — republishing on every sample refills the outbox as fast as
+/// the loop drains it, livelock where it used to deadlock. And the outbox is not
+/// backpressure: the mutex used to throttle producers, staging does not, and
+/// nothing bounds the queue. Bounding it means dropping samples or restoring a
+/// block, both larger changes than removing the deadlock.
 #[zenoh_macros::unstable]
 fn dispatch_outbox(statesref: &Arc<Mutex<State>>) {
     // Claim the role and take the first batch in one acquisition.
@@ -798,43 +751,25 @@ fn dispatch_outbox(statesref: &Arc<Mutex<State>>) {
 
 /// Blocks until every call another thread has committed to has been delivered.
 ///
-/// This is what `wait_callbacks` needs in order to mean anything. Before
-/// delivery moved out from under `statesref`, a caller that acquired the state
-/// lock was guaranteed no callback was running, because a running callback held
-/// that lock — so `wait_callbacks` could be a no-op. Now that callbacks run
-/// unlocked, the wait has to be explicit.
+/// `wait_callbacks` was a no-op while a running callback held the state lock:
+/// acquiring it was proof none was running. Callbacks now run unlocked, so the
+/// wait has to be explicit.
 ///
-/// # Waiting on `delivering` alone is not enough
+/// Waiting on `delivering` alone is not enough. A staging thread releases the
+/// guard before claiming the role, so `delivering` is `None` while the outbox
+/// still holds committed calls, and each carries its own callback handle —
+/// unregistering first does not stop it. So a non-empty outbox counts as
+/// outstanding, which is safe because every staging site calls `dispatch_outbox`
+/// on the way out. The exception is a callback unwinding, which is why
+/// `DeliveringRole::drop` empties the outbox.
 ///
-/// A staging thread releases the guard before it claims the delivering role in
-/// `dispatch_outbox`. In that window `delivering` is `None` while the outbox is
-/// not empty, so a wait that only watched `delivering` would return while a call
-/// was still owed — and every staged `Call` carries its own callback handle, so
-/// unregistering first does not stop it. A caller of `wait_callbacks` would
-/// then see its listener fire after `wait_callbacks` had returned, which is
-/// precisely the guarantee it exists to give.
+/// Never waits on this thread's own delivery: a callback that undeclares while
+/// being delivered would otherwise block on itself — the original defect in
+/// another hat.
 ///
-/// So a non-empty outbox counts as outstanding work. That is safe to wait for
-/// because every site that stages calls `dispatch_outbox` on the way out, with
-/// nothing between the two that can fail: a non-empty outbox always has a thread
-/// on its way to drain it.
-///
-/// The one path that could break that invariant is a user callback unwinding
-/// out of `dispatch_outbox`, which leaves the drainer gone and anything staged
-/// meanwhile unclaimed. `DeliveringRole::drop` empties the outbox for exactly
-/// this reason — see the comment there.
-///
-/// # Never waits on this thread's own delivery
-///
-/// A callback that undeclares while it is being delivered would otherwise block
-/// forever on itself — the original defect wearing a different hat. When this
-/// thread holds the delivering role, everything outstanding is its own work and
-/// there is nothing to wait for.
-///
-/// The wait is per-subscriber, not per-listener: `wait_callbacks` on a sample
-/// miss listener therefore also waits out any sample callback in flight. That is
-/// broader than the name suggests, and deliberate — the outbox interleaves both,
-/// so a listener's staged misses cannot be waited for in isolation.
+/// The wait is per-subscriber, not per-listener. `wait_callbacks` on a miss
+/// listener also waits out any sample callback in flight; the outbox interleaves
+/// both, so a listener's misses cannot be waited for in isolation.
 #[zenoh_macros::unstable]
 fn wait_for_delivery(statesref: &Arc<Mutex<State>>) {
     let me = std::thread::current().id();
