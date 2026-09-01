@@ -551,31 +551,36 @@ impl Drop for DeliveringRole<'_> {
 /// instead of deadlocking. And the outbox is not backpressure: the mutex used to
 /// throttle producers, staging does not, and nothing bounds the queue.
 fn dispatch_outbox(state: &Arc<Mutex<InnerState>>, callback: &Callback<Sample>) {
+    // Drained into across laps rather than taking the outbox itself, so both
+    // buffers keep their capacity instead of being freed and reallocated once
+    // per batch.
+    let mut samples: Vec<Sample> = Vec::new();
     // Claim the role and take the first batch in one acquisition.
-    let mut samples = {
+    {
         let guard = &mut *zlock!(state);
         if guard.delivering || guard.outbox.is_empty() {
             return;
         }
         guard.delivering = true;
-        std::mem::take(&mut guard.outbox)
-    };
+        samples.extend(guard.outbox.drain(..));
+    }
     let mut role = DeliveringRole {
         state,
         released: false,
     };
     loop {
-        for sample in samples {
+        for sample in samples.drain(..) {
             callback.call(sample);
         }
-        samples = {
+        // Braced so the guard's scope is explicit: no user code may run inside.
+        {
             let guard = &mut *zlock!(state);
             if guard.outbox.is_empty() {
                 role.release(guard);
                 return;
             }
-            std::mem::take(&mut guard.outbox)
-        };
+            samples.extend(guard.outbox.drain(..));
+        }
     }
 }
 

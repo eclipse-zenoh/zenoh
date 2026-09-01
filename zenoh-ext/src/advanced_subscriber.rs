@@ -718,34 +718,40 @@ impl Drop for DeliveringRole<'_> {
 /// block, both larger changes than removing the deadlock.
 #[zenoh_macros::unstable]
 fn dispatch_outbox(statesref: &Arc<Mutex<State>>) {
+    // Drained into across laps rather than taking the outbox itself, so both
+    // buffers keep their capacity instead of being freed and reallocated once
+    // per batch — which, when delivery keeps up and a batch is one call, is once
+    // per sample.
+    let mut calls: Vec<Call> = Vec::new();
     // Claim the role and take the first batch in one acquisition.
-    let mut calls = {
+    {
         let states = &mut *zlock!(statesref);
         if states.delivering.is_some() || states.outbox.is_empty() {
             return;
         }
         states.delivering = Some(std::thread::current().id());
-        std::mem::take(&mut states.outbox)
-    };
+        calls.extend(states.outbox.drain(..));
+    }
     let mut role = DeliveringRole {
         statesref,
         released: false,
     };
     loop {
-        for call in calls {
+        for call in calls.drain(..) {
             match call {
                 Call::Sample(callback, sample) => callback.call(sample),
                 Call::Miss(miss_callback, miss) => miss_callback.call(miss),
             }
         }
-        calls = {
+        // Braced so the guard's scope is explicit: no user code may run inside.
+        {
             let states = &mut *zlock!(statesref);
             if states.outbox.is_empty() {
                 role.release(states);
                 return;
             }
-            std::mem::take(&mut states.outbox)
-        };
+            calls.extend(states.outbox.drain(..));
+        }
     }
 }
 
