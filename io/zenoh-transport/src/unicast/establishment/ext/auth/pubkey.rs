@@ -83,13 +83,13 @@ impl AuthPubKey {
         const S: &str = "PubKey extension - From config.";
 
         // First, check if PEM keys are provided
-        match (config.public_key_pem(), config.private_key_pem()) {
+        let mut auth = match (config.public_key_pem(), config.private_key_pem()) {
             (Some(public), Some(private)) => {
                 let pub_key = RsaPublicKey::from_pkcs1_pem(public)
                     .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
                 let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
                     .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+                Some(Self::new(pub_key.into(), pri_key.into()))
             }
             (Some(_), None) => {
                 bail!("{S} Missing Rsa Private Key: PEM.")
@@ -97,33 +97,69 @@ impl AuthPubKey {
             (None, Some(_)) => {
                 bail!("{S} Missing Rsa Public Key: PEM.")
             }
-            (None, None) => {}
+            (None, None) => None,
+        };
+
+        // Second, if not provided inline, check if PEM files are provided
+        if auth.is_none() {
+            auth = match (config.public_key_file(), config.private_key_file()) {
+                (Some(public), Some(private)) => {
+                    let path = Path::new(public);
+                    let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
+                        .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
+                    let path = Path::new(private);
+                    let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
+                        .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
+                    Some(Self::new(pub_key.into(), pri_key.into()))
+                }
+                (Some(_), None) => {
+                    bail!("{S} Missing Rsa Private Key: file.")
+                }
+                (None, Some(_)) => {
+                    bail!("{S} Missing Rsa Public Key: file.")
+                }
+                (None, None) => None,
+            };
         }
 
-        // Second, check if PEM files are provided
-        match (config.public_key_file(), config.private_key_file()) {
-            (Some(public), Some(private)) => {
-                let path = Path::new(public);
-                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
-                let path = Path::new(private);
-                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
-                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
-                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
-            }
-            (Some(_), None) => {
-                bail!("{S} Missing Rsa Private Key: file.")
-            }
-            (None, Some(_)) => {
-                bail!("{S} Missing Rsa Public Key: file.")
-            }
-            (None, None) => {}
+        match (auth.as_mut(), config.known_keys_file()) {
+            (Some(auth), Some(known_keys_file)) => auth.load_known_keys(known_keys_file)?,
+            (None, Some(_)) => bail!("{S} Known keys file configured without a key pair."),
+            _ => {}
         }
 
-        // @TODO: populate lookup file
-
-        Ok(None)
+        Ok(auth)
     }
+
+    fn load_known_keys(&mut self, path: &str) -> ZResult<()> {
+        let keys = read_authorized_keys(path)?;
+        if let Some(lookup) = self.lookup.as_mut() {
+            lookup.extend(keys);
+        }
+        Ok(())
+    }
+}
+
+fn read_authorized_keys(path: &str) -> ZResult<Vec<ZPublicKey>> {
+    const S: &str = "PubKey extension - Known keys file.";
+    let content = std::fs::read_to_string(Path::new(path))
+        .map_err(|e| zerror!("{} Cannot read file: {}.", S, e))?;
+    let keys: Vec<ZPublicKey> = pem::parse_many(&content)
+        .map_err(|e| zerror!("{} Malformed PEM: {}.", S, e))?
+        .iter()
+        .map(|block| {
+            if block.tag() != "RSA PUBLIC KEY" {
+                bail!("{} Expected an RSA public key, found '{}'.", S, block.tag());
+            }
+            let key = RsaPublicKey::from_pkcs1_der(block.contents())
+                .map_err(|e| zerror!("{} Invalid public key: {}.", S, e))?;
+            Ok(key.into())
+        })
+        .collect::<ZResult<_>>()?;
+    if keys.is_empty() {
+        bail!("{S} No public keys found.");
+    }
+    Ok(keys)
 }
 
 #[repr(transparent)]
@@ -653,5 +689,210 @@ impl<'a> AcceptFsm for &'a AuthPubKeyFsm<'a> {
         tracing::trace!("{S}");
 
         Ok(Some(ZExtUnit::new()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    // Removes the wrapped file when dropped, so a temp fixture is cleaned up even
+    // if an assertion panics before the end of the test.
+    struct RemoveOnDrop(PathBuf);
+    impl Drop for RemoveOnDrop {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn authenticator_pubkey_known_keys_file() {
+        use std::{fs::File, io::Write};
+
+        use rsa::{
+            pkcs1::{EncodeRsaPrivateKey, EncodeRsaPublicKey, LineEnding},
+            RsaPrivateKey, RsaPublicKey,
+        };
+        use zenoh_config::PubKeyConf;
+
+        use super::{AuthPubKey, ZPublicKey};
+
+        let mut rng = rand::thread_rng();
+        let bits = 2048;
+
+        // The node's own key pair
+        let own_priv = RsaPrivateKey::new(&mut rng, bits).unwrap();
+        let own_pub = RsaPublicKey::from(&own_priv);
+        let own_pub_pem = own_pub.to_pkcs1_pem(LineEnding::LF).unwrap();
+        let own_priv_pem = own_priv.to_pkcs1_pem(LineEnding::LF).unwrap().to_string();
+
+        // Two additional public keys to authorize via the known keys file
+        let known_pub_1 = RsaPublicKey::from(&RsaPrivateKey::new(&mut rng, bits).unwrap());
+        let known_pub_2 = RsaPublicKey::from(&RsaPrivateKey::new(&mut rng, bits).unwrap());
+
+        // Write the two known public keys into a temp PEM file, removed on drop
+        let path = std::env::temp_dir().join(format!(
+            "zenoh-test-auth-pubkey-known-keys-{}.pem",
+            std::process::id()
+        ));
+        let _cleanup = RemoveOnDrop(path.clone());
+        {
+            let mut f = File::create(&path).unwrap();
+            f.write_all(known_pub_1.to_pkcs1_pem(LineEnding::LF).unwrap().as_bytes())
+                .unwrap();
+            f.write_all(known_pub_2.to_pkcs1_pem(LineEnding::LF).unwrap().as_bytes())
+                .unwrap();
+        }
+        let known_keys_file = path.to_string_lossy().into_owned();
+
+        // The two known keys must be loaded into the lookup
+        let mut config = PubKeyConf::default();
+        config
+            .set_public_key_pem(Some(own_pub_pem.clone()))
+            .unwrap();
+        config
+            .set_private_key_pem(Some(own_priv_pem.clone()))
+            .unwrap();
+        config
+            .set_known_keys_file(Some(known_keys_file.clone()))
+            .unwrap();
+
+        let auth = AuthPubKey::from_config(&config).unwrap().unwrap();
+        let lookup = auth.lookup.as_ref().unwrap();
+        assert_eq!(lookup.len(), 2);
+        assert!(lookup.contains(&ZPublicKey::from(known_pub_1)));
+        assert!(lookup.contains(&ZPublicKey::from(known_pub_2)));
+
+        // Without a known keys file the lookup stays empty
+        let mut config_no_file = PubKeyConf::default();
+        config_no_file
+            .set_public_key_pem(Some(own_pub_pem.clone()))
+            .unwrap();
+        config_no_file
+            .set_private_key_pem(Some(own_priv_pem.clone()))
+            .unwrap();
+        let auth = AuthPubKey::from_config(&config_no_file).unwrap().unwrap();
+        assert!(auth.lookup.as_ref().unwrap().is_empty());
+
+        // A known keys file without a key pair is a hard error, not a silent bypass
+        let mut config_no_keypair = PubKeyConf::default();
+        config_no_keypair
+            .set_known_keys_file(Some(known_keys_file))
+            .unwrap();
+        assert!(AuthPubKey::from_config(&config_no_keypair).is_err());
+
+        // A known keys file that yields no keys is an error, not a silently empty list
+        let empty_path = std::env::temp_dir().join(format!(
+            "zenoh-test-auth-pubkey-empty-{}.pem",
+            std::process::id()
+        ));
+        let _cleanup_empty = RemoveOnDrop(empty_path.clone());
+        File::create(&empty_path).unwrap();
+        let mut config_empty = PubKeyConf::default();
+        config_empty.set_public_key_pem(Some(own_pub_pem)).unwrap();
+        config_empty
+            .set_private_key_pem(Some(own_priv_pem))
+            .unwrap();
+        config_empty
+            .set_known_keys_file(Some(empty_path.to_string_lossy().into_owned()))
+            .unwrap();
+        assert!(AuthPubKey::from_config(&config_empty).is_err());
+
+        // A PEM block that is not an RSA public key (here a private key) is rejected
+        let wrong_path = std::env::temp_dir().join(format!(
+            "zenoh-test-auth-pubkey-wrong-{}.pem",
+            std::process::id()
+        ));
+        let _cleanup_wrong = RemoveOnDrop(wrong_path.clone());
+        std::fs::write(
+            &wrong_path,
+            own_priv.to_pkcs1_pem(LineEnding::LF).unwrap().as_bytes(),
+        )
+        .unwrap();
+        let mut config_wrong = PubKeyConf::default();
+        config_wrong
+            .set_public_key_pem(Some(own_pub.to_pkcs1_pem(LineEnding::LF).unwrap()))
+            .unwrap();
+        config_wrong
+            .set_private_key_pem(Some(
+                own_priv.to_pkcs1_pem(LineEnding::LF).unwrap().to_string(),
+            ))
+            .unwrap();
+        config_wrong
+            .set_known_keys_file(Some(wrong_path.to_string_lossy().into_owned()))
+            .unwrap();
+        assert!(AuthPubKey::from_config(&config_wrong).is_err());
+    }
+
+    enum Lookup {
+        Empty,
+        ContainsPeer,
+        WithoutPeer,
+    }
+
+    fn make_keypair() -> (super::ZPublicKey, super::ZPrivateKey) {
+        use rsa::{RsaPrivateKey, RsaPublicKey};
+        let mut rng = rand::thread_rng();
+        let pri = RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let pubk = RsaPublicKey::from(&pri);
+        (pubk.into(), pri.into())
+    }
+
+    // Drives the InitSyn/RecvInitSyn exchange: the connector presents its public
+    // key and the acceptor checks it against its lookup (allow-list).
+    async fn run_init_syn(lookup: Lookup) -> zenoh_core::Result<()> {
+        use rand::SeedableRng;
+        use tokio::sync::{Mutex, RwLock};
+        use zenoh_crypto::PseudoRng;
+
+        use super::{AuthPubKey, AuthPubKeyFsm, StateAccept, StateOpen};
+        use crate::unicast::establishment::{AcceptFsm, OpenFsm};
+
+        // Connector
+        let (peer_pub, peer_pri) = make_keypair();
+        let connector = AuthPubKey::new(peer_pub.clone(), peer_pri);
+
+        // Acceptor, with a controlled allow-list
+        let (acc_pub, acc_pri) = make_keypair();
+        let mut acceptor = AuthPubKey::new(acc_pub, acc_pri);
+        {
+            let allowed = acceptor.lookup.as_mut().unwrap();
+            allowed.clear();
+            match lookup {
+                Lookup::Empty => {}
+                Lookup::ContainsPeer => {
+                    allowed.insert(peer_pub);
+                }
+                Lookup::WithoutPeer => {
+                    allowed.insert(make_keypair().0);
+                }
+            }
+        }
+
+        let connector_inner = RwLock::new(connector);
+        let connector_prng = Mutex::new(PseudoRng::from_entropy());
+        let connector_fsm = AuthPubKeyFsm::new(&connector_inner, &connector_prng);
+
+        let acceptor_inner = RwLock::new(acceptor);
+        let acceptor_prng = Mutex::new(PseudoRng::from_entropy());
+        let acceptor_fsm = AuthPubKeyFsm::new(&acceptor_inner, &acceptor_prng);
+
+        let state_open = StateOpen::new();
+        let mut state_accept = StateAccept::new();
+
+        let init_syn = connector_fsm.send_init_syn(&state_open).await?;
+        acceptor_fsm
+            .recv_init_syn((&mut state_accept, init_syn))
+            .await
+    }
+
+    #[tokio::test]
+    async fn authenticator_pubkey_lookup_enforcement() {
+        // An acceptor with an empty allow-list denies every peer (fail-safe)
+        assert!(run_init_syn(Lookup::Empty).await.is_err());
+        // A key on the allow-list is accepted
+        assert!(run_init_syn(Lookup::ContainsPeer).await.is_ok());
+        // A key not on the allow-list is rejected
+        assert!(run_init_syn(Lookup::WithoutPeer).await.is_err());
     }
 }
