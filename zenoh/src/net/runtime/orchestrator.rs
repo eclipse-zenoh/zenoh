@@ -1086,6 +1086,10 @@ impl Runtime {
     /// Returns `true` if a new Transport instance is established with `zid` or had already been established.
     #[must_use]
     async fn connect(&self, zid: &ZenohIdProto, scouted_locators: &[Locator]) -> bool {
+        if scouted_locators.is_empty() {
+            return false;
+        }
+
         if !self.insert_pending_connection(*zid).await {
             tracing::debug!("Already connecting to {}. Ignore.", zid);
             return false;
@@ -1116,6 +1120,7 @@ impl Runtime {
                 "Already connecting to locators of {} (connect configuration). Ignore.",
                 zid
             );
+            self.remove_pending_connection(zid).await;
             return false;
         }
 
@@ -1472,6 +1477,33 @@ mod tests {
     use tokio::time::{timeout, Duration};
 
     use super::*;
+    use crate::{net::runtime::RuntimeBuilder, Config};
+
+    #[tokio::test]
+    async fn empty_scouted_locators_do_not_leave_connection_pending() {
+        let runtime = RuntimeBuilder::new(Config::default())
+            .build()
+            .await
+            .unwrap();
+        let zid = ZenohIdProto::rand();
+
+        assert!(!runtime.connect(&zid, &[]).await);
+        assert!(!runtime.remove_pending_connection(&zid).await);
+    }
+
+    #[tokio::test]
+    async fn configured_scouted_locator_does_not_leave_connection_pending() {
+        let mut config = Config::default();
+        config
+            .insert_json5("connect/endpoints", r#"["tcp/localhost:12345"]"#)
+            .unwrap();
+        let runtime = RuntimeBuilder::new(config).build().await.unwrap();
+        let zid = ZenohIdProto::rand();
+        let locator = "tcp/localhost:12345".parse().unwrap();
+
+        assert!(!runtime.connect(&zid, &[locator]).await);
+        assert!(!runtime.remove_pending_connection(&zid).await);
+    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn scout_sender_can_multicast_on_loopback() {
