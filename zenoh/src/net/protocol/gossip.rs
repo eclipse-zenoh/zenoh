@@ -409,11 +409,13 @@ impl Gossip {
             }
         }
         if (!self.wait_declares) || src_whatami != WhatAmI::Peer {
-            zenoh_runtime::ZRuntime::Net.block_in_place(
-                strong_runtime
-                    .start_conditions()
-                    .terminate_peer_connector_zid(src),
-            );
+            // Spawned, not `block_in_place`-ed: `link_states` runs under the
+            // routing `ctrl_lock`, and parking the lock holder deadlocks under
+            // peer churn.
+            let start_conditions = strong_runtime.start_conditions().clone();
+            zenoh_runtime::ZRuntime::Net.spawn(async move {
+                start_conditions.terminate_peer_connector_zid(src).await;
+            });
         }
     }
 

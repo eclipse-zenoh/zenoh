@@ -280,17 +280,22 @@ impl HatInterestTrait for Hat {
                 return Noop;
             }
 
-            zenoh_runtime::ZRuntime::Net.block_in_place(async move {
-                if let Some(runtime) = &ctx.tables.runtime {
-                    if let Some(runtime) = runtime.upgrade() {
-                        tracing::debug!("Terminating peer connector");
-                        runtime
-                            .start_conditions()
-                            .terminate_peer_connector_zid(ctx.src_face.zid)
-                            .await
-                    }
-                }
-            });
+            // Spawned, not `block_in_place`-ed: this runs under the routing
+            // `ctrl_lock`, and parking the lock holder deadlocks under peer
+            // churn.
+            let start_conditions = ctx
+                .tables
+                .runtime
+                .as_ref()
+                .and_then(|runtime| runtime.upgrade())
+                .map(|runtime| runtime.start_conditions().clone());
+            let zid = ctx.src_face.zid;
+            if let Some(start_conditions) = start_conditions {
+                zenoh_runtime::ZRuntime::Net.spawn(async move {
+                    tracing::debug!("Terminating peer connector");
+                    start_conditions.terminate_peer_connector_zid(zid).await;
+                });
+            }
 
             Noop
         } else {
