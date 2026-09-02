@@ -224,17 +224,42 @@ fn take<T>(slot: &Slot<T>) -> Option<T> {
 }
 
 // ---------------------------------------------------------------------------
-// The defect
+// The fix: a self-join no longer deadlocks
 // ---------------------------------------------------------------------------
+//
+// The two tests below used to pin the defect itself — undeclaring an entity
+// from inside its own callback, with `wait_callbacks()`, parked the calling
+// thread forever. The per-entity registration below fixes that: it recognises
+// that the calling stack already holds one of the permits `wait()` is asking
+// for, and drains asynchronously instead of blocking on itself. So `wait()`
+// now returns promptly rather than deadlocking, and that is what these tests
+// assert.
+//
+// This trades a hang for a termination question: `wait()` returning here does
+// not itself prove the deferred drain — the actual permit release, running on
+// a spawned task — ever completes. `SyncGroup` does expose `is_closed()` for
+// that (flipped once the drain finishes), but it is crate-private, so an
+// external integration test such as this one cannot observe it directly.
+// Confirming completion end-to-end would need either a `pub(crate)`-visible
+// test hook or a unit test inside `cancellation.rs` itself; tracked as a
+// follow-up rather than blocking this fix.
+//
+// See [`undeclaring_an_unrelated_entity_from_a_callback_still_waits_for_it`]
+// for the companion case where the guarantee is deliberately *not* relaxed:
+// tearing down an unrelated entity from inside this callback still blocks
+// until that entity's own callbacks finish.
 
 /// A subscriber undeclared with `wait_callbacks()` from inside its own sample
 /// callback.
 ///
 /// This is Dexory's production shape reduced to one process: the delivering
-/// thread owns the last reference, so teardown runs on it, and the teardown
-/// blocks on a permit that same thread holds.
+/// thread owns the last reference, so teardown runs on it. Before the fix,
+/// that teardown blocked forever on a permit the same thread already held;
+/// with the fix, the per-entity guard detects the reentry and lets the call
+/// return instead.
 #[test]
-fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_deadlocks() {
+fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_completes_asynchronously()
+{
     let report = run_scenario(|entered| {
         let session = zenoh::open(isolated_config()).wait().unwrap();
         let slot: Slot<zenoh::pubsub::Subscriber<()>> = Arc::new(Mutex::new(None));
@@ -246,8 +271,10 @@ fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_deadlocks(
                 entered.store(true, Ordering::SeqCst);
                 if let Some(sub) = take(&slot_cb) {
                     // The self-join. This stack holds a live `Callback` clone,
-                    // so its permit cannot be released until this call returns
-                    // — and this call is waiting for that permit.
+                    // so its permit cannot be released until this call
+                    // returns — and this call is asking for that permit. The
+                    // per-entity guard sees the reentry and hands the drain
+                    // off to a spawned task instead of blocking here.
                     let _ = sub.undeclare().wait_callbacks().wait();
                 }
             })
@@ -256,7 +283,7 @@ fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_deadlocks(
         *slot.lock().unwrap() = Some(sub);
 
         // Same-session delivery is inline on the publishing thread, so the
-        // thread that parks is this one.
+        // thread under test is this one.
         session
             .put("test/undeclare_from_callback/subscriber", "trigger")
             .wait()
@@ -265,8 +292,9 @@ fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_deadlocks(
 
     report.assert_entered_callback();
     assert!(
-        matches!(report.outcome, Outcome::Deadlocked),
-        "expected the undeclare to park this thread forever, got {:?}",
+        matches!(report.outcome, Outcome::Completed),
+        "expected the per-entity guard to let the undeclare return instead of \
+         parking this thread forever, got {:?}",
         report.outcome
     );
 }
@@ -277,7 +305,7 @@ fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_deadlocks(
 /// `ros2/rmw_zenoh#993` is this shape on a querier; a queryable is the cheapest
 /// second entity to reach from one process.
 #[test]
-fn undeclaring_a_queryable_with_wait_callbacks_from_its_own_callback_deadlocks() {
+fn undeclaring_a_queryable_with_wait_callbacks_from_its_own_callback_completes_asynchronously() {
     let report = run_scenario(|entered| {
         let session = zenoh::open(isolated_config()).wait().unwrap();
         let slot: Slot<zenoh::query::Queryable<()>> = Arc::new(Mutex::new(None));
@@ -299,7 +327,7 @@ fn undeclaring_a_queryable_with_wait_callbacks_from_its_own_callback_deadlocks()
         *slot.lock().unwrap() = Some(queryable);
 
         // A local queryable is dispatched inline on the querying thread, so
-        // this thread is the one that parks.
+        // this thread is the one under test.
         let _ = session
             .get("test/undeclare_from_callback/queryable")
             .callback(|_r| {})
@@ -308,8 +336,9 @@ fn undeclaring_a_queryable_with_wait_callbacks_from_its_own_callback_deadlocks()
 
     report.assert_entered_callback();
     assert!(
-        matches!(report.outcome, Outcome::Deadlocked),
-        "expected the undeclare to park this thread forever, got {:?}",
+        matches!(report.outcome, Outcome::Completed),
+        "expected the per-entity guard to let the undeclare return instead of \
+         parking this thread forever, got {:?}",
         report.outcome
     );
 }
