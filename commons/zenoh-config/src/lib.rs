@@ -321,9 +321,11 @@ pub enum InterceptorLink {
     Quic,
     Serial,
     Unixpipe,
+    Isotp,
     UnixsockStream,
     Vsock,
     Ws,
+    Can,
 }
 
 impl std::fmt::Display for InterceptorLink {

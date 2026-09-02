@@ -296,6 +296,7 @@ fn test_default_features() {
             " zenoh/auth_usrpwd",
             // " zenoh/shared-memory",
             // " zenoh/stats",
+            // " zenoh/transport_can",
             " zenoh/transport_multilink",
             " zenoh/transport_quic",
             // " zenoh/transport_serial",
@@ -306,6 +307,7 @@ fn test_default_features() {
             " zenoh/transport_unixsock-stream",
             " zenoh/transport_ws",
             // " zenoh/transport_vsock",
+            // " zenoh/transport_isotp",
             " zenoh/unstable",
             " zenoh/default",
         )
@@ -322,6 +324,7 @@ fn test_no_default_features() {
             // " zenoh/auth_usrpwd",
             // " zenoh/shared-memory",
             // " zenoh/stats",
+            // " zenoh/transport_can",
             // " zenoh/transport_multilink",
             // " zenoh/transport_quic",
             // " zenoh/transport_serial",
@@ -332,6 +335,7 @@ fn test_no_default_features() {
             // " zenoh/transport_unixsock-stream",
             // " zenoh/transport_ws",
             // " zenoh/transport_vsock",
+            // " zenoh/transport_isotp",
             " zenoh/unstable",
             // " zenoh/default",
         )

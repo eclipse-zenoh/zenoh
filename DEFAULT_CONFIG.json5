@@ -307,7 +307,7 @@
   //       ],
   //       /// Optional list of link protocols. Transports with at least one of these links will have their qos overwritten.
   //       /// If absent, the overwrite will be applied to all transports. An empty list is invalid.
-  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock", "can"],
   //       /// List of message types to apply to (replies qos cannot be overwritten).
   //       messages: [
   //         "put", // put publications
@@ -371,7 +371,7 @@
   //     interfaces: [ "wlan0" ],
   //     /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
   //     /// If absent, the rules will be applied to all transports. An empty list is invalid.
-  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock", "can"],
   //     /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //     /// If absent, the rules will be applied to both flows.
   //     flows: ["ingress", "egress"],
@@ -476,7 +476,7 @@
   //       "id": "subject4",
   //       /// link protocols can also be used to identify transports to filter messages on.
   //       /// If absent, the rules will be applied to all transports. An empty list is invalid.
-  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //       link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock", "can"],
   //       /// ZIDs can also be used to identify transports to filter messages on.
   //       /// NOTE: ZID is not backed by an authentication mechanism, it can only be trusted for ACL if it is
   //       ///       dynamically added/removed by eventual dedicated Zenoh mechanisms when transports are opened/closed.
@@ -511,7 +511,7 @@
   //     interfaces: [ "wlan0" ],
   //     /// Optional list of link protocols. Transports with at least one of these links will have their messages filtered.
   //     /// If absent, the rule will be applied to all transports. An empty list is invalid.
-  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock"],
+  //     link_protocols: [ "tcp", "udp", "tls", "quic", "ws", "serial", "unixsock-stream", "unixpipe", "vsock", "can"],
   //     /// Optional list of data flows messages will be processed on ("egress" and/or "ingress").
   //     /// If absent, the filter will be applied to both flows.
   //     flows: ["ingress", "egress"],
@@ -599,7 +599,7 @@
     link: {
       /// An optional whitelist of protocols to be used for accepting and opening sessions. If not
       /// configured, all the supported protocols are automatically whitelisted. The supported
-      /// protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock"] For
+      /// protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream", "vsock", "can"] For
       /// example, to only enable "tls" and "quic": protocols: ["tls", "quic"],
       ///
       /// Configure the zenoh TX parameters of a link

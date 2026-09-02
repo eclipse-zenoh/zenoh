@@ -40,7 +40,9 @@ shared-memory = [
 stats = ["zenoh-stats"]
 test = []
 transport_auth = []
+transport_can = ["zenoh-link/transport_can"]
 transport_compression = []
+transport_isotp = ["zenoh-link/transport_isotp"]
 transport_multilink = ["auth_pubkey"]
 transport_quic = ["zenoh-link/transport_quic"]
 transport_quic_datagram = ["zenoh-link/transport_quic_datagram"]
@@ -98,6 +100,8 @@ zenoh-uring = { workspace = true, optional = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]
+zenoh-buffers = { workspace = true }
+zenoh-codec = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
 zenoh-test = { workspace = true }
 zenoh-util = { workspace = true }
