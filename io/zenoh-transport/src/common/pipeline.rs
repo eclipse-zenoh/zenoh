@@ -872,6 +872,13 @@ impl TransmissionPipelineProducer {
         &self,
         msg: NetworkMessageRef,
     ) -> Result<bool, TransportClosed> {
+        // Fail fast if the pipeline has already been disabled (e.g. because a previous
+        // non droppable message could not be pushed and the transport is being closed).
+        // This prevents threads from blocking up to `wait_before_close` on a transport
+        // that is already known to be unresponsive.
+        if self.status.is_disabled() {
+            return Err(TransportClosed);
+        }
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
             let priority = msg.priority();
@@ -936,6 +943,17 @@ impl TransmissionPipelineProducer {
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[priority]);
         queue.push_transport_message(msg)
+    }
+
+    /// Marks the pipeline as disabled without acquiring the `stage_in` locks.
+    ///
+    /// Contrary to [`Self::disable`], this method can safely be called while another
+    /// thread is blocked pushing a message on this pipeline (such a thread holds the
+    /// `stage_in` lock until its deadline expires). New pushes fail fast with
+    /// [`TransportClosed`] and the consumer task terminates on its next wakeup
+    /// (e.g. keep-alive), which in turn unblocks any parked pusher.
+    pub(crate) fn mark_disabled(&self) {
+        self.status.set_disabled(true);
     }
 
     pub(crate) fn disable(&self) {
