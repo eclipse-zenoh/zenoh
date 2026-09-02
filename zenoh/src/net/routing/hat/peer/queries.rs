@@ -317,6 +317,7 @@ impl HatQueriesTrait for Hat {
                         },
                         info: None,
                         region: self.region(),
+                        forwarder: false,
                     });
                 }
             }
@@ -334,6 +335,7 @@ impl HatQueriesTrait for Hat {
                     },
                     info: None,
                     region: self.region(),
+                    forwarder: false,
                 });
             }
         }

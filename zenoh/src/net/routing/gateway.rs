@@ -188,9 +188,14 @@ impl<'conf> GatewayBuilder<'conf> {
             stats,
         )?;
 
+        let mut tables = Tables { data, hats };
+        // Pre-create the northbound-aggregation aggregate resources (needs the fully-assembled
+        // `Tables`); no-op unless `aggregation.upstream` is configured.
+        tables.precreate_upstream_aggregates();
+
         Ok(Gateway {
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables { data, hats }),
+                tables: RwLock::new(tables),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
             }),
