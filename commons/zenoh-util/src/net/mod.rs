@@ -12,11 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::{IpAddr, Ipv6Addr};
+#[cfg(target_os = "freebsd")]
+use std::net::{SocketAddr, SocketAddrV6};
 
 #[cfg(unix)]
 use lazy_static::lazy_static;
 #[cfg(unix)]
 use pnet_datalink::NetworkInterface;
+#[cfg(not(target_os = "freebsd"))]
 use tokio::net::{TcpSocket, UdpSocket};
 use zenoh_core::zconfigurable;
 #[cfg(unix)]
@@ -483,4 +486,78 @@ pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
     tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS, iOS, and Windows");
     Ok(())
+}
+
+#[cfg(target_os = "freebsd")]
+fn is_link_local(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ip.is_link_local(),
+        // Ipv6Addr::is_unicast_link_local is still unstable.
+        IpAddr::V6(ip) => (ip.segments()[0] & 0xffc0) == 0xfe80,
+    }
+}
+
+#[cfg(target_os = "freebsd")]
+fn index_of_interface(name: &str) -> ZResult<u32> {
+    match IFACES.iter().find(|iface| iface.name == name) {
+        Some(iface) => Ok(iface.index),
+        None => bail!("Interface {name} not found"),
+    }
+}
+
+/// FreeBSD has no SO_BINDTODEVICE / IP_BOUND_IF equivalent (there is no such sockopt in
+/// netinet/in.h, netinet6/in6.h or sys/socket.h), so the only way to restrict a socket to a
+/// given interface is to bind it to one of that interface's own addresses. Callers on FreeBSD
+/// use this to compute the address to bind *before* their single bind(2) call (a socket can
+/// only be bound once) — there is no `set_bind_to_device_{tcp,udp}_socket` for FreeBSD to call
+/// after an existing bind, unlike Linux/macOS/iOS/Windows.
+///
+/// An `addr` that already carries a concrete IP is validated against `iface` rather than
+/// rewritten: silently binding somewhere the caller did not ask for would hide the
+/// misconfiguration instead of reporting it. An unspecified `addr` selects an address of the
+/// same family from `iface`, preferring a routable one over a link-local.
+///
+/// Note that the interface list is a process-lifetime snapshot, so an address assigned to
+/// `iface` after startup is not visible here.
+#[cfg(target_os = "freebsd")]
+pub fn resolve_bind_addr_for_interface(iface: &str, addr: SocketAddr) -> ZResult<SocketAddr> {
+    let addrs = get_unicast_addresses_of_interface(iface)?;
+
+    if !addr.ip().is_unspecified() {
+        return if addrs.contains(&addr.ip()) {
+            Ok(addr)
+        } else {
+            bail!(
+                "Cannot bind to {} on interface {iface}: the interface has no such address",
+                addr.ip()
+            )
+        };
+    }
+
+    let want_v6 = addr.is_ipv6();
+    let (mut routable, mut link_local) = (None, None);
+    for ip in addrs {
+        if ip.is_ipv6() != want_v6 || ip.is_loopback() {
+            continue;
+        }
+        if is_link_local(&ip) {
+            link_local.get_or_insert(ip);
+        } else if routable.is_none() {
+            routable = Some(ip);
+        }
+    }
+
+    match routable.or(link_local) {
+        // A link-local IPv6 address cannot be bound without its zone index — FreeBSD answers
+        // EADDRNOTAVAIL — and the interface list does not carry one, so take it from the
+        // interface index.
+        Some(IpAddr::V6(ip)) if is_link_local(&IpAddr::V6(ip)) => Ok(SocketAddr::V6(
+            SocketAddrV6::new(ip, addr.port(), 0, index_of_interface(iface)?),
+        )),
+        Some(ip) => Ok(SocketAddr::new(ip, addr.port())),
+        None => bail!(
+            "Interface {iface} has no {} address to bind to",
+            if want_v6 { "IPv6" } else { "IPv4" }
+        ),
+    }
 }
