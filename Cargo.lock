@@ -5613,6 +5613,7 @@ dependencies = [
  "lazy_static",
  "lockfree",
  "lz4_flex",
+ "pem",
  "rand 0.8.7",
  "ringbuffer-spsc",
  "rsa",

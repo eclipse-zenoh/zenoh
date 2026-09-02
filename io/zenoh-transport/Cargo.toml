@@ -25,7 +25,7 @@ version = { workspace = true }
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-auth_pubkey = ["rsa", "transport_auth"]
+auth_pubkey = ["rsa", "pem", "transport_auth"]
 auth_usrpwd = ["transport_auth"]
 default = ["test", "transport_multilink"]
 shared-memory = [
@@ -63,6 +63,7 @@ futures = { workspace = true }
 lazy_static = { workspace = true }
 lockfree = { workspace = true, optional = true }
 lz4_flex = { workspace = true }
+pem = { workspace = true, optional = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
