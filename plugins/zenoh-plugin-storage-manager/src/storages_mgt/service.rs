@@ -328,7 +328,14 @@ impl StorageService {
             }
 
             let mut storage = self.storage.lock().await;
-            let storage_result = match sample.kind() {
+            // Dispatch on the kind of `sample_to_store`, not the original `sample`: when an
+            // incoming Put is overridden by a retained wildcard Delete, `sample_to_store` is
+            // rebuilt as a Delete (empty payload, at the wildcard delete's timestamp). Using
+            // `sample.kind()` here would store that override as a `put` of the empty payload,
+            // resurrecting a key the wildcard-delete tombstone should suppress. In the
+            // non-override branch `sample_to_store` is derived from `sample`, so the two kinds
+            // already agree.
+            let storage_result = match sample_to_store.kind() {
                 SampleKind::Put => {
                     storage
                         .put(
