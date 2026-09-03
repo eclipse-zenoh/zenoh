@@ -174,6 +174,11 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
+        match c.use_public_pki().unwrap_or(TLS_USE_PUBLIC_PKI_DEFAULT) {
+            true => ps.push((TLS_USE_PUBLIC_PKI, "true")),
+            false => ps.push((TLS_USE_PUBLIC_PKI, "false")),
+        }
+
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }
@@ -390,15 +395,27 @@ impl TlsClientConfig {
             tracing::warn!("Skipping name verification of QUIC server");
         }
 
-        // Allows mixed user-generated CA and webPKI CA
-        tracing::debug!("Loading default Web PKI certificates.");
-        let mut root_cert_store = RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+        let tls_use_public_pki: bool = match config.get(TLS_USE_PUBLIC_PKI) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown use public pki argument: {}", s))?,
+            None => TLS_USE_PUBLIC_PKI_DEFAULT,
         };
+
+        let mut root_cert_store = RootCertStore::empty();
+        // Allows mixed user-generated CA and webPKI CA
+        if tls_use_public_pki {
+            tracing::debug!("Loading default Web PKI certificates.");
+            root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        }
 
         if let Some(custom_root_cert) = load_trust_anchors(config)? {
             tracing::debug!("Loading user-generated certificates.");
             root_cert_store.extend(custom_root_cert.roots);
+        }
+
+        if root_cert_store.is_empty() {
+            return Err(zerror!("No root CA certificates loaded: 'use_public_pki' is disabled and no root CA certificate was configured").into());
         }
 
         let cc = if tls_client_server_auth {
