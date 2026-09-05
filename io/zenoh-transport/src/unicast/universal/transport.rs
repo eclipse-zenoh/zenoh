@@ -305,6 +305,28 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
         }
 
+        // io_uring owns the RX side of this link: drop the READABLE registration
+        // the link keeps with its tokio reactor before any task uses the socket.
+        #[cfg(all(
+            feature = "uring",
+            target_os = "linux",
+            any(
+                target_arch = "x86_64",
+                target_arch = "aarch64",
+                target_arch = "riscv64",
+                target_arch = "loongarch64",
+                target_arch = "powerpc64"
+            )
+        ))]
+        if self.manager.state.uring.is_some() && link.link.link.get_fd().is_ok() {
+            // SAFETY: Establishment I/O has completed. The link is not published
+            // to the transport yet, and its TX/RX tasks have not been started.
+            if let Err(e) = unsafe { link.link.link.detach_rx_from_reactor() } {
+                let (l, asl) = link.fail();
+                return Err((e, l, asl, close::reason::GENERIC));
+            }
+        }
+
         // Wrap the link
         let (link, ack, associated_link) = link.unpack();
         let (mut link, consumer) =

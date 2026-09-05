@@ -251,7 +251,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo prlimit --memlock=unlimited --pid=$$
-          cargo nextest run -p zenoh -F uring
+          cargo nextest run -p zenoh -p zenoh-link-tcp -F uring
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
