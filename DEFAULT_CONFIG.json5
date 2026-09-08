@@ -91,6 +91,13 @@
   /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
   /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   listen: {
+    /// TCP/TLS/UDP/QUIC unicast listeners may use #advertise_addr=observed.
+    /// E.g. tls/192.168.0.11:7447#advertise_addr=observed
+    /// Direct scouting receivers use the Hello packet's source IP and the listener's
+    /// actual port. Older receivers use the ordinary advertised address instead.
+    /// The hint is omitted from gossip and session locator lists. Source substitution
+    /// requires support on the receiving peer and scouting over the same IP family.
+    /// This does not establish NAT port forwarding; TLS certificate checks still apply.
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
     /// Accepts a single value (e.g. timeout_ms: 0)
     /// or different values for router, peer and client (e.g. timeout_ms: { router: -1, peer: -1, client: 0 }).

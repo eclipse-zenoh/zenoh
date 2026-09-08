@@ -23,9 +23,9 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zread, zwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
-use crate::BIND_INTERFACE;
+use crate::{ADVERTISE_ADDR, BIND_INTERFACE};
 
 pub struct ListenerUnicastIP {
     endpoint: EndPoint,
@@ -100,6 +100,19 @@ impl ListenersUnicastIP {
     where
         F: Future<Output = ZResult<()>> + Send + 'static,
     {
+        if let Some(value) = endpoint.config().get(ADVERTISE_ADDR) {
+            if value != "observed"
+                || !matches!(endpoint.protocol().as_str(), "tcp" | "tls" | "udp" | "quic")
+            {
+                bail!(
+                    "Unsupported {ADVERTISE_ADDR}={value} for {}",
+                    endpoint.protocol()
+                );
+            }
+            Locator::new(endpoint.protocol(), addr.to_string(), endpoint.metadata())?
+                .metadata_mut()
+                .insert(ADVERTISE_ADDR, "observed")?;
+        }
         let mut listeners = zwrite!(self.listeners);
         let c_listeners = self.listeners.clone();
         let c_addr = addr;
@@ -152,6 +165,8 @@ impl ListenersUnicastIP {
         for (key, value) in guard.iter() {
             let (kip, kpt) = (key.ip(), key.port());
             let config = value.endpoint.config();
+            let observed = config.get(ADVERTISE_ADDR) == Some("observed");
+            let start = locators.len();
             let iface = config.get(BIND_INTERFACE);
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
@@ -173,8 +188,24 @@ impl ListenersUnicastIP {
                     .unwrap()
                 });
                 locators.extend(iter);
+            } else if observed {
+                locators.push(
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        key.to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap(),
+                );
             } else {
                 locators.push(value.endpoint.to_locator());
+            }
+            if observed {
+                for locator in &mut locators[start..] {
+                    if let Err(err) = locator.metadata_mut().insert(ADVERTISE_ADDR, "observed") {
+                        tracing::warn!("Cannot advertise observed address for {locator}: {err}");
+                    }
+                }
             }
         }
 
