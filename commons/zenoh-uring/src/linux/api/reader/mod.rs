@@ -109,11 +109,14 @@ impl Reader {
         let (join_sender, mut join_receiver) = tokio::sync::watch::channel("".into());
         join_receiver.mark_unchanged();
 
+        let (init_sender, init_receiver) = std::sync::mpsc::channel::<ZResult<()>>();
+        let ready_sender = init_sender.clone();
+
         let ring_worker = move || -> ZResult<()> {
             // Create Rx context storage
             let mut context_storage = RxContextStorage::new();
 
-            // io_uring read
+            // io_uring read (created on the reactor thread: SINGLE_ISSUER)
             let ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::builder()
                 .setup_submit_all()
                 .setup_defer_taskrun()
@@ -131,6 +134,10 @@ impl Reader {
                     .flags(io_uring::squeue::Flags::ASYNC);
 
             unsafe { ring.submission_shared().push(&waker_read)? };
+
+            // Confirm actual startup, including the first submission, before selecting io_uring.
+            ring.submit()?;
+            ready_sender.send(Ok(()))?;
 
             fn roll_cmds(
                 receiver: &Receiver<ReactorCmd>,
@@ -255,10 +262,12 @@ impl Reader {
             if let Err(e) = ring_worker() {
                 tracing::error!("Uring reactor error: {e}");
                 let _ = join_sender.send(e.to_string());
+                let _ = init_sender.send(Err(e));
             }
             tracing::debug!("Uring reactor thread finished!");
         });
 
+        init_receiver.recv()??;
         let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
 
         Ok(Self {
