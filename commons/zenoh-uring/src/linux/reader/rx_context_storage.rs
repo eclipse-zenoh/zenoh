@@ -37,18 +37,15 @@ impl RxContextCell {
         None
     }
 
-    fn free(&mut self, generation: NonZeroU32) {
+    fn take(&mut self, generation: NonZeroU32) -> Option<Rx> {
         if self.generation == generation {
-            if let Some(context) = self.context.take() {
-                tracing::debug!("Begin RxContext destroy {:?}", context);
-                drop(context);
-                tracing::debug!("End RxContext destroy!");
-            }
+            self.context.take()
         } else {
             tracing::debug!(
                 "Unable to free: generation mismatch! {:?}, generation: {generation}",
                 self
             );
+            None
         }
     }
 
@@ -80,8 +77,8 @@ impl RxContextStorage {
         self.data[id.index() as usize].get(id.generation())
     }
 
-    pub(crate) fn free(&mut self, id: IndexGeneration) {
-        self.data[id.index() as usize].free(id.generation())
+    pub(crate) fn take(&mut self, id: IndexGeneration) -> Option<Rx> {
+        self.data[id.index() as usize].take(id.generation())
     }
 
     pub(crate) fn alloc(&mut self, context: Rx) -> IndexGeneration {
