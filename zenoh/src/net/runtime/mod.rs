@@ -20,6 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 mod region;
+pub(crate) mod rotation;
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
