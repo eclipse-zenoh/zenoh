@@ -139,16 +139,24 @@ jobs:
           cache-bin: false
 
       - name: Install latest cargo-deny
-        uses: taiki-e/install-action@cargo-deny
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-deny
 
       - name: Install latest cargo-machete
-        uses: taiki-e/install-action@cargo-machete
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-machete
 
       - name: Install latest cargo-semver-checks
-        uses: taiki-e/install-action@cargo-semver-checks
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-semver-checks
 
       - name: Install latest taplo
-        uses: taiki-e/install-action@taplo
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: taplo
 
       - name: Code format check
         run: rustfmt +${{ env.NIGHTLY_TOOLCHAIN }} --check --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate,skip_children=true" $(git ls-files '*.rs')
@@ -237,7 +245,9 @@ jobs:
           echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-nextest
 
       - name: Run tests stable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -291,7 +301,9 @@ jobs:
           echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-nextest
 
       - name: Run tests with unstable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -346,7 +358,9 @@ jobs:
           echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV
 
       - name: Install latest nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-nextest
 
       - name: Run tests with SHM (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
@@ -446,7 +460,9 @@ jobs:
         run: rustup show
 
       - name: Install valgrind
-        uses: taiki-e/install-action@valgrind
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: valgrind
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
@@ -464,7 +480,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check spelling
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@d43b6c087ac471e2ea7b8af622ff15f05c0c365b # v1.50.1
 
   markdown_lint:
     runs-on: ubuntu-latest
@@ -507,7 +523,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: false
           android: true
@@ -538,7 +554,9 @@ jobs:
           cache-bin: false
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@e67fa11c4b9316fa714ddf0abed07a0c3143b95b # v2.87.4
+        with:
+          tool: cargo-llvm-cov
 
       - name: Generate code coverage
         env:
