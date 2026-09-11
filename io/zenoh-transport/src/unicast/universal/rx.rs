@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{fmt::Debug, sync::MutexGuard};
+use std::fmt::Debug;
 
 use zenoh_buffers::{buffer::Buffer, reader::BacktrackableReader};
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::zlock;
+use zenoh_core::{tracking::TrackedMutexGuard, zlock};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -223,7 +223,7 @@ impl TransportUnicastUniversal {
         &self,
         message_type: &str,
         sn: TransportSn,
-        guard: &mut MutexGuard<'_, TransportChannelRx>,
+        guard: &mut TrackedMutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.roll(sn)?;
         if !precedes {

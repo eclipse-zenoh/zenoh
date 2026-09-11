@@ -27,7 +27,7 @@ use std::future::IntoFuture;
 use std::sync::OnceLock;
 #[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 use std::{
     any::Any,
     collections::HashSet,
@@ -38,6 +38,9 @@ use std::{
         Arc, Weak,
     },
 };
+#[cfg(feature = "unstable")]
+#[cfg(feature = "plugins")]
+use zenoh_core::tracking::TrackedMutexGuard;
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
@@ -488,7 +491,7 @@ impl RuntimeState {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    fn plugins_manager(&self) -> TrackedMutexGuard<'_, PluginsManager> {
         zlock!(self.plugins_manager)
     }
 
@@ -931,7 +934,7 @@ impl Runtime {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    pub fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    pub fn plugins_manager(&self) -> TrackedMutexGuard<'_, PluginsManager> {
         self.state.plugins_manager()
     }
 

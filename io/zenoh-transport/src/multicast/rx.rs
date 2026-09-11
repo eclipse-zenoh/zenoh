@@ -11,11 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
-
 use zenoh_buffers::ZSlice;
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::{zlock, zread};
+use zenoh_core::{tracking::TrackedMutexGuard, zlock, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
     network::NetworkMessageMut,
@@ -263,7 +261,7 @@ impl TransportMulticastInner {
         &self,
         message_type: &str,
         sn: TransportSn,
-        guard: &mut MutexGuard<'_, TransportChannelRx>,
+        guard: &mut TrackedMutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {

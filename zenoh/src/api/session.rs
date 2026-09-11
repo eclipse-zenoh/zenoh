@@ -19,7 +19,7 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Mutex, RwLock, RwLockReadGuard,
+        Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -2968,7 +2968,7 @@ impl Session {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,
-        state: RwLockReadGuard<'_, SessionState>,
+        state: zenoh_core::tracking::TrackedReadGuard<'_, SessionState>,
         local: bool,
         key_expr: &KeyExpr<'_>,
         parameters: &str,

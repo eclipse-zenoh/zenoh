@@ -37,3 +37,10 @@ lazy_static = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+harness = false
+name = "tracked_lock"
