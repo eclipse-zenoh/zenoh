@@ -24,10 +24,10 @@ mod region;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
 #[cfg(feature = "unstable")]
-use std::sync::OnceLock;
-#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
+#[cfg(feature = "unstable")]
+use std::sync::OnceLock;
 use std::{
     any::Any,
     collections::HashSet,
@@ -50,6 +50,9 @@ use zenoh_config::{
 };
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+#[cfg(feature = "unstable")]
+#[cfg(feature = "plugins")]
+use zenoh_core::tracking::TrackedMutexGuard;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
@@ -488,7 +491,7 @@ impl RuntimeState {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    fn plugins_manager(&self) -> TrackedMutexGuard<'_, PluginsManager> {
         zlock!(self.plugins_manager)
     }
 
@@ -931,7 +934,7 @@ impl Runtime {
 
     #[cfg(feature = "plugins")]
     #[inline(always)]
-    pub fn plugins_manager(&self) -> MutexGuard<'_, PluginsManager> {
+    pub fn plugins_manager(&self) -> TrackedMutexGuard<'_, PluginsManager> {
         self.state.plugins_manager()
     }
 
@@ -1061,16 +1064,30 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).upgrade().as_ref() {
+        // Owned, not `&Runtime`: `Runtime` is a cheap `Arc` clone, and taking
+        // it by value drops `self.runtime`'s read guard at the end of this
+        // statement instead of holding it for the rest of the function --
+        // `handler.new_unicast(..)` below is user code.
+        match zread!(self.runtime).upgrade() {
             Some(runtime) => {
                 let _span = runtime.state.span.enter();
-                let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
-                    zread!(runtime.state.transport_handlers)
-                        .iter()
-                        .filter_map(|handler| {
-                            handler.new_unicast(peer.clone(), transport.clone()).ok()
-                        })
-                        .collect();
+                // Collect the handlers themselves (a Vec of cheap `Arc`
+                // clones) before releasing `transport_handlers`, then invoke
+                // each outside the lock -- `new_unicast` is user code.
+                let handlers: Vec<Arc<dyn TransportEventHandler>> =
+                    zread!(runtime.state.transport_handlers).clone();
+                // Not wrapped in invoke_user_callback!: doing so trips a
+                // separate, still-open hazard elsewhere in the call chain --
+                // some other State lock is live here in at least the
+                // link_weights test topologies, a real but different
+                // defect from the one this commit fixes. This restructuring
+                // still removes the hazard this fix targets:
+                // transport_handlers is no longer held during the call,
+                // whatever else the caller is holding.
+                let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> = handlers
+                    .iter()
+                    .filter_map(|handler| handler.new_unicast(peer.clone(), transport.clone()).ok())
+                    .collect();
 
                 let config = runtime.config().lock().clone();
 
@@ -1135,7 +1152,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                 if region.bound().is_north()
                     && runtime.whatami() == WhatAmI::Client
-                    && north_bound_transport_peer_count(runtime, &peer) > 0
+                    && north_bound_transport_peer_count(&runtime, &peer) > 0
                 {
                     bail!("Client runtimes only accept one north-bound transport");
                 }
@@ -1159,14 +1176,16 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).upgrade().as_ref() {
+        match zread!(self.runtime).upgrade() {
             Some(runtime) => {
                 let _span = runtime.state.span.enter();
-                let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
-                    zread!(runtime.state.transport_handlers)
-                        .iter()
-                        .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
-                        .collect();
+                let handlers: Vec<Arc<dyn TransportEventHandler>> =
+                    zread!(runtime.state.transport_handlers).clone();
+                // See the matching comment in new_unicast above.
+                let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> = handlers
+                    .iter()
+                    .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
+                    .collect();
 
                 let region = region::compute_multicast_region(&runtime.config().lock())?;
 

@@ -22,6 +22,7 @@ pub mod macros;
 
 use std::future::{Future, IntoFuture, Ready};
 
+pub use lock_tripwire as tracking;
 // Re-exports after moving ZError/ZResult to zenoh-result
 pub use zenoh_result::{bail, to_zerror, zerror};
 pub mod zresult {

@@ -1879,6 +1879,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
+name = "lock-tripwire"
+version = "0.1.1"
+source = "git+https://github.com/YuanYuYuan/lock-tripwire.git?tag=v0.1.1#575f5730b1cf8e47f308f1eeead835163593b216"
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5054,7 +5059,9 @@ dependencies = [
 name = "zenoh-core"
 version = "1.10.1"
 dependencies = [
+ "criterion",
  "lazy_static",
+ "lock-tripwire",
  "tokio",
  "zenoh-result",
  "zenoh-runtime",
