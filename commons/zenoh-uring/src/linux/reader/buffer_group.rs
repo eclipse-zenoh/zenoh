@@ -13,6 +13,7 @@
 //
 
 use std::{
+    cell::RefCell,
     collections::HashSet,
     rc::Rc,
     sync::{atomic::AtomicU16, Arc, Mutex},
@@ -27,7 +28,7 @@ use crate::{
     api::{reader::rx_buffer::RxBuffer, types::BufferCount},
     batch_arena::Batches,
     reader::reservable_arena::{ReservableArena, ReservableArenaInner},
-    types::BufferGroupId,
+    types::{BufferGroupId, BufferId},
 };
 
 // Absolute maximum ratings:
@@ -99,6 +100,8 @@ pub(crate) struct BufferGroup {
     id: BufferGroupId,
     arena: Rc<GroupedArenaInner>,
     buffers_missing: AtomicU16,
+    /// Buffers provided to the kernel and not yet handed back by a completion.
+    provided: RefCell<HashSet<BufferId>>,
 }
 
 impl Drop for BufferGroup {
@@ -122,6 +125,7 @@ impl BufferGroup {
             id,
             arena: arena.inner.clone(),
             buffers_missing: AtomicU16::new(required_buffers_in_ring),
+            provided: RefCell::new(HashSet::new()),
         };
 
         group.ensure_batches_to_ring(sq)?;
@@ -143,10 +147,13 @@ impl BufferGroup {
             .buffers_missing
             .load(std::sync::atomic::Ordering::Relaxed)
             + 1;
-        let leftover = self
-            .arena
-            .arena
-            .provide_batches_to_group(self.id, count, sq)?;
+        let mut provided = self.provided.borrow_mut();
+        provided.remove(&buf_id);
+        let leftover =
+            self.arena
+                .arena
+                .provide_batches_to_group(self.id, count, sq, &mut provided)?;
+        drop(provided);
         self.buffers_missing
             .store(leftover, std::sync::atomic::Ordering::Relaxed);
 
@@ -193,9 +200,58 @@ impl BufferGroup {
         unsafe {
             sq.push(&entry)?;
         }
+        self.provided
+            .borrow_mut()
+            .extend(batches.start_bid..batches.start_bid + batches.nbufs);
 
         self.buffers_missing
             .fetch_sub(batches.nbufs, std::sync::atomic::Ordering::Relaxed);
         Ok(())
+    }
+
+    /// A completion of the stopped task consumed `buf_id`: nobody will read
+    /// it, return it to the arena.
+    pub(crate) fn release_consumed(&self, buf_id: BufferId) {
+        self.provided.borrow_mut().remove(&buf_id);
+        self.arena.arena.recycle_batch(buf_id);
+    }
+
+    /// Once no receive can select from this group anymore, ask the kernel to
+    /// give back the buffers still queued in it. Returns `false` when there
+    /// is nothing to remove.
+    pub(crate) fn remove_buffers(
+        &self,
+        user_data: u64,
+        sq: &mut SubmissionQueue<'_>,
+    ) -> ZResult<bool> {
+        let count = self.provided.borrow().len();
+        if count == 0 {
+            return Ok(false);
+        }
+        let entry = opcode::RemoveBuffers::new(count as u16, self.id)
+            .build()
+            .user_data(user_data);
+        unsafe {
+            sq.push(&entry)?;
+        }
+        Ok(true)
+    }
+
+    /// Completion of `remove_buffers`: the kernel reported how many buffers
+    /// it gave back. Recycle them only if that matches what we tracked; on a
+    /// mismatch the ownership is unknown, so the buffers are left unused.
+    pub(crate) fn buffers_removed(&self, removed: i32) {
+        let provided = std::mem::take(&mut *self.provided.borrow_mut());
+        if removed != provided.len() as i32 {
+            tracing::error!(
+                "Buffer group {}: kernel removed {removed} buffers, {} tracked; leaking them",
+                self.id,
+                provided.len()
+            );
+            return;
+        }
+        for buf_id in provided {
+            self.arena.arena.recycle_batch(buf_id);
+        }
     }
 }

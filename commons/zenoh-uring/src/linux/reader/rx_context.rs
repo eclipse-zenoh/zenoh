@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{cell::UnsafeCell, os::fd::RawFd, sync::Arc};
+use std::{
+    cell::{Cell, UnsafeCell},
+    os::fd::RawFd,
+    sync::Arc,
+};
 
 use tokio::sync::mpsc::UnboundedSender;
 use zenoh_result::ZResult;
@@ -38,6 +42,17 @@ pub(crate) struct Rx {
     pub fd: RawFd,
     error_sender: UnboundedSender<zenoh_result::Error>,
     buffer_group: BufferGroup,
+    /// Whether a multishot receive of this task is still in flight.
+    pub recv_live: Cell<bool>,
+}
+
+/// Buffer group of a stopped task, kept until the kernel has handed back
+/// every buffer. Dropping it closes the error channel, which is what
+/// `ReadTask::stop` waits for.
+#[derive(Debug)]
+pub(crate) struct Retiring {
+    pub buffer_group: BufferGroup,
+    _error_sender: UnboundedSender<zenoh_result::Error>,
 }
 
 impl Rx {
@@ -52,6 +67,7 @@ impl Rx {
             error_sender,
             fd,
             buffer_group,
+            recv_live: Cell::new(true),
         };
         tracing::debug!("RX context created: {:?}", rx);
         rx
@@ -59,6 +75,16 @@ impl Rx {
 
     pub(crate) fn buffer_group(&self) -> &BufferGroup {
         &self.buffer_group
+    }
+
+    /// Stop the task: the callback is dropped now, the buffer group outlives
+    /// the context until its buffers are reclaimed.
+    pub(crate) fn into_retiring(self) -> Retiring {
+        tracing::debug!("Destroy RX context: {:?}", self);
+        Retiring {
+            buffer_group: self.buffer_group,
+            _error_sender: self.error_sender,
+        }
     }
 
     pub(crate) fn run_callback(&self, buffer: Arc<RxBuffer>) {
@@ -76,11 +102,5 @@ impl Rx {
     pub(crate) fn post_error(&self, error: zenoh_result::Error) {
         tracing::error!("Read task error: {error}");
         let _ = self.error_sender.send(error);
-    }
-}
-
-impl Drop for Rx {
-    fn drop(&mut self) {
-        tracing::debug!("Destroy RX context: {:?}", self);
     }
 }
