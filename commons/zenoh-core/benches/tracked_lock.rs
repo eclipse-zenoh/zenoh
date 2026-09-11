@@ -44,6 +44,13 @@ fn benchmark(c: &mut Criterion) {
 
     let mutex = Mutex::new(0u64);
     let rwlock = RwLock::new(0u64);
+    // Distinct instances for the nesting benchmark below: std::sync::RwLock
+    // documents recursive read() on the SAME instance as unspecified ("might
+    // panic or deadlock" if a writer queues in between) -- a realistic
+    // nesting scenario in this codebase is a mutex held alongside several
+    // DIFFERENT rwlocks, never the same rwlock re-entered on one thread.
+    let rwlock_b = RwLock::new(0u64);
+    let rwlock_c = RwLock::new(0u64);
 
     let mut group = c.benchmark_group(format!("uncontended/{profile}"));
 
@@ -94,8 +101,8 @@ fn benchmark(c: &mut Criterion) {
             |()| {
                 let _a = mutex.lock().unwrap();
                 let _b = rwlock.read().unwrap();
-                let _c = rwlock.read().unwrap();
-                let _d = rwlock.read().unwrap();
+                let _c = rwlock_b.read().unwrap();
+                let _d = rwlock_c.read().unwrap();
                 std::hint::black_box(*_d)
             },
             BatchSize::SmallInput,
@@ -107,8 +114,8 @@ fn benchmark(c: &mut Criterion) {
             |()| {
                 let _a = zlock!(mutex);
                 let _b = zread!(rwlock);
-                let _c = zread!(rwlock);
-                let _d = zread!(rwlock);
+                let _c = zread!(rwlock_b);
+                let _d = zread!(rwlock_c);
                 std::hint::black_box(*_d)
             },
             BatchSize::SmallInput,
