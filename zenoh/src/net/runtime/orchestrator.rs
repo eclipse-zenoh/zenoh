@@ -23,7 +23,7 @@ use futures::{prelude::*, stream::FuturesUnordered};
 use socket2::{Domain, Socket, Type};
 use tokio::{
     net::UdpSocket,
-    sync::{futures::Notified, Mutex, Notify},
+    sync::{futures::Notified, Notify},
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
@@ -91,7 +91,12 @@ pub(crate) struct PeerConnector {
 #[derive(Default, Debug)]
 pub(crate) struct StartConditions {
     notify: Notify,
-    peer_connectors: Mutex<Vec<PeerConnector>>,
+    // NOTE: this is a sync mutex on purpose: its critical sections never await
+    // and it is locked from RX/routing contexts that hold the router
+    // ctrl_lock. An async (fair) mutex here can hand ownership to a connector
+    // task parked on a starved runtime and deadlock the whole session (see
+    // gossip.rs link_states / hat/peer/interests.rs route_declare_final).
+    peer_connectors: std::sync::Mutex<Vec<PeerConnector>>,
 }
 
 impl StartConditions {
@@ -99,14 +104,14 @@ impl StartConditions {
         self.notify.notified()
     }
 
-    pub(crate) async fn add_peer_connector(&self) -> usize {
-        let mut peer_connectors = self.peer_connectors.lock().await;
+    pub(crate) fn add_peer_connector(&self) -> usize {
+        let mut peer_connectors = zlock!(self.peer_connectors);
         peer_connectors.push(PeerConnector::default());
         peer_connectors.len() - 1
     }
 
-    pub(crate) async fn add_peer_connector_zid(&self, zid: ZenohIdProto) {
-        let mut peer_connectors = self.peer_connectors.lock().await;
+    pub(crate) fn add_peer_connector_zid(&self, zid: ZenohIdProto) {
+        let mut peer_connectors = zlock!(self.peer_connectors);
         if !peer_connectors.iter().any(|pc| pc.zid == Some(zid)) {
             peer_connectors.push(PeerConnector {
                 zid: Some(zid),
@@ -115,15 +120,15 @@ impl StartConditions {
         }
     }
 
-    pub(crate) async fn set_peer_connector_zid(&self, idx: usize, zid: ZenohIdProto) {
-        let mut peer_connectors = self.peer_connectors.lock().await;
+    pub(crate) fn set_peer_connector_zid(&self, idx: usize, zid: ZenohIdProto) {
+        let mut peer_connectors = zlock!(self.peer_connectors);
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.zid = Some(zid);
         }
     }
 
-    pub(crate) async fn terminate_peer_connector(&self, idx: usize) {
-        let mut peer_connectors = self.peer_connectors.lock().await;
+    pub(crate) fn terminate_peer_connector(&self, idx: usize) {
+        let mut peer_connectors = zlock!(self.peer_connectors);
         if let Some(peer_connector) = peer_connectors.get_mut(idx) {
             peer_connector.terminated = true;
         }
@@ -132,8 +137,8 @@ impl StartConditions {
         }
     }
 
-    pub(crate) async fn terminate_peer_connector_zid(&self, zid: ZenohIdProto) {
-        let mut peer_connectors = self.peer_connectors.lock().await;
+    pub(crate) fn terminate_peer_connector_zid(&self, zid: ZenohIdProto) {
+        let mut peer_connectors = zlock!(self.peer_connectors);
         if let Some(peer_connector) = peer_connectors.iter_mut().find(|pc| pc.zid == Some(zid)) {
             peer_connector.terminated = true;
         } else {
@@ -867,7 +872,7 @@ impl Runtime {
             .await?
         {
             let this = self.clone();
-            let idx = self.state.start_conditions.add_peer_connector().await;
+            let idx = self.state.start_conditions.add_peer_connector();
             let config_guard = this.config().lock();
             let config = &config_guard;
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
@@ -875,16 +880,10 @@ impl Runtime {
             drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
-                    this.state
-                        .start_conditions
-                        .set_peer_connector_zid(idx, zid)
-                        .await;
+                    this.state.start_conditions.set_peer_connector_zid(idx, zid);
                 }
                 if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
-                    this.state
-                        .start_conditions
-                        .terminate_peer_connector(idx)
-                        .await;
+                    this.state.start_conditions.terminate_peer_connector(idx);
                 }
             });
             Ok(())
