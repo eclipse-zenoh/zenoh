@@ -349,6 +349,29 @@
   //   publishers: [
   //     // key_expression
   //   ],
+  //   /// Router upstream (northbound) declaration aggregation. Opt-in; effective only on a
+  //   /// router's north-bound forwarding (distinct from the session-local subscribers/publishers
+  //   /// above). A downstream subscriber/queryable whose key-expression is included by one of
+  //   /// these prefixes is folded into a single `${prefix}` declaration toward the upstream and
+  //   /// suppressed upstream (kept locally for downward routing), so an upstream router holds one
+  //   /// resource per configured prefix instead of one per forwarded child key-expression. The
+  //   /// folded queryable is advertised complete=false (presence, not authority); `target=AllComplete`
+  //   /// queries are still forwarded through the aggregate to the real child queryables.
+  //   /// Trade-offs when enabled — apply per-key policy/introspection at the router that performs the
+  //   /// fold (where child keys are still visible): upstream per-key declaration ACL/QoS/interceptors
+  //   /// and admin-space enumeration see only the `${prefix}` aggregate; the wildcard aggregate may
+  //   /// forward data toward the folding router for unsubscribed keys; liveliness tokens are NOT
+  //   /// folded. Each prefix should cover the key-expression sub-tree a single downstream branch owns;
+  //   /// prefixes should be disjoint, not a bare `**` root, and not under the `@/` admin key-space
+  //   /// (misconfigured prefixes are warned about at startup).
+  //   upstream: {
+  //     subscribers: [
+  //       // key_expression
+  //     ],
+  //     queryables: [
+  //       // key_expression
+  //     ],
+  //   },
   // },
 
   // /// Namespace prefix.

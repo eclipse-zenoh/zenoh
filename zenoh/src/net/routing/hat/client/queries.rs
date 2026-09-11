@@ -191,6 +191,7 @@ impl HatQueriesTrait for Hat {
                             node_id: DEFAULT_NODE_ID,
                         },
                         region: self.region,
+                        forwarder: false,
                     });
                 }
             }
