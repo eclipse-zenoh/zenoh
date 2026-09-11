@@ -38,9 +38,6 @@ use std::{
         Arc, Weak,
     },
 };
-#[cfg(feature = "unstable")]
-#[cfg(feature = "plugins")]
-use zenoh_core::tracking::TrackedMutexGuard;
 
 pub use adminspace::AdminSpace;
 use async_trait::async_trait;
@@ -53,6 +50,9 @@ use zenoh_config::{
 };
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
+#[cfg(feature = "unstable")]
+#[cfg(feature = "plugins")]
+use zenoh_core::tracking::TrackedMutexGuard;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use zenoh_core::{Resolvable, Wait};
 use zenoh_keyexpr::OwnedNonWildKeyExpr;
