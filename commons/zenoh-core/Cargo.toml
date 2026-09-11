@@ -33,7 +33,7 @@ std = []
 tracing-instrument = ["zenoh-runtime/tracing-instrument"]
 
 [dependencies]
-lock-tripwire = { git = "https://forgejo.yuyuan.dev/circle/lock-tripwire.git", tag = "v0.1.1" }
+lock-tripwire = { git = "https://github.com/YuanYuYuan/lock-tripwire.git", tag = "v0.1.1" }
 lazy_static = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 zenoh-result = { workspace = true }
