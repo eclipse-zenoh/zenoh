@@ -409,11 +409,9 @@ impl Gossip {
             }
         }
         if (!self.wait_declares) || src_whatami != WhatAmI::Peer {
-            zenoh_runtime::ZRuntime::Net.block_in_place(
-                strong_runtime
-                    .start_conditions()
-                    .terminate_peer_connector_zid(src),
-            );
+            strong_runtime
+                .start_conditions()
+                .terminate_peer_connector_zid_blocking(src);
         }
     }
 

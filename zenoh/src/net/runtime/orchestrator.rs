@@ -146,6 +146,21 @@ impl StartConditions {
             self.notify.notify_one()
         }
     }
+
+    pub(crate) fn terminate_peer_connector_zid_blocking(&self, zid: ZenohIdProto) {
+        let mut peer_connectors = self.peer_connectors.blocking_lock();
+        if let Some(peer_connector) = peer_connectors.iter_mut().find(|pc| pc.zid == Some(zid)) {
+            peer_connector.terminated = true;
+        } else {
+            peer_connectors.push(PeerConnector {
+                zid: Some(zid),
+                terminated: true,
+            })
+        }
+        if peer_connectors.iter().all(|pc| pc.terminated) {
+            self.notify.notify_one()
+        }
+    }
 }
 
 impl Runtime {
