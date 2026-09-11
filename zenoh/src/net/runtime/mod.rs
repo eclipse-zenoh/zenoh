@@ -24,10 +24,10 @@ mod region;
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
 #[cfg(feature = "unstable")]
-use std::sync::OnceLock;
-#[cfg(feature = "unstable")]
 #[cfg(feature = "plugins")]
 use std::sync::Mutex;
+#[cfg(feature = "unstable")]
+use std::sync::OnceLock;
 use std::{
     any::Any,
     collections::HashSet,
