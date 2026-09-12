@@ -51,5 +51,8 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 
+[dev-dependencies]
+rcgen = { workspace = true }
+
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]

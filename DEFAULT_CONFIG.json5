@@ -715,6 +715,11 @@
         /// If set to true, links that require certificates (tls/quic) will automatically disconnect when the time of expiration of the remote certificate chain is reached
         /// note that mTLS (client authentication) is required for a listener to disconnect a client on expiration
         close_link_on_expiration: false,
+        /// Paths to PEM or DER CRLs used to check remote certificate revocation.
+        /// Provide a CRL for each CA in the trust path (root and any intermediates).
+        /// When set, rustls checks the full presented chain; a cert without matching CRL coverage is rejected.
+        /// CRLs are loaded at listen/connect time (restart to pick up a new file).
+        crl: null,
         /// Optional configuration for TCP system buffers sizes for TLS links
         ///
         /// Configure TCP read buffer size (bytes)

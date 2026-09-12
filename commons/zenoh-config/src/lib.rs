@@ -786,6 +786,10 @@ validated_struct::validator! {
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
                     close_link_on_expiration: Option<bool>,
+                    /// PEM or DER CRL files used to check remote certificate revocation.
+                    /// Provide a CRL for each CA in the presented chain. When set, the
+                    /// full chain is checked; missing CRL coverage fails the handshake.
+                    crl: Option<Vec<String>>,
                     /// Configure TCP write buffer size
                     pub so_sndbuf: Option<u32>,
                     /// Configure TCP read buffer size

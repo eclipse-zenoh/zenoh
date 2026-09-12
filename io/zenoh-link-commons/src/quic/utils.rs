@@ -24,7 +24,6 @@ use quinn::{crypto::rustls::HandshakeData, TransportConfig};
 use rustls::{
     crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
-    server::WebPkiClientVerifier,
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
 };
@@ -44,7 +43,10 @@ use crate::{
         plaintext::{SkipServerVerification, SELF_SIGNED_CERT},
         unicast::MultiStreamConfig,
     },
-    tls::{config::*, WebPkiVerifierAnyServerName},
+    tls::{
+        config::*, load_crls, webpki_client_cert_verifier, webpki_server_cert_verifier,
+        WebPkiVerifierAnyServerName,
+    },
     ConfigurationInspector, LinkAuthId,
 };
 
@@ -174,6 +176,15 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
+        let crl_paths = c
+            .crl()
+            .as_ref()
+            .filter(|paths| !paths.is_empty())
+            .map(|paths| paths.join("|"));
+        if let Some(ref crl_paths) = crl_paths {
+            ps.push((TLS_CRL_FILE, crl_paths));
+        }
+
         Ok(parameters::from_iter(ps.drain(..)))
     }
 }
@@ -270,7 +281,8 @@ impl TlsServerConfig {
                 || Err(zerror!("Missing root certificates while mTLS is enabled.")),
                 Ok,
             )?;
-            let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
+            let crls = load_crls(config)?;
+            let client_auth = webpki_client_cert_verifier(root_cert_store, crls)?;
             ServerConfig::builder_with_protocol_versions(&[&TLS13])
                 .with_client_cert_verifier(client_auth)
                 .with_single_cert(certs, keys.remove(0))
@@ -401,6 +413,11 @@ impl TlsClientConfig {
             root_cert_store.extend(custom_root_cert.roots);
         }
 
+        let crls = load_crls(config)?;
+        if !crls.is_empty() && !tls_server_name_verification {
+            tracing::warn!("TLS CRLs are ignored when verify_name_on_connect is false");
+        }
+
         let cc = if tls_client_server_auth {
             tracing::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
@@ -439,9 +456,15 @@ impl TlsClientConfig {
             let builder = ClientConfig::builder_with_protocol_versions(&[&TLS13]);
 
             if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_client_auth_cert(certs, keys.remove(0))
+                if crls.is_empty() {
+                    builder
+                        .with_root_certificates(root_cert_store)
+                        .with_client_auth_cert(certs, keys.remove(0))
+                } else {
+                    builder
+                        .with_webpki_verifier(webpki_server_cert_verifier(root_cert_store, crls)?)
+                        .with_client_auth_cert(certs, keys.remove(0))
+                }
             } else {
                 builder
                     .dangerous()
@@ -454,9 +477,15 @@ impl TlsClientConfig {
         } else {
             let builder = ClientConfig::builder();
             if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_no_client_auth()
+                if crls.is_empty() {
+                    builder
+                        .with_root_certificates(root_cert_store)
+                        .with_no_client_auth()
+                } else {
+                    builder
+                        .with_webpki_verifier(webpki_server_cert_verifier(root_cert_store, crls)?)
+                        .with_no_client_auth()
+                }
             } else {
                 builder
                     .dangerous()
