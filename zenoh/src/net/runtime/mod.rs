@@ -298,11 +298,23 @@ impl IRuntime for RuntimeState {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        self.locators.read().unwrap().clone()
+        self.locators
+            .read()
+            .unwrap()
+            .iter()
+            .cloned()
+            .map(orchestrator::without_observed_addr)
+            .collect()
     }
 
     fn get_locators_noloopback(&self) -> Vec<Locator> {
-        self.locators_noloopback.read().unwrap().clone()
+        self.locators_noloopback
+            .read()
+            .unwrap()
+            .iter()
+            .cloned()
+            .map(orchestrator::without_observed_addr)
+            .collect()
     }
 
     fn hlc(&self) -> Option<&HLC> {

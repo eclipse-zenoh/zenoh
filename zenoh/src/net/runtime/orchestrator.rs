@@ -35,7 +35,7 @@ use zenoh_config::{
     get_global_connect_timeout, get_global_listener_timeout, unwrap_or_default,
     ConnectionRetryPeriod, ModeDependent,
 };
-use zenoh_link::{Locator, LocatorInspector};
+use zenoh_link::{Locator, LocatorInspector, ADVERTISE_ADDR};
 use zenoh_protocol::{
     core::{
         whatami::WhatAmIMatcher, EndPoint, EndPoints, LocatorsStrategy, Metadata, PriorityRange,
@@ -52,6 +52,40 @@ const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
+
+fn is_observed_locator(locator: &Locator) -> bool {
+    matches!(locator.protocol().as_str(), "tcp" | "tls" | "udp" | "quic")
+        && locator.metadata().get(ADVERTISE_ADDR) == Some("observed")
+}
+
+// Gossip and session locators retain the ordinary address without the scouting hint.
+pub(super) fn without_observed_addr(mut locator: Locator) -> Locator {
+    if is_observed_locator(&locator) {
+        locator.metadata_mut().remove(ADVERTISE_ADDR).unwrap();
+    }
+    locator
+}
+
+// Only direct Hello reception supplies the address needed to interpret this hint.
+fn resolve_observed_locators(locators: &mut Vec<Locator>, mut source: SocketAddr) {
+    locators.retain_mut(|locator| {
+        if !is_observed_locator(locator) {
+            return true;
+        }
+        let Ok(address) = locator.address().as_str().parse::<SocketAddr>() else {
+            return false;
+        };
+        if address.port() == 0 {
+            return false;
+        }
+        locator.metadata_mut().remove(ADVERTISE_ADDR).unwrap();
+        if address.is_ipv4() != source.is_ipv4() {
+            return true;
+        }
+        source.set_port(address.port());
+        locator.address_mut().set(&source.to_string()).is_ok()
+    });
+}
 
 // TODO(fuzzypixelz): collapse per-interface scout sockets into one wildcard socket
 // per address family. Select egress with `set_multicast_if_*` before send;
@@ -1055,7 +1089,9 @@ impl Runtime {
                                 tracing::trace!("Received {:?} from {}", msg.body, peer);
                                 if let ScoutingBody::Hello(hello) = &msg.body {
                                     if matcher.matches(hello.whatami) {
-                                        if let Loop::Break = f(hello.clone()).await {
+                                        let mut hello = hello.clone();
+                                        resolve_observed_locators(&mut hello.locators, peer);
+                                        if let Loop::Break = f(hello).await {
                                             break;
                                         }
                                     } else {
@@ -1111,8 +1147,10 @@ impl Runtime {
 
         let locators = scouted_locators
             .iter()
+            .cloned()
+            .map(without_observed_addr)
             .filter(|l| !configured_locators.contains(l))
-            .collect::<Vec<&Locator>>();
+            .collect::<Vec<Locator>>();
 
         if locators.is_empty() {
             tracing::debug!(
@@ -1127,7 +1165,7 @@ impl Runtime {
 
         let inspector = LocatorInspector::default();
         for locator in locators {
-            let is_multicast = match inspector.is_multicast(locator).await {
+            let is_multicast = match inspector.is_multicast(&locator).await {
                 Ok(im) => im,
                 Err(e) => {
                     tracing::trace!("{} {} on {}: {}", ERR, zid, locator, e);
@@ -1140,7 +1178,7 @@ impl Runtime {
                 .metadata()
                 .get(Metadata::PRIORITIES)
                 .and_then(|p| PriorityRange::from_str(p).ok());
-            let reliability = inspector.is_reliable(locator).ok();
+            let reliability = inspector.is_reliable(&locator).ok();
             if !manager
                 .get_transport_unicast(zid)
                 .await
@@ -1285,11 +1323,12 @@ impl Runtime {
     /// Loopback peers get loopback locators; public locators intentionally
     /// exclude loopback.
     fn get_hello_locators(&self, peer: &SocketAddr) -> Vec<Locator> {
-        if peer.ip().is_loopback() {
-            self.get_locators()
+        let locators = if peer.ip().is_loopback() {
+            &self.state.locators
         } else {
-            self.get_locators_noloopback()
-        }
+            &self.state.locators_noloopback
+        };
+        locators.read().unwrap().clone()
     }
 
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[ScoutSocket]) {
@@ -1477,6 +1516,297 @@ mod tests {
 
     use super::*;
     use crate::{net::runtime::RuntimeBuilder, Config};
+
+    #[test]
+    fn observed_locators_preserve_ports_metadata_and_ipv6_scope() {
+        for (source, address, expected_addr) in [
+            ("203.0.113.7:50000", "192.168.0.11:7447", "203.0.113.7:7447"),
+            (
+                "[2001:db8::7]:50000",
+                "[fd00::11]:7447",
+                "[2001:db8::7]:7447",
+            ),
+            ("[fe80::7%3]:50000", "[fe80::11%9]:7447", "[fe80::7%3]:7447"),
+        ] {
+            let source: SocketAddr = source.parse().unwrap();
+            for protocol in ["tcp", "tls", "udp", "quic"] {
+                let mut locators =
+                    vec![
+                        format!("{protocol}/{address}?advertise_addr=observed;prio=1-2;rel=1")
+                            .parse()
+                            .unwrap(),
+                    ];
+                resolve_observed_locators(&mut locators, source);
+                assert_eq!(
+                    locators,
+                    vec![format!("{protocol}/{expected_addr}?prio=1-2;rel=1")
+                        .parse()
+                        .unwrap()]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn observed_locators_drop_invalid_addresses_and_preserve_normal_locators() {
+        let normal: Vec<Locator> = [
+            "tls/example.com:7447?prio=1-2",
+            "unixsock-stream/path?advertise_addr=observed",
+            "tcp/192.0.2.1:7447?advertise_addr=future",
+            "udp/192.0.2.1:7447",
+            "quic/example.com:7447",
+        ]
+        .into_iter()
+        .map(|locator| locator.parse().unwrap())
+        .collect();
+        let mut locators = normal.clone();
+        for address in [
+            "192.0.2.1:0",
+            "192.0.2.1:65536",
+            "192.0.2.1:bad",
+            "192.0.2.1:",
+            "*:7447",
+        ] {
+            locators.push(
+                format!("tcp/{address}?advertise_addr=observed")
+                    .parse()
+                    .unwrap(),
+            );
+        }
+        resolve_observed_locators(&mut locators, "203.0.113.7:50000".parse().unwrap());
+        assert_eq!(locators, normal);
+    }
+
+    #[test]
+    fn observed_locators_keep_other_address_families_as_fallbacks() {
+        for (address, source) in [
+            ("[fd00::11]:7447", "203.0.113.7:50000"),
+            ("192.168.0.11:7447", "[2001:db8::7]:50000"),
+        ] {
+            let mut locators = vec![format!("tcp/{address}?advertise_addr=observed;prio=1-2")
+                .parse()
+                .unwrap()];
+            resolve_observed_locators(&mut locators, source.parse().unwrap());
+            assert_eq!(
+                locators,
+                vec![format!("tcp/{address}?prio=1-2").parse().unwrap()]
+            );
+        }
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn observed_hints_are_advertised_only_in_direct_hello() {
+        let runtime = RuntimeBuilder::new(Config::default())
+            .build()
+            .await
+            .unwrap();
+        let normal = runtime
+            .manager()
+            .add_listener("tcp/127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        for bind in ["127.0.0.1:0", "0.0.0.0:0", "[::1]:0", "[::]:0"] {
+            let endpoint: EndPoint = format!("tcp/{bind}?prio=1-2#advertise_addr=observed")
+                .parse()
+                .unwrap();
+            let bound = runtime.manager().add_listener(endpoint).await.unwrap();
+            let addr: SocketAddr = bound.address().as_str().parse().unwrap();
+            assert_ne!(addr.port(), 0);
+            runtime.print_locators();
+            for peer in [
+                "127.0.0.1:50000",
+                "203.0.113.7:50000",
+                "[2001:db8::7]:50000",
+            ] {
+                let peer: SocketAddr = peer.parse().unwrap();
+                let hello = runtime.get_hello_locators(&peer);
+                let ordinary = if peer.ip().is_loopback() {
+                    runtime.get_locators()
+                } else {
+                    runtime.get_locators_noloopback()
+                };
+                assert!(hello.contains(&normal));
+                assert_eq!(hello.len(), ordinary.len());
+                if peer.ip().is_loopback() || !addr.ip().is_unspecified() {
+                    assert!(hello.iter().any(is_observed_locator));
+                }
+                for locator in hello.iter().filter(|l| is_observed_locator(l)) {
+                    let advertised: SocketAddr = locator.address().as_str().parse().unwrap();
+                    assert!(!advertised.ip().is_unspecified());
+                    assert_eq!(advertised.port(), addr.port());
+                    assert_eq!(locator.metadata().get("prio"), Some("1-2"));
+                }
+                // Session, gossip and linkstate retain the usable addresses, without the hint.
+                assert_eq!(
+                    ordinary,
+                    hello
+                        .into_iter()
+                        .map(without_observed_addr)
+                        .collect::<Vec<_>>()
+                );
+                assert!(ordinary
+                    .iter()
+                    .all(|l| l.metadata().get(ADVERTISE_ADDR).is_none()));
+            }
+            runtime
+                .manager()
+                .del_listener(&bound.to_endpoint())
+                .await
+                .unwrap();
+            runtime.print_locators();
+            assert_eq!(runtime.get_hello_locators(&addr), vec![normal.clone()]);
+        }
+        assert!(runtime
+            .manager()
+            .add_listener("tcp/127.0.0.1:0#advertise_addr=typo".parse().unwrap())
+            .await
+            .is_err());
+        runtime.close().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn observed_tls_locator_uses_bound_address_without_changing_endpoint() {
+        let listeners = zenoh_link::ListenersUnicastIP::new();
+        let endpoint: EndPoint = "tls/localhost:0?prio=1-2#advertise_addr=observed"
+            .parse()
+            .unwrap();
+        let addr: SocketAddr = "[::1]:7447".parse().unwrap();
+        let token = listeners.token.child_token();
+        let stop = token.clone();
+        listeners
+            .add_listener(
+                endpoint.clone(),
+                addr,
+                async move {
+                    stop.cancelled().await;
+                    Ok(())
+                },
+                token,
+            )
+            .await
+            .unwrap();
+        assert_eq!(listeners.get_endpoints(), vec![endpoint]);
+        assert_eq!(
+            listeners.get_locators(),
+            vec!["tls/[::1]:7447?advertise_addr=observed;prio=1-2"
+                .parse()
+                .unwrap()]
+        );
+        listeners.del_listener(addr).await.unwrap();
+
+        for protocol in ["ws", "unixsock-stream"] {
+            assert!(listeners
+                .add_listener(
+                    format!("{protocol}/[::1]:7447#advertise_addr=observed")
+                        .parse()
+                        .unwrap(),
+                    addr,
+                    futures::future::pending(),
+                    listeners.token.child_token(),
+                )
+                .await
+                .is_err());
+        }
+        // Adding the hint must fail cleanly if it would exceed the locator size limit.
+        let oversized: EndPoint = format!(
+            "tls/[::1]:7447?padding={}#advertise_addr=observed",
+            "x".repeat(220)
+        )
+        .parse()
+        .unwrap();
+        assert!(listeners
+            .add_listener(
+                oversized,
+                addr,
+                futures::future::pending(),
+                listeners.token.child_token()
+            )
+            .await
+            .is_err());
+        assert!(listeners.get_endpoints().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn observed_hello_is_resolved_before_scout_callback() {
+        let receiver = Runtime::bind_ucast_port(Ipv4Addr::LOCALHOST.into(), 1).unwrap();
+        let sender = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let destination = sender.local_addr().unwrap();
+        let reply = async {
+            let mut buf = [0; 256];
+            let (_, peer) = sender.recv_from(&mut buf).await.unwrap();
+            let message: ScoutingMessage = HelloProto {
+                version: zenoh_protocol::VERSION,
+                whatami: WhatAmI::Peer,
+                zid: ZenohIdProto::rand(),
+                locators: vec!["tls/192.168.0.11:7447?advertise_addr=observed;prio=1-2"
+                    .parse()
+                    .unwrap()],
+            }
+            .into();
+            let mut bytes = vec![];
+            Zenoh080::new()
+                .write(&mut bytes.writer(), &message)
+                .unwrap();
+            sender.send_to(&bytes, peer).await.unwrap();
+        };
+        timeout(Duration::from_secs(5), async {
+            let receivers = [receiver];
+            tokio::join!(
+                reply,
+                Runtime::scout(
+                    &receivers,
+                    WhatAmI::Peer.into(),
+                    &destination,
+                    |hello| async move {
+                        assert_eq!(
+                            hello.locators,
+                            vec!["tls/127.0.0.1:7447?prio=1-2".parse().unwrap()]
+                        );
+                        Loop::Break
+                    }
+                )
+            );
+        })
+        .await
+        .unwrap();
+    }
+
+    #[cfg(feature = "transport_tcp")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn observed_hint_received_without_source_uses_ordinary_address() {
+        let listener = RuntimeBuilder::new(Config::default())
+            .build()
+            .await
+            .unwrap();
+        let bound = listener
+            .manager()
+            .add_listener("tcp/127.0.0.1:0#advertise_addr=observed".parse().unwrap())
+            .await
+            .unwrap();
+        listener.print_locators();
+        let connector = RuntimeBuilder::new(Config::default())
+            .build()
+            .await
+            .unwrap();
+        let hello = listener.get_hello_locators(&"127.0.0.1:50000".parse().unwrap());
+        assert!(hello.iter().all(is_observed_locator));
+        // A forwarded hint has no source address to substitute. Dial the original address.
+        assert!(timeout(
+            Duration::from_secs(5),
+            connector.connect(&listener.manager().zid(), &hello)
+        )
+        .await
+        .unwrap());
+        let transport = connector
+            .manager()
+            .get_transport_unicast(&listener.manager().zid())
+            .await
+            .unwrap();
+        assert_eq!(transport.get_links().unwrap()[0].dst, bound);
+        connector.close().await.unwrap();
+        listener.close().await.unwrap();
+    }
 
     #[tokio::test]
     async fn empty_scouted_locators_do_not_leave_connection_pending() {
