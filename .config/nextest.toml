@@ -38,5 +38,11 @@ test-group = 'serial'
 filter = """
 package(zenoh) and test(net::tests::regions)
 """
-retries = 0
-slow-timeout = { period = "2s", terminate-after = 1 }
+# Tests using `MockFace::interest` now wait on `send_interest`'s replay,
+# which is dispatched onto the shared, single-worker `ZRuntime::Net` (see
+# `Face::send_interest`) instead of running synchronously. Under CI's
+# parallel test execution that adds real scheduling latency, so the
+# previous 2s/no-retry budget (calibrated for fully-synchronous behavior)
+# is too tight.
+retries = 1
+slow-timeout = { period = "10s", terminate-after = 1 }
