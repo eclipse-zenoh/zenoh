@@ -14,7 +14,7 @@
 use std::{
     fmt::{self, Debug},
     fs::File,
-    io::{self, BufReader, Cursor},
+    io::{self, BufReader},
     net::SocketAddr,
     sync::Arc,
     time::Duration,
@@ -23,7 +23,7 @@ use std::{
 use quinn::{crypto::rustls::HandshakeData, TransportConfig};
 use rustls::{
     crypto::CryptoProvider,
-    pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
+    pki_types::{pem::PemObject, CertificateDer, PrivateKeyDer, TrustAnchor},
     server::WebPkiClientVerifier,
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
@@ -236,30 +236,13 @@ impl TlsServerConfig {
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
-        let certs: Vec<CertificateDer> =
-            rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server certificate: {err}."))?;
+        let certs: Vec<CertificateDer> = PemObject::pem_slice_iter(&tls_server_certificate)
+            .collect::<Result<_, _>>()
+            .map_err(|err| zerror!("Error processing server certificate: {err}."))?;
 
-        let mut keys: Vec<PrivateKeyDer> =
-            rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-
-        if keys.is_empty() {
-            keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-        }
-
-        if keys.is_empty() {
-            keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map(|x| x.map(PrivateKeyDer::from))
-                .collect::<Result<_, _>>()
-                .map_err(|err| zerror!("Error processing server key: {err}."))?;
-        }
+        let mut keys: Vec<PrivateKeyDer> = PrivateKeyDer::from_pem_slice(&tls_server_private_key)
+            .map(|x| vec![x])
+            .map_err(|err| zerror!("Error processing server key: {err}."))?;
 
         if keys.is_empty() {
             bail!("No private key found for TLS server.");
@@ -406,31 +389,14 @@ impl TlsClientConfig {
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
 
-            let certs: Vec<CertificateDer> =
-                rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
-                    .collect::<Result<_, _>>()
-                    .map_err(|err| zerror!("Error processing client certificate: {err}."))?;
+            let certs: Vec<CertificateDer> = PemObject::pem_slice_iter(&tls_client_certificate)
+                .collect::<Result<_, _>>()
+                .map_err(|err| zerror!("Error processing client certificate: {err}."))?;
 
             let mut keys: Vec<PrivateKeyDer> =
-                rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|x| x.map(PrivateKeyDer::from))
-                    .collect::<Result<_, _>>()
+                PrivateKeyDer::from_pem_slice(&tls_client_private_key)
+                    .map(|x| vec![x])
                     .map_err(|err| zerror!("Error processing client key: {err}."))?;
-
-            if keys.is_empty() {
-                keys =
-                    rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
-                        .map(|x| x.map(PrivateKeyDer::from))
-                        .collect::<Result<_, _>>()
-                        .map_err(|err| zerror!("Error processing client key: {err}."))?;
-            }
-
-            if keys.is_empty() {
-                keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map(|x| x.map(PrivateKeyDer::from))
-                    .collect::<Result<_, _>>()
-                    .map_err(|err| zerror!("Error processing client key: {err}."))?;
-            }
 
             if keys.is_empty() {
                 bail!("No private key found for TLS client.");
@@ -501,7 +467,7 @@ impl TlsClientConfig {
 }
 
 fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<TrustAnchor<'static>>> {
-    let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
+    let certs: Vec<CertificateDer> = PemObject::pem_reader_iter(pem)
         .map(|result| result.map_err(|err| zerror!("Error processing PEM certificates: {err}.")))
         .collect::<Result<Vec<CertificateDer>, ZError>>()?;
 
