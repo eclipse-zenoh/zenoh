@@ -14,7 +14,7 @@
 use std::time::Instant;
 
 use clap::Parser;
-use zenoh::{Config, Wait};
+use zenoh::{key_expr::KeyExpr, Wait};
 use zenoh_examples::CommonArgs;
 
 struct Stats {
@@ -71,24 +71,22 @@ fn main() {
     // initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (config, m, n) = parse_args();
+    let args = Args::parse();
 
-    let session = zenoh::open(config).wait().unwrap();
+    let session = zenoh::open(args.common).wait().unwrap();
 
-    let key_expr = "test/thr";
-
-    let mut stats = Stats::new(n);
+    let mut stats = Stats::new(args.number);
     session
-        .declare_subscriber(key_expr)
+        .declare_subscriber(args.key_expr)
         .callback_mut(move |_sample| {
             stats.increment();
-            if stats.finished_rounds >= m {
+            if stats.finished_rounds >= args.samples {
                 std::process::exit(0)
             }
         })
         .background()
         .wait()
-        .unwrap();
+        .expect("Failed to open Zenoh session");
 
     println!("Press CTRL-C to quit...");
     std::thread::park();
@@ -102,11 +100,10 @@ struct Args {
     #[arg(short, long, default_value = "100000")]
     /// Number of messages in each throughput measurements.
     number: usize,
+    /// The key expression to be used for the throughput test
+    #[arg(short, long, default_value = "test/thr")]
+    key_expr: KeyExpr<'static>,
+    ///Common args for all examples
     #[command(flatten)]
     common: CommonArgs,
-}
-
-fn parse_args() -> (Config, usize, usize) {
-    let args = Args::parse();
-    (args.common.into(), args.samples, args.number)
 }
