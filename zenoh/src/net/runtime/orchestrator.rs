@@ -905,14 +905,11 @@ impl Runtime {
             drop(config_guard);
             self.spawn(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer.clone()).await {
-                    this.state
-                        .start_conditions
-                        .set_peer_connector_zid(idx, zid);
+                    this.state.start_conditions.set_peer_connector_zid(idx, zid);
 
                     if rotation_conf.is_some() {
                         this.start_rotation_engine(&peer);
                     }
-
                 }
                 if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
                     this.state.start_conditions.terminate_peer_connector(idx);
