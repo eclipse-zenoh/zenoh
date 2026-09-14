@@ -185,17 +185,57 @@ async fn gossip_autoconnect_works_on_loopback() {
     peer_a.close().await.unwrap();
 }
 
-#[cfg(all(feature = "unstable", feature = "transport_tcp"))]
+#[cfg(all(
+    feature = "unstable",
+    any(
+        feature = "transport_tcp",
+        feature = "transport_tls",
+        feature = "transport_udp",
+        feature = "transport_quic"
+    )
+))]
+#[cfg_attr(feature = "transport_tcp", test_case::test_case(None; "normal"))]
+#[cfg_attr(feature = "transport_tcp", test_case::test_case(Some("tcp"); "observed_tcp"))]
+#[cfg_attr(feature = "transport_tls", test_case::test_case(Some("tls"); "observed_tls"))]
+#[cfg_attr(feature = "transport_udp", test_case::test_case(Some("udp"); "observed_udp"))]
+#[cfg_attr(feature = "transport_quic", test_case::test_case(Some("quic"); "observed_quic"))]
 #[tokio::test(flavor = "multi_thread")]
-async fn multicast_autoconnect_works_on_loopback() {
+async fn multicast_autoconnect_works_on_loopback(protocol: Option<&str>) {
     zenoh::init_log_from_env_or("error");
 
     let mcast_addr = SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(224, 0, 0, 224)),
         get_free_udp_port(),
     );
+    let tls = matches!(protocol, Some("tls" | "quic")).then(|| {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+
+        let cert = rcgen::generate_simple_self_signed(vec!["127.0.0.1".into()]).unwrap();
+        let certificate = STANDARD.encode(cert.cert.pem());
+        serde_json::json!({
+            "root_ca_certificate_base64": certificate,
+            "listen_certificate_base64": certificate,
+            "listen_private_key_base64": STANDARD.encode(cert.signing_key.serialize_pem()),
+            "verify_name_on_connect": true,
+        })
+        .to_string()
+    });
     let peer_config = || {
         let mut config = Config::default();
+        if let Some(protocol) = protocol {
+            config
+                .listen
+                .endpoints
+                .set(vec![format!(
+                    "{protocol}/127.0.0.1:0#advertise_addr=observed"
+                )
+                .parse::<EndPoint>()
+                .unwrap()])
+                .unwrap();
+        }
+        if let Some(tls) = &tls {
+            config.insert_json5("transport/link/tls", tls).unwrap();
+        }
         config.set_mode(Some(WhatAmI::Peer)).unwrap();
         config.scouting.gossip.set_enabled(Some(false)).unwrap();
         config.scouting.multicast.set_enabled(Some(true)).unwrap();
@@ -225,7 +265,9 @@ async fn multicast_autoconnect_works_on_loopback() {
     timeout(Duration::from_secs(5), async {
         loop {
             let event = peer1_events.recv_async().await.unwrap();
-            if event.kind() == SampleKind::Put && event.transport().zid() == &peer2_zid {
+            if event.kind() == zenoh::sample::SampleKind::Put
+                && event.transport().zid() == &peer2_zid
+            {
                 break;
             }
         }
