@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{any::Any, cell::OnceCell, sync::Arc};
+use std::{any::Any, cell::OnceCell, sync::atomic::Ordering, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use zenoh_link::Link;
@@ -54,6 +54,26 @@ impl DeMux {
             interceptor,
             zid,
         }
+    }
+
+    /// Rebuilds the interceptors of the face's transport.
+    ///
+    /// Interceptor factories capture the links of the transport at face creation time. In
+    /// case of multilink transports, links may be added or removed later on, in which case
+    /// the interceptors must be rebuilt to account for the new set of links.
+    fn reload_interceptors(&self) {
+        if self.transport.is_none() {
+            // Multicast faces have a fixed link: nothing to reload.
+            return;
+        }
+        let tables = zread!(self.face.tables.tables);
+        let version = tables
+            .data
+            .next_interceptor_version
+            .fetch_add(1, Ordering::SeqCst);
+        self.face
+            .state
+            .set_interceptors_from_factories(&tables.data.interceptors, version + 1);
     }
 }
 
@@ -224,9 +244,13 @@ impl TransportPeerEventHandler for DeMux {
         Ok(())
     }
 
-    fn new_link(&self, _link: Link) {}
+    fn new_link(&self, _link: Link) {
+        self.reload_interceptors()
+    }
 
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {
+        self.reload_interceptors()
+    }
 
     fn closed(&self) {
         self.face.send_close();
