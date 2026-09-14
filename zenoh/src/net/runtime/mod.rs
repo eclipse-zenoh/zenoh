@@ -1064,11 +1064,14 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        // Owned, not `&Runtime`: `Runtime` is a cheap `Arc` clone, and taking
-        // it by value drops `self.runtime`'s read guard at the end of this
-        // statement instead of holding it for the rest of the function --
-        // `handler.new_unicast(..)` below is user code.
-        match zread!(self.runtime).upgrade() {
+        // Bind to a `let` first, then match the local: a `match` scrutinee's
+        // temporaries live for the whole matched arm, so `match
+        // zread!(self.runtime).upgrade() { ... }` would still hold
+        // `self.runtime`'s read guard across `handler.new_unicast(..)` below
+        // -- user code -- even though `.upgrade()` returns an owned value.
+        // The `let` statement's semicolon is what actually drops the guard.
+        let runtime = zread!(self.runtime).upgrade();
+        match runtime {
             Some(runtime) => {
                 let _span = runtime.state.span.enter();
                 // Collect the handlers themselves (a Vec of cheap `Arc`
@@ -1176,7 +1179,9 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).upgrade() {
+        // See the matching comment in new_unicast above.
+        let runtime = zread!(self.runtime).upgrade();
+        match runtime {
             Some(runtime) => {
                 let _span = runtime.state.span.enter();
                 let handlers: Vec<Arc<dyn TransportEventHandler>> =
