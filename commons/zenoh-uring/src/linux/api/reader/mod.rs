@@ -17,6 +17,7 @@ pub mod read_task;
 pub mod rx_buffer;
 
 use std::{
+    collections::HashMap,
     ops::Neg,
     os::fd::{AsRawFd, RawFd},
     sync::{atomic::AtomicBool, Arc},
@@ -44,7 +45,7 @@ use crate::{
         index::IndexGeneration,
         reactor_cmd::ReactorCmd,
         reservable_arena::ReservableArena,
-        rx_context::Rx,
+        rx_context::{Retiring, Rx},
         rx_context_storage::RxContextStorage,
         submission::SubmissionIface,
         window::RxWindow,
@@ -112,6 +113,10 @@ impl Reader {
         let ring_worker = move || -> ZResult<()> {
             // Create Rx context storage
             let mut context_storage = RxContextStorage::new();
+            // Buffer groups of stopped tasks, keyed by the user_data of the
+            // completion they wait for: the task's own terminal receive
+            // completion first, then the RemoveBuffers completion.
+            let mut retiring: HashMap<u64, Retiring> = HashMap::new();
 
             // io_uring read
             let ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::builder()
@@ -135,6 +140,7 @@ impl Reader {
             fn roll_cmds(
                 receiver: &Receiver<ReactorCmd>,
                 context_storage: &mut RxContextStorage,
+                retiring: &mut HashMap<u64, Retiring>,
                 arena: &GroupedArena,
                 sq: &mut SubmissionQueue<'_>,
                 batch_count: BufferCount,
@@ -152,25 +158,38 @@ impl Reader {
                             let index = context_storage.alloc(rx_context);
                             set_once.set(index)?;
 
+                            // Issued inline (not ASYNC): on a socket without
+                            // data the receive is registered for polling before
+                            // this submission returns, where a cancellation
+                            // finds it. A receive forced onto io-wq can be
+                            // missed by the cancellation while it starts, and
+                            // would then outlive its task.
                             let recv = opcode::RecvMulti::new(types::Fd(fd), group_id)
                                 .build()
-                                .flags(io_uring::squeue::Flags::ASYNC)
                                 .user_data(index.into());
 
                             unsafe { sq.push(&recv)? }
                         }
                         ReactorCmd::StopRx(index_generation) => {
-                            context_storage.free(index_generation);
+                            let Some(rx) = context_storage.take(index_generation) else {
+                                continue;
+                            };
+                            let recv_live = rx.recv_live.get();
+                            let group = rx.into_retiring();
+                            if recv_live {
+                                // wait for the receive to terminate before
+                                // touching its buffers
+                                retiring.insert(index_generation.into(), group);
 
-                            let cancel_builder =
-                                types::CancelBuilder::user_data(index_generation.into()).all();
-
-                            let event = AsyncCancel2::new(cancel_builder)
-                                .build()
-                                .user_data(index_generation.into())
-                                .flags(io_uring::squeue::Flags::ASYNC);
-
-                            unsafe { sq.push(&event)? }
+                                let cancel_builder =
+                                    types::CancelBuilder::user_data(index_generation.into()).all();
+                                let event = AsyncCancel2::new(cancel_builder)
+                                    .build()
+                                    .user_data(IndexGeneration::INVALID_MIN);
+                                unsafe { sq.push(&event)? }
+                            } else {
+                                Reader::retire(index_generation, group, retiring, sq)?;
+                            }
                         }
                     }
                 }
@@ -188,6 +207,7 @@ impl Reader {
                     roll_cmds(
                         &receiver,
                         &mut context_storage,
+                        &mut retiring,
                         &arena,
                         &mut sq,
                         batch_count,
@@ -196,6 +216,11 @@ impl Reader {
                     match e.user_data() {
                         IndexGeneration::INVALID_MIN => {
                             tracing::debug!("Zero-user-data entry: {:?}", e);
+                        }
+                        user_data if IndexGeneration::is_retire_user_data(user_data) => {
+                            if let Some(group) = retiring.remove(&user_data) {
+                                group.buffer_group.buffers_removed(e.result());
+                            }
                         }
                         IndexGeneration::INVALID_MAX => {
                             tracing::debug!("Waker event: {:?}", e);
@@ -209,8 +234,14 @@ impl Reader {
                             }
 
                             let index = unsafe { IndexGeneration::new_unchecked(index) };
-                            let to_submit =
-                                Reader::multi(&context_storage, &e, index, &arena, &mut sq)?;
+                            let to_submit = Reader::multi(
+                                &context_storage,
+                                &mut retiring,
+                                &e,
+                                index,
+                                &arena,
+                                &mut sq,
+                            )?;
                             let len = sq.len() as u32;
                             if to_submit || len >= (batch_count / 2) as u32 {
                                 drop(sq);
@@ -235,6 +266,7 @@ impl Reader {
                 roll_cmds(
                     &receiver,
                     &mut context_storage,
+                    &mut retiring,
                     &arena,
                     &mut sq,
                     batch_count,
@@ -275,22 +307,56 @@ impl Reader {
         }
     }
 
+    /// No receive of the stopped task is in flight anymore: reclaim the
+    /// buffers still queued in its group.
+    fn retire(
+        index: IndexGeneration,
+        group: Retiring,
+        retiring: &mut HashMap<u64, Retiring>,
+        sq: &mut SubmissionQueue<'_>,
+    ) -> ZResult<()> {
+        let user_data = index.retire_user_data();
+        if group.buffer_group.remove_buffers(user_data, sq)? {
+            retiring.insert(user_data, group);
+        }
+        Ok(())
+    }
+
     fn multi(
         context_storage: &RxContextStorage,
+        retiring: &mut HashMap<u64, Retiring>,
         e: &io_uring::cqueue::Entry,
         index: IndexGeneration,
         arena: &GroupedArena,
         sq: &mut SubmissionQueue<'_>,
     ) -> ZResult<bool> {
+        // last completion of a multishot receive
+        let terminal = !cqueue::more(e.flags());
         match context_storage.get(index) {
-            Some(context) => match Reader::read_multi(e, index, context, sq) {
-                Ok(val) => Ok(val),
-                Err(e) => {
-                    context.post_error(e);
-                    Ok(false)
+            Some(context) => {
+                if terminal {
+                    // set again by read_multi if it queues a new receive
+                    context.recv_live.set(false);
                 }
-            },
-            None => Ok(Self::utilize_multi(e, arena)),
+                match Reader::read_multi(e, index, context, sq) {
+                    Ok(val) => Ok(val),
+                    Err(e) => {
+                        context.post_error(e);
+                        Ok(false)
+                    }
+                }
+            }
+            None => {
+                let user_data: u64 = index.into();
+                let consumed = Self::utilize_multi(e, retiring.get(&user_data), arena);
+                if terminal {
+                    if let Some(group) = retiring.remove(&user_data) {
+                        Self::retire(index, group, retiring, sq)?;
+                        return Ok(true);
+                    }
+                }
+                Ok(consumed)
+            }
         }
     }
 
@@ -312,10 +378,10 @@ impl Reader {
                     let recv =
                         opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
                             .build()
-                            .flags(io_uring::squeue::Flags::ASYNC)
                             .user_data(index.into());
 
                     unsafe { sq.push(&recv)? };
+                    context.recv_live.set(true);
                     need_submit = true;
                 }
                 libc::ECANCELED => {
@@ -339,10 +405,10 @@ impl Reader {
                     let recv =
                         opcode::RecvMulti::new(types::Fd(context.fd), context.buffer_group().id())
                             .build()
-                            .flags(io_uring::squeue::Flags::ASYNC)
                             .user_data(index.into());
 
                     unsafe { sq.push(&recv)? };
+                    context.recv_live.set(true);
                     need_submit = true;
                 }
 
@@ -354,14 +420,110 @@ impl Reader {
         Ok(need_submit)
     }
 
-    fn utilize_multi(e: &io_uring::cqueue::Entry, arena: &GroupedArena) -> bool {
+    fn utilize_multi(
+        e: &io_uring::cqueue::Entry,
+        group: Option<&Retiring>,
+        arena: &GroupedArena,
+    ) -> bool {
         if e.result() >= 0 {
             if let Some(buf_id) = io_uring::cqueue::buffer_select(e.flags()) {
                 tracing::trace!("(utilize_multi) Read multishot entry: {:?}", e);
-                arena.recycle_batch(buf_id);
+                match group {
+                    Some(group) => group.buffer_group.release_consumed(buf_id),
+                    None => arena.recycle_batch(buf_id),
+                }
                 return true;
             }
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        cell::UnsafeCell,
+        collections::HashMap,
+        io::Write,
+        os::{fd::AsRawFd, unix::net::UnixStream},
+        sync::Arc,
+    };
+
+    use io_uring::{cqueue, opcode, squeue, types, IoUring};
+    use nix::sys::eventfd::{EfdFlags, EventFd};
+
+    use super::Reader;
+    use crate::{
+        api::types::BufferCount,
+        batch_arena::BatchArena,
+        reader::{
+            buffer_group::{BufferGroup, GroupedArena},
+            reservable_arena::ReservableArena,
+            rx_context::{Retiring, Rx, RxCallback},
+            rx_context_storage::RxContextStorage,
+            submission::SubmissionIface,
+        },
+    };
+
+    /// A task whose receive just completed with a buffer and without
+    /// `F_MORE`: `Reader::multi` must queue a replacement receive and mark
+    /// it live even if replenishing the buffer group fails afterwards
+    /// because the submission queue is full.
+    ///
+    /// `free_slots` is the number of SQ entries left for `Reader::multi`.
+    fn terminal_buffer_completion(free_slots: usize) -> bool {
+        let mut ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::new(4).unwrap();
+        let arena = BatchArena::new(64, 1, BufferCount::MAX).unwrap();
+        let waker = Arc::new(EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap());
+        let (cmd_tx, _cmd_rx) = flume::unbounded();
+        let arena = ReservableArena::new(arena, SubmissionIface::new(waker, cmd_tx));
+        let arena = GroupedArena::new(arena);
+        let (peer, mut writer) = UnixStream::pair().unwrap();
+        let mut storage = RxContextStorage::new();
+        let mut retiring: HashMap<u64, Retiring> = HashMap::new();
+        let (err_tx, mut err_rx) = tokio::sync::mpsc::unbounded_channel();
+
+        // one task with a one-buffer group and a one-shot receive on it
+        let group = BufferGroup::new(&arena, 1, &mut ring.submission()).unwrap();
+        let recv = opcode::Recv::new(types::Fd(peer.as_raw_fd()), std::ptr::null_mut(), 0)
+            .buf_group(group.id())
+            .build()
+            .flags(squeue::Flags::BUFFER_SELECT);
+        let callback = RxCallback::new(UnsafeCell::new(Box::new(|_| Ok(()))));
+        let index = storage.alloc(Rx::new(peer.as_raw_fd(), callback, err_tx, group));
+        unsafe {
+            ring.submission()
+                .push(&recv.user_data(index.into()))
+                .unwrap()
+        };
+        writer.write_all(b"data").unwrap();
+        ring.submit_and_wait(1).unwrap();
+        let cqe = ring.completion().next().unwrap();
+        assert!(cqueue::buffer_select(cqe.flags()).is_some() && !cqueue::more(cqe.flags()));
+
+        // leave exactly `free_slots` entries for the handler
+        let mut sq = ring.submission();
+        while sq.capacity() - sq.len() > free_slots {
+            unsafe { sq.push(&opcode::Nop::new().build()).unwrap() };
+        }
+        let result = Reader::multi(&storage, &mut retiring, &cqe, index, &arena, &mut sq);
+        assert!(result.is_ok(), "handler errors are posted, not returned");
+        assert_eq!(
+            sq.capacity() - sq.len(),
+            0,
+            "the handler used the free slots"
+        );
+        assert!(err_rx.try_recv().is_ok(), "the failed push was reported");
+        storage.get(index).unwrap().recv_live.get()
+    }
+
+    #[test]
+    fn restart_queued_before_replenishment_fails_stays_live() {
+        assert!(terminal_buffer_completion(1));
+    }
+
+    #[test]
+    fn failed_restart_is_not_live() {
+        assert!(!terminal_buffer_completion(0));
     }
 }

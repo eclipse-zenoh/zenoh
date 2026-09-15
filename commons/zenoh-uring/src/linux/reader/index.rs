@@ -21,6 +21,21 @@ pub struct IndexGeneration(NonZeroU64);
 impl IndexGeneration {
     pub const INVALID_MIN: u64 = 0;
     pub const INVALID_MAX: u64 = u64::MAX;
+    /// Set in the `user_data` of the `RemoveBuffers` that retires the buffer
+    /// group of a stopped task. Slot indices stay far below this bit: a slot
+    /// is only allocated together with a `u16` buffer group id.
+    const RETIRE_TAG: u64 = 1 << 31;
+
+    /// `user_data` of the buffer-group retirement of this task.
+    #[inline]
+    pub const fn retire_user_data(self) -> u64 {
+        self.0.get() | Self::RETIRE_TAG
+    }
+
+    #[inline]
+    pub const fn is_retire_user_data(val: u64) -> bool {
+        val & Self::RETIRE_TAG != 0 && val != Self::INVALID_MAX
+    }
 
     #[inline]
     pub const fn new(index: u32, generation: NonZeroU32) -> Self {

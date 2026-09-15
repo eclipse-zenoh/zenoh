@@ -49,7 +49,7 @@ impl ReadTask {
         let stop_rx_cmd = ReactorCmd::StopRx(self.index);
         let _ = self.submitter.submit(stop_rx_cmd);
 
-        // waiting for read task context to be destroyed within the reactor
+        // wait for the retirement of the task's buffers, or the reactor exit
         while self.error_receiver.recv().await.is_some() {}
     }
 
