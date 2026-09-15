@@ -23,7 +23,6 @@ use std::{
 
 use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
-    server::WebPkiClientVerifier,
     version::TLS13,
     ClientConfig, RootCertStore, ServerConfig,
 };
@@ -36,6 +35,7 @@ use zenoh_link_commons::{
     tcp::TcpSocketConfig,
     tls::{
         config::{self, *},
+        load_crls, webpki_client_cert_verifier, webpki_server_cert_verifier,
         WebPkiVerifierAnyServerName,
     },
     ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
@@ -156,6 +156,15 @@ impl ConfigurationInspector<ZenohConfig> for TlsConfigurator {
             false => ps.push((TLS_CLOSE_LINK_ON_EXPIRATION, "false")),
         }
 
+        let crl_paths = c
+            .crl()
+            .as_ref()
+            .filter(|paths| !paths.is_empty())
+            .map(|paths| paths.join("|"));
+        if let Some(ref crl_paths) = crl_paths {
+            ps.push((TLS_CRL_FILE, crl_paths));
+        }
+
         let rx_buffer_size;
         if let Some(size) = c.so_rcvbuf() {
             rx_buffer_size = size.to_string();
@@ -240,7 +249,8 @@ impl<'a> TlsServerConfig<'a> {
                 || Err(zerror!("Missing root certificates while mTLS is enabled.")),
                 Ok,
             )?;
-            let client_auth = WebPkiClientVerifier::builder(root_cert_store.into()).build()?;
+            let crls = load_crls(config)?;
+            let client_auth = webpki_client_cert_verifier(root_cert_store, crls)?;
             ServerConfig::builder_with_protocol_versions(&[&TLS13])
                 .with_client_cert_verifier(client_auth)
                 .with_single_cert(certs, keys.remove(0))
@@ -357,6 +367,11 @@ impl<'a> TlsClientConfig<'a> {
             root_cert_store.extend(custom_root_cert.roots);
         }
 
+        let crls = load_crls(config)?;
+        if !crls.is_empty() && !tls_server_name_verification {
+            tracing::warn!("TLS CRLs are ignored when verify_name_on_connect is false");
+        }
+
         // Install ring based rustls CryptoProvider.
         rustls::crypto::ring::default_provider()
             // This can be called successfully at most once in any process execution.
@@ -405,9 +420,15 @@ impl<'a> TlsClientConfig<'a> {
             let builder = ClientConfig::builder_with_protocol_versions(&[&TLS13]);
 
             if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_client_auth_cert(certs, keys.remove(0))
+                if crls.is_empty() {
+                    builder
+                        .with_root_certificates(root_cert_store)
+                        .with_client_auth_cert(certs, keys.remove(0))
+                } else {
+                    builder
+                        .with_webpki_verifier(webpki_server_cert_verifier(root_cert_store, crls)?)
+                        .with_client_auth_cert(certs, keys.remove(0))
+                }
             } else {
                 builder
                     .dangerous()
@@ -420,9 +441,15 @@ impl<'a> TlsClientConfig<'a> {
         } else {
             let builder = ClientConfig::builder();
             if tls_server_name_verification {
-                builder
-                    .with_root_certificates(root_cert_store)
-                    .with_no_client_auth()
+                if crls.is_empty() {
+                    builder
+                        .with_root_certificates(root_cert_store)
+                        .with_no_client_auth()
+                } else {
+                    builder
+                        .with_webpki_verifier(webpki_server_cert_verifier(root_cert_store, crls)?)
+                        .with_no_client_auth()
+                }
             } else {
                 builder
                     .dangerous()
@@ -604,4 +631,177 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
 
 pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use rcgen::{
+        BasicConstraints, CertificateParams, CertificateRevocationListParams, CertifiedIssuer,
+        DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyIdMethod, KeyPair,
+        KeyUsagePurpose, RevocationReason, RevokedCertParams, SerialNumber,
+    };
+    use rustls::{
+        pki_types::{CertificateDer, CertificateRevocationListDer, UnixTime},
+        RootCertStore,
+    };
+    use time::{Duration, OffsetDateTime};
+    use zenoh_link_commons::tls::parse_crls;
+
+    use super::*;
+
+    const LEAF_SERIAL: u64 = 42;
+    const ISSUER_SERIAL: u64 = 7;
+
+    fn install_crypto() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .ok();
+    }
+
+    fn ca_params(cn: &str, serial: u64) -> CertificateParams {
+        let mut params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CommonName, cn);
+        params.distinguished_name = dn;
+        params.serial_number = Some(SerialNumber::from(serial));
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        params
+    }
+
+    fn crl(issuer: &Issuer<'_, KeyPair>, revoked: &[u64]) -> CertificateRevocationListDer<'static> {
+        let now = OffsetDateTime::now_utc();
+        CertificateRevocationListParams {
+            this_update: now - Duration::hours(1),
+            next_update: now + Duration::hours(1),
+            crl_number: SerialNumber::from(1),
+            issuing_distribution_point: None,
+            revoked_certs: revoked
+                .iter()
+                .map(|serial| RevokedCertParams {
+                    serial_number: SerialNumber::from(*serial),
+                    revocation_time: now - Duration::minutes(1),
+                    reason_code: Some(RevocationReason::KeyCompromise),
+                    invalidity_date: None,
+                })
+                .collect(),
+            key_identifier_method: KeyIdMethod::Sha256,
+        }
+        .signed_by(issuer)
+        .unwrap()
+        .into()
+    }
+
+    struct Chain {
+        roots: RootCertStore,
+        leaf: CertificateDer<'static>,
+        issuer: CertificateDer<'static>,
+        root_issuer: CertifiedIssuer<'static, KeyPair>,
+        issuer_ca: CertifiedIssuer<'static, KeyPair>,
+    }
+
+    fn chain() -> Chain {
+        let root =
+            CertifiedIssuer::self_signed(ca_params("test-root", 1), KeyPair::generate().unwrap())
+                .unwrap();
+        let issuer_ca = CertifiedIssuer::signed_by(
+            ca_params("test-issuer", ISSUER_SERIAL),
+            KeyPair::generate().unwrap(),
+            &root,
+        )
+        .unwrap();
+
+        let mut leaf_params = CertificateParams::new(Vec::<String>::new()).unwrap();
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CommonName, "device");
+        leaf_params.distinguished_name = dn;
+        leaf_params.serial_number = Some(SerialNumber::from(LEAF_SERIAL));
+        leaf_params.is_ca = IsCa::NoCa;
+        leaf_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+        let leaf_key = KeyPair::generate().unwrap();
+        let leaf = leaf_params.signed_by(&leaf_key, &issuer_ca).unwrap();
+
+        let mut roots = RootCertStore::empty();
+        roots.add(root.der().clone()).unwrap();
+        Chain {
+            roots,
+            leaf: leaf.der().clone(),
+            issuer: issuer_ca.der().clone(),
+            root_issuer: root,
+            issuer_ca,
+        }
+    }
+
+    fn verify(
+        roots: RootCertStore,
+        crls: Vec<CertificateRevocationListDer<'static>>,
+        leaf: &CertificateDer<'_>,
+        issuer: &CertificateDer<'_>,
+    ) -> Result<(), rustls::Error> {
+        install_crypto();
+        let verifier = webpki_client_cert_verifier(roots, crls).unwrap();
+        rustls::server::danger::ClientCertVerifier::verify_client_cert(
+            verifier.as_ref(),
+            leaf,
+            std::slice::from_ref(issuer),
+            UnixTime::now(),
+        )
+        .map(|_| ())
+    }
+
+    #[test]
+    fn parse_der_and_pem_crls() {
+        let chain = chain();
+        let der = crl(&chain.issuer_ca, &[]);
+        assert_eq!(parse_crls(&der).unwrap().len(), 1);
+
+        let pem = rcgen::CertificateRevocationListParams {
+            this_update: OffsetDateTime::now_utc() - Duration::hours(1),
+            next_update: OffsetDateTime::now_utc() + Duration::hours(1),
+            crl_number: SerialNumber::from(1),
+            issuing_distribution_point: None,
+            revoked_certs: vec![],
+            key_identifier_method: KeyIdMethod::Sha256,
+        }
+        .signed_by(&chain.issuer_ca)
+        .unwrap()
+        .pem()
+        .unwrap();
+        assert_eq!(parse_crls(pem.as_bytes()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn full_chain_accepts_empty_crls() {
+        let chain = chain();
+        let crls = vec![crl(&chain.root_issuer, &[]), crl(&chain.issuer_ca, &[])];
+        verify(chain.roots, crls, &chain.leaf, &chain.issuer).unwrap();
+    }
+
+    #[test]
+    fn full_chain_rejects_revoked_leaf() {
+        let chain = chain();
+        let crls = vec![
+            crl(&chain.root_issuer, &[]),
+            crl(&chain.issuer_ca, &[LEAF_SERIAL]),
+        ];
+        assert!(verify(chain.roots, crls, &chain.leaf, &chain.issuer).is_err());
+    }
+
+    #[test]
+    fn full_chain_rejects_revoked_issuer() {
+        let chain = chain();
+        let crls = vec![
+            crl(&chain.root_issuer, &[ISSUER_SERIAL]),
+            crl(&chain.issuer_ca, &[]),
+        ];
+        assert!(verify(chain.roots, crls, &chain.leaf, &chain.issuer).is_err());
+    }
+
+    #[test]
+    fn full_chain_requires_both_crls() {
+        let chain = chain();
+        // Issuer CRL only: rustls treats the intermediate as unknown revocation status.
+        let crls = vec![crl(&chain.issuer_ca, &[])];
+        assert!(verify(chain.roots, crls, &chain.leaf, &chain.issuer).is_err());
+    }
 }

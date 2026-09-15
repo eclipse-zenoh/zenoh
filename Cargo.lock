@@ -5265,6 +5265,7 @@ version = "1.10.1"
 dependencies = [
  "async-trait",
  "base64",
+ "rcgen",
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",

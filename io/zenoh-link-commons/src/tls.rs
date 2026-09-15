@@ -1,16 +1,19 @@
 use alloc::vec::Vec;
+use std::{fs, io::Cursor, sync::Arc};
 
 use rustls::{
     client::{
         danger::{ServerCertVerified, ServerCertVerifier},
-        verify_server_cert_signed_by_trust_anchor,
+        verify_server_cert_signed_by_trust_anchor, WebPkiServerVerifier,
     },
     crypto::{verify_tls12_signature, verify_tls13_signature},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-    server::ParsedCertificate,
+    pki_types::{CertificateDer, CertificateRevocationListDer, ServerName, UnixTime},
+    server::{danger::ClientCertVerifier, ParsedCertificate, WebPkiClientVerifier},
     RootCertStore,
 };
 use webpki::ALL_VERIFICATION_ALGS;
+use zenoh_protocol::core::endpoint::Config;
+use zenoh_result::{bail, zerror, ZResult};
 
 pub mod config {
     pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
@@ -42,9 +45,89 @@ pub mod config {
     pub const TLS_CLOSE_LINK_ON_EXPIRATION: &str = "close_link_on_expiration";
     pub const TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT: bool = false;
 
+    /// `|`-separated list of CRL file paths (PEM or DER).
+    pub const TLS_CRL_FILE: &str = "crl";
+
     /// The time duration in milliseconds to wait for the TLS handshake to complete.
     pub const TLS_HANDSHAKE_TIMEOUT_MS: &str = "tls_handshake_timeout_ms";
     pub const TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT: u64 = 10_000;
+}
+
+fn looks_like_pem(bytes: &[u8]) -> bool {
+    let start = bytes
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    bytes[start..].starts_with(b"-----BEGIN")
+}
+
+/// Parse one or more CRLs from PEM (possibly concatenated) or a single DER blob.
+pub fn parse_crls(bytes: &[u8]) -> ZResult<Vec<CertificateRevocationListDer<'static>>> {
+    let pem_crls = rustls_pemfile::crls(&mut Cursor::new(bytes))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| zerror!("Error processing PEM CRL: {err}."))?;
+    if !pem_crls.is_empty() {
+        return Ok(pem_crls);
+    }
+    if looks_like_pem(bytes) {
+        bail!("PEM file contains no CRLs");
+    }
+    if bytes.iter().all(u8::is_ascii_whitespace) {
+        bail!("Empty CRL");
+    }
+    Ok(vec![CertificateRevocationListDer::from(bytes.to_vec())])
+}
+
+/// Load CRLs from `crl` file paths (`|`-separated in endpoint config).
+pub fn load_crls(config: &Config<'_>) -> ZResult<Vec<CertificateRevocationListDer<'static>>> {
+    let mut crls = Vec::new();
+    for path in config.values(config::TLS_CRL_FILE) {
+        if path.is_empty() {
+            continue;
+        }
+        let bytes =
+            fs::read(path).map_err(|err| zerror!("Invalid TLS CRL file '{path}': {err}"))?;
+        let parsed = parse_crls(&bytes)
+            .map_err(|err| zerror!("Error processing TLS CRL file '{path}': {err}"))?;
+        if parsed.is_empty() {
+            bail!("No CRL found in '{path}'");
+        }
+        crls.extend(parsed);
+    }
+    Ok(crls)
+}
+
+/// Client-cert verifier. When `crls` is non-empty, rustls checks the full chain
+/// (not only the leaf) and rejects unknown revocation status.
+pub fn webpki_client_cert_verifier(
+    roots: RootCertStore,
+    crls: Vec<CertificateRevocationListDer<'static>>,
+) -> ZResult<Arc<dyn ClientCertVerifier>> {
+    let builder = WebPkiClientVerifier::builder(roots.into());
+    let builder = if crls.is_empty() {
+        builder
+    } else {
+        builder.with_crls(crls)
+    };
+    builder
+        .build()
+        .map_err(|err| zerror!("TLS client certificate verifier: {err}").into())
+}
+
+/// Server-cert verifier with optional CRLs (full chain, unknown status is an error).
+pub fn webpki_server_cert_verifier(
+    roots: RootCertStore,
+    crls: Vec<CertificateRevocationListDer<'static>>,
+) -> ZResult<Arc<WebPkiServerVerifier>> {
+    let builder = WebPkiServerVerifier::builder(roots.into());
+    let builder = if crls.is_empty() {
+        builder
+    } else {
+        builder.with_crls(crls)
+    };
+    builder
+        .build()
+        .map_err(|err| zerror!("TLS server certificate verifier: {err}").into())
 }
 
 impl ServerCertVerifier for WebPkiVerifierAnyServerName {
