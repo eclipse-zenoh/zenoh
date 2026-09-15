@@ -358,6 +358,15 @@ impl LinkManagerUnicastUdp {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         };
 
+        // FreeBSD has no SO_BINDTODEVICE equivalent: resolve the interface's own address here,
+        // before the single bind() call below, instead of via set_bind_to_device_udp_socket after
+        // (the socket is already bound by the time that function would be called).
+        #[cfg(target_os = "freebsd")]
+        let src_socket_addr = match iface {
+            Some(iface) => zenoh_util::net::resolve_bind_addr_for_interface(iface, src_socket_addr)?,
+            None => src_socket_addr,
+        };
+
         // Establish a UDP socket
         let socket = UdpSocket::bind(src_socket_addr).await.map_err(|e| {
             let e = zerror!(
@@ -369,6 +378,7 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
+        #[cfg(not(target_os = "freebsd"))]
         if let Some(iface) = iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
         }
@@ -416,6 +426,12 @@ impl LinkManagerUnicastUdp {
         iface: Option<&str>,
         dscp: Option<u32>,
     ) -> ZResult<(UdpSocket, SocketAddr)> {
+        #[cfg(target_os = "freebsd")]
+        let addr = &match iface {
+            Some(iface) => zenoh_util::net::resolve_bind_addr_for_interface(iface, *addr)?,
+            None => *addr,
+        };
+
         // Bind the UDP socket
         let socket = UdpSocket::bind(addr).await.map_err(|e| {
             let e = zerror!("Can not create a new UDP listener on {}: {}", addr, e);
@@ -423,6 +439,7 @@ impl LinkManagerUnicastUdp {
             e
         })?;
 
+        #[cfg(not(target_os = "freebsd"))]
         if let Some(iface) = iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
         }

@@ -50,6 +50,7 @@ impl<'a> TcpSocketConfig<'a> {
         // Build a TcpListener from TcpSocket
         // https://docs.rs/tokio/latest/tokio/net/struct.TcpSocket.html
         socket.set_reuseaddr(true)?;
+        let addr = &self.resolve_listen_addr(addr)?;
         socket.bind(*addr).map_err(|e| zerror!("{}: {}", addr, e))?;
         // backlog (the maximum number of pending connections are queued): 1024
         let listener = socket
@@ -70,7 +71,7 @@ impl<'a> TcpSocketConfig<'a> {
     ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
         let socket = self.socket_with_config(dst_addr)?;
 
-        if let Some(bind_addr) = self.bind_socket {
+        if let Some(bind_addr) = self.resolve_bind_socket(dst_addr)? {
             match (bind_addr, dst_addr) {
                 (SocketAddr::V6(local), SocketAddr::V4(dest)) => {
                     return Err(Box::from(format!(
@@ -107,6 +108,51 @@ impl<'a> TcpSocketConfig<'a> {
         Ok((stream, src_addr, dst_addr))
     }
 
+    /// Resolve the address to listen on, restricting egress/ingress to `self.iface` when set.
+    /// FreeBSD has no SO_BINDTODEVICE equivalent, so the interface is selected by binding to
+    /// its own address instead of a device-level sockopt (see `resolve_bind_addr_for_interface`).
+    /// On other platforms the interface restriction is applied via `set_bind_to_device_tcp_socket`
+    /// in `socket_with_config`, so the listen address is returned unchanged here.
+    #[cfg(target_os = "freebsd")]
+    fn resolve_listen_addr(&self, addr: &SocketAddr) -> ZResult<SocketAddr> {
+        match self.iface {
+            Some(iface) => zenoh_util::net::resolve_bind_addr_for_interface(iface, *addr),
+            None => Ok(*addr),
+        }
+    }
+    #[cfg(not(target_os = "freebsd"))]
+    fn resolve_listen_addr(&self, addr: &SocketAddr) -> ZResult<SocketAddr> {
+        Ok(*addr)
+    }
+
+    /// Resolve the address to bind before connect(), merging `self.iface`'s own address into
+    /// `self.bind_socket` (or synthesizing one) on FreeBSD for the same reason as above.
+    #[cfg(target_os = "freebsd")]
+    fn resolve_bind_socket(&self, dst_addr: &SocketAddr) -> ZResult<Option<SocketAddr>> {
+        match (self.iface, self.bind_socket) {
+            (Some(iface), Some(bind_addr)) => {
+                Ok(Some(zenoh_util::net::resolve_bind_addr_for_interface(
+                    iface, bind_addr,
+                )?))
+            }
+            (Some(iface), None) => {
+                let unspec = if dst_addr.is_ipv6() {
+                    SocketAddr::new(std::net::Ipv6Addr::UNSPECIFIED.into(), 0)
+                } else {
+                    SocketAddr::new(std::net::Ipv4Addr::UNSPECIFIED.into(), 0)
+                };
+                Ok(Some(zenoh_util::net::resolve_bind_addr_for_interface(
+                    iface, unspec,
+                )?))
+            }
+            (None, bind_socket) => Ok(bind_socket),
+        }
+    }
+    #[cfg(not(target_os = "freebsd"))]
+    fn resolve_bind_socket(&self, _dst_addr: &SocketAddr) -> ZResult<Option<SocketAddr>> {
+        Ok(self.bind_socket)
+    }
+
     /// Creates a TcpSocket with the provided config
     fn socket_with_config(&self, addr: &SocketAddr) -> ZResult<TcpSocket> {
         let socket = match addr {
@@ -114,6 +160,7 @@ impl<'a> TcpSocketConfig<'a> {
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
 
+        #[cfg(not(target_os = "freebsd"))]
         if let Some(iface) = self.iface {
             zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
         }

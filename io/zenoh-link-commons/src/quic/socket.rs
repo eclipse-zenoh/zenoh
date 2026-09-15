@@ -51,7 +51,14 @@ impl<'a> QuicSocketConfig<'a> {
 
     /// Build a new UDP socket bound to `addr` with the given configuration parameters
     pub async fn new_listener(&self, addr: &SocketAddr) -> ZResult<UdpSocket> {
+        #[cfg(target_os = "freebsd")]
+        let addr = &match self.iface {
+            Some(iface) => zenoh_util::net::resolve_bind_addr_for_interface(iface, *addr)?,
+            None => *addr,
+        };
+
         let socket = tokio::net::UdpSocket::bind(addr).await?;
+        #[cfg(not(target_os = "freebsd"))]
         if let Some(iface) = self.iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
         }
@@ -70,11 +77,19 @@ impl<'a> QuicSocketConfig<'a> {
         } else {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         };
+        // FreeBSD has no SO_BINDTODEVICE equivalent: resolve the interface's own address here,
+        // before the single bind() call below, instead of via set_bind_to_device_udp_socket after.
+        #[cfg(target_os = "freebsd")]
+        let src_addr = match self.iface {
+            Some(iface) => zenoh_util::net::resolve_bind_addr_for_interface(iface, src_addr)?,
+            None => src_addr,
+        };
         let socket = tokio::net::UdpSocket::bind(src_addr).await?;
 
         if let Some(dscp) = self.dscp {
             set_dscp(&socket, src_addr, dscp)?;
         }
+        #[cfg(not(target_os = "freebsd"))]
         if let Some(iface) = self.iface {
             zenoh_util::net::set_bind_to_device_udp_socket(&socket, iface)?;
         };
