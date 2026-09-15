@@ -92,6 +92,7 @@ ignored = [
   "libloading",
   "litemap",
   "lz4_flex",
+  "mio-serial",
   "nonempty-collections",
   "pest",
   "pest_derive",
