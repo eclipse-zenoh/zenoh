@@ -28,6 +28,7 @@ version = { workspace = true }
 [features]
 default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
+systemd = ["dep:sd-notify"]
 
 [dependencies]
 clap = { workspace = true, features = ["derive"] }
@@ -45,8 +46,12 @@ zenoh = { workspace = true, default-features = false, features = [
 zenoh-config = { workspace = true }
 zenoh-util = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+sd-notify = { workspace = true, optional = true }
+
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
+zenoh-test = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
