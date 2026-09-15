@@ -16,7 +16,7 @@ use std::{
     ops::Add,
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
-        Arc, Mutex, MutexGuard,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -30,7 +30,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
-use zenoh_core::zlock;
+use zenoh_core::{tracking::TrackedMutexGuard, zlock};
 use zenoh_protocol::{
     core::Priority,
     network::{NetworkMessageExt, NetworkMessageRef},
@@ -162,7 +162,7 @@ struct StageInMutex {
 
 impl StageInMutex {
     #[inline]
-    fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
+    fn channel(&self, is_reliable: bool) -> TrackedMutexGuard<'_, TransportChannelTx> {
         if is_reliable {
             zlock!(self.priority.reliable)
         } else {
@@ -657,7 +657,7 @@ impl StageOut {
         self.s_ref.refill(batch);
     }
 
-    fn drain(&mut self, guard: &mut MutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
+    fn drain(&mut self, guard: &mut TrackedMutexGuard<'_, Current>) -> Vec<BoxedWBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(batch) = self.s_in.s_out_r.pull() {
@@ -943,7 +943,7 @@ impl TransmissionPipelineProducer {
 
         // Acquire all the locks, in_guard first, out_guard later
         // Use the same locking order as in drain to avoid deadlocks
-        let mut in_guards: Vec<MutexGuard<'_, StageIn>> =
+        let mut in_guards: Vec<TrackedMutexGuard<'_, StageIn>> =
             self.stage_in.iter().map(|x| zlock!(x)).collect();
 
         // Unblock waiting pullers
@@ -1117,7 +1117,7 @@ impl PipelineConsumer for SplitTransmissionPipelineConsumer {
 
     fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
         let current = self.stage_out.s_in.current.clone();
-        let batches = self.stage_out.drain(&mut current.lock().unwrap());
+        let batches = self.stage_out.drain(&mut zlock!(current));
         batches.into_iter().map(|b| (b, self.priority)).collect()
     }
 }

@@ -11,11 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::MutexGuard;
-
 use zenoh_buffers::ZSlice;
 use zenoh_codec::transport::frame::FrameReader;
-use zenoh_core::{zlock, zread};
+use zenoh_core::{tracking::TrackedMutexGuard, zlock_delivery, zread};
 use zenoh_protocol::{
     core::{Locator, Priority, Reliability},
     network::NetworkMessageMut,
@@ -170,8 +168,8 @@ impl TransportMulticastInner {
         };
 
         let mut guard = match frame.reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zlock_delivery!(c.reliable),
+            Reliability::BestEffort => zlock_delivery!(c.best_effort),
         };
 
         if !self.verify_sn("Frame", frame.sn, &mut guard)? {
@@ -211,8 +209,8 @@ impl TransportMulticastInner {
         };
 
         let mut guard = match reliability {
-            Reliability::Reliable => zlock!(c.reliable),
-            Reliability::BestEffort => zlock!(c.best_effort),
+            Reliability::Reliable => zlock_delivery!(c.reliable),
+            Reliability::BestEffort => zlock_delivery!(c.best_effort),
         };
 
         if !self.verify_sn("Fragment", sn, &mut guard)? {
@@ -263,7 +261,7 @@ impl TransportMulticastInner {
         &self,
         message_type: &str,
         sn: TransportSn,
-        guard: &mut MutexGuard<'_, TransportChannelRx>,
+        guard: &mut TrackedMutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<bool> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
