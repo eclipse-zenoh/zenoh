@@ -387,7 +387,7 @@ impl Gossip {
                 if let Some(locators) = locators {
                     let runtime = strong_runtime.clone();
                     let wait_declares = self.wait_declares;
-                    strong_runtime.spawn(async move {
+                    strong_runtime.spawn_abortable(async move {
                         if runtime
                             .manager()
                             .get_transport_unicast(&zid)
