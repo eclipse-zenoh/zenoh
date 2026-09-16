@@ -50,6 +50,8 @@ pub fn parse_dscp(config: &Config) -> ZResult<Option<u32>> {
 ///
 /// If the target doesn't support it, a warning is emitted.
 /// IPv4 uses IP_TOS, while IPv6 uses IPV6_TCLASS
+// No raw socket to mark DSCP on in a browser/Emscripten sandbox; the only caller is gated out.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn set_dscp<'a>(
     socket: impl Into<socket2::SockRef<'a>>,
     addr: SocketAddr,
