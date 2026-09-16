@@ -10,6 +10,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// Dynamic plugin loading (dlopen()) doesn't exist in a browser sandbox; gated out entirely since
+// it's structurally tied to `libloading::Library`. See the wasm32 stubs of
+// declare_dynamic_plugin_by_name/_by_paths below.
+#[cfg(not(target_arch = "wasm32"))]
 mod dynamic_plugin;
 mod static_plugin;
 
@@ -19,10 +23,9 @@ use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
-use self::{
-    dynamic_plugin::{DynamicPlugin, DynamicPluginSource},
-    static_plugin::StaticPlugin,
-};
+#[cfg(not(target_arch = "wasm32"))]
+use self::dynamic_plugin::{DynamicPlugin, DynamicPluginSource};
+use self::static_plugin::StaticPlugin;
 use crate::*;
 
 pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
@@ -169,6 +172,18 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Add dynamic plugin to the manager by name, automatically prepending the default library prefix
+    #[cfg(target_arch = "wasm32")]
+    pub fn declare_dynamic_plugin_by_name<S: Into<String>>(
+        &mut self,
+        _id: S,
+        _plugin_name: S,
+        _required: bool,
+    ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
+        Err("Dynamic plugin loading is not supported on wasm32 (no dlopen()/filesystem in a browser sandbox)".into())
+    }
+
+    /// Add dynamic plugin to the manager by name, automatically prepending the default library prefix
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn declare_dynamic_plugin_by_name<S: Into<String>>(
         &mut self,
         id: S,
@@ -205,6 +220,19 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Add first available dynamic plugin from the list of paths to the plugin files
+    #[cfg(target_arch = "wasm32")]
+    pub fn declare_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
+        &mut self,
+        _name: S,
+        _id: S,
+        _paths: &[P],
+        _required: bool,
+    ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
+        Err("Dynamic plugin loading is not supported on wasm32 (no dlopen()/filesystem in a browser sandbox)".into())
+    }
+
+    /// Add first available dynamic plugin from the list of paths to the plugin files
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn declare_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: S,
