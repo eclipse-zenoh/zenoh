@@ -20,11 +20,16 @@ use std::{
 };
 
 use futures::{prelude::*, stream::FuturesUnordered};
+#[cfg(not(target_arch = "wasm32"))]
 use socket2::{Domain, Socket, Type};
-use tokio::{
-    net::UdpSocket,
-    sync::{futures::Notified, Notify},
-};
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::net::UdpSocket;
+use tokio::sync::{futures::Notified, Notify};
+// tokio's "net" feature can't be enabled on wasm32-unknown-unknown. Scouting is stubbed out
+// entirely on that target (see below), so this dummy type just lets the stubbed signatures that
+// still mention `UdpSocket` type-check.
+#[cfg(target_arch = "wasm32")]
+struct UdpSocket;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
@@ -71,6 +76,14 @@ pub(crate) struct ScoutSocket {
 
 impl ScoutSocket {
     /// Sends a multicast datagram through this socket's egress interface.
+    // Unreachable: a ScoutSocket is never actually constructed on wasm32
+    // (bind_ucast_port() always errors first). See the dummy UdpSocket comment above.
+    #[cfg(target_arch = "wasm32")]
+    async fn send_multicast(&self, _buffer: &[u8], _dst: SocketAddr) -> std::io::Result<usize> {
+        unimplemented!("ScoutSocket is never constructed on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn send_multicast(&self, buffer: &[u8], dst: SocketAddr) -> std::io::Result<usize> {
         self.socket.send_to(buffer, dst).await
     }
@@ -201,6 +214,19 @@ impl Runtime {
 
         self.bind_listeners(&listeners).await?;
 
+        // Multicast scouting needs raw UDP, unavailable in a browser sandbox (see
+        // bind_mcast_port()), so treat it as always-disabled here and fall back to the same
+        // explicit-peers-required behavior the non-wasm32 code uses for `scouting=false`.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (scouting, listen, autoconnect, addr, ifaces, timeout, multicast_ttl);
+            if peers.is_empty() {
+                bail!("No peer specified (multicast scouting is not supported on wasm32)")
+            } else {
+                self.connect_peers(&peers, true).await
+            }
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         if scouting {
             if listen || peers.is_empty() {
                 let ifaces = Runtime::get_interfaces(&ifaces);
@@ -244,6 +270,15 @@ impl Runtime {
         }
     }
 
+    // Peer/Router mode need inbound listeners (see listener.rs) and scouting, neither available
+    // in a browser sandbox, so both are out of scope on wasm32 -- matching zenoh-pico, which
+    // also only implements the Client role.
+    #[cfg(target_arch = "wasm32")]
+    async fn start_peer(&self) -> ZResult<()> {
+        bail!("Peer mode is not supported on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, wait_scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.state.config.lock();
@@ -285,6 +320,13 @@ impl Runtime {
         Ok(())
     }
 
+    // See start_peer()'s comment above.
+    #[cfg(target_arch = "wasm32")]
+    async fn start_router(&self) -> ZResult<()> {
+        bail!("Router mode is not supported on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.state.config.lock();
@@ -322,6 +364,20 @@ impl Runtime {
         Ok(())
     }
 
+    // Unreachable on wasm32 (only called from start_peer()/start_router(), both stubbed above),
+    // but still needs to type-check since tokio's "net" feature can't be enabled here.
+    #[cfg(target_arch = "wasm32")]
+    async fn start_scout(
+        &self,
+        _listen: bool,
+        _autoconnect: AutoConnect,
+        _addr: SocketAddr,
+        _ifaces: String,
+    ) -> ZResult<()> {
+        unimplemented!("start_scout() is unreachable on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn start_scout(
         &self,
         listen: bool,
@@ -622,6 +678,14 @@ impl Runtime {
         }
     }
 
+    // Interface enumeration for multicast scouting is native-only (see bind_mcast_port()).
+    // Empty means "no interfaces to scout on", correctly disabling scouting.
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_interfaces(_names: &str) -> Vec<IpAddr> {
+        Vec::new()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_interfaces(names: &str) -> Vec<IpAddr> {
         if names == "auto" {
             let ifaces = zenoh_util::net::get_multicast_interfaces();
@@ -656,6 +720,20 @@ impl Runtime {
         }
     }
 
+    // Multicast/broadcast UDP scouting is native-only: a browser sandbox has no raw socket
+    // capability, so `socket2` can't help here regardless of target. Stubbed to a clean error
+    // rather than gating out the whole module, since `StartConditions` below is load-bearing
+    // on `Runtime` regardless of whether scouting is used.
+    #[cfg(target_arch = "wasm32")]
+    pub async fn bind_mcast_port(
+        _sockaddr: &SocketAddr,
+        _ifaces: &[IpAddr],
+        _multicast_ttl: u32,
+    ) -> ZResult<UdpSocket> {
+        bail!("Multicast scouting is not supported on wasm32 (no raw UDP/multicast in a browser sandbox)")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn bind_mcast_port(
         sockaddr: &SocketAddr,
         ifaces: &[IpAddr],
@@ -756,6 +834,13 @@ impl Runtime {
     /// with multicast egress socket options.[^mcast-if]
     ///
     /// [^mcast-if]: [`Socket::set_multicast_if_v4`], [`Socket::set_multicast_if_v6`].
+    // See bind_mcast_port()'s comment above.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn bind_ucast_port(_iface: IpAddr, _multicast_ttl: u32) -> ZResult<ScoutSocket> {
+        bail!("Multicast scouting is not supported on wasm32 (no raw UDP/multicast in a browser sandbox)")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn bind_ucast_port(iface: IpAddr, multicast_ttl: u32) -> ZResult<ScoutSocket> {
         let bind_addr = match iface {
             IpAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
@@ -993,6 +1078,21 @@ impl Runtime {
             .map(|peers| peers[0])
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) async fn scout<Fut, F>(
+        _sockets: &[ScoutSocket],
+        _matcher: WhatAmIMatcher,
+        _mcast_addr: &SocketAddr,
+        _f: F,
+    ) where
+        F: Fn(HelloProto) -> Fut + std::marker::Send + std::marker::Sync + Clone,
+        Fut: Future<Output = Loop> + std::marker::Send,
+        Self: Sized,
+    {
+        unimplemented!("Runtime::scout() is unreachable on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) async fn scout<Fut, F>(
         sockets: &[ScoutSocket],
         matcher: WhatAmIMatcher,
@@ -1292,6 +1392,12 @@ impl Runtime {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    async fn responder(&self, _mcast_socket: &UdpSocket, _ucast_sockets: &[ScoutSocket]) {
+        unimplemented!("responder() is unreachable on wasm32 -- see comment")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn responder(&self, mcast_socket: &UdpSocket, ucast_sockets: &[ScoutSocket]) {
         fn get_best_match<'a>(
             addr: &IpAddr,

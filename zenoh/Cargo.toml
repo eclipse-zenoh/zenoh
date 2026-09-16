@@ -104,7 +104,6 @@ phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
-socket2 = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "time"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
@@ -129,6 +128,9 @@ zenoh-sync = { workspace = true }
 zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+socket2 = { workspace = true }
 
 [dev-dependencies]
 libc = { workspace = true }
