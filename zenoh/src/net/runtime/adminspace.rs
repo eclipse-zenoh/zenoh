@@ -863,7 +863,8 @@ fn route_successor(prefix: &keyexpr, context: &AdminContext, query: Query) {
     let (shortcut, successors) = {
         let rtables = zread!(tables.tables);
         let mut shortcut: Vec<ZenohIdProto> = Vec::new();
-        if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/")) {
+        if let Some((src, dst)) = suffix.and_then(|s| s.strip_prefix("/src/")?.split_once("/dst/"))
+        {
             if let (Ok(src_zid), Ok(dst_zid)) = (src.parse(), dst.parse()) {
                 for hat in rtables.hats.values().filter(|hat| hat.mode().is_router()) {
                     if let Some(successor) = hat.route_successor(src_zid, dst_zid) {
