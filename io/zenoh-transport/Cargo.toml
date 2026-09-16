@@ -60,6 +60,7 @@ async-trait = { workspace = true }
 crossbeam-utils = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
+getrandom03 = { package = "getrandom", version = "=0.3.4", features = ["wasm_js"] }
 lazy_static = { workspace = true }
 lockfree = { workspace = true, optional = true }
 lz4_flex = { workspace = true }
@@ -70,15 +71,12 @@ serde = { workspace = true, features = ["default"] }
 sha3 = { workspace = true }
 static_init = { workspace = true, optional = true }
 tokio = { workspace = true, features = [
-  "fs",
   "io-util",
   "macros",
-  "net",
-  "rt-multi-thread",
   "sync",
   "time",
 ] }
-tokio-util = { workspace = true, features = ["rt"] }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-codec = { workspace = true }

@@ -186,6 +186,14 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         zasynclock!(self.status)
     }
 
+    // These introspection accessors synchronously block on an async RwLock read via
+    // `block_in_place`, which needs `rt-multi-thread` and isn't available on wasm32.
+    #[cfg(target_arch = "wasm32")]
+    fn get_links(&self) -> Vec<Link> {
+        unimplemented!("get_links() is not supported on wasm32")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn get_links(&self) -> Vec<Link> {
         let handle = tokio::runtime::Handle::current();
         let guard =
@@ -197,6 +205,12 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.config.zid
     }
 
+    #[cfg(target_arch = "wasm32")]
+    fn get_auth_ids(&self) -> TransportAuthId {
+        unimplemented!("get_auth_ids() is not supported on wasm32")
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
@@ -251,6 +265,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.send(msg).map(|_| true)
+    }
+
+    // The lowlatency transport kind is opt-in config, not needed on wasm32; see
+    // TransportUnicast::schedule_async() in unicast/mod.rs, which only supports the universal kind.
+    #[cfg(target_arch = "wasm32")]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     /*************************************/
