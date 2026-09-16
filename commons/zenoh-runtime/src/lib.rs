@@ -65,6 +65,10 @@ impl Default for RuntimeParam {
 }
 
 impl RuntimeParam {
+    // Only used on native: on wasm32, ZRuntimePool::get() borrows the ambient runtime instead of
+    // building its own (see below), and this needs tokio's "rt-multi-thread" feature, which isn't
+    // pulled in on that target.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn build(&self, zrt: ZRuntime) -> Result<Runtime> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(self.worker_threads)
@@ -128,6 +132,7 @@ pub enum ZRuntime {
 }
 
 impl ZRuntime {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
@@ -137,6 +142,20 @@ impl ZRuntime {
         let future = tracing::Instrument::instrument(future, tracing::Span::current());
 
         self.deref().spawn(future)
+    }
+
+    // `Handle::spawn`'s `Send` bound is a real constraint on native but meaningless on wasm32's
+    // single OS thread. `spawn_local` has no `Send` bound, at the cost of requiring the current
+    // task to already run inside a `LocalSet` (see `ZRuntimePool::get`).
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + 'static,
+    {
+        #[cfg(feature = "tracing-instrument")]
+        let future = tracing::Instrument::instrument(future, tracing::Span::current());
+
+        tokio::task::spawn_local(future)
     }
 
     pub fn block_in_place<F, R>(&self, f: F) -> R
@@ -159,7 +178,16 @@ impl ZRuntime {
         #[cfg(feature = "tracing-instrument")]
         let f = tracing::Instrument::instrument(f, tracing::Span::current());
 
-        tokio::task::block_in_place(move || self.block_on(f))
+        // `tokio::task::block_in_place` needs `rt-multi-thread`, unavailable on wasm32's
+        // single-threaded model. Each call site needs converting to a real `.await` instead.
+        #[cfg(target_arch = "wasm32")]
+        {
+            unimplemented!("ZRuntime::block_in_place() is not supported on wasm32")
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            tokio::task::block_in_place(move || self.block_on(f))
+        }
     }
 }
 
@@ -192,7 +220,16 @@ impl Drop for ZRuntimePoolGuard {
     }
 }
 
-pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<Runtime>>);
+// On native, each ZRuntime pool variant owns an independent `Runtime` with its own worker
+// thread(s). wasm32 has exactly one OS thread, which can only drive one runtime at a time, so
+// every variant instead resolves to the same ambient runtime, borrowed via `Handle::current()`.
+// The embedding program must run its top-level zenoh usage inside a `LocalSet` for this to work.
+#[cfg(not(target_arch = "wasm32"))]
+type StoredZRuntime = Runtime;
+#[cfg(target_arch = "wasm32")]
+type StoredZRuntime = Handle;
+
+pub struct ZRuntimePool(HashMap<ZRuntime, OnceLock<StoredZRuntime>>);
 
 impl fmt::Debug for ZRuntimePool {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -212,6 +249,7 @@ impl ZRuntimePool {
         Self(ZRuntime::iter().map(|zrt| (zrt, OnceLock::new())).collect())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get(&self, zrt: &ZRuntime) -> &Handle {
         // Although the ZRuntime is called to use `zrt`, it may be handed over to another one
         // specified via the environmental variable.
@@ -230,9 +268,26 @@ impl ZRuntimePool {
             })
             .handle()
     }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn get(&self, zrt: &ZRuntime) -> &Handle {
+        // No per-variant handover on wasm32: every variant maps onto the same ambient runtime.
+        self.0
+            .get(zrt)
+            .unwrap_or_else(|| panic!("The hashmap should contains {zrt} after initialization"))
+            .get_or_init(|| {
+                Handle::try_current().unwrap_or_else(|_| {
+                    panic!(
+                        "zenoh-runtime on wasm32 requires an ambient tokio runtime to already be \
+                         running (e.g. entered via `LocalSet::run_until` inside `Runtime::block_on`)"
+                    )
+                })
+            })
+    }
 }
 
 // If there are any blocking tasks spawned by ZRuntimes, the function will block until they return.
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for ZRuntimePool {
     fn drop(&mut self) {
         let handles: Vec<_> = self
@@ -248,6 +303,12 @@ impl Drop for ZRuntimePool {
             let _ = hd.join();
         }
     }
+}
+
+// On wasm32 the pool only holds borrowed `Handle`s to a runtime it doesn't own.
+#[cfg(target_arch = "wasm32")]
+impl Drop for ZRuntimePool {
+    fn drop(&mut self) {}
 }
 
 #[should_panic(expected = "Zenoh runtime doesn't support")]
