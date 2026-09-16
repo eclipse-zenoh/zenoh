@@ -791,6 +791,18 @@ impl Clone for Session {
 impl Drop for Session {
     fn drop(&mut self) {
         if self.0.strong_counter.fetch_sub(1, Ordering::Relaxed) == 1 {
+            // `Drop::drop()` can't `.await`, and the sync fallback (block_in_place) panics on
+            // wasm32 (see zenoh-runtime's comment). This only matters for callers that dropped
+            // without closing first, so just skip it here rather than crash.
+            #[cfg(target_arch = "wasm32")]
+            {
+                tracing::debug!(
+                    "Session dropped without an explicit close() on wasm32 -- skipping the \
+                    synchronous close fallback (unsupported on this target's single-threaded \
+                    runtime); call `session.close().await` explicitly before dropping instead."
+                );
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             if let Err(error) = self.close().wait() {
                 tracing::error!(error)
             }
