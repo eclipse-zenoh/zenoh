@@ -126,7 +126,7 @@ impl LinkUnicastTls {
         {
             let socket = socket2::SockRef::from(&tcp_stream);
             // Get the MSS and divide it by 2 to ensure we can at least fill half the MSS
-            let mss = socket.mss().unwrap_or(mtu as u32) / 2;
+            let mss = socket.tcp_mss().unwrap_or(mtu as u32) / 2;
             // Compute largest multiple of TCP MSS that is smaller of default MTU
             let mut tgt = mss;
             while (tgt + mss) < mtu as u32 {
