@@ -62,7 +62,7 @@ pub fn set_dscp<'a>(
             target_os = "solaris",
             target_os = "illumos",
         )))]
-        SocketAddr::V4(_) => socket.into().set_tos(dscp)?,
+        SocketAddr::V4(_) => socket.into().set_tos_v4(dscp)?,
         #[cfg(any(
             target_os = "android",
             target_os = "dragonfly",
