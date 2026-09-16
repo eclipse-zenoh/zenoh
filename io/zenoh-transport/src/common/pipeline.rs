@@ -95,6 +95,17 @@ impl StageInRefill {
             Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
         }
     }
+
+    // Async counterpart of wait_deadline() above, used by push_network_message_async() instead
+    // of the thread-parking wait_deadline().
+    #[cfg(target_arch = "wasm32")]
+    async fn wait_deadline_async(&self, instant: Instant) -> Result<bool, TransportClosed> {
+        match self.n_ref_r.wait_deadline_async(instant).await {
+            Ok(()) => Ok(true),
+            Err(WaitDeadlineError::Deadline) => Ok(false),
+            Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
+        }
+    }
 }
 
 lazy_static::lazy_static! {
@@ -273,6 +284,16 @@ impl Deadline {
         }
     }
 
+    // Async counterpart of wait() above.
+    #[cfg(target_arch = "wasm32")]
+    #[inline]
+    async fn wait_async(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
+        match self.lazy_deadline.deadline() {
+            DeadlineSetting::Immediate => Ok(false),
+            DeadlineSetting::Finite(instant) => s_ref.wait_deadline_async(*instant).await,
+        }
+    }
+
     fn on_next_fragment(&mut self) {
         self.lazy_deadline.advance();
     }
@@ -317,6 +338,178 @@ impl StageIn {
                             None => {
                                 // Wait for an available batch until deadline
                                 if !deadline.wait(&self.s_ref)? {
+                                    // Still no available batch.
+                                    // Restore the sequence number and drop the message
+                                    $($restore_sn)?
+                                    tracing::trace!(
+                                        "Zenoh message dropped because it's over the deadline {:?}: {:?}",
+                                        deadline.lazy_deadline.wait_time, msg
+                                    );
+                                    return Ok(false);
+                                }
+                            }
+                        },
+                    }
+                }
+            };
+        }
+
+        macro_rules! zretok {
+            ($batch:expr, $msg:expr) => {{
+                if !self.batching || $msg.is_express() {
+                    // Move out existing batch
+                    self.s_out.move_batch($batch);
+                    return Ok(true);
+                } else {
+                    let bytes = $batch.len();
+                    c_guard.batch = Some($batch);
+                    drop(c_guard);
+                    self.s_out.notify(bytes);
+                    return Ok(true);
+                }
+            }};
+        }
+
+        // Get the current serialization batch.
+        let mut batch = zgetbatch_rets!();
+        // Attempt the serialization on the current batch
+        let e = match batch.encode(msg) {
+            Ok(_) => zretok!(batch, msg),
+            Err(e) => e,
+        };
+
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut tch = self.mutex.channel(msg.is_reliable());
+
+        // Retrieve the next SN
+        let sn = tch.sn.get();
+
+        // The Frame
+        let frame = FrameHeader {
+            reliability: msg.reliability,
+            sn,
+            ext_qos: frame::ext::QoSType::new(priority),
+        };
+
+        if let BatchError::NewFrame = e {
+            // Attempt a serialization with a new frame
+            if batch.encode((msg, &frame)).is_ok() {
+                zretok!(batch, msg);
+            }
+        }
+
+        if !batch.is_empty() {
+            // Move out existing batch
+            self.s_out.move_batch(batch);
+            batch = zgetbatch_rets!(tch.sn.set(sn).unwrap());
+        }
+
+        // Attempt a second serialization on fully empty batch
+        if batch.encode((msg, &frame)).is_ok() {
+            zretok!(batch, msg);
+        }
+
+        // The second serialization attempt has failed. This means that the message is
+        // too large for the current batch size: we need to fragment.
+        // Reinsert the current batch for fragmentation.
+        c_guard.batch = Some(batch);
+
+        // Take the expandable buffer and serialize the totality of the message
+        self.fragbuf.clear();
+
+        let mut writer = self.fragbuf.writer();
+        let codec = Zenoh080::new();
+        codec.write(&mut writer, msg).unwrap();
+
+        // Fragment the whole message
+        let mut fragment = FragmentHeader {
+            reliability: frame.reliability,
+            more: true,
+            sn,
+            ext_qos: frame.ext_qos,
+            ext_first: Some(fragment::ext::First::new()),
+            ext_drop: None,
+        };
+        let mut reader = self.fragbuf.reader();
+        while reader.can_read() {
+            // Get the current serialization batch
+            batch = zgetbatch_rets!({
+                // If no fragment has been sent, the sequence number is just reset
+                if fragment.ext_first.is_some() {
+                    tch.sn.set(sn).unwrap()
+                // Otherwise, an ephemeral batch is created to send the stop fragment
+                } else {
+                    let mut batch = Box::new(WBatch::new_ephemeral(self.batch_config));
+                    self.fragbuf.clear();
+                    fragment.ext_drop = Some(fragment::ext::Drop::new());
+                    let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
+                    self.s_out.move_batch(batch);
+                }
+            });
+
+            // Serialize the message fragment
+            match batch.encode((&mut reader, &mut fragment)) {
+                Ok(_) => {
+                    // Update the SN
+                    fragment.sn = tch.sn.get();
+                    fragment.ext_first = None;
+                    // Move the serialization batch into the OUT pipeline
+                    self.s_out.move_batch(batch);
+                }
+                Err(_) => {
+                    // Restore the sequence number
+                    tch.sn.set(sn).unwrap();
+                    // Reinsert the batch
+                    c_guard.batch = Some(batch);
+                    tracing::warn!(
+                        "Zenoh message dropped because it can not be fragmented: {:?}",
+                        msg
+                    );
+                    break;
+                }
+            }
+
+            // adopt deadline for the next fragment
+            deadline.on_next_fragment();
+        }
+
+        // Clean the fragbuf
+        self.fragbuf.clear();
+
+        Ok(true)
+    }
+
+    // Async counterpart of push_network_message() above: identical logic, awaiting the
+    // batch-refill wait instead of thread-parking. Kept as a full duplicate rather than making
+    // the sync version generic over sync/async waiting, to avoid touching the native path.
+    #[cfg(target_arch = "wasm32")]
+    async fn push_network_message_async(
+        &mut self,
+        msg: NetworkMessageRef<'_>,
+        priority: Priority,
+        deadline: &mut Deadline,
+    ) -> Result<bool, TransportClosed> {
+        // Lock the current serialization batch.
+        let mut c_guard = zlock!(self.mutex.current);
+        c_guard.notify_pending();
+
+        macro_rules! zgetbatch_rets {
+            ($($restore_sn:stmt)?) => {
+                loop {
+                    match c_guard.batch.take() {
+                        Some(batch) => break batch,
+                        None => match self.s_ref.pull() {
+                            Some(mut batch) => {
+                                batch.clear();
+                                self.s_out.atomic_backoff.first_write.store(
+                                    LOCAL_EPOCH.elapsed().as_micros() as MicroSeconds,
+                                    Ordering::Relaxed,
+                                );
+                                break batch;
+                            }
+                            None => {
+                                // Wait for an available batch until deadline
+                                if !deadline.wait_async(&self.s_ref).await? {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
@@ -921,6 +1114,58 @@ impl TransmissionPipelineProducer {
             // congested flag in that case. However, if some batches were available,
             // that means that they would have still been pushed, so we can expect them to
             // be refilled, and they will eventually unset the congested flag.
+        }
+        Ok(sent)
+    }
+
+    // Async counterpart of push_network_message() above. Not yet wired into `Publisher::put()`,
+    // which still goes through the sync `Primitives` trait; that needs its own async redesign.
+    #[cfg(target_arch = "wasm32")]
+    #[inline]
+    pub(crate) async fn push_network_message_async(
+        &self,
+        msg: NetworkMessageRef<'_>,
+    ) -> Result<bool, TransportClosed> {
+        // If the queue is not QoS, it means that we only have one priority with index 0.
+        let (idx, priority) = if self.stage_in.len() > 1 {
+            let priority = msg.priority();
+            (priority as usize, priority)
+        } else {
+            (0, Priority::DEFAULT)
+        };
+
+        // If message is droppable, compute a deadline after which the sample could be dropped
+        let (wait_time, max_wait_time) = if msg.is_droppable() {
+            // Checked if we are blocked on the priority queue and we drop directly the message
+            if self.status.is_congested(priority) {
+                return Ok(false);
+            }
+            (
+                self.status.waits.wait_before_drop,
+                Some(self.status.waits.max_wait_before_drop_fragments),
+            )
+        } else {
+            (self.status.waits.wait_before_close, None)
+        };
+        let mut deadline = Deadline::new(wait_time, max_wait_time);
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut queue = zlock!(self.stage_in[idx]);
+        // Check again for congestion in case it happens when blocking on the mutex.
+        if msg.is_droppable() && self.status.is_congested(priority) {
+            return Ok(false);
+        }
+        let mut sent = queue
+            .push_network_message_async(msg, priority, &mut deadline)
+            .await?;
+        // If the message cannot be sent, mark the pipeline as congested.
+        if !sent {
+            self.status.set_congested(priority, true);
+            sent = queue
+                .push_network_message_async(msg, priority, &mut deadline)
+                .await?;
+            if sent {
+                self.status.set_congested(priority, false);
+            }
         }
         Ok(sent)
     }

@@ -216,6 +216,75 @@ impl TransportUnicastUniversal {
         );
         Ok(pushed)
     }
+
+    // Async counterpart of internal_schedule() above, awaiting TX-pipeline backpressure instead
+    // of thread-parking. `CongestionControl::BlockFirst` isn't ported here: it needs its own
+    // async redesign, like the rest of this file's sync path.
+    #[allow(unused_mut)]
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) async fn internal_schedule_async(
+        &self,
+        mut msg: NetworkMessageMut<'_>,
+    ) -> ZResult<bool> {
+        let transport_links = self
+            .links
+            .read()
+            .expect("reading `TransportUnicastUniversal::links` should not fail");
+
+        let Some(transport_link_index) = Self::select(
+            transport_links.get_links().iter().map(|tl| {
+                (
+                    tl.link
+                        .config
+                        .reliability
+                        .unwrap_or(Reliability::from(tl.link.link.is_reliable())),
+                    tl.link.config.priorities.clone(),
+                )
+            }),
+            Reliability::from(msg.is_reliable()),
+            msg.priority(),
+        ) else {
+            tracing::trace!(
+                "Message dropped because the transport has no links: {}",
+                msg
+            );
+            #[cfg(feature = "stats")]
+            self.stats.tx_observe_no_link(msg.as_ref());
+            return Ok(false);
+        };
+
+        let transport_link = transport_links
+            .get_links()
+            .get(transport_link_index)
+            .expect("transport link index should be valid");
+
+        let msg = msg.as_ref();
+
+        let pipeline = transport_link.pipeline.clone();
+        tracing::trace!(
+            "Scheduled {:?} for transmission to {} ({})",
+            msg,
+            transport_link.link.link.get_dst(),
+            self.get_zid()
+        );
+
+        #[cfg(feature = "stats")]
+        let stats = transport_link.stats.clone();
+
+        // Drop the guard before the push since the link could be congested and this
+        // operation could take a while (though now cooperatively, not by blocking the thread).
+        drop(transport_links);
+
+        let pushed = pipeline.push_network_message_async(msg).await?;
+
+        self.handle_push_result(
+            msg,
+            pushed,
+            #[cfg(feature = "stats")]
+            stats,
+        );
+        Ok(pushed)
+    }
 }
 
 #[cfg(test)]

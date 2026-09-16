@@ -223,6 +223,9 @@ pub(crate) fn derive_register_param(input: DeriveInput) -> Result<TokenStream, s
             }
 
             #[doc = "Initialize the tokio runtime according to the given config"]
+            // Only called from the native branch of ZRuntimePool::get(); matches
+            // RuntimeParam::build(), which this calls and which is native-only.
+            #[cfg(not(target_arch = "wasm32"))]
             fn init(&self) -> Result<Runtime> {
                 match self {
                     #(

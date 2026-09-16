@@ -195,7 +195,9 @@ impl TransportUnicastUniversal {
         // Notify the callback
         if let Some(callback) = self.callback.get().cloned() {
             let associated_link = associated_link.clone();
-            tokio::task::spawn_blocking(move || {
+            // See manager.rs's notify_new_link_unicast() comment.
+            #[cfg(target_arch = "wasm32")]
+            {
                 callback.del_link(link);
                 if let Some(asl) = &associated_link {
                     callback.del_link(Link::new_unicast(
@@ -204,8 +206,21 @@ impl TransportUnicastUniversal {
                         asl.link.config.reliability,
                     ));
                 }
-            })
-            .await?;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                tokio::task::spawn_blocking(move || {
+                    callback.del_link(link);
+                    if let Some(asl) = &associated_link {
+                        callback.del_link(Link::new_unicast(
+                            &asl.link.link,
+                            asl.link.config.priorities.clone(),
+                            asl.link.config.reliability,
+                        ));
+                    }
+                })
+                .await?;
+            }
         }
 
         // Associated link must also be closed. run both close calls, return whichever failed first
@@ -454,6 +469,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool> {
         self.internal_schedule(msg)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
