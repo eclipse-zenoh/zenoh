@@ -49,6 +49,9 @@ struct ExecutingGroups(usize);
 
 impl ExecutingGroups {
     fn enter(groups: &[GroupId]) -> Self {
+        if groups.is_empty() {
+            return Self(0);
+        }
         EXECUTING_GROUPS.with_borrow_mut(|stack| stack.extend_from_slice(groups));
         Self(groups.len())
     }
@@ -56,6 +59,9 @@ impl ExecutingGroups {
 
 impl Drop for ExecutingGroups {
     fn drop(&mut self) {
+        if self.0 == 0 {
+            return;
+        }
         EXECUTING_GROUPS.with_borrow_mut(|stack| {
             stack.truncate(stack.len().saturating_sub(self.0));
         });

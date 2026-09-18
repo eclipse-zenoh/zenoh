@@ -114,7 +114,7 @@ impl SyncGroup {
         // `ze_undeclare_advanced_subscriber`. The transport RX thread
         // then blocked forever, and the whole session froze.
         if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
-            tracing::warn!(
+            tracing::trace!(
                 "SyncGroup::wait called from inside a callback of the same entity; \
                  draining asynchronously to avoid self-deadlock"
             );
@@ -135,7 +135,7 @@ impl SyncGroup {
         // group. Without this check, the `.await` below would wait
         // on its own caller's permit and never finish.
         if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
-            tracing::warn!(
+            tracing::trace!(
                 "SyncGroup::wait_async called from inside a callback of the same entity; \
                  draining in the background to avoid self-deadlock"
             );
