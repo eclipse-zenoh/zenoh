@@ -384,33 +384,69 @@ fn undeclaring_without_wait_callbacks_from_the_callback_completes() {
     );
 }
 
-/// `wait_callbacks()` from a thread that is *not* the callback's.
+/// `wait_callbacks()` from a thread that is *not* the callback's, while that
+/// callback is genuinely still running.
 ///
 /// The permit is held by a stack this thread does not own, so it is released
-/// when that callback returns and the wait completes. This is the behaviour the
-/// API promises, and it is why the fix cannot simply delete the wait.
+/// only when that callback returns, and the wait must actually block until
+/// then. This is the behaviour the API promises, and it is why the fix cannot
+/// simply delete the wait.
+///
+/// **Local delivery is synchronous with `put().wait()`** (measured directly:
+/// a 300ms callback makes `put().wait()` itself take about 300ms, on the same
+/// thread). So `put(..).wait()` followed by `undeclare()` on that same thread
+/// would already find the callback finished and its permit released, proving
+/// nothing about a wait that has to block. This scenario puts the triggering
+/// `put` on its own thread, and waits for the callback to have actually
+/// started, so `wait_callbacks()` on the scenario thread has a real permit to
+/// wait for when it runs.
 #[test]
 fn undeclaring_with_wait_callbacks_from_another_thread_completes() {
-    let report = run_scenario(|entered| {
+    let callback_running = Arc::new(AtomicBool::new(false));
+    let callback_finished = Arc::new(AtomicBool::new(false));
+    let wait_took_ms = Arc::new(AtomicU64::new(u64::MAX));
+
+    let running_body = callback_running.clone();
+    let finished_body = callback_finished.clone();
+    let took_body = wait_took_ms.clone();
+
+    let report = run_scenario(move |entered| {
         let session = zenoh::open(isolated_config()).wait().unwrap();
 
+        let running_cb = running_body.clone();
+        let finished_cb = finished_body.clone();
         let sub = session
             .declare_subscriber("test/undeclare_from_callback/other_thread")
             .callback(move |_s: Sample| {
                 entered.store(true, Ordering::SeqCst);
-                // Long enough that the undeclare below genuinely has to wait,
-                // rather than arriving after the callback happened to finish.
-                std::thread::sleep(Duration::from_millis(300));
+                running_cb.store(true, Ordering::SeqCst);
+                std::thread::sleep(UNRELATED_CALLBACK_WORK);
+                finished_cb.store(true, Ordering::SeqCst);
             })
             .wait()
             .unwrap();
 
-        session
-            .put("test/undeclare_from_callback/other_thread", "trigger")
-            .wait()
-            .unwrap();
+        // Put the triggering publish on its own thread. `put().wait()` is
+        // synchronous with local delivery, so calling it on this thread
+        // would block here for the callback's whole duration, and the
+        // callback would already be finished by the time this function
+        // continues below.
+        let publisher = session.clone();
+        std::thread::spawn(move || {
+            publisher
+                .put("test/undeclare_from_callback/other_thread", "trigger")
+                .wait()
+                .unwrap();
+        });
+        while !callback_running.load(Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
 
+        // The callback is now genuinely in flight on the thread spawned
+        // above. This thread owns none of its permits.
+        let started = Instant::now();
         sub.undeclare().wait_callbacks().wait().unwrap();
+        took_body.store(started.elapsed().as_millis() as u64, Ordering::SeqCst);
     });
 
     report.assert_entered_callback();
@@ -418,6 +454,17 @@ fn undeclaring_with_wait_callbacks_from_another_thread_completes() {
         matches!(report.outcome, Outcome::Completed),
         "wait_callbacks from an unrelated thread must complete, got {:?}",
         report.outcome
+    );
+
+    let took = wait_took_ms.load(Ordering::SeqCst);
+    assert!(
+        callback_finished.load(Ordering::SeqCst),
+        "the callback never finished, so this scenario proves nothing"
+    );
+    assert!(
+        took >= UNRELATED_CALLBACK_WORK.as_millis() as u64 / 2,
+        "wait_callbacks() returned after {took} ms, well under the callback's own \
+         {UNRELATED_CALLBACK_WORK:?} -- it did not genuinely wait for the callback"
     );
 }
 
