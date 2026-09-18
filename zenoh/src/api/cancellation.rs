@@ -119,7 +119,7 @@ impl SyncGroup {
                  draining asynchronously to avoid self-deadlock"
             );
             let this = self.clone();
-            ZRuntime::Application.spawn(async move { this.wait_async().await });
+            ZRuntime::Application.spawn(async move { this.wait_direct().await });
             return;
         }
         let s = self.semaphore.clone();
@@ -129,6 +129,27 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) async fn wait_async(&self) {
+        // Same self-join check as `wait()`, and for the same reason.
+        // A direct caller of this method — session close, for
+        // example — can also run from inside a callback of this
+        // group. Without this check, the `.await` below would wait
+        // on its own caller's permit and never finish.
+        if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
+            tracing::warn!(
+                "SyncGroup::wait_async called from inside a callback of the same entity; \
+                 draining in the background to avoid self-deadlock"
+            );
+            let this = self.clone();
+            ZRuntime::Application.spawn(async move { this.wait_direct().await });
+            return;
+        }
+        self.wait_direct().await;
+    }
+
+    /// The actual drain, with no self-join check. Only call this
+    /// from a caller that has already checked, or from a spawned
+    /// task that is known not to run on the caller's own stack.
+    async fn wait_direct(&self) {
         let _p = self.semaphore.acquire_many(Self::max_permits()).await;
         self.close();
     }
