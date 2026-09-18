@@ -258,8 +258,7 @@ fn take<T>(slot: &Slot<T>) -> Option<T> {
 /// with the fix, the per-entity guard detects the reentry and lets the call
 /// return instead.
 #[test]
-fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_completes_asynchronously()
-{
+fn undeclaring_a_subscriber_with_wait_callbacks_from_its_own_callback_completes_asynchronously() {
     let report = run_scenario(|entered| {
         let session = zenoh::open(isolated_config()).wait().unwrap();
         let slot: Slot<zenoh::pubsub::Subscriber<()>> = Arc::new(Mutex::new(None));

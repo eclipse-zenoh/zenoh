@@ -1762,10 +1762,11 @@ impl Session {
         T: CallbackParameter,
     {
         let n = self.0.callbacks_drop_sync_group.notifier();
-        // Record the groups before the notifiers are moved into the dropper.
-        // `SyncGroup::wait` compares against these to tell a self-join from a
-        // wait it can honour; without them it would have to fall back to "am I
-        // inside any callback?", which drops achievable barriers.
+        // Record the groups before the notifiers move into the dropper.
+        // `SyncGroup::wait` checks this list. It tells a self-join
+        // apart from a wait it can honor. Without this list, it
+        // would fall back to "does any callback run now?". That
+        // fallback drops barriers it could keep.
         callback.set_groups(
             external_notifier
                 .iter()

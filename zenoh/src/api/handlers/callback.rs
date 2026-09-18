@@ -19,31 +19,32 @@ use std::{cell::RefCell, fmt, sync::Arc};
 use crate::api::{cancellation::GroupId, handlers::IntoHandler};
 
 thread_local! {
-    /// The `SyncGroup`s whose user callbacks are currently on this thread's
-    /// stack, innermost last.
+    /// The `SyncGroup`s whose callbacks run now on this thread. The
+    /// list orders them from outer to inner.
     ///
-    /// A `Vec` rather than a counter, because the question `SyncGroup::wait`
-    /// needs answered is not "am I inside a callback?" but "am I inside a
-    /// callback of *this* group?". Only the second is a self-join; the first
-    /// also catches the case where the barrier is achievable, and dropping it
-    /// there loses a guarantee the API promises.
+    /// This uses a `Vec`, not a counter. `SyncGroup::wait` must ask
+    /// "does a callback of THIS group run now?", not "does any
+    /// callback run now?". The second question also flags safe
+    /// cases, and answering it that way would break a guarantee
+    /// the API makes.
     ///
-    /// Nesting is real — a callback may deliver to another entity — so entries
-    /// are pushed and popped rather than set and cleared. Depth is bounded by
-    /// the user's own re-entrancy, and the common case is zero or one.
+    /// A callback may call into another entity, so nesting can
+    /// happen. Each call pushes its own groups. Each return pops
+    /// them. Depth is usually zero or one, but user code can nest
+    /// further.
     static EXECUTING_GROUPS: RefCell<Vec<GroupId>> = const { RefCell::new(Vec::new()) };
 }
 
-/// Whether a callback belonging to `group` is executing on the current thread.
+/// Returns true if a callback of `group` runs now on this thread.
 pub(crate) fn callback_of_group_running_on_this_thread(group: GroupId) -> bool {
     EXECUTING_GROUPS.with_borrow(|groups| groups.contains(&group))
 }
 
-/// Pushes a callback's groups for the duration of one invocation.
+/// Pushes a callback's groups for the length of one call.
 ///
-/// The `Drop` is what makes this unwind-safe: a user callback that panics must
-/// not leave its groups registered, or every later `wait` on them would take
-/// the asynchronous path forever.
+/// `Drop` makes this safe across a panic. A user callback may
+/// panic. If it does, its groups must still pop, or every later
+/// wait on them would take the async path forever.
 struct ExecutingGroups(usize);
 
 impl ExecutingGroups {
@@ -117,9 +118,10 @@ pub struct Callback<T> {
     drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
     /// The `SyncGroup`s this callback holds an on-drop permit in.
     ///
-    /// Shared with every clone, because every clone holds the same permits:
-    /// the permit is released by the dropper, which runs when the last clone
-    /// dies. Empty for a callback that was never registered with a group.
+    /// Every clone shares this list, because every clone holds the
+    /// same permits. The dropper releases them, and it runs only
+    /// when the last clone dies. The list is empty for a callback
+    /// never registered with a group.
     groups: Arc<[GroupId]>,
 }
 
@@ -172,8 +174,9 @@ impl<T> Callback<T> {
         self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
     }
 
-    /// Records which `SyncGroup`s this callback holds a permit in, so that a
-    /// `wait` on one of them can recognise its own callback on this thread.
+    /// Records which `SyncGroup`s this callback holds a permit in.
+    /// A `wait` on one of those groups can then find its own
+    /// callback on this thread.
     pub(crate) fn set_groups(&mut self, groups: impl IntoIterator<Item = GroupId>) {
         self.groups = groups.into_iter().collect();
     }

@@ -38,10 +38,10 @@ pub(crate) struct SyncGroupNotifier {
     permit: OwnedSemaphorePermit,
     /// Identity of the `SyncGroup` this permit belongs to.
     ///
-    /// The address of the group's `Semaphore` allocation. It is only ever
-    /// compared, never dereferenced, and the `Arc` inside the permit keeps that
-    /// allocation alive for as long as this value can be read — so the identity
-    /// cannot be recycled while it is in use.
+    /// This is the address of the group's `Semaphore` allocation.
+    /// Code only compares this value. Code never reads through it
+    /// as a pointer. The `Arc` inside the permit keeps that
+    /// allocation alive, so the identity stays valid while in use.
     group: GroupId,
 }
 
@@ -98,21 +98,21 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
-        // Waiting for *this* group to drain, from inside a callback that
-        // belongs to *this* group, can never complete: that callback pins a
-        // live `Callback` clone — and therefore one of the very permits awaited
-        // below — a few frames beneath us on this thread's own stack. The "no
-        // callback of this entity is running once this returns" contract is
-        // unsatisfiable by definition there, because the caller is one of them.
+        // A callback of this group may call this method on this same
+        // group. That callback holds a live `Callback` clone. The clone
+        // holds one of the permits this wait needs. So the wait can
+        // never finish. This check finds that case and avoids it.
         //
-        // The question is deliberately narrow. Being inside *some* callback is
-        // not enough: undeclaring entity B from inside entity A's callback pins
-        // none of B's permits, so B's barrier is achievable and is honoured.
-        // Asking the wider question would drop it silently.
+        // The check asks a narrow question: does a callback of THIS
+        // group run now? It does not ask about other groups. Entity
+        // A's callback may undeclare entity B. That call holds none
+        // of B's permits. So a wait on B can still block until B's
+        // own callback ends. A wider check would break that guarantee.
         //
-        // Observed in production as rmw_zenoh's ~SubscriptionData →
-        // ze_undeclare_advanced_subscriber parking a transport rx thread
-        // forever, freezing the whole session.
+        // This happened in production. rmw_zenoh dropped a
+        // subscription inside `~SubscriptionData`. That call reached
+        // `ze_undeclare_advanced_subscriber`. The transport RX thread
+        // then blocked forever, and the whole session froze.
         if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
             tracing::warn!(
                 "SyncGroup::wait called from inside a callback of the same entity; \
