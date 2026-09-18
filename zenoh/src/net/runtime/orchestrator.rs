@@ -580,7 +580,7 @@ impl Runtime {
         retry_config: zenoh_config::ConnectionRetryConf,
     ) {
         let this = self.clone();
-        self.spawn(async move {
+        self.spawn_abortable(async move {
             this.add_listener_retry(listener, retry_config).await;
             this.print_locators();
         });
@@ -878,7 +878,7 @@ impl Runtime {
             let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
             let wait_declares = unwrap_or_default!(config.open().return_conditions().declares());
             drop(config_guard);
-            self.spawn(async move {
+            self.spawn_abortable(async move {
                 if let Ok(zid) = this.peer_connector_retry(peer).await {
                     this.state.start_conditions.set_peer_connector_zid(idx, zid);
                 }
@@ -1408,7 +1408,7 @@ impl Runtime {
 
         if !peers.is_empty() {
             let runtime = session.runtime.clone();
-            session.runtime.spawn(async move {
+            session.runtime.spawn_abortable(async move {
                 runtime
                     .peers_connector_retry(peers, runtime.whatami() == WhatAmI::Client)
                     .await
@@ -1442,7 +1442,7 @@ impl Runtime {
 
         if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
             let runtime = session.runtime.clone();
-            session.runtime.spawn(async move {
+            session.runtime.spawn_abortable(async move {
                 let _ = runtime.peer_connector_retry(endpoint).await;
             });
         }
