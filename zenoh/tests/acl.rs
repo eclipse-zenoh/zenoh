@@ -23,15 +23,14 @@ use std::{
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, sample::SampleKind};
 use zenoh_config::Config;
-use zenoh_core::{zlock, ztimeout};
-use zenoh_test::TestSessions;
-
 #[cfg(feature = "transport_multilink")]
 use zenoh_config::EndPoint;
+use zenoh_core::{zlock, ztimeout};
 #[cfg(feature = "transport_multilink")]
 use zenoh_protocol::core::EndPoints;
 #[cfg(feature = "transport_multilink")]
 use zenoh_test::get_locators_from_session;
+use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);

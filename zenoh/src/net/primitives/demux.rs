@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{any::Any, cell::OnceCell, sync::atomic::Ordering, sync::Arc};
+use std::{
+    any::Any,
+    cell::OnceCell,
+    sync::{atomic::Ordering, Arc},
+};
 
 use arc_swap::ArcSwapOption;
 use zenoh_link::Link;
