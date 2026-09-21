@@ -786,12 +786,12 @@ pub struct QuicLinkMaterial {
 /// The per-priority streams of a QUIC connection.
 ///
 /// Index 0 is the bi-directional Control stream: it is opened by the client, accepted by the
-/// server, and established by [`QuicStreams::bi_stream_task`] whose halves are notified to the
+/// server, and established by `QuicStreams::bi_stream_task` whose halves are notified to the
 /// pending channels on the first read/write on [`Priority::Control`]. When multistream is
 /// negotiated (`is_multistream`), one uni stream per priority above Control is opened eagerly,
 /// in priority order: the send streams are stored directly, while the receive
 /// streams are "accepted" only when data is received, so they start with a
-/// "pending" state, and are notified by [`RecvStream::acceptor_task`].
+/// "pending" state, and are notified by `RecvStream::acceptor_task`.
 pub struct QuicStreams {
     send: [UnsafeCell<Option<SendStream>>; Priority::NUM],
     recv: [UnsafeCell<Option<RecvStream>>; Priority::NUM],
