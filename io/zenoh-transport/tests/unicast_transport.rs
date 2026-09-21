@@ -1183,8 +1183,9 @@ async fn transport_unicast_quic_only_server() {
 async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
     use std::net::SocketAddr;
 
-    use zenoh_link_commons::quic::PROTOCOL_SINGLE_STREAM;
-    use zenoh_link_commons::tls::config::TLS_VERIFY_NAME_ON_CONNECT;
+    use zenoh_link_commons::{
+        quic::PROTOCOL_SINGLE_STREAM, tls::config::TLS_VERIFY_NAME_ON_CONNECT,
+    };
 
     zenoh_util::init_log_from_env_or("error");
 
