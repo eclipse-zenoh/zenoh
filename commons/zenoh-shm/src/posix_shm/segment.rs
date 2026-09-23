@@ -74,8 +74,12 @@ where
             // the creation attempt will be repeated with another id
             match shm::Segment::create(id, len) {
                 Ok(shmem) => {
-                    // Register cleanup routine to make sure Segment will be unlinked on exit
-                    CLEANUP.read().register_cleanup(id);
+                    // Register cleanup routine to make sure Segment will be unlinked on exit.
+                    // This might be executed while the process is exiting and the static
+                    // has already been finalized, so statics might not be available here.
+                    if let Ok(cleanup) = CLEANUP.try_read() {
+                        cleanup.register_cleanup(id);
+                    }
 
                     tracing::debug!("Created SHM segment, len: {len}, id: {id}");
                     return Ok(Segment { shmem });
@@ -102,8 +106,12 @@ where
             }
         };
 
-        // Register cleanup routine to make sure Segment will be unlinked on exit
-        CLEANUP.read().register_cleanup(id);
+        // Register cleanup routine to make sure Segment will be unlinked on exit.
+        // This might be executed while the process is exiting and the static
+        // has already been finalized, so statics might not be available here.
+        if let Ok(cleanup) = CLEANUP.try_read() {
+            cleanup.register_cleanup(id);
+        }
 
         tracing::debug!("Opened SHM segment, id: {id}");
 
