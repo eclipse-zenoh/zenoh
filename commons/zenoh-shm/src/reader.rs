@@ -51,9 +51,17 @@ impl ShmReader {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
-        let metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&info.metadata)?;
+        // This might be executed while the process is exiting and the SHM
+        // statics have already been finalized, so statics might not be available here.
+        let metadata = GLOBAL_METADATA_SUBSCRIPTION
+            .try_read()
+            .map_err(|_| zerror!("SHM subsystem is not available (process exiting?)"))?
+            .link(&info.metadata)?;
         // attach to the watchdog before doing other things
-        let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(metadata);
+        let confirmed_metadata = GLOBAL_CONFIRMATOR
+            .try_read()
+            .map_err(|_| zerror!("SHM subsystem is not available (process exiting?)"))?
+            .add(metadata);
 
         // retrieve data descriptor from metadata
         let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
