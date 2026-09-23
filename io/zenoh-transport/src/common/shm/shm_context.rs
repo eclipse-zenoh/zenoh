@@ -97,6 +97,12 @@ impl ShmContext {
             return Ok(None);
         }
 
+        // Initialize the SHM statics now, while the process is not exiting.
+        // Every later access uses try_read() and degrades once they are
+        // finalized at process exit.
+        zenoh_shm::init::init();
+        crate::unicast::establishment::ext::shm::handoff::init();
+
         let shm_provider = if *cfg.transport_optimization.enabled() {
             Some(Arc::new(LazyShmProvider::new(
                 *cfg.transport_optimization.pool_size(),
