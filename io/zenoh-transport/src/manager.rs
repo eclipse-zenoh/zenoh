@@ -135,6 +135,7 @@ pub struct TransportManagerConfig {
     pub queue_alloc: QueueAllocConf,
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
+    pub best_effort_reorder_window: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
     pub link_configs: HashMap<LinkKind, String>, // (protocol, config)
@@ -165,6 +166,10 @@ impl fmt::Debug for TransportManagerConfig {
             .field("queue_alloc", &self.queue_alloc)
             .field("defrag_buff_size", &self.defrag_buff_size)
             .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field(
+                "best_effort_reorder_window",
+                &self.best_effort_reorder_window,
+            )
             .field("unicast", &self.unicast)
             .field("multicast", &self.multicast)
             .field("link_configs", &self.link_configs)
@@ -239,6 +244,7 @@ pub struct TransportManagerBuilder {
     queue_alloc: QueueAllocConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
+    best_effort_reorder_window: usize,
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
     link_configs: HashMap<LinkKind, String>, // (protocol, config)
@@ -273,6 +279,10 @@ impl fmt::Debug for TransportManagerBuilder {
             .field("queue_alloc", &self.queue_alloc)
             .field("defrag_buff_size", &self.defrag_buff_size)
             .field("link_rx_buffer_size", &self.link_rx_buffer_size)
+            .field(
+                "best_effort_reorder_window",
+                &self.best_effort_reorder_window,
+            )
             .field("unicast", &self.unicast)
             .field("multicast", &self.multicast)
             .field("link_configs", &self.link_configs)
@@ -372,6 +382,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn best_effort_reorder_window(mut self, best_effort_reorder_window: usize) -> Self {
+        self.best_effort_reorder_window = best_effort_reorder_window;
+        self
+    }
+
     pub fn link_configs(mut self, link_configs: HashMap<LinkKind, String>) -> Self {
         self.link_configs = link_configs;
         self
@@ -431,6 +446,7 @@ impl TransportManagerBuilder {
         ));
         self = self.defrag_buff_size(*link.rx().max_message_size());
         self = self.link_rx_buffer_size(*link.rx().buffer_size());
+        self = self.best_effort_reorder_window(*link.rx().best_effort_reorder_window());
         self = self.wait_before_drop(duration_from_i64us(*cc_drop.wait_before_drop()));
         self = self.max_wait_before_drop_fragments(duration_from_i64us(
             *cc_drop.max_wait_before_drop_fragments(),
@@ -506,6 +522,7 @@ impl TransportManagerBuilder {
             queue_alloc: self.queue_alloc,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
+            best_effort_reorder_window: self.best_effort_reorder_window,
             unicast: unicast.config,
             multicast: multicast.config,
             link_configs: self.link_configs,
@@ -606,6 +623,7 @@ impl Default for TransportManagerBuilder {
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),
+            best_effort_reorder_window: *link_rx.best_effort_reorder_window(),
             link_configs: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),

@@ -22,7 +22,7 @@ use zenoh_result::ZResult;
 
 use super::{
     defragmentation::DefragBuffer,
-    seq_num::{SeqNum, SeqNumGenerator},
+    seq_num::{SeqNum, SeqNumGenerator, SeqNumWindow},
 };
 
 #[derive(Debug)]
@@ -46,6 +46,7 @@ impl TransportChannelTx {
 #[derive(Debug)]
 pub(crate) struct TransportChannelRx {
     pub(crate) sn: SeqNum,
+    pub(crate) frame_sn: Option<SeqNumWindow>,
     pub(crate) defrag: DefragBuffer,
 }
 
@@ -54,22 +55,34 @@ impl TransportChannelRx {
         reliability: Reliability,
         resolution: Bits,
         defrag_buff_size: usize,
+        best_effort_reorder_window: usize,
     ) -> ZResult<TransportChannelRx> {
         let sn = SeqNum::make(0, resolution)?;
+        let frame_sn = (reliability == Reliability::BestEffort
+            && best_effort_reorder_window != 0)
+            .then(|| SeqNumWindow::make(0, resolution, best_effort_reorder_window))
+            .transpose()?;
         let defrag = DefragBuffer::make(reliability, resolution, defrag_buff_size)?;
-        let tch = TransportChannelRx { sn, defrag };
+        let tch = TransportChannelRx {
+            sn,
+            frame_sn,
+            defrag,
+        };
         Ok(tch)
     }
 
     pub(crate) fn sync(&mut self, sn: TransportSn) -> ZResult<()> {
         // Set the sequence number in the state as it had received a message with sn - 1
         let sn = if sn == 0 {
-            self.sn.resolution() - 1
+            self.sn.resolution()
         } else {
             sn - 1
         };
 
         self.sn.set(sn)?;
+        if let Some(frame_sn) = self.frame_sn.as_mut() {
+            frame_sn.reset(sn)?;
+        }
         self.defrag.sync(sn)
     }
 }
@@ -104,9 +117,23 @@ pub(crate) struct TransportPriorityRx {
 }
 
 impl TransportPriorityRx {
-    pub(crate) fn make(resolution: Bits, defrag_buff_size: usize) -> ZResult<TransportPriorityRx> {
-        let rch = TransportChannelRx::make(Reliability::Reliable, resolution, defrag_buff_size)?;
-        let bch = TransportChannelRx::make(Reliability::BestEffort, resolution, defrag_buff_size)?;
+    pub(crate) fn make(
+        resolution: Bits,
+        defrag_buff_size: usize,
+        best_effort_reorder_window: usize,
+    ) -> ZResult<TransportPriorityRx> {
+        let rch = TransportChannelRx::make(
+            Reliability::Reliable,
+            resolution,
+            defrag_buff_size,
+            best_effort_reorder_window,
+        )?;
+        let bch = TransportChannelRx::make(
+            Reliability::BestEffort,
+            resolution,
+            defrag_buff_size,
+            best_effort_reorder_window,
+        )?;
         let ctr = TransportPriorityRx {
             reliable: Arc::new(Mutex::new(rch)),
             best_effort: Arc::new(Mutex::new(bch)),
