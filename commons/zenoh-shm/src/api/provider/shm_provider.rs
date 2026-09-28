@@ -39,6 +39,7 @@ use crate::{
         },
         provider::memory_layout::{MemoryLayout, TypedLayout},
     },
+    init::try_read_init,
     metadata::{
         allocated_descriptor::AllocatedMetadataDescriptor, descriptor::MetadataDescriptor,
         storage::GLOBAL_METADATA_STORAGE,
@@ -959,14 +960,12 @@ where
         // allocate metadata
         // This might be executed while the process is exiting and the SHM
         // statics have already been finalized, so statics might not be available here.
-        let allocated_metadata = GLOBAL_METADATA_STORAGE
-            .try_read()
+        let allocated_metadata = try_read_init!(GLOBAL_METADATA_STORAGE)
             .map_err(|_| ZAllocError::Other)?
             .allocate()?;
 
         // add watchdog to confirmator
-        let confirmed_metadata = GLOBAL_CONFIRMATOR
-            .try_read()
+        let confirmed_metadata = try_read_init!(GLOBAL_CONFIRMATOR)
             .map_err(|_| ZAllocError::Other)?
             .add(allocated_metadata.clone());
 
@@ -994,7 +993,7 @@ where
         // add watchdog to validator
         // This might be executed while the process is exiting and the SHM
         // statics have already been finalized, so statics might not be available here.
-        if let Ok(validator) = GLOBAL_VALIDATOR.try_read() {
+        if let Ok(validator) = try_read_init!(GLOBAL_VALIDATOR) {
             validator.add(confirmed_metadata.owned.clone());
         }
 

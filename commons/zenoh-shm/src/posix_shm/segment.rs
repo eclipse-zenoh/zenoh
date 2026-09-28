@@ -17,7 +17,7 @@ use std::{fmt::Debug, num::NonZeroUsize};
 use rand::Rng;
 use zenoh_result::{bail, ZResult};
 
-use crate::{cleanup::CLEANUP, shm};
+use crate::{cleanup::CLEANUP, init::try_read_init, shm};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
@@ -77,7 +77,7 @@ where
                     // Register cleanup routine to make sure Segment will be unlinked on exit.
                     // This might be executed while the process is exiting and the static
                     // has already been finalized, so statics might not be available here.
-                    if let Ok(cleanup) = CLEANUP.try_read() {
+                    if let Ok(cleanup) = try_read_init!(CLEANUP) {
                         cleanup.register_cleanup(id);
                     }
 
@@ -109,7 +109,7 @@ where
         // Register cleanup routine to make sure Segment will be unlinked on exit.
         // This might be executed while the process is exiting and the static
         // has already been finalized, so statics might not be available here.
-        if let Ok(cleanup) = CLEANUP.try_read() {
+        if let Ok(cleanup) = try_read_init!(CLEANUP) {
             cleanup.register_cleanup(id);
         }
 
