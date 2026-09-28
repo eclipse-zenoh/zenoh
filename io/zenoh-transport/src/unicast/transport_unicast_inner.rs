@@ -38,7 +38,7 @@ pub(crate) type LinkError = (
 );
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
 pub(crate) enum InitTransportError {
-    Link(LinkError),
+    Link(Box<LinkError>),
     Transport(TransportError),
 }
 
@@ -104,6 +104,13 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*            TERMINATION            */
     /*************************************/
     async fn close(&self, reason: u8) -> ZResult<()>;
+
+    /// Close a specific link within this transport.
+    ///
+    /// If the transport has multiple links (multilink), only the specified
+    /// link is closed and the transport remains alive. If this is the last
+    /// link, the entire transport is closed.
+    async fn close_link(&self, link: Link) -> ZResult<()>;
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
         &self,

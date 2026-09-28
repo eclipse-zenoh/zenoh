@@ -113,7 +113,7 @@ impl OwnedWatchdog {
 pub struct OwnedMetadataDescriptor {
     pub(crate) segment: Arc<MetadataSegment>,
     header: &'static ChunkHeaderType,
-    watchdog: OwnedWatchdog,
+    pub(crate) watchdog: OwnedWatchdog,
 }
 
 impl Hash for OwnedMetadataDescriptor {

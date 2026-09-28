@@ -144,6 +144,10 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
         Ok(())
     }
 
+    async fn close_link(&self, _link: Link) -> ZResult<()> {
+        Ok(())
+    }
+
     fn add_debug_fields<'a, 'b: 'a, 'c>(
         &self,
         s: &'c mut DebugStruct<'a, 'b>,

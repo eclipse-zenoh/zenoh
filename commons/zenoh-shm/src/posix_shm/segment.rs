@@ -22,6 +22,7 @@ use crate::{cleanup::CLEANUP, shm};
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
 /// Segment of shared memory identified by an ID
+#[derive(PartialEq, Eq)]
 pub struct Segment<ID>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,

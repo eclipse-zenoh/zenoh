@@ -50,9 +50,13 @@ impl TransportMulticastInner {
         #[cfg(feature = "shared-memory")]
         {
             if let Some(shm_context) = &self.shm_context {
-                if let Err(e) =
-                    crate::shm::map_zmsg_to_shmbuf(msg.as_mut(), &shm_context.shm_reader)
-                {
+                use crate::unicast::establishment::ext::shm::handoff::RxHandoffChannel;
+
+                if let Err(e) = crate::common::shm::interop::map_zmsg_to_shmbuf(
+                    msg.as_mut(),
+                    &shm_context.shm_reader,
+                    &RxHandoffChannel::Disabled, // Multicast transport is unreliable, so it don't support SHM handoff
+                ) {
                     tracing::debug!("Error receiving SHM buffer: {e}");
                     return Ok(());
                 }

@@ -41,7 +41,7 @@ use zenoh_result::{zerror, ZResult};
 use self::transport_unicast_inner::TransportUnicastTrait;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "shared-memory")]
-use crate::shm::TransportShmConfig;
+use crate::common::shm::interop::TransportShmConfig;
 use crate::unicast::authentication::TransportAuthId;
 #[cfg(feature = "auth_usrpwd")]
 use crate::unicast::establishment::ext::auth::UsrPwdId;
@@ -150,6 +150,28 @@ impl TransportUnicast {
             Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
+    }
+
+    /// Close a specific link within this transport.
+    ///
+    /// If the transport has multiple links (multilink), only the specified
+    /// link is closed and the transport remains alive. If this is the last
+    /// link, the entire transport is closed.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # async fn example(transport: zenoh_transport::unicast::TransportUnicast) {
+    /// // Close a specific link while keeping the transport alive
+    /// let links = transport.get_links().unwrap();
+    /// if links.len() > 1 {
+    ///     transport.close_link(links[0].clone()).await.unwrap();
+    /// }
+    /// # }
+    /// ```
+    #[inline(always)]
+    pub async fn close_link(&self, link: Link) -> ZResult<()> {
+        let transport = self.get_inner()?;
+        transport.close_link(link).await
     }
 
     /// Returns the transport stats, or an error if the transport is closed.

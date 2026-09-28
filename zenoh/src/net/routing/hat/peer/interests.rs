@@ -280,17 +280,17 @@ impl HatInterestTrait for Hat {
                 return Noop;
             }
 
-            zenoh_runtime::ZRuntime::Net.block_in_place(async move {
-                if let Some(runtime) = &ctx.tables.runtime {
-                    if let Some(runtime) = runtime.upgrade() {
-                        tracing::debug!("Terminating peer connector");
-                        runtime
-                            .start_conditions()
-                            .terminate_peer_connector_zid(ctx.src_face.zid)
-                            .await
-                    }
+            // NOTE: called with the router ctrl_lock and the tables write lock
+            // held -- must not block on another runtime (see gossip.rs
+            // link_states); terminate_peer_connector_zid is sync on purpose.
+            if let Some(runtime) = &ctx.tables.runtime {
+                if let Some(runtime) = runtime.upgrade() {
+                    tracing::debug!("Terminating peer connector");
+                    runtime
+                        .start_conditions()
+                        .terminate_peer_connector_zid(ctx.src_face.zid)
                 }
-            });
+            }
 
             Noop
         } else {

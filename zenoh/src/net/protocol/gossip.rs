@@ -394,26 +394,28 @@ impl Gossip {
                             .await
                             .is_none()
                         {
-                            runtime.start_conditions().add_peer_connector_zid(zid).await;
+                            runtime.start_conditions().add_peer_connector_zid(zid);
                             if runtime.connect_peer(&zid, &locators).await
                                 && ((!wait_declares) || whatami != WhatAmI::Peer)
                             {
-                                runtime
-                                    .start_conditions()
-                                    .terminate_peer_connector_zid(zid)
-                                    .await;
+                                runtime.start_conditions().terminate_peer_connector_zid(zid);
                             }
                         }
                     });
                 }
             }
         }
+        // NOTE: link_states() is called from OAM handling with the router
+        // ctrl_lock and the tables write lock held. It must never block on
+        // work scheduled on another runtime (e.g. via block_in_place): the
+        // Net runtime concurrently runs autoconnect connectors that block
+        // synchronously on the ctrl_lock in Router::new_transport_unicast,
+        // which deadlocks the whole session. terminate_peer_connector_zid
+        // is a sync call precisely so that it is safe to invoke here.
         if (!self.wait_declares) || src_whatami != WhatAmI::Peer {
-            zenoh_runtime::ZRuntime::Net.block_in_place(
-                strong_runtime
-                    .start_conditions()
-                    .terminate_peer_connector_zid(src),
-            );
+            strong_runtime
+                .start_conditions()
+                .terminate_peer_connector_zid(src);
         }
     }
 

@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 use std::{
+    borrow::Cow,
     convert::{Infallible, TryFrom},
     fmt::Write,
     future::Future,
@@ -31,7 +32,7 @@ use std::{
 
 use axum::{
     extract::{FromRequest, FromRequestParts, Path, Request, State},
-    http::{header, request::Parts, HeaderValue, Method, StatusCode, Uri},
+    http::{header, request::Parts, HeaderMap, HeaderValue, Method, StatusCode, Uri},
     response::{sse::Event, Html, IntoResponse, Response, Sse},
     routing::get,
     Json, Router,
@@ -356,6 +357,34 @@ async fn subscribe(state: AppState, key_expr: KeyExpr<'static>) -> Response {
     .into_response()
 }
 
+const CONTENT_ENCODING_PARAM: &str = "content-encoding=";
+
+/// Extract the `content-encoding` value carried in a Zenoh encoding schema, and return it along
+/// with the remaining MIME content-type.
+///
+/// The adminspace metrics handler — and any queryable following the same convention — appends
+/// `;content-encoding=<value>` to the encoding of its replies. It has to be surfaced as a separate
+/// HTTP header, and not left in `Content-Type` as a bogus MIME parameter.
+fn extract_content_encoding(encoding: &str) -> (Cow<'_, str>, Option<&str>) {
+    let mut start = 0;
+    for chunk in encoding.split(';') {
+        let Some(value) = chunk.trim_start().strip_prefix(CONTENT_ENCODING_PARAM) else {
+            start += chunk.len() + 1;
+            continue;
+        };
+        // `start` is the index of the chunk, i.e. one byte past its leading `;`, if any
+        let before = &encoding[..start.saturating_sub(1)];
+        let after = &encoding[start + chunk.len()..];
+        let content_type = if after.is_empty() {
+            Cow::Borrowed(before)
+        } else {
+            Cow::Owned([before, after].concat())
+        };
+        return (content_type, Some(value.trim_end()));
+    }
+    (Cow::Borrowed(encoding), None)
+}
+
 async fn query(
     state: AppState,
     accept: Accept,
@@ -386,9 +415,20 @@ async fn query(
                         Ok(sample) => (sample.encoding(), sample.payload()),
                         Err(err) => (err.encoding(), err.payload()),
                     };
-                    let content_type = Some([(header::CONTENT_TYPE, encoding.to_string())])
-                        .filter(|[(_, e)]| Mime::from_str(e).is_ok());
-                    (content_type, payload.to_bytes().to_vec()).into_response()
+                    let encoding = encoding.to_string();
+                    let (content_type, content_encoding) = extract_content_encoding(&encoding);
+                    let mut headers = HeaderMap::new();
+                    if Mime::from_str(&content_type).is_ok() {
+                        if let Ok(value) = HeaderValue::from_str(&content_type) {
+                            headers.insert(header::CONTENT_TYPE, value);
+                        }
+                    }
+                    if let Some(value) =
+                        content_encoding.and_then(|encoding| HeaderValue::from_str(encoding).ok())
+                    {
+                        headers.insert(header::CONTENT_ENCODING, value);
+                    }
+                    (headers, payload.to_bytes().to_vec()).into_response()
                 }
                 Err(_) => StatusCode::OK.into_response(),
             },
@@ -575,7 +615,7 @@ mod tests {
     use zenoh::{bytes::Encoding, sample::SampleKind, Session, Wait};
     use zenoh_test::TestSessions;
 
-    use crate::app;
+    use crate::{app, extract_content_encoding};
 
     async fn setup() -> (TestSessions, Session, Session) {
         let mut test_sessions = TestSessions::new();
@@ -735,6 +775,85 @@ mod tests {
                 .unwrap();
             check(body);
         }
+
+        test_sessions.close().await;
+    }
+
+    #[test]
+    fn content_encoding_extraction() {
+        for (encoding, expected) in [
+            ("text/plain", ("text/plain", None)),
+            (
+                "application/openmetrics-text; version=1.0.0; charset=utf-8;content-encoding=gzip",
+                (
+                    "application/openmetrics-text; version=1.0.0; charset=utf-8",
+                    Some("gzip"),
+                ),
+            ),
+            (
+                "text/plain;content-encoding=gzip;charset=utf-8",
+                ("text/plain;charset=utf-8", Some("gzip")),
+            ),
+            (
+                "text/plain; content-encoding=gzip ",
+                ("text/plain", Some("gzip")),
+            ),
+            ("content-encoding=gzip", ("", Some("gzip"))),
+            // `content-encoding=` is only a parameter on its own, not as a substring
+            (
+                "text/plain;x-content-encoding=gzip",
+                ("text/plain;x-content-encoding=gzip", None),
+            ),
+        ] {
+            let (content_type, content_encoding) = extract_content_encoding(encoding);
+            assert_eq!((&*content_type, content_encoding), expected, "{encoding}");
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn query_content_encoding() {
+        let (mut test_sessions, get_session, queryable_session) = setup().await;
+        let _queryable = queryable_session
+            .declare_queryable("test/**")
+            .callback(|q| {
+                q.reply(q.key_expr(), "reply")
+                    .encoding(Encoding::from("text/plain;content-encoding=gzip"))
+                    .wait()
+                    .unwrap()
+            })
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let response = app(get_session.clone())
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/test/query?_raw=true")
+                    .header(header::ACCEPT, "text/plain")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(response.status().is_success());
+        // the `content-encoding` schema must be surfaced as its own header, not as a MIME parameter
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).unwrap(),
+            "text/plain"
+        );
+        assert_eq!(
+            response.headers().get(header::CONTENT_ENCODING).unwrap(),
+            "gzip"
+        );
+        let body = response
+            .into_body()
+            .into_data_stream()
+            .next()
+            .now_or_never()
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(body, "reply");
 
         test_sessions.close().await;
     }

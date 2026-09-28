@@ -23,6 +23,11 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
+#[cfg(feature = "shared-memory")]
+use crate::{
+    common::shm::interop::LinkShmHandoffConfig,
+    unicast::establishment::ext::shm::handoff::{RxHandoffChannel, TxHandoffStorage},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum TransportLinkUnicastDirection {
@@ -39,24 +44,80 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) reliability: Option<Reliability>,
 }
 
+#[cfg(feature = "shared-memory")]
+#[derive(Debug, Clone)]
+pub(crate) struct TransportLinkShmHandoff {
+    pub(crate) tx: TxHandoffStorage,
+    pub(crate) rx: Arc<RxHandoffChannel>,
+}
+
+#[cfg(feature = "shared-memory")]
+impl From<LinkShmHandoffConfig> for TransportLinkShmHandoff {
+    fn from(value: LinkShmHandoffConfig) -> Self {
+        Self {
+            tx: value.tx.into(),
+            rx: Arc::new(value.rx),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shm_handoff: Box<TransportLinkShmHandoff>,
 }
 
 impl TransportLinkUnicast {
-    pub(crate) fn new(link: LinkUnicast, config: TransportLinkUnicastConfig) -> Self {
-        Self::init(link, config)
+    pub(crate) fn new(
+        link: LinkUnicast,
+        config: TransportLinkUnicastConfig,
+        #[cfg(feature = "shared-memory")] shm_handoff: TransportLinkShmHandoff,
+    ) -> Self {
+        Self::init(
+            link,
+            config,
+            #[cfg(feature = "shared-memory")]
+            shm_handoff,
+        )
     }
 
-    pub(crate) fn reconfigure(self, new_config: TransportLinkUnicastConfig) -> Self {
-        Self::init(self.link, new_config)
+    pub(crate) fn reconfigure(
+        self,
+        new_config: TransportLinkUnicastConfig,
+        #[cfg(feature = "shared-memory")] shm_handoff: TransportLinkShmHandoff,
+    ) -> Self {
+        #[cfg(not(feature = "shared-memory"))]
+        tracing::debug!("Link {:?}: reconfiguring to {:?}", self, new_config);
+        #[cfg(feature = "shared-memory")]
+        tracing::debug!(
+            "Link {:?}: reconfiguring to {:?}, handoff: {:?}",
+            self,
+            new_config,
+            shm_handoff
+        );
+        Self::init(
+            self.link,
+            new_config,
+            #[cfg(feature = "shared-memory")]
+            shm_handoff,
+        )
     }
 
-    fn init(link: LinkUnicast, mut config: TransportLinkUnicastConfig) -> Self {
+    fn init(
+        link: LinkUnicast,
+        mut config: TransportLinkUnicastConfig,
+
+        #[cfg(feature = "shared-memory")] shm_handoff: TransportLinkShmHandoff,
+    ) -> Self {
         config.batch.mtu = link.get_mtu().min(config.batch.mtu);
-        Self { link, config }
+        Self {
+            link,
+            config,
+            #[cfg(feature = "shared-memory")]
+            shm_handoff: Box::new(shm_handoff),
+        }
     }
 
     pub(crate) fn link(&self) -> Link {
@@ -87,6 +148,8 @@ impl TransportLinkUnicast {
         TransportLinkUnicastRx {
             link: self.link.clone(),
             config: self.config.clone(),
+            #[cfg(feature = "shared-memory")]
+            shm: self.shm_handoff.rx.clone(),
         }
     }
 
@@ -209,6 +272,8 @@ impl fmt::Debug for TransportLinkUnicastTx {
 pub(crate) struct TransportLinkUnicastRx {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shm: Arc<RxHandoffChannel>,
 }
 
 impl TransportLinkUnicastRx {

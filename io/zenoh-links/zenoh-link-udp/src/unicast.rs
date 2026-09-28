@@ -606,10 +606,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         self.listeners.get_endpoints()
     }
 
+    /// See [`zenoh_link_commons::ListenersUnicastIP::get_locators`].
     async fn get_locators(&self) -> Vec<Locator> {
         self.listeners.get_locators()
     }
 
+    /// See [`zenoh_link_commons::ListenersUnicastIP::get_locators_noloopback`].
     async fn get_locators_noloopback(&self) -> Vec<Locator> {
         self.listeners.get_locators_noloopback()
     }

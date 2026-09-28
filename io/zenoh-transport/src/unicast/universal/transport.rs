@@ -33,7 +33,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 
 #[cfg(feature = "shared-memory")]
-use crate::shm_context::UnicastTransportShmContext;
+use crate::common::shm::shm_context::UnicastTransportShmContext;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
@@ -421,6 +421,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
         // Terminate and clean up the transport
         self.delete().await
+    }
+
+    async fn close_link(&self, link: Link) -> ZResult<()> {
+        self.del_link(link).await
     }
 
     fn get_links(&self) -> Vec<Link> {

@@ -1,15 +1,3 @@
-#[cfg(all(
-    feature = "uring",
-    target_os = "linux",
-    any(
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        target_arch = "riscv64",
-        target_arch = "loongarch64",
-        target_arch = "powerpc64"
-    )
-))]
-use std::fmt::Debug;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -23,6 +11,18 @@ use std::fmt::Debug;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(all(
+    feature = "uring",
+    target_os = "linux",
+    any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "loongarch64",
+        target_arch = "powerpc64"
+    )
+))]
+use std::fmt::Debug;
 use std::{
     future::poll_fn,
     sync::{
@@ -515,11 +515,6 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
         Ok(batch)
     }
 
-    let l = Link::new_unicast(
-        &link.link,
-        link.config.priorities.clone(),
-        link.config.reliability,
-    );
     loop {
         tokio::select! {
             batch = read(link, priority, pool) => {
@@ -527,10 +522,10 @@ async fn read_loop<F: Fn() -> Box<[u8]>>(
                 lease_tracker.reset();
                 #[cfg(feature = "stats")]
                 {
-                    let header_bytes = if l.is_streamed { 2 } else { 0 };
+                    let header_bytes = if link.link.is_streamed() { 2 } else { 0 };
                     stats.inc_bytes(zenoh_stats::Rx, header_bytes + batch.len() as u64);
                 }
-                transport.read_messages(batch, &l, #[cfg(feature = "stats")] &stats)?;
+                transport.read_messages(batch, link, #[cfg(feature = "stats")] &stats)?;
             }
             _ = lease_tracker.wait_if(priority.unwrap_or(Priority::Control) == Priority::Control) => {
                 bail!("{link}: expired after {} milliseconds", lease_tracker.timeout().as_millis());
@@ -640,11 +635,7 @@ async fn rx_task_uring(
 
     let pool = RecyclingObjectPool::new(n, move || vec![0_u8; mtu].into_boxed_slice());
 
-    let l = Link::new_unicast(
-        &link.link,
-        link.config.priorities.clone(),
-        link.config.reliability,
-    );
+    let c_link = link.clone();
 
     let batch_config = link.config.batch;
 
@@ -661,7 +652,7 @@ async fn rx_task_uring(
 
     fn read_batch<TBuffer: BacktrackableReader + Buffer + Debug>(
         transport: &TransportUnicastUniversal,
-        link: &Link,
+        link: &TransportLinkUnicastRx,
         batch: RBatch<TBuffer>,
         #[cfg(feature = "stats")] stats: &zenoh_stats::LinkStats,
     ) -> ZResult<()> {
@@ -692,7 +683,7 @@ async fn rx_task_uring(
                             })?;
                             read_batch(
                                 &transport,
-                                &l,
+                                &c_link,
                                 batch,
                                 #[cfg(feature = "stats")]
                                 &stats,
@@ -705,14 +696,14 @@ async fn rx_task_uring(
                             })? {
                                 Some(decompressed_batch) => read_batch(
                                     &transport,
-                                    &l,
+                                    &c_link,
                                     decompressed_batch,
                                     #[cfg(feature = "stats")]
                                     &stats,
                                 ),
                                 None => read_batch(
                                     &transport,
-                                    &l,
+                                    &c_link,
                                     batch,
                                     #[cfg(feature = "stats")]
                                     &stats,
@@ -735,7 +726,7 @@ async fn rx_task_uring(
 
                     read_batch(
                         &transport,
-                        &l,
+                        &c_link,
                         batch,
                         #[cfg(feature = "stats")]
                         &stats,

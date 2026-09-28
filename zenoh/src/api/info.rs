@@ -121,7 +121,7 @@ impl SessionInfo {
     /// ```
     #[zenoh_macros::unstable]
     pub fn locators(&self) -> impl Resolve<Vec<Locator>> + '_ {
-        ResolveClosure::new(|| self.session.runtime().get_locators())
+        ResolveClosure::new(|| self.session.runtime().get_locators_noloopback())
     }
 
     /// Return information about currently opened transport sessions. Transport session is a connection to another zenoh node.

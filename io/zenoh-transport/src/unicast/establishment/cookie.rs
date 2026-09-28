@@ -38,7 +38,7 @@ pub(crate) struct Cookie {
     #[cfg(feature = "transport_multilink")]
     pub(crate) ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
-    pub(crate) ext_shm: ext::shm::StateAccept,
+    pub(crate) ext_shm: ext::shm::auth::StateAccept,
     #[cfg(feature = "transport_auth")]
     pub(crate) ext_auth: ext::auth::StateAccept,
     pub(crate) ext_lowlatency: ext::lowlatency::StateAccept,
@@ -98,7 +98,7 @@ where
         #[cfg(feature = "transport_multilink")]
         let ext_mlink: ext::multilink::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
-        let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
+        let ext_shm: ext::shm::auth::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "transport_auth")]
         let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
         let ext_lowlatency: ext::lowlatency::StateAccept = self.read(&mut *reader)?;
@@ -190,7 +190,7 @@ impl Cookie {
             #[cfg(feature = "transport_multilink")]
             ext_mlink: ext::multilink::StateAccept::rand(),
             #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateAccept::rand(),
+            ext_shm: ext::shm::auth::StateAccept::rand(),
             #[cfg(feature = "transport_auth")]
             ext_auth: ext::auth::StateAccept::rand(),
             ext_lowlatency: ext::lowlatency::StateAccept::rand(),

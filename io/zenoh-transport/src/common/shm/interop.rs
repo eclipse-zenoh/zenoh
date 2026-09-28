@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    collections::HashSet,
     fmt::Debug,
     num::NonZeroUsize,
     sync::{Arc, Mutex},
@@ -22,6 +21,7 @@ use zenoh_buffers::{reader::HasReader, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zerror, zlock, Wait};
 use zenoh_protocol::{
+    core::Priority,
     network::{NetworkBodyMut, NetworkMessageMut, Push, Request, Response},
     zenoh::{
         err::Err,
@@ -44,7 +44,12 @@ use zenoh_shm::{
     ShmBufInfo, ShmBufInner,
 };
 
-use crate::unicast::establishment::ext::shm::AuthSegment;
+use crate::unicast::establishment::ext::shm::{
+    handoff::{
+        OpenTransaction, RxHandoffChannel, TxHandoffChannel, TxHandoffStorage, TxHandoffTransaction,
+    },
+    segment::RXAuthSegment,
+};
 
 #[derive(Debug)]
 struct ProviderInitCfg {
@@ -149,13 +154,16 @@ impl LazyShmProvider {
         }
     }
 
-    fn wrap_in_place<const ID: u8>(&self, ext_shm: &mut Option<ShmType<ID>>, slice: &mut ZSlice) {
-        if slice.len() < self.message_size_threshold {
-            return;
-        }
-
-        if let ProviderInitState::Ready(provider) = self.try_get_provider() {
-            Self::_wrap_in_place(&provider, ext_shm, slice)
+    fn wrap_in_place<const ID: u8>(
+        &self,
+        ext_shm: &mut Option<ShmType<ID>>,
+        slice: &mut ZSlice,
+        handoff_transaction: &mut OpenTransaction,
+    ) {
+        if slice.len() >= self.message_size_threshold {
+            if let ProviderInitState::Ready(provider) = self.try_get_provider() {
+                Self::_wrap_in_place(&provider, ext_shm, slice, handoff_transaction);
+            }
         }
     }
 
@@ -163,7 +171,8 @@ impl LazyShmProvider {
         shm_provider: &ShmProvider<PosixShmProviderBackend>,
         ext_shm: &mut Option<ShmType<ID>>,
         slice: &mut ZSlice,
-    ) {
+        handoff_transaction: &mut OpenTransaction,
+    ) -> bool {
         if let Ok(mut shmbuf) = unsafe {
             shm_provider
             .alloc(slice.len())
@@ -171,30 +180,53 @@ impl LazyShmProvider {
             .wait()
         } {
             shmbuf.as_mut().copy_from_slice(slice);
+            let reference = (&shmbuf).into();
             *slice = shmbuf.into();
             slice.kind = ZSliceKind::ShmPtr;
             *ext_shm = Some(ShmType::new());
+            handoff_transaction.on_tx(reference);
+
+            return true;
+        }
+        false
+    }
+}
+
+#[derive(Debug)]
+pub struct LinkShmHandoffConfig {
+    pub rx: RxHandoffChannel,
+    pub tx: TxHandoffChannel,
+}
+
+impl LinkShmHandoffConfig {
+    pub fn new(rx: RxHandoffChannel, tx: TxHandoffChannel) -> Self {
+        Self { rx, tx }
+    }
+
+    pub fn new_disabled() -> Self {
+        Self {
+            rx: RxHandoffChannel::Disabled,
+            tx: TxHandoffChannel::new_disabled(),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportShmConfig {
-    partner_protocols: Box<[ProtocolID]>,
+    link_partner_segment: Arc<RXAuthSegment>,
+}
+
+impl TransportShmConfig {
+    pub fn new(link_partner_segment: Arc<RXAuthSegment>) -> Self {
+        Self {
+            link_partner_segment,
+        }
+    }
 }
 
 impl PartnerShmConfig for TransportShmConfig {
     fn supports_protocol(&self, protocol: ProtocolID) -> bool {
-        self.partner_protocols.contains(&protocol)
-    }
-}
-
-impl TransportShmConfig {
-    pub fn new(partner_segment: AuthSegment) -> Self {
-        let t: HashSet<ProtocolID> = partner_segment.protocols().iter().cloned().collect();
-        Self {
-            partner_protocols: t.iter().cloned().collect(),
-        }
+        self.link_partner_segment.protocols().contains(&protocol)
     }
 }
 
@@ -228,73 +260,99 @@ pub fn map_zmsg_to_partner<ShmCfg: PartnerShmConfig>(
     msg: &mut NetworkMessageMut,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
+    handoff: &TxHandoffStorage,
     policy: ShmOptimizationPolicy,
-) {
+) -> TxHandoffTransaction {
     // The policy gates only the *implicit* optimization (auto-copying a large raw
     // payload into SHM): a category is granted the provider only when it is enabled.
     // An already-allocated SHM buffer is *always* forwarded as a descriptor (subject to
     // the partner supporting its protocol) since the explicit branch of `map_to_partner`
     // does not use the provider.
     let no_provider: Option<Arc<LazyShmProvider>> = None;
-    match &mut msg.body {
-        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
+    let open = match &mut msg.body {
+        NetworkBodyMut::Push(Push {
+            payload, ext_qos, ..
+        }) => match payload {
             PushBody::Put(b) => {
                 let p = if policy.put {
                     shm_provider
                 } else {
                     &no_provider
                 };
-                b.map_to_partner(partner_shm_cfg, p);
+
+                let mut transaction = OpenTransaction::new(handoff, ext_qos.get_priority());
+                b.map_to_partner(partner_shm_cfg, p, &mut transaction);
+                transaction
             }
-            PushBody::Del(_) => {}
+            PushBody::Del(_) => OpenTransaction::new_disabled(),
         },
-        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
+        NetworkBodyMut::Request(Request {
+            payload, ext_qos, ..
+        }) => match payload {
             RequestBody::Query(b) => {
                 let p = if policy.query {
                     shm_provider
                 } else {
                     &no_provider
                 };
-                b.map_to_partner(partner_shm_cfg, p);
+
+                let mut transaction = OpenTransaction::new(handoff, ext_qos.get_priority());
+                b.map_to_partner(partner_shm_cfg, p, &mut transaction);
+                transaction
             }
         },
-        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Reply(b) => {
-                let p = if policy.reply {
-                    shm_provider
-                } else {
-                    &no_provider
-                };
-                b.map_to_partner(partner_shm_cfg, p);
+        NetworkBodyMut::Response(Response {
+            payload, ext_qos, ..
+        }) => {
+            let p = if policy.reply {
+                shm_provider
+            } else {
+                &no_provider
+            };
+
+            match payload {
+                ResponseBody::Reply(b) => {
+                    let mut transaction = OpenTransaction::new(handoff, ext_qos.get_priority());
+                    b.map_to_partner(partner_shm_cfg, p, &mut transaction);
+                    transaction
+                }
+                ResponseBody::Err(b) => {
+                    let mut transaction = OpenTransaction::new(handoff, ext_qos.get_priority());
+                    b.map_to_partner(partner_shm_cfg, p, &mut transaction);
+                    transaction
+                }
             }
-            ResponseBody::Err(b) => {
-                let p = if policy.reply {
-                    shm_provider
-                } else {
-                    &no_provider
-                };
-                b.map_to_partner(partner_shm_cfg, p);
-            }
-        },
+        }
         NetworkBodyMut::ResponseFinal(_)
         | NetworkBodyMut::Interest(_)
         | NetworkBodyMut::Declare(_)
-        | NetworkBodyMut::OAM(_) => {}
-    }
+        | NetworkBodyMut::OAM(_) => OpenTransaction::new_disabled(),
+    };
+    open.close()
 }
 
-pub fn map_zmsg_to_shmbuf(msg: NetworkMessageMut, shmr: &ShmReader) -> ZResult<()> {
+pub fn map_zmsg_to_shmbuf(
+    msg: NetworkMessageMut,
+    shmr: &ShmReader,
+    handoff: &RxHandoffChannel,
+) -> ZResult<()> {
     match msg.body {
-        NetworkBodyMut::Push(Push { payload, .. }) => match payload {
-            PushBody::Put(b) => b.map_to_shmbuf(shmr),
+        NetworkBodyMut::Push(Push {
+            payload, ext_qos, ..
+        }) => match payload {
+            PushBody::Put(b) => b.map_to_shmbuf(shmr, handoff, ext_qos.get_priority()),
             PushBody::Del(_) => Ok(()),
         },
-        NetworkBodyMut::Request(Request { payload, .. }) => match payload {
-            RequestBody::Query(b) => b.map_to_shmbuf(shmr),
+        NetworkBodyMut::Request(Request {
+            payload, ext_qos, ..
+        }) => match payload {
+            RequestBody::Query(b) => b.map_to_shmbuf(shmr, handoff, ext_qos.get_priority()),
         },
-        NetworkBodyMut::Response(Response { payload, .. }) => match payload {
-            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+        NetworkBodyMut::Response(Response {
+            payload, ext_qos, ..
+        }) => match payload {
+            ResponseBody::Err(b) => b.map_to_shmbuf(shmr, handoff, ext_qos.get_priority()),
+            ResponseBody::Reply(b) => b.map_to_shmbuf(shmr, handoff, ext_qos.get_priority()),
         },
         NetworkBodyMut::ResponseFinal(_)
         | NetworkBodyMut::Interest(_)
@@ -316,7 +374,12 @@ trait MapShm {
     // RX:
     // - shminfo -> shmbuf
     // - rawbuf -> rawbuf (no changes)
-    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()>;
+    fn map_to_shmbuf(
+        &mut self,
+        shmr: &ShmReader,
+        handoff: &RxHandoffChannel,
+        priority: Priority,
+    ) -> ZResult<()>;
 
     // TX:
     // - shmbuf -> shminfo if partner supports shmbuf's SHM protocol
@@ -326,6 +389,7 @@ trait MapShm {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
+        handoff_transaction: &mut OpenTransaction,
     );
 }
 
@@ -334,17 +398,20 @@ fn map_to_partner<const ID: u8, ShmCfg: PartnerShmConfig>(
     ext_shm: &mut Option<ShmType<ID>>,
     partner_shm_cfg: &ShmCfg,
     shm_provider: &Option<Arc<LazyShmProvider>>,
+    handoff_transaction: &mut OpenTransaction,
 ) {
     for zs in zbuf.zslices_mut() {
         match zs.downcast_ref::<ShmBufInner>() {
             None => {
                 if let Some(shm_provider) = shm_provider {
                     // Implicit SHM optimization: try to convert to SHM buffer
-                    shm_provider.wrap_in_place(ext_shm, zs);
+                    shm_provider.wrap_in_place(ext_shm, zs, handoff_transaction);
                 }
             }
             Some(shmb) => {
                 if partner_shm_cfg.supports_protocol(shmb.protocol()) {
+                    handoff_transaction.on_tx(shmb.into());
+
                     zs.kind = ZSliceKind::ShmPtr;
                     *ext_shm = Some(ShmType::new());
                 }
@@ -357,16 +424,24 @@ fn map_to_shmbuf<const ID: u8>(
     zbuf: &mut ZBuf,
     ext_shm: &mut Option<ShmType<ID>>,
     shmr: &ShmReader,
+    handoff: &RxHandoffChannel,
+    priority: Priority,
 ) -> ZResult<()> {
+    let mut result = Ok(());
     if ext_shm.is_some() {
         *ext_shm = None;
         for zs in zbuf.zslices_mut() {
             if zs.kind == ZSliceKind::ShmPtr {
-                map_zslice_to_shmbuf(zs, shmr)?;
+                let new_result = map_zslice_to_shmbuf(zs, shmr);
+                // Handle RX handoff
+                handoff.on_rx(priority);
+                if let Err(e) = new_result {
+                    result = Err(e);
+                }
             }
         }
     }
-    Ok(())
+    result
 }
 
 // Impl - Put
@@ -375,18 +450,30 @@ impl MapShm for Put {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
+        handoff_transaction: &mut OpenTransaction,
     ) {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
+        map_to_partner(
+            payload,
+            ext_shm,
+            partner_shm_cfg,
+            shm_provider,
+            handoff_transaction,
+        );
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
+    fn map_to_shmbuf(
+        &mut self,
+        shmr: &ShmReader,
+        handoff: &RxHandoffChannel,
+        priority: Priority,
+    ) -> ZResult<()> {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_shmbuf(payload, ext_shm, shmr)
+        map_to_shmbuf(payload, ext_shm, shmr, handoff, priority)
     }
 }
 
@@ -396,6 +483,7 @@ impl MapShm for Query {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
+        handoff_transaction: &mut OpenTransaction,
     ) {
         if let Self {
             ext_body: Some(QueryBodyType {
@@ -404,11 +492,22 @@ impl MapShm for Query {
             ..
         } = self
         {
-            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
+            map_to_partner(
+                payload,
+                ext_shm,
+                partner_shm_cfg,
+                shm_provider,
+                handoff_transaction,
+            );
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
+    fn map_to_shmbuf(
+        &mut self,
+        shmr: &ShmReader,
+        handoff: &RxHandoffChannel,
+        priority: Priority,
+    ) -> ZResult<()> {
         if let Self {
             ext_body: Some(QueryBodyType {
                 payload, ext_shm, ..
@@ -416,7 +515,7 @@ impl MapShm for Query {
             ..
         } = self
         {
-            map_to_shmbuf(payload, ext_shm, shmr)?;
+            map_to_shmbuf(payload, ext_shm, shmr, handoff, priority)?;
         }
         Ok(())
     }
@@ -428,21 +527,33 @@ impl MapShm for Reply {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
+        handoff_transaction: &mut OpenTransaction,
     ) {
         if let PushBody::Put(Put {
             payload, ext_shm, ..
         }) = &mut self.payload
         {
-            map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
+            map_to_partner(
+                payload,
+                ext_shm,
+                partner_shm_cfg,
+                shm_provider,
+                handoff_transaction,
+            );
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
+    fn map_to_shmbuf(
+        &mut self,
+        shmr: &ShmReader,
+        handoff: &RxHandoffChannel,
+        priority: Priority,
+    ) -> ZResult<()> {
         if let PushBody::Put(Put {
             payload, ext_shm, ..
         }) = &mut self.payload
         {
-            map_to_shmbuf(payload, ext_shm, shmr)?;
+            map_to_shmbuf(payload, ext_shm, shmr, handoff, priority)?;
         }
         Ok(())
     }
@@ -454,18 +565,30 @@ impl MapShm for Err {
         &mut self,
         partner_shm_cfg: &ShmCfg,
         shm_provider: &Option<Arc<LazyShmProvider>>,
+        handoff_transaction: &mut OpenTransaction,
     ) {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_partner(payload, ext_shm, partner_shm_cfg, shm_provider);
+        map_to_partner(
+            payload,
+            ext_shm,
+            partner_shm_cfg,
+            shm_provider,
+            handoff_transaction,
+        );
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &ShmReader) -> ZResult<()> {
+    fn map_to_shmbuf(
+        &mut self,
+        shmr: &ShmReader,
+        handoff: &RxHandoffChannel,
+        priority: Priority,
+    ) -> ZResult<()> {
         let Self {
             payload, ext_shm, ..
         } = self;
-        map_to_shmbuf(payload, ext_shm, shmr)
+        map_to_shmbuf(payload, ext_shm, shmr, handoff, priority)
     }
 }
 
