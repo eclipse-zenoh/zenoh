@@ -86,7 +86,10 @@ fn shm_exit_race() {
             })
         })
         .collect();
-    let failures: Vec<String> = workers.into_iter().flat_map(|w| w.join().unwrap()).collect();
+    let failures: Vec<String> = workers
+        .into_iter()
+        .flat_map(|w| w.join().unwrap())
+        .collect();
     assert!(
         failures.is_empty(),
         "{} of {} peers panicked or crashed at exit, first:\n{}",
