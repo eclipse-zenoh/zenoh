@@ -40,8 +40,13 @@ zenoh-result = { workspace = true }
 # NOTE: getrandom needs to be explicitly added here in order to enable the `js` feature when compiling the rand crate to WASM
 # more information: https://docs.rs/getrandom/latest/getrandom/#webassembly-support 
 getrandom = { workspace = true }
-
-[target.'cfg(not(features = "std"))'.dependencies]
+# hashbrown is only *used* in `no_std` builds (see `keyexpr_tree/impls/hashmap_impl.rs`),
+# but Cargo cannot express "depend on this crate only when a feature is *off*" in a
+# `[target.'cfg(...)'.dependencies]` section — `cfg(not(feature = "std"))` there still
+# resolves the dependency unconditionally, and the previously written `cfg(not(features = "std"))`
+# (plural `features`) was silently a typo that made the dependency unconditional anyway.
+# Since hashbrown 0.16 has no `std` feature and is always `no_std`-compatible, we keep it
+# as a plain dependency instead of a misleading target-gated one.
 hashbrown = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
