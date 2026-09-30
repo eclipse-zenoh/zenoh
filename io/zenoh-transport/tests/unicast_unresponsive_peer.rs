@@ -35,9 +35,10 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_test::get_free_tcp_port;
 use zenoh_transport::{
-    multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
-    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
-    TransportPeerEventHandler,
+    multicast::TransportMulticast,
+    unicast::{TransportManagerBuilderUnicast, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -45,6 +46,11 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 /// How long a non droppable message is allowed to block before the transport
 /// is considered unresponsive and closed.
 const WAIT_BEFORE_CLOSE: Duration = Duration::from_secs(1);
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
+// Keep lease expiry outside the test deadline so it cannot mask a stuck close task.
+// A short keep-alive bounds the final TX flush during teardown.
+const LEASE: Duration = Duration::from_secs(120);
+const KEEP_ALIVE: usize = 120;
 
 #[derive(Default)]
 struct SHDummy;
@@ -70,7 +76,11 @@ impl TransportEventHandler for SHDummy {
 /// both sides as soon as `stalled` is set to `true`, simulating a peer whose TCP
 /// connection is alive but which does not consume incoming data anymore
 /// (zero-window situation, e.g. a frozen or abruptly powered off host).
-async fn spawn_stallable_proxy(proxy_addr: String, target_addr: String, stalled: Arc<AtomicBool>) {
+async fn spawn_stallable_proxy(
+    proxy_addr: String,
+    target_addr: String,
+    stalled: Arc<AtomicBool>,
+) -> tokio::task::JoinHandle<()> {
     let listener = TcpListener::bind(proxy_addr).await.unwrap();
     tokio::spawn(async move {
         let (downstream, _) = listener.accept().await.unwrap();
@@ -107,13 +117,13 @@ async fn spawn_stallable_proxy(proxy_addr: String, target_addr: String, stalled:
             pump(down_rx, up_tx, stalled.clone()),
             pump(up_rx, down_tx, stalled),
         );
-    });
+    })
 }
 
-fn make_message(payload_size: usize) -> NetworkMessage {
+fn make_message(payload_size: usize, priority: Priority) -> NetworkMessage {
     NetworkMessage::from(Push {
         wire_expr: "test".into(),
-        ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
+        ext_qos: QoSType::new(priority, CongestionControl::Block, false),
         ..Push::from(vec![0u8; payload_size])
     })
 }
@@ -125,8 +135,7 @@ fn make_message(payload_size: usize) -> NetworkMessage {
 /// again would starve the very runtime that has to execute the close task,
 /// deadlocking the whole session (see eclipse-zenoh/zenoh#1876 and
 /// eclipse-zenoh/zenoh#2581).
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
+async fn unresponsive_peer(qos: bool, priority: Priority) {
     zenoh_util::init_log_from_env_or("error");
 
     // Listener side (the peer that will become unresponsive)
@@ -134,17 +143,21 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
     let listener_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .zid(ZenohIdProto::try_from([1]).unwrap())
+        .unicast(
+            TransportManagerBuilderUnicast::default()
+                .qos(qos)
+                .lease(LEASE)
+                .keep_alive(KEEP_ALIVE),
+        )
         .build_test(Arc::new(SHDummy))
         .unwrap();
-    let listen_endpoint: EndPoint = format!("tcp/127.0.0.1:{listener_port}")
-        .parse()
-        .unwrap();
+    let listen_endpoint: EndPoint = format!("tcp/127.0.0.1:{listener_port}").parse().unwrap();
     ztimeout!(listener_manager.add_listener(listen_endpoint)).unwrap();
 
     // Stallable TCP proxy in front of the listener
     let proxy_port = get_free_tcp_port();
     let stalled = Arc::new(AtomicBool::new(false));
-    spawn_stallable_proxy(
+    let proxy = spawn_stallable_proxy(
         format!("127.0.0.1:{proxy_port}"),
         format!("127.0.0.1:{listener_port}"),
         stalled.clone(),
@@ -155,6 +168,12 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
     let connect_manager = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .zid(ZenohIdProto::try_from([2]).unwrap())
+        .unicast(
+            TransportManagerBuilderUnicast::default()
+                .qos(qos)
+                .lease(LEASE)
+                .keep_alive(KEEP_ALIVE),
+        )
         .wait_before_close(WAIT_BEFORE_CLOSE)
         .build_test(Arc::new(SHDummy))
         .unwrap();
@@ -162,7 +181,9 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
     let transport = ztimeout!(connect_manager.open_transport_unicast(connect_endpoint)).unwrap();
 
     // Check that the transport works
-    assert!(transport.schedule(make_message(64).as_mut()).unwrap());
+    assert!(transport
+        .schedule(make_message(64, priority).as_mut())
+        .unwrap());
 
     // Make the peer unresponsive
     stalled.store(true, Ordering::Relaxed);
@@ -171,10 +192,10 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
     // cannot be pushed within `wait_before_close`. This message triggers the
     // "Unable to push non droppable network message. Closing transport!" path.
     let (tx, rx) = std::sync::mpsc::channel::<(Duration, ZResult<bool>)>();
-    std::thread::spawn(move || {
+    let pusher = std::thread::spawn(move || {
         let mut failures = 0;
         for _ in 0..10_000 {
-            let mut msg = make_message(60_000);
+            let mut msg = make_message(60_000, priority);
             let start = Instant::now();
             let res = transport.schedule(msg.as_mut());
             let elapsed = start.elapsed();
@@ -194,11 +215,11 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
     });
 
     // Wait for the first push that failed after blocking for wait_before_close
-    let recv_timeout = TIMEOUT;
+    let push_deadline = Instant::now() + TIMEOUT;
     loop {
-        let (elapsed, res) = rx.recv_timeout(recv_timeout).expect(
-            "the pusher thread stopped without any push failing: the peer did not stall?",
-        );
+        let (elapsed, res) = rx
+            .recv_timeout(push_deadline.saturating_duration_since(Instant::now()))
+            .expect("the pusher thread stopped without any push failing: the peer did not stall?");
         match res {
             Ok(true) => continue,
             Ok(false) => {
@@ -210,16 +231,17 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
         }
     }
 
-    // Any subsequent push to this transport must now fail fast with
-    // `TransportClosed` instead of blocking for another `wait_before_close`.
+    // Any subsequent push must fail fast instead of blocking for another
+    // `wait_before_close`. It returns `TransportClosed` while the disabled
+    // pipeline is still attached, or Ok(false) if teardown already took the links.
     // Without the fail fast mechanism, this push blocks for a full
     // `wait_before_close` period (and so does every following one, potentially
     // starving the RX runtime and deadlocking the session).
     let (elapsed, res) = rx
-        .recv_timeout(recv_timeout)
+        .recv_timeout(push_deadline.saturating_duration_since(Instant::now()))
         .expect("the pusher thread stopped after the first failed push");
     assert!(
-        res.is_err(),
+        matches!(res, Ok(false) | Err(_)),
         "expected the push following the transport closure to fail, got {res:?}"
     );
     assert!(
@@ -227,4 +249,37 @@ async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
         "the push following the transport closure blocked for {elapsed:?} \
          instead of failing fast"
     );
+    pusher.join().unwrap();
+
+    // Fail-fast pushes alone do not prove that the close task reached teardown.
+    // In particular, a Close frame must not wait for space in the stalled queue.
+    tokio::time::timeout(CLEANUP_TIMEOUT, async {
+        while !connect_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the unresponsive transport was not removed from the manager");
+
+    proxy.abort();
+    let _ = proxy.await;
+    ztimeout!(connect_manager.close());
+    ztimeout!(listener_manager.close());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_push_fails_fast_on_unresponsive_peer() {
+    unresponsive_peer(true, Priority::DEFAULT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unresponsive_peer_without_qos() {
+    // Without QoS, data and Close frames share the same full queue.
+    unresponsive_peer(false, Priority::DEFAULT).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_unresponsive_peer_background() {
+    // With QoS, fill the Background queue used by Close frames explicitly.
+    unresponsive_peer(true, Priority::Background).await;
 }

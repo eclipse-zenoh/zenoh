@@ -949,9 +949,9 @@ impl TransmissionPipelineProducer {
     ///
     /// Contrary to [`Self::disable`], this method can safely be called while another
     /// thread is blocked pushing a message on this pipeline (such a thread holds the
-    /// `stage_in` lock until its deadline expires). New pushes fail fast with
-    /// [`TransportClosed`] and the consumer task terminates on its next wakeup
-    /// (e.g. keep-alive), which in turn unblocks any parked pusher.
+    /// `stage_in` lock until its deadline expires). New network message pushes fail
+    /// fast with [`TransportClosed`]. This does not cancel an in-flight link write;
+    /// the caller must arrange teardown to stop a stalled consumer task.
     pub(crate) fn mark_disabled(&self) {
         self.status.set_disabled(true);
     }

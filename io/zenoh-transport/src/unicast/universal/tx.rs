@@ -17,7 +17,6 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
     network::{NetworkMessageExt, NetworkMessageMut, NetworkMessageRef},
-    transport::close,
 };
 use zenoh_result::ZResult;
 
@@ -106,7 +105,10 @@ impl TransportUnicastUniversal {
             zenoh_runtime::ZRuntime::RX.spawn({
                 let transport = self.clone();
                 async move {
-                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
+                    // Do not enqueue a Close frame on an unresponsive pipeline:
+                    // push_transport_message can wait indefinitely for a free batch,
+                    // preventing teardown from cancelling the stalled TX task.
+                    if let Err(e) = transport.delete().await {
                         tracing::error!(
                             "Error closing transport with {}: {}",
                             transport.config.zid,
