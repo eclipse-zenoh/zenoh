@@ -280,14 +280,18 @@ mod tests {
         let mut batch = RBatch::new(config, buffer.to_vec().into());
         batch
             .initialize(|| vec![0u8; config.mtu as usize].into_boxed_slice())
-            .unwrap();
+            .expect("Failed to initialize multicast batch: expected compression framing; compression may not be enabled");
         let decoded_len = batch.len();
-        let has_payload =
-            std::iter::from_fn(|| (!batch.is_empty()).then(|| batch.decode().unwrap())).any(
-                |received: TransportMessage| {
-                    matches!(received.body, TransportBody::Frame(frame) if !frame.payload.is_empty())
-                },
-            );
+        let has_payload = std::iter::from_fn(|| {
+            (!batch.is_empty()).then(|| {
+                batch.decode().expect(
+                    "Failed to decode multicast batch: expected compression framing; compression may not be enabled",
+                )
+            })
+        })
+        .any(|received: TransportMessage| {
+            matches!(received.body, TransportBody::Frame(frame) if !frame.payload.is_empty())
+        });
         has_payload.then_some(decoded_len)
     }
 
