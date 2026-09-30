@@ -20,16 +20,53 @@
 use lazy_static::lazy_static;
 
 pub mod ffi;
+#[cfg(not(target_arch = "wasm32"))]
 mod lib_loader;
 pub mod lib_search_dirs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod net;
 pub mod time_range;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use lib_loader::*;
 pub mod timer;
 pub use timer::*;
 pub mod log;
 pub use lib_search_dirs::*;
+
+// `LibLoader` dlopen()s native plugin files, which doesn't exist in a browser sandbox and whose
+// `libloading` dependency doesn't build for wasm32-unknown-unknown. `zenoh-config`'s `Config`
+// embeds one unconditionally though, so keep the same name/shape here as an inert no-op.
+#[cfg(target_arch = "wasm32")]
+#[derive(Clone, Debug, Default)]
+pub struct LibLoader;
+
+#[cfg(target_arch = "wasm32")]
+impl LibLoader {
+    pub fn empty() -> LibLoader {
+        LibLoader
+    }
+
+    pub fn new(_dirs: LibSearchDirs) -> LibLoader {
+        LibLoader
+    }
+
+    pub fn search_paths(&self) -> Option<&[std::path::PathBuf]> {
+        None
+    }
+}
+
+// The real `net` module enumerates network interfaces to expand a listener bound to an
+// unspecified address -- a listener-only concern a browser build never needs, kept as an empty
+// stub so callers that reach for it unconditionally still type-check.
+#[cfg(target_arch = "wasm32")]
+pub mod net {
+    pub fn get_local_addresses(
+        _interface: Option<&str>,
+    ) -> zenoh_result::ZResult<Vec<std::net::IpAddr>> {
+        Ok(Vec::new())
+    }
+}
 pub use log::*;
 
 /// The "ZENOH_HOME" environment variable name
@@ -45,12 +82,20 @@ pub fn zenoh_home() -> &'static std::path::Path {
             if let Some(dir) = std::env::var_os(ZENOH_HOME_ENV_VAR) {
                 PathBuf::from(dir)
             } else {
-                match home::home_dir() {
-                    Some(mut dir) => {
-                        dir.push(DEFAULT_ZENOH_HOME_DIRNAME);
-                        dir
+                // No home directory in a browser sandbox, and `home` doesn't build for wasm32.
+                #[cfg(target_arch = "wasm32")]
+                {
+                    PathBuf::from(DEFAULT_ZENOH_HOME_DIRNAME)
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    match home::home_dir() {
+                        Some(mut dir) => {
+                            dir.push(DEFAULT_ZENOH_HOME_DIRNAME);
+                            dir
+                        }
+                        None => PathBuf::from(DEFAULT_ZENOH_HOME_DIRNAME),
                     }
-                    None => PathBuf::from(DEFAULT_ZENOH_HOME_DIRNAME),
                 }
             }
         };

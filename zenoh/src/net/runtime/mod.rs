@@ -1133,10 +1133,18 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                     })
                 }
 
-                if region.bound().is_north()
+                // north_bound_transport_peer_count() uses block_in_place(), unavailable on
+                // wasm32. It only guards against a client ending up with more than one
+                // north-bound transport, which can't happen for a browser client that only ever
+                // opens one connection -- skip the check there instead of porting it.
+                #[cfg(not(target_arch = "wasm32"))]
+                let has_duplicate_north_bound_transport = region.bound().is_north()
                     && runtime.whatami() == WhatAmI::Client
-                    && north_bound_transport_peer_count(runtime, &peer) > 0
-                {
+                    && north_bound_transport_peer_count(runtime, &peer) > 0;
+                #[cfg(target_arch = "wasm32")]
+                let has_duplicate_north_bound_transport = false;
+
+                if has_duplicate_north_bound_transport {
                     bail!("Client runtimes only accept one north-bound transport");
                 }
 

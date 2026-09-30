@@ -553,10 +553,19 @@ impl TransportManager {
         link: Link,
     ) -> ZResult<()> {
         if let Some(callback) = transport.get_callback() {
-            tokio::task::spawn_blocking(move || {
+            // `spawn_blocking` needs "rt-multi-thread", unavailable on wasm32. `new_link()` is a
+            // lightweight, synchronous notification, so just call it inline there instead.
+            #[cfg(target_arch = "wasm32")]
+            {
                 callback.new_link(link);
-            })
-            .await?;
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                tokio::task::spawn_blocking(move || {
+                    callback.new_link(link);
+                })
+                .await?;
+            }
         }
 
         Ok(())

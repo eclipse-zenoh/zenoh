@@ -143,6 +143,24 @@ impl TransportUnicast {
         transport.schedule(message)
     }
 
+    // Async counterpart of schedule() above, awaiting TX-pipeline backpressure instead of
+    // thread-parking. Downcasts to the concrete type instead of going through the trait object;
+    // see `TransportUnicastTrait::as_any()`.
+    #[cfg(target_arch = "wasm32")]
+    #[inline(always)]
+    pub async fn schedule_async(&self, message: NetworkMessageMut<'_>) -> ZResult<bool> {
+        let transport = self.get_inner()?;
+        let transport = transport
+            .as_any()
+            .downcast_ref::<crate::unicast::universal::transport::TransportUnicastUniversal>()
+            .ok_or_else(|| {
+                zenoh_result::zerror!(
+                    "schedule_async() is only supported for the universal transport kind on wasm32"
+                )
+            })?;
+        transport.internal_schedule_async(message).await
+    }
+
     #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed

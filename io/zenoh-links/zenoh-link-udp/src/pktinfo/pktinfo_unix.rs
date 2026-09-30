@@ -104,7 +104,9 @@ fn recv_with_dst_inner(
     local_port: u16,
     buf: &mut [u8],
 ) -> io::Result<(usize, SocketAddr, Option<SocketAddr>)> {
-    let mut addr_src: MaybeUninit<libc::sockaddr_storage> = MaybeUninit::uninit();
+    // socket2 0.6 wraps `SockAddr::new`'s argument in a repr(transparent) `SockAddrStorage`
+    // instead of the raw libc type; same layout, so recvmsg can fill it the same way.
+    let mut addr_src: MaybeUninit<socket2::SockAddrStorage> = MaybeUninit::uninit();
     let mut msg_iov = IoSliceMut::new(buf);
     let mut cmsg = {
         let space = unsafe {
