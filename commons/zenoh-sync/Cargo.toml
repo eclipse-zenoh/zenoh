@@ -32,7 +32,7 @@ version = { workspace = true }
 arc-swap = { workspace = true }
 event-listener = { workspace = true }
 futures = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 zenoh-buffers = { workspace = true }
 zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }

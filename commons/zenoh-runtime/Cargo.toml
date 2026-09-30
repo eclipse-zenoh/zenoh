@@ -20,17 +20,20 @@ lazy_static = { workspace = true }
 ron = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true, features = [
-  "fs",
   "io-util",
   "macros",
-  "net",
-  "rt-multi-thread",
+  "rt",
   "sync",
   "time",
 ] }
 tracing = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
+
+# block_in_place needs "rt-multi-thread"; wasm32 only borrows an ambient current_thread runtime
+# (see ZRuntimePool::get()) and never builds its own.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["fs", "net", "rt-multi-thread"] }
 
 [package.metadata.cargo-machete]
 ignored = ["ron"]
