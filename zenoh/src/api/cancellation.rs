@@ -33,7 +33,26 @@ use zenoh_runtime::ZRuntime;
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) struct SyncGroupNotifier(OwnedSemaphorePermit);
+pub(crate) struct SyncGroupNotifier {
+    #[allow(dead_code)]
+    permit: OwnedSemaphorePermit,
+    /// Identity of the `SyncGroup` this permit belongs to.
+    ///
+    /// This is the address of the group's `Semaphore` allocation.
+    /// Code only compares this value. Code never reads through it
+    /// as a pointer. The `Arc` inside the permit keeps that
+    /// allocation alive, so the identity stays valid while in use.
+    group: GroupId,
+}
+
+impl SyncGroupNotifier {
+    pub(crate) fn group(&self) -> GroupId {
+        self.group
+    }
+}
+
+/// Identity of a [`SyncGroup`], comparable but not dereferenceable.
+pub(crate) type GroupId = usize;
 
 #[zenoh_macros::pub_visibility_if_internal]
 #[derive(Clone)]
@@ -55,11 +74,18 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn notifier(&self) -> Option<SyncGroupNotifier> {
+        let group = self.id();
         self.semaphore
             .clone()
             .try_acquire_owned()
             .ok()
-            .map(SyncGroupNotifier)
+            .map(|permit| SyncGroupNotifier { permit, group })
+    }
+
+    /// This group's identity, for comparison against the groups whose
+    /// callbacks are executing on the current thread.
+    pub(crate) fn id(&self) -> GroupId {
+        Arc::as_ptr(&self.semaphore) as GroupId
     }
 
     pub(crate) fn close(&self) {
@@ -72,6 +98,30 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn wait(&self) {
+        // A callback of this group may call this method on this same
+        // group. That callback holds a live `Callback` clone. The clone
+        // holds one of the permits this wait needs. So the wait can
+        // never finish. This check finds that case and avoids it.
+        //
+        // The check asks a narrow question: does a callback of THIS
+        // group run now? It does not ask about other groups. Entity
+        // A's callback may undeclare entity B. That call holds none
+        // of B's permits. So a wait on B can still block until B's
+        // own callback ends. A wider check would break that guarantee.
+        //
+        // This happened in production. rmw_zenoh dropped a
+        // subscription inside `~SubscriptionData`. That call reached
+        // `ze_undeclare_advanced_subscriber`. The transport RX thread
+        // then blocked forever, and the whole session froze.
+        if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
+            tracing::trace!(
+                "SyncGroup::wait called from inside a callback of the same entity; \
+                 draining asynchronously to avoid self-deadlock"
+            );
+            let this = self.clone();
+            ZRuntime::Application.spawn(async move { this.wait_direct().await });
+            return;
+        }
         let s = self.semaphore.clone();
         let _p = ZRuntime::Application.block_in_place(s.acquire_many(Self::max_permits()));
         self.close();
@@ -79,6 +129,27 @@ impl SyncGroup {
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) async fn wait_async(&self) {
+        // Same self-join check as `wait()`, and for the same reason.
+        // A direct caller of this method — session close, for
+        // example — can also run from inside a callback of this
+        // group. Without this check, the `.await` below would wait
+        // on its own caller's permit and never finish.
+        if crate::api::handlers::callback_of_group_running_on_this_thread(self.id()) {
+            tracing::trace!(
+                "SyncGroup::wait_async called from inside a callback of the same entity; \
+                 draining in the background to avoid self-deadlock"
+            );
+            let this = self.clone();
+            ZRuntime::Application.spawn(async move { this.wait_direct().await });
+            return;
+        }
+        self.wait_direct().await;
+    }
+
+    /// The actual drain, with no self-join check. Only call this
+    /// from a caller that has already checked, or from a spawned
+    /// task that is known not to run on the caller's own stack.
+    async fn wait_direct(&self) {
         let _p = self.semaphore.acquire_many(Self::max_permits()).await;
         self.close();
     }
