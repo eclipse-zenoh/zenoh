@@ -100,6 +100,14 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /// Returns if the message has successfully been sent.
     fn schedule(&self, msg: NetworkMessageMut) -> ZResult<bool>;
 
+    // `schedule_async`'s implementation holds non-Send guards across `.await`, which doesn't fit
+    // async_trait's default `+ Send`-boxed vtable dispatch used by every other method on this
+    // trait. Rather than mark the whole trait `?Send`, expose a downcast instead so
+    // `TransportUnicast::schedule_async()` (unicast/mod.rs) can call the concrete type's inherent
+    // method directly.
+    #[cfg(target_arch = "wasm32")]
+    fn as_any(&self) -> &dyn std::any::Any;
+
     /*************************************/
     /*            TERMINATION            */
     /*************************************/
