@@ -16,6 +16,7 @@ use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
 use zenoh_result::{zerror, ZResult};
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::set_dscp;
 
 #[derive(Debug)]
@@ -114,17 +115,23 @@ impl<'a> TcpSocketConfig<'a> {
             SocketAddr::V6(_) => TcpSocket::new_v6(),
         }?;
 
-        if let Some(iface) = self.iface {
-            zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
-        }
-        if let Some(size) = self.tx_buffer_size {
-            socket.set_send_buffer_size(size)?;
-        }
-        if let Some(size) = self.rx_buffer_size {
-            socket.set_recv_buffer_size(size)?;
-        }
-        if let Some(dscp) = self.dscp {
-            set_dscp(&socket, *addr, dscp)?;
+        // Binding to an interface, tuning socket buffer sizes, and DSCP marking are all
+        // native-only OS-level knobs with no equivalent in a browser/Emscripten sandbox; ignore
+        // them there rather than fail.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if let Some(iface) = self.iface {
+                zenoh_util::net::set_bind_to_device_tcp_socket(&socket, iface)?;
+            }
+            if let Some(size) = self.tx_buffer_size {
+                socket.set_send_buffer_size(size)?;
+            }
+            if let Some(size) = self.rx_buffer_size {
+                socket.set_recv_buffer_size(size)?;
+            }
+            if let Some(dscp) = self.dscp {
+                set_dscp(&socket, *addr, dscp)?;
+            }
         }
 
         Ok(socket)

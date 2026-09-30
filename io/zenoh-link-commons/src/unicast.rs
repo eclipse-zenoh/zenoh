@@ -148,6 +148,14 @@ impl From<Arc<dyn LinkUnicastTrait>> for LinkUnicast {
     }
 }
 
+// A display/logging helper backed by native-only interface enumeration, unavailable on wasm32;
+// stub to the same empty-Vec fallback other platforms already use on error.
+#[cfg(target_arch = "wasm32")]
+pub fn get_ip_interface_names(_addr: &SocketAddr) -> Vec<String> {
+    vec![]
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn get_ip_interface_names(addr: &SocketAddr) -> Vec<String> {
     match zenoh_util::net::get_interface_names_by_addr(addr.ip()) {
         Ok(interfaces) => {

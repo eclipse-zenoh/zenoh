@@ -155,6 +155,16 @@ impl ListenersUnicastIP {
             let iface = config.get(BIND_INTERFACE);
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
+            //
+            // Listeners don't exist on wasm32 (a browser tab can only connect out), so this
+            // unspecified-address expansion is unreachable there; skip it rather than pull in
+            // zenoh_util::net's native-only interface enumeration.
+            #[cfg(target_arch = "wasm32")]
+            {
+                let _ = iface;
+                locators.push(value.endpoint.to_locator());
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             if kip.is_unspecified() {
                 let mut addrs = match kip {
                     IpAddr::V4(_) => {

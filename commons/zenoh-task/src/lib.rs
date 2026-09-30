@@ -126,16 +126,30 @@ impl TaskController {
     /// The call blocks until all tasks yield or timeout duration expires.
     /// Returns 0 in case of success, number of non terminated tasks otherwise.
     pub fn terminate_all(&self, timeout: Duration) -> usize {
-        ResolveFuture::new(async move {
-            if tokio::time::timeout(timeout, self.terminate_all_async())
-                .await
-                .is_err()
-            {
-                tracing::error!("Failed to terminate {} tasks", self.tracker.len());
-            }
+        // `terminate_all()`'s callers (`Primitives::send_close()` and friends) are plain sync
+        // trait methods, so this can't just await `terminate_all_async()` directly on wasm32
+        // without a much larger async redesign of the routing layer. Fire the cancellation and
+        // return immediately instead of confirming every task finished via `block_in_place`.
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = timeout;
+            self.tracker.close();
+            self.token.cancel();
             self.tracker.len()
-        })
-        .wait()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ResolveFuture::new(async move {
+                if tokio::time::timeout(timeout, self.terminate_all_async())
+                    .await
+                    .is_err()
+                {
+                    tracing::error!("Failed to terminate {} tasks", self.tracker.len());
+                }
+                self.tracker.len()
+            })
+            .wait()
+        }
     }
 
     /// Async version of [`TaskController::terminate_all()`].
