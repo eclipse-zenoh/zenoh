@@ -159,10 +159,25 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     type Output = <Self as Resolvable>::To;
-    type IntoFuture = Ready<<Self as Resolvable>::To>;
+    // `Session::new()` is already a real `async move { ... }` future; await it directly instead
+    // of routing through `.wait()`, which forces it through `block_in_place` needlessly.
+    type IntoFuture = std::pin::Pin<Box<dyn std::future::Future<Output = Self::Output> + Send>>;
 
     fn into_future(self) -> Self::IntoFuture {
-        std::future::ready(self.wait())
+        Box::pin(async move {
+            let config: crate::config::Config = self
+                .config
+                .try_into()
+                .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
+            Session::new(
+                config,
+                #[cfg(feature = "shared-memory")]
+                self.shm_clients,
+                #[cfg(feature = "unstable")]
+                self.timestamp_callback,
+            )
+            .await
+        })
     }
 }
 
