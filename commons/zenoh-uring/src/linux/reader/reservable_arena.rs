@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use io_uring::{opcode, squeue::Flags, SubmissionQueue};
 use zenoh_result::ZResult;
@@ -62,6 +62,7 @@ impl ReservableArenaInner {
         group_id: BufferGroupId,
         mut count: BufferCount,
         sq: &mut SubmissionQueue<'_>,
+        provided: &mut HashSet<BufferId>,
     ) -> ZResult<BufferCount> {
         // recycle batches from the recycled_batches queue first
         while let Some(buf_id) = self.recycled_batches.pop() {
@@ -80,6 +81,7 @@ impl ReservableArenaInner {
             unsafe {
                 sq.push(&entry)?;
             }
+            provided.insert(buf_id);
 
             count -= 1;
 
@@ -108,6 +110,8 @@ impl ReservableArenaInner {
                 unsafe {
                     sq.push(&entry)?;
                 }
+                provided.extend(primary.start_bid..primary.start_bid + primary.nbufs);
+                count -= primary.nbufs;
 
                 // recycle the leftover batches
                 if let Some(to_recycle) = to_recycle {
@@ -172,5 +176,57 @@ impl ReservableArena {
     pub fn new(arena: BatchArena, submitter: SubmissionIface) -> Self {
         let inner = Arc::new(ReservableArenaInner::new(arena, submitter));
         Self { inner }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, sync::Arc};
+
+    use io_uring::{cqueue, squeue, IoUring};
+    use nix::sys::eventfd::{EfdFlags, EventFd};
+
+    use super::*;
+
+    const BATCH: usize = 6144;
+    const COUNT: BufferCount = 16;
+
+    fn fixture() -> (IoUring<squeue::Entry, cqueue::Entry>, ReservableArena) {
+        let ring = IoUring::builder().build(64).unwrap();
+        let arena = BatchArena::new(BATCH, COUNT, BufferCount::MAX).unwrap();
+        let waker = Arc::new(EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap());
+        let (tx, _rx) = flume::unbounded();
+        (
+            ring,
+            ReservableArena::new(arena, SubmissionIface::new(waker, tx)),
+        )
+    }
+
+    /// The region locked at construction is served first, as one batch.
+    #[test]
+    fn initial_region_served_first() {
+        let (_ring, a) = fixture();
+        let first = a.inner.pop_batches(COUNT);
+        assert_eq!(first.len(), 1);
+        assert_eq!((first[0].start_bid, first[0].nbufs), (0, COUNT));
+        let second = a.inner.pop_batches(COUNT);
+        assert_eq!((second[0].start_bid, second[0].nbufs), (COUNT, COUNT));
+    }
+
+    /// Buffers supplied by an arena expansion count as provided.
+    #[test]
+    fn expansion_satisfies_request() {
+        let (mut ring, a) = fixture();
+        let mut sq = ring.submission();
+        let mut provided = HashSet::new();
+        // use up the initial region so the request has to expand the arena
+        assert_eq!(a.inner.pop_batches(COUNT)[0].nbufs, COUNT);
+        let missing = a
+            .inner
+            .provide_batches_to_group(7, 1, &mut sq, &mut provided)
+            .unwrap();
+        assert_eq!(missing, 0);
+        assert_eq!(provided, HashSet::from([COUNT]));
+        assert_eq!(sq.len(), 1);
     }
 }
