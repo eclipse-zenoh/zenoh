@@ -46,7 +46,8 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 /// How long a non droppable message is allowed to block before the transport
 /// is considered unresponsive and closed.
 const WAIT_BEFORE_CLOSE: Duration = Duration::from_secs(1);
-const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
+// Allow for the final TX flush and the default 10-second TCP linger on Linux.
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(30);
 // Keep lease expiry outside the test deadline so it cannot mask a stuck close task.
 // A short keep-alive bounds the final TX flush during teardown.
 const LEASE: Duration = Duration::from_secs(120);
