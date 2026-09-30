@@ -250,6 +250,30 @@ impl Waiter {
         Ok(())
     }
 
+    /// Async equivalent of [`Waiter::wait_deadline`], built on [`Waiter::wait_async`].
+    #[inline]
+    pub async fn wait_deadline_async(&self, deadline: Instant) -> Result<(), WaitDeadlineError> {
+        let Some(timeout) = deadline.checked_duration_since(Instant::now()) else {
+            return Err(WaitDeadlineError::Deadline);
+        };
+        match tokio::time::timeout(timeout, self.wait_async()).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(WaitError)) => Err(WaitDeadlineError::WaitError),
+            Err(_elapsed) => Err(WaitDeadlineError::Deadline),
+        }
+    }
+
+    /// Waits for the condition to be notified or returns an error when the timeout expires.
+    /// See [`Waiter::wait_deadline_async`].
+    #[inline]
+    pub async fn wait_timeout_async(&self, timeout: Duration) -> Result<(), WaitTimeoutError> {
+        match tokio::time::timeout(timeout, self.wait_async()).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(WaitError)) => Err(WaitTimeoutError::WaitError),
+            Err(_elapsed) => Err(WaitTimeoutError::Timeout),
+        }
+    }
+
     /// Waits for the condition to be notified
     #[inline]
     pub fn wait(&self) -> Result<(), WaitError> {
@@ -273,6 +297,14 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
+            //
+            // `event_listener::Listener::wait()` is excluded on every wasm target upstream; an
+            // untimed blocking wait has no safe fallback on a single cooperative thread. Prefer
+            // `wait_async()` from an async caller instead; this path (only reachable from
+            // control-message sends) fails gracefully rather than panicking.
+            #[cfg(target_arch = "wasm32")]
+            return Err(WaitError);
+            #[cfg(not(target_arch = "wasm32"))]
             listener.wait();
         }
 
@@ -302,6 +334,12 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
+            //
+            // event_listener's timed wait methods are also excluded on wasm targets; use
+            // `wait_deadline_async()` from an async caller instead.
+            #[cfg(target_arch = "wasm32")]
+            return Err(WaitDeadlineError::Deadline);
+            #[cfg(not(target_arch = "wasm32"))]
             if listener.wait_deadline(deadline).is_none() {
                 return Err(WaitDeadlineError::Deadline);
             }
@@ -333,6 +371,10 @@ impl Waiter {
             }
 
             // Wait for a notification and continue the loop.
+            // See wait_deadline()'s comment above; use `wait_timeout_async()` instead.
+            #[cfg(target_arch = "wasm32")]
+            return Err(WaitTimeoutError::Timeout);
+            #[cfg(not(target_arch = "wasm32"))]
             if listener.wait_timeout(timeout).is_none() {
                 return Err(WaitTimeoutError::Timeout);
             }
