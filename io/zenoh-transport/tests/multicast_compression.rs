@@ -25,8 +25,9 @@ mod tests {
         time::Duration,
     };
 
+    use zenoh_config::Config;
     use zenoh_core::ztimeout;
-    use zenoh_link::Link;
+    use zenoh_link::{Link, LinkKind, LinkManagerBuilderMulticast};
     use zenoh_protocol::{
         core::{
             Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohIdProto,
@@ -35,10 +36,12 @@ mod tests {
             push::{ext::QoSType, Push},
             NetworkMessage, NetworkMessageMut,
         },
+        transport::{TransportBody, TransportMessage},
     };
     use zenoh_result::ZResult;
     use zenoh_test::get_free_udp_port;
     use zenoh_transport::{
+        common::batch::{BatchConfig, Decode, RBatch},
         multicast::{TransportManagerBuilderMulticast, TransportMulticast},
         unicast::TransportUnicast,
         TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
@@ -142,23 +145,41 @@ mod tests {
         let peer01_id = ZenohIdProto::try_from([1]).unwrap();
         let peer02_id = ZenohIdProto::try_from([2]).unwrap();
 
+        let mut config = Config::default();
+        config
+            .transport
+            .multicast
+            .compression
+            .set_enabled(true)
+            .unwrap();
+
         // Create the peer01 transport manager
         let peer01_handler = Arc::new(SHPeer::default());
         let peer01_manager = TransportManager::builder()
             .zid(peer01_id)
             .whatami(WhatAmI::Peer)
-            .multicast(TransportManagerBuilderMulticast::default().compression(true))
+            .multicast(
+                TransportManagerBuilderMulticast::default()
+                    .from_config(&config)
+                    .unwrap(),
+            )
             .build_test(peer01_handler.clone())
             .unwrap();
+        assert!(peer01_manager.config.multicast.is_compression);
 
         // Create the peer02 transport manager
         let peer02_handler = Arc::new(SHPeer::default());
         let peer02_manager = TransportManager::builder()
             .zid(peer02_id)
             .whatami(WhatAmI::Peer)
-            .multicast(TransportManagerBuilderMulticast::default().compression(true))
+            .multicast(
+                TransportManagerBuilderMulticast::default()
+                    .from_config(&config)
+                    .unwrap(),
+            )
             .build_test(peer02_handler.clone())
             .unwrap();
+        assert!(peer02_manager.config.multicast.is_compression);
 
         // Create an empty transport with the peer01
         // Open transport -> This should be accepted
@@ -249,12 +270,43 @@ mod tests {
         tokio::time::sleep(SLEEP).await;
     }
 
+    // Return the decoded batch size only when it contains application data.
+    fn get_decoded_len(buffer: &[u8]) -> Option<usize> {
+        let config = BatchConfig {
+            is_streamed: false,
+            is_compression: true,
+            ..Default::default()
+        };
+        let mut batch = RBatch::new(config, buffer.to_vec().into());
+        batch
+            .initialize(|| vec![0u8; config.mtu as usize].into_boxed_slice())
+            .expect("Failed to initialize multicast batch: expected compression framing; compression may not be enabled");
+        let decoded_len = batch.len();
+        let has_payload = std::iter::from_fn(|| {
+            (!batch.is_empty()).then(|| {
+                batch.decode().expect(
+                    "Failed to decode multicast batch: expected compression framing; compression may not be enabled",
+                )
+            })
+        })
+        .any(|received: TransportMessage| {
+            matches!(received.body, TransportBody::Frame(frame) if !frame.payload.is_empty())
+        });
+        has_payload.then_some(decoded_len)
+    }
+
     async fn test_transport(
         peer01: &TransportMulticastPeer,
         peer02: &TransportMulticastPeer,
+        endpoint: &EndPoint,
         channel: Channel,
         msg_size: usize,
     ) {
+        // Observe the actual datagrams independently of the receiving transport.
+        let observer_manager =
+            LinkManagerBuilderMulticast::make(LinkKind::try_from(endpoint).unwrap()).unwrap();
+        let observer = ztimeout!(observer_manager.new_link(endpoint)).unwrap();
+
         // Create the message to send
         let mut message = NetworkMessage::from(Push {
             wire_expr: "test".into(),
@@ -266,6 +318,21 @@ mod tests {
         for _ in 0..MSG_COUNT {
             peer01.transport.schedule(message.as_mut()).unwrap();
         }
+
+        ztimeout!(async {
+            let mut buffer = vec![0u8; observer.get_mtu() as usize];
+            loop {
+                let (wire_len, _) = observer.read(&mut buffer).await.unwrap();
+                if let Some(decoded_len) = get_decoded_len(&buffer[..wire_len]) {
+                    assert!(
+                        wire_len < decoded_len,
+                        "Batch contains payload but did not shrink: {wire_len} bytes on the wire, {decoded_len} decoded bytes"
+                    );
+                    return;
+                }
+            }
+        });
+        drop(observer);
 
         match channel.reliability {
             Reliability::Reliable => {
@@ -290,7 +357,7 @@ mod tests {
 
     async fn run_single(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         let (peer01, peer02) = open_transport(endpoint).await;
-        test_transport(&peer01, &peer02, channel, msg_size).await;
+        test_transport(&peer01, &peer02, endpoint, channel, msg_size).await;
 
         close_transport(peer01, peer02, endpoint).await;
     }
