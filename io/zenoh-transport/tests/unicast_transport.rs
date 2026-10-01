@@ -1175,6 +1175,154 @@ async fn transport_unicast_quic_only_server() {
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
 }
 
+/// Regression test for https://github.com/eclipse-zenoh/zenoh/issues/2719:
+/// a connection that completes QUIC's TLS handshake but never opens its first bi-stream
+/// must not prevent the QUIC listener from admitting other connections.
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
+    use std::net::SocketAddr;
+
+    use zenoh_link_commons::{
+        quic::PROTOCOL_SINGLE_STREAM, tls::config::TLS_VERIFY_NAME_ON_CONNECT,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+
+    const ATTACKER_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Victim connection should succeed relatively quickly.
+    /// Using 5s here which is half Zenoh's default accept_timeout.
+    const VICTIM_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// A `ServerCertVerifier` accepting any server certificate, for the attacker client:
+    /// no client certificate is needed as mTLS is disabled by default.
+    #[derive(Debug)]
+    struct AcceptAnyServerCert(Arc<rustls::crypto::CryptoProvider>);
+
+    impl rustls::client::danger::ServerCertVerifier for AcceptAnyServerCert {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &rustls::pki_types::CertificateDer<'_>,
+            _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+            _server_name: &rustls::pki_types::ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            self.0.signature_verification_algorithms.supported_schemes()
+        }
+    }
+
+    /// Builds the QUIC client config of the attacker: a plain quinn client accepting any
+    /// server certificate and negotiating a Zenoh ALPN (required for the handshake to
+    /// succeed), but performing no Zenoh exchange.
+    fn quic_attacker_client_config() -> quinn::ClientConfig {
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let mut crypto = rustls::ClientConfig::builder_with_provider(provider.clone().into())
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert(provider)))
+            .with_no_client_auth();
+        crypto.alpn_protocols = vec![PROTOCOL_SINGLE_STREAM.to_vec()];
+        quinn::ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(crypto).unwrap(),
+        ))
+    }
+
+    let port = get_free_udp_port();
+    let mut endpoint = quic_endpoint(&format!("quic/127.0.0.1:{port}"));
+    endpoint
+        .config_mut()
+        .extend_from_iter([(TLS_VERIFY_NAME_ON_CONNECT, "false")].iter().copied())
+        .unwrap();
+
+    // Create the router transport manager and the listener
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(Arc::new(SHRouter::default()))
+        .unwrap();
+    println!("Add endpoint: {endpoint}");
+    ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+
+    // Attacker: completes the QUIC handshake but never opens any stream.
+    // A connection handle is kept alive for the whole test.
+    let mut attacker_endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).unwrap();
+    attacker_endpoint.set_default_client_config(quic_attacker_client_config());
+    let dst_addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    println!("Attacker connects to {dst_addr} without opening any stream");
+    let _attacker_conn = tokio::time::timeout(ATTACKER_CONNECT_TIMEOUT, {
+        attacker_endpoint.connect(dst_addr, "localhost").unwrap()
+    })
+    .await
+    .expect("attacker connection should complete its handshake")
+    .expect("attacker connection should be accepted");
+
+    // Victim: the same listener should still admit a transport with a QUIC link.
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+    println!("Victim opens transport while the attacker connection is parked");
+    tokio::time::timeout(
+        VICTIM_OPEN_TIMEOUT,
+        client_manager.open_transport_unicast(endpoint.clone()),
+    )
+    .await
+    .expect("QUIC listener should admit connections while a stream-less connection is parked")
+    .unwrap();
+
+    // Cleanup
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+}
+
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_mutual_success() {
