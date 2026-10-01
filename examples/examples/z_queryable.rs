@@ -59,7 +59,7 @@ async fn main() {
         );
         // Refer to z_bytes.rs to see how to serialize different types of message
         query
-            .reply(key_expr.clone(), payload.clone())
+            .reply(key_expr.clone(), &payload)
             .await
             .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
     }
