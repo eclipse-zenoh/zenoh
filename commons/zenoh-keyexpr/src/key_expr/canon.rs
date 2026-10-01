@@ -73,9 +73,9 @@ fn canonize(bytes: &mut [u8]) -> usize {
                             index += 2;
                             bytes.copy_within(write_start..index, written);
                             written += index - write_start;
-                            let skip = bytes[index + 4..]
-                                .windows(2)
-                                .take_while(|s| s == b"$*")
+                            let skip = bytes[index + 2..]
+                                .chunks_exact(2)
+                                .take_while(|s| *s == b"$*")
                                 .count();
                             index += (1 + skip) * 2;
                             write_start = index;
@@ -173,4 +173,41 @@ fn canonizer() {
     s_mut.canonize();
     assert_eq!(s_mut, "*/hello/*/bye/*");
     assert_eq!(s, "*/hello/*/bye/*\0\0\0\0\0\0\0\0\0\0\0");
+}
+
+#[test]
+fn canonizer_collapses_dollar_star_runs_inside_a_chunk() {
+    use super::{keyexpr, OwnedKeyExpr};
+
+    // Any contiguous sequence of $*s is replaced by a single $*, whatever its
+    // length and whatever follows it in the chunk.
+    for (input, expected) in [
+        ("a$*$*", "a$*"),
+        ("a$*$*b", "a$*b"),
+        ("a$*$*bc", "a$*bc"),
+        ("a$*$*$*bc", "a$*bc"),
+        ("a$*$*$*$*b", "a$*b"),
+        ("a$*$*xy$*b", "a$*xy$*b"),
+        ("a$*$*/b", "a$*/b"),
+    ] {
+        let mut s = String::from(input);
+        s.canonize();
+        assert_eq!(s, expected, "canonizing {input}");
+        assert_eq!(
+            OwnedKeyExpr::autocanonize(String::from(input))
+                .unwrap()
+                .as_str(),
+            expected,
+            "autocanonizing {input}"
+        );
+    }
+
+    assert_eq!(
+        keyexpr::new("demo")
+            .unwrap()
+            .join("a$*$*b")
+            .unwrap()
+            .as_str(),
+        "demo/a$*b"
+    );
 }
