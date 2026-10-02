@@ -72,6 +72,9 @@ pub use mode_dependent::*;
 pub mod connection_retry;
 pub use connection_retry::*;
 
+pub mod rotation;
+pub use rotation::*;
+
 // Wrappers for secrecy of values
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct SecretString(String);
@@ -512,6 +515,8 @@ validated_struct::validator! {
             /// if connection timeout exceed, exit from application
             pub exit_on_failure: Option<ModeDependentValue<bool>>,
             pub retry: Option<connection_retry::ConnectionRetryModeDependentConf>,
+            /// Transport link rotation configuration.
+            pub rotation: Option<rotation::RotationConf>,
         },
         /// Which endpoints to listen on.
         pub listen:
