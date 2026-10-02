@@ -467,6 +467,23 @@ where
 }
 
 #[cfg(test)]
+mod reactor_tests {
+    use super::*;
+    use crate::unicast::establishment::ext::shm::segment::TXAuthSegment;
+
+    #[test]
+    fn task_is_registered_with_uninitialized_reactor() {
+        // The reactor is process-global: this only checks the first-use init when
+        // no other test in the process touched the reactor before.
+        let auth_segment = Arc::new(TXAuthSegment::create(0, &[]).unwrap());
+        let handoff = TxHandoff::new(ShmTXCounterLease::new(auth_segment).unwrap());
+
+        // One reference is ours, the other one is held by the reactor.
+        assert_eq!(Arc::strong_count(&handoff.inner.task), 2);
+    }
+}
+
+#[cfg(test)]
 mod race_tests {
     use std::{sync::atomic::Ordering::SeqCst, thread, time::Duration};
 
