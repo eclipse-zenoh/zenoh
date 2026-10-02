@@ -69,6 +69,12 @@ fn run_peer() -> Result<(), String> {
     if stderr.contains("AccessError") {
         return Err(format!("peer panicked at exit:\n{stderr}"));
     }
+    // A peer that crashes (signal) or fails to open its session did not
+    // exercise the race, so it must fail the test. Panics in unrelated threads
+    // leave the exit status at 0 and stay warnings.
+    if !output.status.success() {
+        return Err(format!("peer exited with {}:\n{stderr}", output.status));
+    }
     if stderr.contains("panicked") {
         eprintln!("peer panicked at exit for another reason:\n{stderr}");
     }
