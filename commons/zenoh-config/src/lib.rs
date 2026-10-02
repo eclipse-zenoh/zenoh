@@ -786,6 +786,7 @@ validated_struct::validator! {
                     connect_certificate: Option<String>,
                     verify_name_on_connect: Option<bool>,
                     close_link_on_expiration: Option<bool>,
+                    use_public_pki: Option<bool>,
                     /// Configure TCP write buffer size
                     pub so_sndbuf: Option<u32>,
                     /// Configure TCP read buffer size

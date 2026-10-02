@@ -42,6 +42,9 @@ pub mod config {
     pub const TLS_CLOSE_LINK_ON_EXPIRATION: &str = "close_link_on_expiration";
     pub const TLS_CLOSE_LINK_ON_EXPIRATION_DEFAULT: bool = false;
 
+    pub const TLS_USE_PUBLIC_PKI: &str = "use_public_pki";
+    pub const TLS_USE_PUBLIC_PKI_DEFAULT: bool = true;
+
     /// The time duration in milliseconds to wait for the TLS handshake to complete.
     pub const TLS_HANDSHAKE_TIMEOUT_MS: &str = "tls_handshake_timeout_ms";
     pub const TLS_HANDSHAKE_TIMEOUT_MS_DEFAULT: u64 = 10_000;
