@@ -347,6 +347,49 @@ impl Default for TransportManagerBuilderUnicast {
 /*************************************/
 /*         TRANSPORT MANAGER         */
 /*************************************/
+
+/// Closes a transport if dropped while armed.
+///
+/// Transport initialisation runs under the accept/open timeout. If that future is dropped
+/// (deadline elapsed) after the link's TX task was started but before its RX task is, the
+/// transport is left half-open forever: its TX keep-alives keep the peer's lease alive while
+/// nothing ever reads the link (the RX task, which also owns the lease watchdog, never runs).
+/// Closing it lets the peer re-establish the session instead.
+struct CloseIfCancelled(Option<Arc<dyn TransportUnicastTrait>>);
+
+impl CloseIfCancelled {
+    fn arm(transport: &Arc<dyn TransportUnicastTrait>) -> Self {
+        Self(Some(transport.clone()))
+    }
+
+    fn disarm(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for CloseIfCancelled {
+    fn drop(&mut self) {
+        if let Some(transport) = self.0.take() {
+            let zid = transport.get_zid();
+            tracing::warn!(
+                "Initialisation of the transport with {zid} was cancelled before its RX task \
+                 was started: closing it"
+            );
+            // `Drop` is synchronous, so the close must be spawned; it cannot be awaited here
+            // anyway, as the caller may still hold the transport's status lock (add_link
+            // guard), which is released right after this guard is dropped.
+            zenoh_runtime::ZRuntime::Net.spawn(async move {
+                if let Err(e) = transport.close(close::reason::GENERIC).await {
+                    tracing::warn!(
+                        "Failed to close the transport with {zid} whose initialisation was \
+                         cancelled: {e}"
+                    );
+                }
+            });
+        }
+    }
+}
+
 impl TransportManager {
     pub fn config_unicast() -> TransportManagerBuilderUnicast {
         TransportManagerBuilderUnicast::default()
@@ -535,11 +578,12 @@ impl TransportManager {
         start_tx();
 
         // notify transport's callback interface that there is a new link
-        Self::notify_new_link_unicast(&transport, c_link)
-            .await
-            .map_err(|e| {
-                InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
-            })?;
+        let cancel_guard = CloseIfCancelled::arm(&transport);
+        let notified = Self::notify_new_link_unicast(&transport, c_link).await;
+        cancel_guard.disarm();
+        notified.map_err(|e| {
+            InitTransportError::Transport((e, transport.clone(), close::reason::GENERIC))
+        })?;
 
         start_rx();
 
@@ -744,10 +788,10 @@ impl TransportManager {
         );
 
         // Notify transport's callback interface that there is a new link
-        transport_error!(
-            Self::notify_new_link_unicast(&t, c_link).await,
-            close::reason::GENERIC
-        );
+        let cancel_guard = CloseIfCancelled::arm(&t);
+        let notified = Self::notify_new_link_unicast(&t, c_link).await;
+        cancel_guard.disarm();
+        transport_error!(notified, close::reason::GENERIC);
 
         start_rx();
 
