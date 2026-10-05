@@ -32,6 +32,8 @@ mod scenario6;
 mod scenario7;
 #[cfg(feature = "unstable")]
 mod scenario8;
+#[cfg(feature = "unstable")]
+mod upstream_agg;
 
 use std::{
     sync::{Arc, RwLock},

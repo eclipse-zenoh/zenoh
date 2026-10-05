@@ -190,18 +190,17 @@ impl Hat {
             return false;
         };
 
-        let is_matching_res = |qabl: &Resource| {
+        let is_matching = |qabl: &Resource, info: &QueryableInfoType| {
             let Some(ke) = qabl.keyexpr() else {
                 bug!("Queryable resource should not be root");
                 return false;
             };
-
-            ke.includes(key_expr)
-        };
-        let is_matching_info = |info: &QueryableInfoType| !complete || info.complete;
-
-        let is_matching = |qabl: &Resource, info: &QueryableInfoType| {
-            is_matching_res(qabl) && is_matching_info(info)
+            // Under AllComplete (`complete`), match a complete queryable OR a strict wildcard
+            // superset (`ke != key_expr`) — a transparent forwarder (e.g. a northbound aggregate
+            // that suppresses its complete children upstream). A same-key non-complete queryable
+            // stays non-matching. Mirrors the AllComplete route-path forwarder in
+            // dispatcher::compute_final_route (B-A2).
+            ke.includes(key_expr) && (!complete || info.complete || ke != key_expr)
         };
 
         let compute_other_matches = || {
