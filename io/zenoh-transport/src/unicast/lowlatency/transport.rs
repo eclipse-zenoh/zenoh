@@ -148,7 +148,7 @@ impl TransportUnicastLowlatency {
         // We also drop the status_guard, to avoid deadlock due to different lock acquisition order in init_existing_transport unicast.
         // The lock is no longer needed at this point, as we have already marked the transport as not alive and taken the callback to notify it of the closure.
         drop(status_guard);
-        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
+        let _ = self.manager.del_transport_unicast(self).await;
         Ok(())
     }
 
@@ -184,6 +184,10 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
         zasynclock!(self.status)
+    }
+
+    fn get_status_mutex(&self) -> &Arc<AsyncMutex<TransportStatus>> {
+        &self.status
     }
 
     fn get_links(&self) -> Vec<Link> {

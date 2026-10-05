@@ -18,7 +18,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tokio::sync::MutexGuard as AsyncMutexGuard;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -66,6 +66,10 @@ impl TransportUnicastTrait for MockTransportUnicastInner {
 
     async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
         unimplemented!("MockTransportUnicastInner::get_status")
+    }
+
+    fn get_status_mutex(&self) -> &Arc<AsyncMutex<TransportStatus>> {
+        unimplemented!("MockTransportUnicastInner::get_status_mutex")
     }
 
     fn get_zid(&self) -> ZenohIdProto {
@@ -178,6 +182,19 @@ pub fn mock_transport_unicast(
     let erased: Arc<dyn TransportUnicastTrait> = inner.clone();
     let transport = TransportUnicast::from(&erased);
     (transport, inner)
+}
+
+/// Test-only guard that keeps the transport object behind a [`TransportUnicast`] alive.
+///
+/// A [`TransportUnicast`] only holds a `Weak` reference: once the manager has torn the
+/// transport down, it cannot be dereferenced anymore. Tests hold this guard to drive a late
+/// `close()` on an already torn down transport, as a stale in-flight `delete()` (e.g. one of
+/// several concurrent closes of the same transport) would.
+pub struct TransportKeepAliveGuard(#[allow(dead_code)] Arc<dyn TransportUnicastTrait>);
+
+/// Returns a guard keeping the transport object behind `transport` alive, if it still is.
+pub fn keep_transport_alive(transport: &TransportUnicast) -> Option<TransportKeepAliveGuard> {
+    transport.get_inner().ok().map(TransportKeepAliveGuard)
 }
 
 pub fn make_transport_manager_builder(
