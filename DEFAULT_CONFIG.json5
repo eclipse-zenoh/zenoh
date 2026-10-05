@@ -428,6 +428,27 @@
   //         "**"
   //       ],
   //     },
+  //     {
+  //       /// A rule can alternatively (or additionally) define key expression templates,
+  //       /// expanded per-connection with the authenticated identity of the remote instance.
+  //       /// Supported placeholders: ${cert_common_name} (TLS/QUIC certificate common name)
+  //       /// and ${username} (user/password authentication).
+  //       /// The substituted value must be usable as (part of) a single key expression chunk
+  //       /// (it must not contain '/', '*', '$', '?' or '#'), otherwise the rule is skipped
+  //       /// for that connection; it is also skipped if the template references an identity
+  //       /// the connection does not have. With this rule and "default_permission": "deny",
+  //       /// a client whose certificate common name is "tenant1" can only use "tenant/tenant1/**".
+  //       "id": "rule3",
+  //       "messages": [
+  //         "put", "delete", "declare_subscriber",
+  //         "query", "reply", "declare_queryable",
+  //       ],
+  //       "flows":["egress","ingress"],
+  //       "permission": "allow",
+  //       "key_expr_templates": [
+  //         "tenant/${cert_common_name}/**"
+  //       ],
+  //     },
   //   ],
   //   /// List of combinations of subjects.
   //   ///
@@ -446,6 +467,12 @@
   //       /// Subjects can be cert_common_names when using TLS or Quic
   //       "cert_common_names": [
   //         "example.zenoh.io"
+  //       ],
+  //       /// Subjects can also match cert_common_names by prefix: a remote instance
+  //       /// matches if its certificate common name starts with any listed prefix.
+  //       /// Combined with "cert_common_names" (exact matches) when both are provided.
+  //       "cert_common_name_prefixes": [
+  //         "tenant"
   //       ],
   //       /// Subjects can be usernames when using user/password authentication
   //       "usernames": [

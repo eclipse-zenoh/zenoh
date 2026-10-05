@@ -18,7 +18,12 @@
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
 
-use std::{any::Any, collections::HashSet, iter, sync::Arc};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    iter,
+    sync::Arc,
+};
 
 use itertools::Itertools;
 use zenoh_config::{
@@ -39,8 +44,9 @@ use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 use super::{
-    authorization::PolicyEnforcer, EgressInterceptor, IngressInterceptor, InterceptorFactory,
-    InterceptorFactoryTrait, InterceptorLinkWrapper, InterceptorTrait,
+    authorization::{FlowPolicy, PolicyEnforcer, TemplateVars},
+    EgressInterceptor, IngressInterceptor, InterceptorFactory, InterceptorFactoryTrait,
+    InterceptorLinkWrapper, InterceptorTrait,
 };
 use crate::{
     key_expr::KeyExpr,
@@ -58,6 +64,8 @@ pub struct AuthSubject {
 struct EgressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
+    // per-subject policies built from template rules with this transport's authenticated identity
+    conn_policies: Option<Arc<HashMap<usize, FlowPolicy>>>,
     zid: ZenohIdProto,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::DropStats,
@@ -367,6 +375,8 @@ impl EgressAclEnforcer {
 struct IngressAclEnforcer {
     policy_enforcer: Arc<PolicyEnforcer>,
     subject: Vec<AuthSubject>,
+    // per-subject policies built from template rules with this transport's authenticated identity
+    conn_policies: Option<Arc<HashMap<usize, FlowPolicy>>>,
     zid: ZenohIdProto,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::DropStats,
@@ -773,6 +783,8 @@ impl InterceptorFactoryTrait for AclEnforcer {
         }
 
         let mut auth_subjects = HashSet::new();
+        // (matched subject id, authenticated identity attributes) pairs feeding template rules
+        let mut subject_vars: HashSet<(usize, TemplateVars)> = HashSet::new();
 
         for ((((username, interface), cert_common_name), link_protocol), zid) in
             iter::once(username)
@@ -790,12 +802,25 @@ impl InterceptorFactoryTrait for AclEnforcer {
             };
 
             for entry in self.enforcer.subject_store.query(&query) {
+                subject_vars.insert((
+                    entry.id,
+                    TemplateVars {
+                        cert_common_name: query.cert_common_name.as_ref().map(|ccn| ccn.0.clone()),
+                        username: query.username.as_ref().map(|username| username.0.clone()),
+                    },
+                ));
                 auth_subjects.insert(AuthSubject {
                     id: entry.id,
                     name: format!("{query}"),
                 });
             }
         }
+
+        let subject_vars = subject_vars.into_iter().collect::<Vec<_>>();
+        let conn_policies = self
+            .enforcer
+            .build_connection_policies(&subject_vars)
+            .map(Arc::new);
 
         let zid = match transport.get_zid() {
             Ok(zid) => zid,
@@ -824,6 +849,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects.clone(),
+            conn_policies: conn_policies.clone(),
             #[cfg(feature = "stats")]
             stats: stats.clone(),
         });
@@ -831,6 +857,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
             policy_enforcer: self.enforcer.clone(),
             zid,
             subject: auth_subjects,
+            conn_policies,
             #[cfg(feature = "stats")]
             stats: stats.clone(),
         });
@@ -975,14 +1002,26 @@ pub trait AclActionMethods {
     fn zid(&self) -> &ZenohIdProto;
     fn flow(&self) -> InterceptorFlow;
     fn authn_ids(&self) -> &Vec<AuthSubject>;
+    fn conn_policies(&self) -> Option<&HashMap<usize, FlowPolicy>>;
     fn action(&self, action: AclMessage, log_msg: &str, key_expr: &keyexpr) -> Permission {
         let policy_enforcer = self.policy_enforcer();
         let authn_ids = self.authn_ids();
         let zid = self.zid();
         let mut decision = policy_enforcer.default_permission;
         for subject in authn_ids {
-            match policy_enforcer.policy_decision_point(subject.id, self.flow(), action, key_expr) {
-                Ok(Permission::Allow) => {
+            // a subject's effective policy is the union of its static rules and the
+            // template rules expanded with this connection's authenticated identity
+            let conn_policy = self
+                .conn_policies()
+                .and_then(|policies| policies.get(&subject.id));
+            match policy_enforcer.subject_decision(
+                subject.id,
+                conn_policy,
+                self.flow(),
+                action,
+                key_expr,
+            ) {
+                Permission::Allow => {
                     tracing::trace!(
                         "{} on {} is authorized to {} on {}",
                         zid,
@@ -993,7 +1032,7 @@ pub trait AclActionMethods {
                     decision = Permission::Allow;
                     break;
                 }
-                Ok(Permission::Deny) => {
+                Permission::Deny => {
                     tracing::trace!(
                         "{} on {} is unauthorized to {} on {}",
                         zid,
@@ -1004,17 +1043,6 @@ pub trait AclActionMethods {
 
                     decision = Permission::Deny;
                     continue;
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        "{} on {} has an authorization error to {} on {}: {}",
-                        zid,
-                        subject.name,
-                        log_msg,
-                        key_expr,
-                        e
-                    );
-                    return Permission::Deny;
                 }
             }
         }
@@ -1038,6 +1066,10 @@ impl AclActionMethods for EgressAclEnforcer {
     fn authn_ids(&self) -> &Vec<AuthSubject> {
         &self.subject
     }
+
+    fn conn_policies(&self) -> Option<&HashMap<usize, FlowPolicy>> {
+        self.conn_policies.as_deref()
+    }
 }
 
 impl AclActionMethods for IngressAclEnforcer {
@@ -1055,5 +1087,9 @@ impl AclActionMethods for IngressAclEnforcer {
 
     fn authn_ids(&self) -> &Vec<AuthSubject> {
         &self.subject
+    }
+
+    fn conn_policies(&self) -> Option<&HashMap<usize, FlowPolicy>> {
+        self.conn_policies.as_deref()
     }
 }
