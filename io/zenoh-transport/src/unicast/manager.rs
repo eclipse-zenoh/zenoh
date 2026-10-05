@@ -924,15 +924,29 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &ZenohIdProto) -> ZResult<()> {
-        zasynclock!(self.state.unicast.transports)
-            .remove(peer)
-            .ok_or_else(|| {
+    /// Removes `transport` from the established transports map.
+    ///
+    /// The entry under the peer's zid is removed only if it is this very transport: a late
+    /// `delete()` of an already closed transport (e.g. one of several concurrent closes of the
+    /// same transport) must not remove a transport that the same peer has re-established in
+    /// the meantime.
+    pub(super) async fn del_transport_unicast(
+        &self,
+        transport: &dyn TransportUnicastTrait,
+    ) -> ZResult<()> {
+        let peer = transport.get_zid();
+        let mut guard = zasynclock!(self.state.unicast.transports);
+        match guard.get(&peer) {
+            Some(entry) if Arc::ptr_eq(entry.get_status_mutex(), transport.get_status_mutex()) => {
+                guard.remove(&peer);
+                Ok(())
+            }
+            _ => {
                 let e = zerror!("Can not delete the transport of peer: {}", peer);
                 tracing::trace!("{}", e);
-                e
-            })?;
-        Ok(())
+                Err(e.into())
+            }
+        }
     }
 
     pub(crate) async fn handle_new_link_unicast(&self, link: LinkUnicast) {
