@@ -48,6 +48,8 @@ pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
+# 0.2.1 requires Rust 1.79.
+powerfmt = { version = "=0.2.0", default-features = false }
 prost = "=0.14.1"
 prost-derive = "=0.14.1"
 quinn-proto = "=0.11.14"
@@ -102,6 +104,7 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "potential_utf",
+  "powerfmt",
   "prost",
   "prost-derive",
   "quinn-proto",
