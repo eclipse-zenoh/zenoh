@@ -515,7 +515,7 @@ impl HatQueriesTrait for Hat {
         tables: &TablesData,
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, QueryableInfoType> {
-        self.owned_faces(tables)
+        self.owned_faces_incl_mcast(tables)
             .flat_map(|f| self.face_hat(f).remote_qabls.values())
             .filter(|(qabl, _)| res.is_none_or(|res| res.matches(qabl)))
             .fold(HashMap::new(), |mut acc, (res, info)| {
