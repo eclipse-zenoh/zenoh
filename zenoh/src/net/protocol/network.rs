@@ -725,6 +725,7 @@ impl Network {
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
                         node.sn = ls.sn;
+                        node.whatami = Some(ls.whatami);
                         node.links.clone_from(&ls.links);
                         if ls.locators.is_some() {
                             node.locators = ls.locators;
