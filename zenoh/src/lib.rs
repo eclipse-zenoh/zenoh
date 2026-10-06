@@ -97,7 +97,7 @@
 //! # Usage examples
 //!
 //! Below are basic examples of using Zenoh. More examples are available in the documentation for each module and in
-//! [zenoh-examples](https://github.com/zenoh-io/zenoh/tree/main/examples).
+//! [zenoh-examples](https://github.com/eclipse-zenoh/zenoh/tree/main/examples).
 //!
 //! ## Publishing/Subscribing
 //! The example below shows how to publish and subscribe to data using Zenoh.
