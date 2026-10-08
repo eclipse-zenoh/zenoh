@@ -24,6 +24,7 @@
 
 mod adminspace;
 mod declare;
+mod expr_id;
 mod forwarding;
 mod interest;
 mod oam;
@@ -238,6 +239,27 @@ impl RecordingPrimitives {
                 } else {
                     None
                 }
+            })
+            .collect()
+    }
+
+    /// Key expression mapping messages in arrival order: `(id, Some(expr))` for a
+    /// `DeclareKeyExpr`, `(id, None)` for an `UndeclareKeyExpr`.
+    pub(crate) fn keyexpr_mappings(&self) -> Vec<(ExprId, Option<String>)> {
+        self.messages
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|m| match m {
+                Message::Declare(Declare {
+                    body: DeclareBody::DeclareKeyExpr(d),
+                    ..
+                }) => Some((d.id, Some(d.wire_expr.suffix.to_string()))),
+                Message::Declare(Declare {
+                    body: DeclareBody::UndeclareKeyExpr(u),
+                    ..
+                }) => Some((u.id, None)),
+                _ => None,
             })
             .collect()
     }
