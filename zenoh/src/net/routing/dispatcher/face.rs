@@ -795,6 +795,8 @@ impl Primitives for Face {
         let hats = &mut tables.hats;
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
+        let mut local_mappings =
+            std::mem::take(&mut get_mut_unchecked(ctx.src_face).local_mappings);
 
         let UnregisterFaceEntitiesResult {
             removed_subscribers,
@@ -878,11 +880,11 @@ impl Primitives for Face {
         }
         get_mut_unchecked(ctx.src_face).remote_mappings.clear();
 
-        for res in get_mut_unchecked(ctx.src_face).local_mappings.values_mut() {
+        for res in local_mappings.values_mut() {
             get_mut_unchecked(res).face_ctxs.remove(&src_fid);
             Resource::clean(res);
         }
-        get_mut_unchecked(ctx.src_face).local_mappings.clear();
+        drop(local_mappings);
 
         for interest in get_mut_unchecked(ctx.src_face).local_interests.values_mut() {
             if let Some(mut res) = interest.res.take() {
