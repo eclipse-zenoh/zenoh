@@ -14,10 +14,17 @@
 use std::collections::HashMap;
 
 use zenoh_core::{zread, zwrite};
-use zenoh_protocol::core::{Bound, ExprId, Region, WhatAmI, EMPTY_EXPR_ID};
+use zenoh_protocol::{
+    core::{Bound, ExprId, Region, WhatAmI, EMPTY_EXPR_ID},
+    network::{
+        interest::{InterestMode, InterestOptions},
+        Declare, DeclareBody,
+    },
+};
 use zenoh_sync::get_mut_unchecked;
 
-use super::{try_init_tracing_subscriber, FaceDef, Harness, HarnessBuilder, MockFace};
+use super::{try_init_tracing_subscriber, FaceDef, Harness, HarnessBuilder, Message, MockFace};
+use crate::net::primitives::Primitives;
 
 /// A peer gateway with one local session and one face towards a router, the shape of a
 /// ROS 2 process running rmw_zenoh in peer mode next to `rmw_zenohd`.
@@ -47,6 +54,39 @@ fn exhaust_expr_ids(face: &MockFace) {
 fn local_mappings(face: &MockFace) -> usize {
     let _tables = zread!(face.face.tables.tables);
     face.face.state.local_mappings.len()
+}
+
+/// Key expressions of the `UndeclareToken`s received by `face`, resolved against the mappings
+/// live when each one arrived, or `None` when its scope was not mapped.
+fn undeclared_token_keys(face: &MockFace) -> Vec<Option<String>> {
+    face.recorder().with_messages(|msgs| {
+        let mut live: HashMap<ExprId, String> = HashMap::new();
+        let mut keys = Vec::new();
+        for msg in msgs {
+            let Message::Declare(Declare { body, .. }) = msg else {
+                continue;
+            };
+            match body {
+                DeclareBody::DeclareKeyExpr(d) => {
+                    live.insert(d.id, d.wire_expr.suffix.to_string());
+                }
+                DeclareBody::UndeclareKeyExpr(u) => {
+                    live.remove(&u.id);
+                }
+                DeclareBody::UndeclareToken(u) => {
+                    let wire_expr = &u.ext_wire_expr.wire_expr;
+                    keys.push(if wire_expr.scope == EMPTY_EXPR_ID {
+                        Some(wire_expr.suffix.to_string())
+                    } else {
+                        live.get(&wire_expr.scope)
+                            .map(|prefix| format!("{prefix}{}", wire_expr.suffix))
+                    });
+                }
+                _ => {}
+            }
+        }
+        keys
+    })
 }
 
 /// Declare then undeclare `cycles` liveliness tokens, each on a key never used before.
@@ -145,4 +185,46 @@ fn should_map_new_keys_again_once_an_expr_id_is_released() {
 
     let token = router.recorder().tokens().pop().unwrap();
     assert_ne!(token.wire_expr.scope, EMPTY_EXPR_ID);
+}
+
+#[test]
+fn should_not_send_undeclare_keyexpr_to_a_closing_face() {
+    let (_peer, router, session) = peer_with_router_face();
+    session.declare_token(None, 0, "a/b/c");
+    session.declare_token(None, 1, "a/b");
+    router.declare_subscriber(None, 0, "a/b/c");
+    session.undeclare_token(0);
+    session.undeclare_token(1);
+    router.recorder().clear();
+
+    router.face.send_close();
+
+    assert!(router
+        .recorder()
+        .keyexpr_mappings()
+        .iter()
+        .all(|(_, expr)| expr.is_some()));
+}
+
+#[test]
+fn should_resolve_the_key_of_a_token_undeclared_to_a_face_that_never_saw_it_declared() {
+    try_init_tracing_subscriber();
+    let router = Harness::new_router();
+    let client = router.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(Region::default_south(WhatAmI::Client)),
+    );
+    let session = router.new_session();
+    session.declare_token(None, 0, "a/b");
+    let options = InterestOptions::KEYEXPRS + InterestOptions::TOKENS;
+    client.interest(1, InterestMode::Future, options, "a/**");
+    client.interest(2, InterestMode::Current, options, "a/**");
+
+    session.undeclare_token(0);
+
+    assert_eq!(
+        undeclared_token_keys(&client),
+        vec![Some("a/b".to_string())]
+    );
 }
