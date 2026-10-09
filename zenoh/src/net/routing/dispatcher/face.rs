@@ -104,6 +104,27 @@ impl InterestState {
     }
 }
 
+impl InterestState {
+    /// Undoes [`InterestState::set_finalized`] when the interest goes away. The remote stops
+    /// sending declarations for this resource, so the flags must not keep claiming that the
+    /// face's declarations are complete, or data routed on them would be dropped.
+    pub(crate) fn unset_finalized(&mut self) {
+        if !self.finalized {
+            return;
+        }
+        if let Some(res) = self.res.as_mut().map(get_mut_unchecked) {
+            if let Some(ctx) = res.face_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
+                if self.options.subscribers() {
+                    ctx.subscriber_interest_finalized = false;
+                }
+                if self.options.queryables() {
+                    ctx.queryable_interest_finalized = false;
+                }
+            }
+        }
+    }
+}
+
 impl PartialEq<RemoteInterest> for InterestState {
     fn eq(&self, other: &RemoteInterest) -> bool {
         self.options == other.options && self.res == other.res
