@@ -2148,3 +2148,134 @@ fn test_complete_queryable_failover() {
     assert_eq!(r0_r1.a2b.recorder().requests().len(), 1);
     assert_eq!(r0_r2.a2b.recorder().requests().len(), 1);
 }
+
+#[test_case::test_matrix([WhatAmI::Client, WhatAmI::Peer])]
+fn test_routing_after_publisher_undeclaration(mode: WhatAmI) {
+    const SUBSCRIBER_ID: u32 = 1;
+    const KEYEXPR: &str = "k";
+    const INTEREST_ID: u32 = 1;
+
+    let s = HarnessBuilder::new()
+        .mode(mode)
+        .subregions([Region::Local])
+        .build();
+
+    let n = s.new_face(
+        FaceDef::default()
+            .region(Region::North)
+            .remote_bound(Bound::South),
+    );
+    let l = s.new_session();
+
+    l.interest(
+        INTEREST_ID,
+        InterestMode::CurrentFuture,
+        InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+        KEYEXPR,
+    );
+
+    assert_eq!(
+        n.recorder().interests().len(),
+        1,
+        "current-future interest 1 should be propagated upstream"
+    );
+
+    n.declare_subscriber(Some(INTEREST_ID), SUBSCRIBER_ID, KEYEXPR);
+    n.declare_final(1);
+
+    assert_eq!(
+        l.recorder().subscribers().len(),
+        1,
+        "subscriber 1 should be propagated to the local interested face"
+    );
+
+    l.interest(
+        INTEREST_ID,
+        InterestMode::Final,
+        InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+        KEYEXPR,
+    );
+
+    n.undeclare_subscriber(SUBSCRIBER_ID);
+
+    assert_eq!(l.recorder().undeclared_subscribers().len(), 1, "subscriber 1's undeclaration should be propagated downstream, even though it has sent `InterestFinal`");
+
+    // NOTE: if a subscriber were to declared upstream at this point, it would
+    // not be propagated downstream as the local face no longer has an active interest
+
+    l.put(KEYEXPR, vec![42]);
+
+    assert_eq!(
+        n.recorder().pushes().len(),
+        1,
+        "gateway should forward the PUT; it has stale knowledge of upstream subscribers at this point"
+    );
+}
+
+#[test_case::test_matrix([WhatAmI::Client, WhatAmI::Peer])]
+fn test_routing_after_queryable_undeclaration(mode: WhatAmI) {
+    const QUERYABLE_ID: u32 = 1;
+    const KEYEXPR: &str = "k";
+    const INTEREST_ID: u32 = 1;
+
+    let s = HarnessBuilder::new()
+        .mode(mode)
+        .subregions([Region::Local])
+        .build();
+
+    let n = s.new_face(
+        FaceDef::default()
+            .region(Region::North)
+            .remote_bound(Bound::South),
+    );
+    let l = s.new_session();
+
+    l.interest(
+        INTEREST_ID,
+        InterestMode::CurrentFuture,
+        InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
+        KEYEXPR,
+    );
+
+    assert_eq!(
+        n.recorder().interests().len(),
+        1,
+        "current-future interest 1 should be propagated upstream"
+    );
+
+    n.declare_queryable(
+        Some(INTEREST_ID),
+        QUERYABLE_ID,
+        KEYEXPR,
+        QueryableInfoType::default(),
+    );
+    n.declare_final(INTEREST_ID);
+
+    assert_eq!(
+        l.recorder().queryables().len(),
+        1,
+        "queryable 1 should be propagated to the local interested face"
+    );
+
+    l.interest(
+        INTEREST_ID,
+        InterestMode::Final,
+        InterestOptions::KEYEXPRS + InterestOptions::QUERYABLES,
+        KEYEXPR,
+    );
+
+    n.undeclare_queryable(QUERYABLE_ID);
+
+    assert_eq!(l.recorder().undeclared_queryables().len(), 1, "queryable 1's undeclaration should be propagated downstream, even though it has sent `InterestFinal`");
+
+    // NOTE: if a queryable were to declared upstream at this point, it would
+    // not be propagated downstream as the local face no longer has an active interest
+
+    l.query(1, KEYEXPR);
+
+    assert_eq!(
+        n.recorder().requests().len(),
+        1,
+        "gateway should forward the GET; it has stale knowledge of upstream queryables at this point"
+    );
+}
