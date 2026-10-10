@@ -86,6 +86,36 @@ fn base_test() {
 }
 
 #[test]
+fn multibyte_first_char_test() {
+    // A key expression starting with a multibyte UTF-8 char, declared by a session, used to
+    // panic in `Resource::split_first_chunk` (#2834).
+    let router = new_router();
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = router.new_session(primitives);
+    register_expr(&tables, &mut face.state.clone(), 1, &"\u{232}/a".into());
+
+    face.declare_subscriber(
+        0,
+        &WireExpr::from(1).with_suffix("/\u{1F600}"),
+        &SubscriberInfo,
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    assert!(Resource::get_resource(
+        zread!(tables.tables).data._get_root(),
+        "\u{232}/a/\u{1F600}"
+    )
+    .is_some());
+}
+
+#[test]
 fn match_test() {
     let key_exprs = [
         "**",
