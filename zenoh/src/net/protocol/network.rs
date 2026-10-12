@@ -724,18 +724,29 @@ impl Network {
                     let node = &mut self.graph[idx];
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
-                        node.sn = ls.sn;
-                        node.whatami = Some(ls.whatami);
-                        node.links.clone_from(&ls.links);
+                        let Node {
+                            zid: _,
+                            whatami,
+                            locators,
+                            sn,
+                            links,
+                            is_gateway,
+                        } = node;
+
+                        *sn = ls.sn;
+                        *whatami = Some(ls.whatami);
                         if ls.locators.is_some() {
-                            node.locators = ls.locators;
+                            *locators = ls.locators;
                         }
+                        links.clone_from(&ls.links);
+                        *is_gateway = ls.is_gateway;
+
                         if oldsn == 0 {
                             new_nodes.push(idx);
                         } else {
                             updated_nodes.insert(idx);
                         }
-                        node.is_gateway = ls.is_gateway;
+
                         idx
                     } else {
                         // outdated link state - ignore
