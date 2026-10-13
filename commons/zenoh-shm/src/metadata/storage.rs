@@ -27,7 +27,7 @@ use super::{
 };
 use crate::api::provider::types::ZAllocError;
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 pub static mut GLOBAL_METADATA_STORAGE: MetadataStorage = MetadataStorage::new().unwrap();
 
 pub struct MetadataStorage {

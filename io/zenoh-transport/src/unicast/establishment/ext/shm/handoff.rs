@@ -113,7 +113,7 @@ impl TxHandoffChannel {
     }
 }
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 static mut GLOBAL_HANDOFF_REACTOR: HandoffReactor = HandoffReactor::new();
 
 struct HandoffReactor {
