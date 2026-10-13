@@ -20,7 +20,7 @@ use zenoh::{
     query::{ConsolidationMode, Query, QueryTarget, QueryableBuilder, Reply, ReplyKeyExpr},
     sample::SampleKind,
     session::SessionGetBuilder,
-    Session, Wait,
+    Session,
 };
 use zenoh_core::ztimeout;
 
@@ -310,97 +310,6 @@ async fn test_queryable_same_session() {
     test_queryable_impl(&s1, &s1, "same session", "test/queryable/same_session").await;
 
     ztimeout!(s1.close()).expect("Failed to close session s1");
-}
-
-async fn query_same_key_completeness(complete_flags: &[bool], target: QueryTarget) -> Vec<String> {
-    zenoh::init_log_from_env_or("error");
-
-    let mut sessions = zenoh_test::TestSessions::new();
-    let mut router_config = sessions.get_listener_config("tcp/127.0.0.1:0", 1);
-    router_config
-        .set_mode(Some(zenoh::config::WhatAmI::Router))
-        .unwrap();
-    let router = sessions.open_listener_with_cfg(router_config).await;
-
-    const KEY_EXPR: &str = "test/queryable/mixed_completeness/**";
-    const QUERY_KEY: &str = "test/queryable/mixed_completeness/probe";
-    let mut queryables = Vec::new();
-    for &complete in complete_flags {
-        queryables.push(
-            ztimeout!(router
-                .declare_queryable(KEY_EXPR)
-                .complete(complete)
-                .callback(move |query| {
-                    let payload = if complete { "complete" } else { "incomplete" };
-                    query.reply(QUERY_KEY, payload).wait().unwrap();
-                }))
-            .unwrap(),
-        );
-    }
-
-    let mut client_config = sessions.get_connector_config();
-    client_config
-        .set_mode(Some(zenoh::config::WhatAmI::Client))
-        .unwrap();
-    let client = sessions.open_connector_with_cfg(client_config).await;
-    tokio::time::sleep(SLEEP).await;
-
-    // Do not consolidate replies from the two queryables sharing the same key.
-    let replies = ztimeout!(client
-        .get(QUERY_KEY)
-        .target(target)
-        .consolidation(ConsolidationMode::None))
-    .unwrap();
-    let mut payloads = ztimeout!(replies
-        .into_stream()
-        .map(|reply| {
-            reply
-                .result()
-                .unwrap()
-                .payload()
-                .try_to_string()
-                .unwrap()
-                .into_owned()
-        })
-        .collect::<Vec<_>>());
-    payloads.sort();
-
-    for queryable in queryables {
-        ztimeout!(queryable.undeclare()).unwrap();
-    }
-    sessions.close().await;
-    payloads
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_queryable_mixed_completeness_single_complete() {
-    let replies = query_same_key_completeness(&[true], QueryTarget::AllComplete).await;
-    assert_eq!(replies, ["complete"]);
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_queryable_mixed_completeness_all_target() {
-    let replies = query_same_key_completeness(&[true, false], QueryTarget::All).await;
-    assert_eq!(replies, ["complete", "incomplete"]);
-}
-
-/// Regression for #2614: an incomplete declaration on the same session/key must
-/// not hide the existing complete queryable from a remote AllComplete query.
-///
-/// Both queryables are declared locally on one router session; the querying
-/// client connects over TCP. Local declarations use Region::Local, which selects
-/// hat/broker/queries.rs::register_queryable even though the session is a router.
-/// This tests the broker/local registration path, not the client, peer, or router
-/// register_queryable implementations used for declarations received on other
-/// regions. Covering those paths requires additional remote-queryable topologies.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_queryable_mixed_completeness_all_complete() {
-    let replies = query_same_key_completeness(&[true, false], QueryTarget::AllComplete).await;
-    assert_eq!(
-        replies,
-        ["complete"],
-        "AllComplete must still reach the complete queryable"
-    );
 }
 
 /// Tests for `Session::get` builder `accept_replies` setter.

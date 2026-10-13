@@ -516,13 +516,23 @@ impl MockFace {
 
     /// Inject a `Get` with an explicit payload.
     pub(crate) fn query(&self, id: RequestId, wire_expr: impl Into<WireExpr<'static>>) {
+        self.query_with_target(id, wire_expr, QueryTarget::DEFAULT);
+    }
+
+    /// Inject a query with an explicit routing target.
+    pub(crate) fn query_with_target(
+        &self,
+        id: RequestId,
+        wire_expr: impl Into<WireExpr<'static>>,
+        target: QueryTarget,
+    ) {
         self.face.send_request(&mut Request {
             id,
             wire_expr: wire_expr.into(),
             ext_qos: ext::QoSType::DEFAULT,
             ext_tstamp: None,
             ext_nodeid: NodeIdType::DEFAULT,
-            ext_target: QueryTarget::DEFAULT,
+            ext_target: target,
             ext_budget: None,
             ext_timeout: None,
             ext_ts_stack: None,
