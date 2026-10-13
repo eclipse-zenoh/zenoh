@@ -384,10 +384,17 @@ async fn test_queryable_mixed_completeness_all_target() {
     assert_eq!(replies, ["complete", "incomplete"]);
 }
 
+/// Regression for #2614: an incomplete declaration on the same session/key must
+/// not hide the existing complete queryable from a remote AllComplete query.
+///
+/// Both queryables are declared locally on one router session; the querying
+/// client connects over TCP. Local declarations use Region::Local, which selects
+/// hat/broker/queries.rs::register_queryable even though the session is a router.
+/// This tests the broker/local registration path, not the client, peer, or router
+/// register_queryable implementations used for declarations received on other
+/// regions. Covering those paths requires additional remote-queryable topologies.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_queryable_mixed_completeness_all_complete() {
-    // Regression for #2614: an incomplete declaration on the same session/key
-    // must not hide the existing complete queryable from a remote AllComplete.
     let replies = query_same_key_completeness(&[true, false], QueryTarget::AllComplete).await;
     assert_eq!(
         replies,
