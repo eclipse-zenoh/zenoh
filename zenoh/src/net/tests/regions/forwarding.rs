@@ -19,10 +19,12 @@ use zenoh_protocol::{
     core::{Bound, Region, Reliability, WhatAmI, WireExpr},
     network::{
         declare::queryable::ext::QueryableInfoType,
+        ext::{NodeIdType, QoSType},
         interest::{InterestMode, InterestOptions},
         request::ext::QueryTarget,
-        Mapping, Push,
+        Mapping, Push, Request,
     },
+    zenoh::{Query, RequestBody},
 };
 
 use super::{try_init_tracing_subscriber, FaceDef, HarnessBuilder};
@@ -59,7 +61,18 @@ fn query_same_key_completeness(complete_flags: &[bool], target: QueryTarget) -> 
     }
 
     session.recorder().clear();
-    client.query_with_target(1, "test/queryable/mixed_completeness/probe", target);
+    client.face.send_request(&mut Request {
+        id: 1,
+        wire_expr: "test/queryable/mixed_completeness/probe".into(),
+        ext_qos: QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::DEFAULT,
+        ext_target: target,
+        ext_budget: None,
+        ext_timeout: None,
+        ext_ts_stack: None,
+        payload: RequestBody::Query(Query::default()),
+    });
     let requests = session.recorder().requests();
     for request in &requests {
         assert_eq!(request.ext_target, target);
