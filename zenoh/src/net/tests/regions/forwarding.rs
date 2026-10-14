@@ -19,9 +19,12 @@ use zenoh_protocol::{
     core::{Bound, Region, Reliability, WhatAmI, WireExpr},
     network::{
         declare::queryable::ext::QueryableInfoType,
+        ext::{NodeIdType, QoSType},
         interest::{InterestMode, InterestOptions},
-        Mapping, Push,
+        request::ext::QueryTarget,
+        Mapping, Push, Request,
     },
+    zenoh::{Query, RequestBody},
 };
 
 use super::{try_init_tracing_subscriber, FaceDef, HarnessBuilder};
@@ -29,6 +32,89 @@ use crate::net::{
     primitives::Primitives,
     tests::regions::{Connection, EstablishedConnection},
 };
+
+fn query_same_key_completeness(complete_flags: &[bool], target: QueryTarget) -> usize {
+    try_init_tracing_subscriber();
+
+    let client_region = Region::default_south(WhatAmI::Client);
+    let gateway = HarnessBuilder::new()
+        .mode(WhatAmI::Router)
+        .subregions([Region::Local, client_region])
+        .build();
+    let session = gateway.new_session();
+    let client = gateway.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(client_region),
+    );
+
+    for (id, &complete) in complete_flags.iter().enumerate() {
+        session.declare_queryable(
+            None,
+            id as u32 + 1,
+            "test/queryable/mixed_completeness/**",
+            QueryableInfoType {
+                complete,
+                distance: 0,
+            },
+        );
+    }
+
+    session.recorder().clear();
+    client.face.send_request(&mut Request {
+        id: 1,
+        wire_expr: "test/queryable/mixed_completeness/probe".into(),
+        ext_qos: QoSType::DEFAULT,
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::DEFAULT,
+        ext_target: target,
+        ext_budget: None,
+        ext_timeout: None,
+        ext_ts_stack: None,
+        payload: RequestBody::Query(Query::default()),
+    });
+    let requests = session.recorder().requests();
+    for request in &requests {
+        assert_eq!(request.ext_target, target);
+    }
+    requests.len()
+}
+
+#[test]
+fn test_queryable_mixed_completeness_single_complete() {
+    assert_eq!(
+        query_same_key_completeness(&[true], QueryTarget::AllComplete),
+        1
+    );
+}
+
+#[test]
+fn test_queryable_mixed_completeness_all_target() {
+    assert_eq!(
+        query_same_key_completeness(&[true, false], QueryTarget::All),
+        1
+    );
+}
+
+/// Regression for #2614: an incomplete declaration must not hide a complete
+/// queryable on the same session/key from a remote AllComplete query.
+///
+/// Both queryables are injected on one local session face of a router gateway.
+/// Region::Local selects hat/broker/queries.rs::register_queryable, not the
+/// client, peer, or router registration implementations. A mock remote client
+/// sends the query; no real transport connections or sleeps are needed.
+///
+/// The assertion checks forwarding to the local session face, not individual
+/// queryable callbacks or replies. Filtering the incomplete queryable within
+/// the session is outside this routing test's scope.
+#[test]
+fn test_queryable_mixed_completeness_all_complete() {
+    assert_eq!(
+        query_same_key_completeness(&[true, false], QueryTarget::AllComplete),
+        1,
+        "AllComplete must still be forwarded to the session with a complete queryable"
+    );
+}
 
 /// Tests data routing between peer subregions.
 ///
