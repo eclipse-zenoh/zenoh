@@ -705,7 +705,6 @@ impl Primitives for Face {
     fn send_close(&self) {
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
-        finalize_pending_queries(&self.tables, &mut state);
         let mut declares = vec![];
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         finalize_pending_interests(&self.tables, &mut state, &mut |p, m| {
@@ -821,11 +820,19 @@ impl Primitives for Face {
         get_mut_unchecked(ctx.src_face).local_interests.clear();
 
         hats[region].close_face(ctx);
+        // Routes cached while the face was open may target it although it declared no matching
+        // entity (queries are sent to faces whose interest is not finalized yet), so they are not
+        // covered by the invalidations above.
+        hats[region].disable_all_routes(&mut tables.data);
 
         tables.data.faces.remove(&src_fid);
 
         drop(wtables);
         drop(ctrl_lock);
+        // Finalize the pending queries once the face can no longer be selected as a query
+        // destination: `route_query` only holds a read lock on the tables, so queries may be routed
+        // to the face until it is removed from them above.
+        finalize_pending_queries(&self.tables, &mut state);
         for (p, m) in declares {
             m.with_mut(|m| p.send_declare(m));
         }
