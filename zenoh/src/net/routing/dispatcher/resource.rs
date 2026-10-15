@@ -27,7 +27,10 @@ use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, Region, WireExpr},
     network::{
         self,
-        declare::{self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr},
+        declare::{
+            self, queryable::ext::QueryableInfoType, Declare, DeclareBody, DeclareKeyExpr,
+            UndeclareKeyExpr,
+        },
         interest::InterestId,
         Mapping, RequestId,
     },
@@ -537,6 +540,9 @@ impl Resource {
         let mutres = get_mut_unchecked(&mut resclone);
         if let Some(ref mut parent) = mutres.parent {
             tracing::trace!(strong_count = Arc::strong_count(res));
+            if res.children.is_empty() {
+                Resource::release_unused_local_expr_ids(res);
+            }
             if Arc::strong_count(res) <= 3 && res.children.is_empty() {
                 // consider only childless resource held by only one external object (+ 1 strong count for resclone, + 1 strong count for res.parent to a total of 3 )
                 tracing::debug!("Unregister resource {}", res.expr());
@@ -557,6 +563,40 @@ impl Resource {
                     get_mut_unchecked(parent).children.remove(res.suffix());
                 }
                 Resource::clean(parent);
+            }
+        }
+    }
+
+    /// Releases the ids this node declared for `res` to its faces when those mappings are the
+    /// only remaining holders of `res` besides the caller, `clean`'s clone and the parent, and
+    /// sends `UndeclareKeyExpr` to each face so the remote releases them too.
+    fn release_unused_local_expr_ids(res: &mut Arc<Resource>) {
+        let mapped: Vec<(Arc<FaceState>, ExprId)> = res
+            .face_ctxs
+            .values()
+            .filter_map(|ctx| ctx.local_expr_id.map(|id| (ctx.face.clone(), id)))
+            .collect();
+        if mapped.is_empty() || Arc::strong_count(res) > 3 + mapped.len() {
+            return;
+        }
+        for (mut face, id) in mapped {
+            if let Some(ctx) = get_mut_unchecked(res).face_ctxs.get_mut(&face.id) {
+                get_mut_unchecked(ctx).local_expr_id = None;
+            }
+            if get_mut_unchecked(&mut face)
+                .release_local_expr_id(id)
+                .is_some()
+            {
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    &mut Declare {
+                        interest_id: None,
+                        ext_qos: declare::ext::QoSType::DECLARE,
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                        body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id }),
+                    },
+                    res.expr().to_string(),
+                ));
             }
         }
     }
@@ -692,11 +732,13 @@ impl Resource {
                             .unwrap_or(true)
                     })
                 {
+                    let Some(expr_id) = get_mut_unchecked(face).next_local_expr_id() else {
+                        return res.expr().to_string().into();
+                    };
                     let ctx = get_mut_unchecked(&mut nonwild_prefix)
                         .face_ctxs
                         .entry(face.id)
                         .or_insert_with(|| Arc::new(FaceContext::new(face.clone())));
-                    let expr_id = face.get_next_local_id();
                     get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
                     get_mut_unchecked(face)
                         .local_mappings

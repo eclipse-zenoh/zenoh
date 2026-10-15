@@ -13,7 +13,7 @@
 //
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt::{self, Debug},
     sync::{Arc, Weak},
     time::Duration,
@@ -112,6 +112,55 @@ impl PartialEq<RemoteInterest> for InterestState {
 
 pub(crate) type FaceId = usize;
 
+/// Allocator of the [`ExprId`]s this node declares to a face.
+///
+/// Hands out never-used ids first, then released ids in release order, so a released id is
+/// reused as late as possible. Allocation is amortized O(1) and returns `None` once every id
+/// is in use.
+pub(crate) struct ExprIdAllocator {
+    next_fresh: u32,
+    released: VecDeque<ExprId>,
+    exhaustion_reported: bool,
+}
+
+impl Default for ExprIdAllocator {
+    fn default() -> Self {
+        Self {
+            next_fresh: 1,
+            released: VecDeque::new(),
+            exhaustion_reported: false,
+        }
+    }
+}
+
+impl ExprIdAllocator {
+    /// Returns an id for which `in_use` is false, or `None` when there is none.
+    pub(crate) fn allocate(&mut self, in_use: impl Fn(ExprId) -> bool) -> Option<ExprId> {
+        while self.next_fresh <= u32::from(ExprId::MAX) {
+            let id = self.next_fresh as ExprId;
+            self.next_fresh += 1;
+            if !in_use(id) {
+                return Some(id);
+            }
+            self.released.push_back(id);
+        }
+        for _ in 0..self.released.len() {
+            let id = self.released.pop_front()?;
+            if !in_use(id) {
+                return Some(id);
+            }
+            self.released.push_back(id);
+        }
+        None
+    }
+
+    /// Makes `id` available again.
+    pub(crate) fn release(&mut self, id: ExprId) {
+        self.released.push_back(id);
+        self.exhaustion_reported = false;
+    }
+}
+
 pub struct FaceState {
     pub(crate) id: FaceId,
     pub(crate) zid: ZenohIdProto,
@@ -124,6 +173,7 @@ pub struct FaceState {
     pub(crate) pending_current_interests: HashMap<InterestId, PendingCurrentInterest>,
     pub(crate) local_mappings: IntHashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: IntHashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_expr_ids: ExprIdAllocator,
     pub(crate) next_qid: RequestId,
     /// Pending queries sent to this face.
     ///
@@ -165,6 +215,7 @@ impl FaceStateBuilder {
             pending_current_interests: HashMap::new(),
             local_mappings: IntHashMap::new(),
             remote_mappings: IntHashMap::new(),
+            local_expr_ids: ExprIdAllocator::default(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group: None,
@@ -241,12 +292,32 @@ impl FaceState {
         }
     }
 
-    pub(crate) fn get_next_local_id(&self) -> ExprId {
-        let mut id = 1;
-        while self.local_mappings.contains_key(&id) || self.remote_mappings.contains_key(&id) {
-            id += 1;
+    /// Allocates an id for a key expression this node declares to the face, or returns `None`
+    /// when every id is in use.
+    pub(crate) fn next_local_expr_id(&mut self) -> Option<ExprId> {
+        let (local, remote) = (&self.local_mappings, &self.remote_mappings);
+        let id = self
+            .local_expr_ids
+            .allocate(|id| local.contains_key(&id) || remote.contains_key(&id));
+        if id.is_none() && !self.local_expr_ids.exhaustion_reported {
+            self.local_expr_ids.exhaustion_reported = true;
+            tracing::warn!(
+                "{} ExprId space exhausted ({} local + {} remote mappings): declaring key \
+                 expressions as full strings until an id is released",
+                self,
+                self.local_mappings.len(),
+                self.remote_mappings.len()
+            );
         }
         id
+    }
+
+    /// Removes the mapping of a key expression this node declared to the face and makes its id
+    /// available again. Returns the unmapped resource, if any.
+    pub(crate) fn release_local_expr_id(&mut self, id: ExprId) -> Option<Arc<Resource>> {
+        let res = self.local_mappings.remove(&id)?;
+        self.local_expr_ids.release(id);
+        Some(res)
     }
 
     pub(crate) fn update_interceptors_caches(&self, res: &mut Arc<Resource>) {
@@ -724,6 +795,8 @@ impl Primitives for Face {
         let hats = &mut tables.hats;
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
+        let mut local_mappings =
+            std::mem::take(&mut get_mut_unchecked(ctx.src_face).local_mappings);
 
         let UnregisterFaceEntitiesResult {
             removed_subscribers,
@@ -807,11 +880,11 @@ impl Primitives for Face {
         }
         get_mut_unchecked(ctx.src_face).remote_mappings.clear();
 
-        for res in get_mut_unchecked(ctx.src_face).local_mappings.values_mut() {
+        for res in local_mappings.values_mut() {
             get_mut_unchecked(res).face_ctxs.remove(&src_fid);
             Resource::clean(res);
         }
-        get_mut_unchecked(ctx.src_face).local_mappings.clear();
+        drop(local_mappings);
 
         for interest in get_mut_unchecked(ctx.src_face).local_interests.values_mut() {
             if let Some(mut res) = interest.res.take() {
@@ -833,5 +906,87 @@ impl Primitives for Face {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_protocol::core::ExprId;
+
+    use super::ExprIdAllocator;
+
+    fn exhausted() -> ExprIdAllocator {
+        let mut ids = ExprIdAllocator::default();
+        while ids.allocate(|_| false).is_some() {}
+        ids
+    }
+
+    #[test]
+    fn should_start_at_one() {
+        let mut ids = ExprIdAllocator::default();
+
+        let id = ids.allocate(|_| false);
+
+        assert_eq!(id, Some(1));
+    }
+
+    #[test]
+    fn should_hand_out_every_non_zero_id_once() {
+        let mut ids = ExprIdAllocator::default();
+
+        let count = std::iter::from_fn(|| ids.allocate(|_| false)).count();
+
+        assert_eq!(count, usize::from(ExprId::MAX));
+    }
+
+    #[test]
+    fn should_return_none_when_exhausted() {
+        let mut ids = exhausted();
+
+        let id = ids.allocate(|_| false);
+
+        assert_eq!(id, None);
+    }
+
+    #[test]
+    fn should_prefer_fresh_ids_over_released_ones() {
+        let mut ids = ExprIdAllocator::default();
+        let first = ids.allocate(|_| false).unwrap();
+        ids.release(first);
+
+        let next = ids.allocate(|_| false);
+
+        assert_eq!(next, Some(first + 1));
+    }
+
+    #[test]
+    fn should_reuse_released_ids_in_release_order() {
+        let mut ids = exhausted();
+        ids.release(7);
+        ids.release(3);
+
+        let reused = [ids.allocate(|_| false), ids.allocate(|_| false)];
+
+        assert_eq!(reused, [Some(7), Some(3)]);
+    }
+
+    #[test]
+    fn should_skip_ids_in_use() {
+        let mut ids = ExprIdAllocator::default();
+
+        let id = ids.allocate(|id| id < 5);
+
+        assert_eq!(id, Some(5));
+    }
+
+    #[test]
+    fn should_hand_out_a_skipped_id_once_it_is_free() {
+        let mut ids = ExprIdAllocator::default();
+        ids.allocate(|id| id == 1);
+        while ids.allocate(|id| id == 1).is_some() {}
+
+        let id = ids.allocate(|_| false);
+
+        assert_eq!(id, Some(1));
     }
 }
