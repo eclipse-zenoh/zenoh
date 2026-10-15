@@ -12,7 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{time::Duration, vec};
+use std::{
+    io::{Read, Write},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
+    sync::mpsc,
+    time::{Duration, Instant},
+    vec,
+};
 
 use futures::StreamExt;
 use zenoh::{
@@ -20,9 +26,10 @@ use zenoh::{
     query::{ConsolidationMode, Query, QueryTarget, QueryableBuilder, Reply, ReplyKeyExpr},
     sample::SampleKind,
     session::SessionGetBuilder,
-    Session,
+    Session, Wait,
 };
 use zenoh_core::ztimeout;
+use zenoh_test::{get_tcp_locator, TestSessions};
 
 const SLEEP: Duration = Duration::from_millis(100);
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -476,4 +483,157 @@ async fn test_accept_replies() {
 
     ztimeout!(s1.close()).expect("Failed to close session");
     ztimeout!(s2.close()).expect("Failed to close session");
+}
+
+/// Relays one connection to `target`, forwarding only the first two frames sent by the
+/// connecting side (`InitSyn` and `OpenSyn`, each prefixed with its little-endian `u16`
+/// length) and everything `target` sends back, then closes the connection to `target` when
+/// `cut` fires. On `target`, this opens a face whose initial interest is never finalized.
+/// Later connections are refused, so that no other face is opened on `target`.
+fn spawn_handshake_only_proxy(target: SocketAddr, cut: mpsc::Receiver<()>) -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    std::thread::spawn(move || {
+        let (mut peer, _) = listener.accept().unwrap();
+        drop(listener);
+        let mut to_target = TcpStream::connect(target).unwrap();
+        let mut from_target = to_target.try_clone().unwrap();
+        let mut to_peer = peer.try_clone().unwrap();
+        let relay = std::thread::spawn(move || {
+            let _ = std::io::copy(&mut from_target, &mut to_peer);
+        });
+        for _ in 0..2 {
+            let mut len = [0u8; 2];
+            peer.read_exact(&mut len).unwrap();
+            let mut frame = vec![0u8; u16::from_le_bytes(len).into()];
+            peer.read_exact(&mut frame).unwrap();
+            to_target.write_all(&len).unwrap();
+            to_target.write_all(&frame).unwrap();
+        }
+        let _ = cut.recv();
+        let _ = to_target.shutdown(Shutdown::Both);
+        let _ = relay.join();
+        let _ = peer.shutdown(Shutdown::Both);
+    });
+    address
+}
+
+/// Issues a query and returns the time until its reply channel is closed, and the number
+/// of successful replies.
+async fn timed_get(session: &Session, key_expr: &str, timeout: Duration) -> (Duration, usize) {
+    let start = Instant::now();
+    let replies = ztimeout!(session.get(key_expr).timeout(timeout)).unwrap();
+    let mut ok = 0;
+    while let Ok(reply) = replies.recv_async().await {
+        ok += usize::from(reply.result().is_ok());
+    }
+    (start.elapsed(), ok)
+}
+
+async fn peer_count(session: &Session) -> usize {
+    session.info().peers_zid().await.count()
+}
+
+/// A face whose initial interest is not finalized yet is a destination of every query, as
+/// its matching queryables may not be declared yet. Once that face is closed, queries must
+/// no longer be routed to it, including through routes cached while it was open; otherwise
+/// they wait for its final reply until they time out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_query_not_routed_to_closed_face() {
+    zenoh::init_log_from_env_or("error");
+    const KEY: &str = "test/query_not_routed_to_closed_face";
+    const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
+    const MAX_QUERY_DURATION: Duration = Duration::from_secs(3);
+
+    let mut test_context = TestSessions::new();
+    let mut queryable_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
+    queryable_config
+        .scouting
+        .gossip
+        .set_enabled(Some(false))
+        .unwrap();
+    let queryable_session = test_context.open_listener_with_cfg(queryable_config).await;
+    let _queryable = ztimeout!(queryable_session
+        .declare_queryable(KEY)
+        .callback(|query| query.reply(KEY, "reply").wait().unwrap()))
+    .unwrap();
+
+    // The querier connects to the queryable and listens for the short-lived peer.
+    let mut querier_config = test_context.get_connector_config();
+    querier_config
+        .scouting
+        .gossip
+        .set_enabled(Some(false))
+        .unwrap();
+    querier_config
+        .listen
+        .endpoints
+        .set(vec!["tcp/127.0.0.1:0".parse().unwrap()])
+        .unwrap();
+    let querier = test_context.open_connector_with_cfg(querier_config).await;
+    ztimeout!(async {
+        while timed_get(&querier, KEY, QUERY_TIMEOUT).await.1 != 1 {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    // Short-lived peer: its transport with the querier is established, but nothing it sends
+    // after the handshake reaches the querier, and the connection is closed on `cut`.
+    let querier_address: SocketAddr = get_tcp_locator(&querier)
+        .await
+        .address()
+        .as_str()
+        .parse()
+        .unwrap();
+    let (cut, cut_rx) = mpsc::channel();
+    let proxy = spawn_handshake_only_proxy(querier_address, cut_rx);
+    let mut short_lived_config =
+        test_context
+            .get_connector_config_with_endpoint(vec![format!("tcp/{proxy}").parse().unwrap()]);
+    short_lived_config
+        .scouting
+        .gossip
+        .set_enabled(Some(false))
+        .unwrap();
+    short_lived_config.listen.endpoints.set(vec![]).unwrap();
+    let short_lived = tokio::spawn(async move { zenoh::open(short_lived_config).await });
+    ztimeout!(async {
+        while peer_count(&querier).await != 2 {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    // A query issued while the face is open is routed to it as well: it completes once the
+    // face is closed.
+    let start = Instant::now();
+    let replies = ztimeout!(querier.get(KEY).timeout(QUERY_TIMEOUT)).unwrap();
+    cut.send(()).unwrap();
+    let mut ok = 0;
+    while let Ok(reply) = replies.recv_async().await {
+        ok += usize::from(reply.result().is_ok());
+    }
+    assert_eq!(ok, 1);
+    assert!(
+        start.elapsed() < MAX_QUERY_DURATION,
+        "query issued before the face was closed took {:?}",
+        start.elapsed()
+    );
+    ztimeout!(async {
+        while peer_count(&querier).await != 1 {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+
+    // Queries issued after the face was closed must not wait for it.
+    for _ in 0..3 {
+        let (duration, ok) = timed_get(&querier, KEY, QUERY_TIMEOUT).await;
+        assert_eq!(ok, 1);
+        assert!(
+            duration < MAX_QUERY_DURATION,
+            "query issued after the face was closed took {duration:?}"
+        );
+    }
+
+    short_lived.abort();
+    test_context.close().await;
 }
