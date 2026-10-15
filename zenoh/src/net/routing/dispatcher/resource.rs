@@ -646,13 +646,12 @@ impl Resource {
     /// For example `split_first_chunk("/a/b") == Some(("/a", "/b"))`.
     #[inline(always)]
     fn split_first_chunk(suffix: &str) -> Option<(&str, &str)> {
-        if suffix.is_empty() {
-            return None;
-        }
-        // don't count the first char which may be a leading slash to find the next one
-        Some(match suffix[1..].find('/') {
-            // don't forget to add 1 to the index because of `[1..]` slice above
-            Some(idx) => suffix.split_at(idx + 1),
+        // don't count the first char which may be a leading slash to find the next one;
+        // skip it by its UTF-8 length, as a key expression can start with a multibyte char
+        let first = suffix.chars().next()?.len_utf8();
+        Some(match suffix[first..].find('/') {
+            // don't forget to add the first char's length because of the slice above
+            Some(idx) => suffix.split_at(idx + first),
             None => (suffix, ""),
         })
     }
@@ -1090,5 +1089,31 @@ pub(crate) fn register_expr_interest(
             .remote_key_interests
             .insert(id, None);
         drop(wtables);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Resource;
+
+    #[test]
+    fn split_first_chunk() {
+        assert_eq!(Resource::split_first_chunk(""), None);
+        assert_eq!(Resource::split_first_chunk("/a/b"), Some(("/a", "/b")));
+        assert_eq!(Resource::split_first_chunk("a/b"), Some(("a", "/b")));
+        assert_eq!(Resource::split_first_chunk("/a"), Some(("/a", "")));
+        // a suffix may start with a multibyte UTF-8 char (#2834)
+        assert_eq!(
+            Resource::split_first_chunk("\u{232}/b"),
+            Some(("\u{232}", "/b"))
+        );
+        assert_eq!(
+            Resource::split_first_chunk("\u{232}"),
+            Some(("\u{232}", ""))
+        );
+        assert_eq!(
+            Resource::split_first_chunk("/\u{232}/\u{1F600}"),
+            Some(("/\u{232}", "/\u{1F600}"))
+        );
     }
 }
