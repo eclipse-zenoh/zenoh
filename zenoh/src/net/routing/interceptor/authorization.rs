@@ -28,6 +28,7 @@ use zenoh_config::{
 use zenoh_keyexpr::{
     keyexpr,
     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
+    OwnedKeyExpr,
 };
 use zenoh_result::ZResult;
 
@@ -61,9 +62,29 @@ impl Subject {
 pub(crate) enum SubjectProperty<T> {
     Wildcard,
     Exactly(T),
+    Prefix(T),
 }
 
-impl<T: PartialEq + Eq> SubjectProperty<T> {
+/// Prefix matching support for subject properties. Only meaningful for string-like
+/// properties (currently certificate common names); other properties never prefix-match.
+pub(crate) trait SubjectPrefixMatch {
+    fn has_prefix(&self, _prefix: &Self) -> bool {
+        false
+    }
+}
+
+impl SubjectPrefixMatch for CertCommonName {
+    fn has_prefix(&self, prefix: &Self) -> bool {
+        self.0.starts_with(&prefix.0)
+    }
+}
+
+impl SubjectPrefixMatch for Interface {}
+impl SubjectPrefixMatch for Username {}
+impl SubjectPrefixMatch for InterceptorLink {}
+impl SubjectPrefixMatch for ZenohId {}
+
+impl<T: PartialEq + Eq + SubjectPrefixMatch> SubjectProperty<T> {
     fn matches(&self, other: Option<&T>) -> bool {
         match (self, other) {
             (SubjectProperty::Wildcard, None) => true,
@@ -71,6 +92,8 @@ impl<T: PartialEq + Eq> SubjectProperty<T> {
             (SubjectProperty::Wildcard, Some(_)) => true,
             (SubjectProperty::Exactly(_), None) => false,
             (SubjectProperty::Exactly(lhs), Some(rhs)) => lhs == rhs,
+            (SubjectProperty::Prefix(_), None) => false,
+            (SubjectProperty::Prefix(lhs), Some(rhs)) => rhs.has_prefix(lhs),
         }
     }
 }
@@ -181,7 +204,6 @@ struct PermissionPolicy {
 }
 
 impl PermissionPolicy {
-    #[allow(dead_code)]
     fn permission(&self, permission: Permission) -> &KeTreeRule {
         match permission {
             Permission::Allow => &self.allow,
@@ -258,11 +280,84 @@ impl FlowPolicy {
     }
 }
 
+/// Placeholder replaced by the authenticated certificate common name of the remote
+/// instance when a `key_expr_templates` rule is expanded at transport establishment.
+pub(crate) const KE_TEMPLATE_CERT_COMMON_NAME: &str = "${cert_common_name}";
+
+/// Placeholder replaced by the authenticated username (user/password authentication)
+/// of the remote instance when a `key_expr_templates` rule is expanded.
+pub(crate) const KE_TEMPLATE_USERNAME: &str = "${username}";
+
+/// The authenticated identity attributes of a connection available for template
+/// expansion. An attribute is `None` when the corresponding authentication method
+/// was not used on the connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub(crate) struct TemplateVars {
+    pub(crate) cert_common_name: Option<String>,
+    pub(crate) username: Option<String>,
+}
+
+/// A rule carrying key expression templates instead of static key expressions.
+/// It is not expanded into `PolicyMap` at config time: the actual key expressions
+/// are only known per-connection, once the remote identity is authenticated.
+#[derive(Debug, Clone)]
+pub(crate) struct TemplatePolicyRule {
+    pub(crate) subject_id: usize,
+    pub(crate) template: String,
+    pub(crate) message: AclMessage,
+    pub(crate) permission: Permission,
+    pub(crate) flow: InterceptorFlow,
+}
+
+/// Checks that a value is safe to substitute into a key expression template as
+/// (part of) a single chunk: it must not inject wildcards or chunk separators.
+fn is_valid_template_substitution(value: &str) -> bool {
+    !value.is_empty() && !value.contains(['/', '*', '$', '?', '#'])
+}
+
+/// Expands a key expression template with the authenticated identity attributes of a
+/// connection and validates the result as a key expression. Fails if the template
+/// references an attribute the connection does not have, or if a value is not safe
+/// to substitute.
+pub(crate) fn expand_template(template: &str, vars: &TemplateVars) -> ZResult<OwnedKeyExpr> {
+    let mut expanded = template.to_string();
+    for (placeholder, value) in [
+        (KE_TEMPLATE_CERT_COMMON_NAME, &vars.cert_common_name),
+        (KE_TEMPLATE_USERNAME, &vars.username),
+    ] {
+        if !expanded.contains(placeholder) {
+            continue;
+        }
+        let Some(value) = value else {
+            bail!(
+                "template references {} but the connection has no such authenticated identity",
+                placeholder
+            );
+        };
+        if !is_valid_template_substitution(value) {
+            bail!(
+                "value {:?} is not safe to substitute into a key expression template",
+                value
+            );
+        }
+        expanded = expanded.replace(placeholder, value);
+    }
+    OwnedKeyExpr::autocanonize(expanded.clone()).map_err(|e| {
+        zerror!(
+            "template expansion produced invalid key expression {:?}: {}",
+            expanded,
+            e
+        )
+        .into()
+    })
+}
+
 pub struct PolicyEnforcer {
     pub(crate) acl_enabled: bool,
     pub(crate) default_permission: Permission,
     pub(crate) subject_store: SubjectStore,
     pub(crate) policy_map: PolicyMap,
+    pub(crate) template_rules: Vec<TemplatePolicyRule>,
     pub(crate) interface_enabled: InterfaceEnabled,
 }
 
@@ -270,6 +365,7 @@ pub struct PolicyEnforcer {
 pub struct PolicyInformation {
     subject_map: SubjectStore,
     policy_rules: Vec<PolicyRule>,
+    template_rules: Vec<TemplatePolicyRule>,
 }
 
 impl PolicyEnforcer {
@@ -279,6 +375,7 @@ impl PolicyEnforcer {
             default_permission: Permission::Deny,
             subject_store: SubjectStore::default(),
             policy_map: PolicyMap::default(),
+            template_rules: Vec::new(),
             interface_enabled: InterfaceEnabled::default(),
         }
     }
@@ -319,6 +416,30 @@ impl PolicyEnforcer {
                     for rule in rules.iter_mut() {
                         if rule.id.trim().is_empty() {
                             bail!("Found empty rule id in rules list");
+                        }
+                        if rule.key_exprs.is_none() && rule.key_expr_templates.is_none() {
+                            bail!(
+                                "Rule '{}' must define at least one of 'key_exprs' and 'key_expr_templates'",
+                                rule.id
+                            );
+                        }
+                        // probe-expand templates so malformed templates fail at config
+                        // time rather than silently at transport establishment
+                        if let Some(templates) = &rule.key_expr_templates {
+                            let probe = TemplateVars {
+                                cert_common_name: Some("probe".to_string()),
+                                username: Some("probe".to_string()),
+                            };
+                            for template in templates.iter() {
+                                expand_template(template, &probe).map_err(|e| {
+                                    zerror!(
+                                        "Rule '{}' has invalid key expression template {:?}: {}",
+                                        rule.id,
+                                        template,
+                                        e
+                                    )
+                                })?;
+                            }
                         }
                         if rule.flows.is_none() {
                             tracing::warn!("Rule '{}' flows list is not set. Setting it to both Ingress and Egress", rule.id);
@@ -364,7 +485,28 @@ impl PolicyEnforcer {
                             }
                         }
                     }
+                    // Template rules are not expanded into the policy map (their key
+                    // expressions are only known per-connection), but they must still
+                    // enable the interceptor interfaces they target.
+                    for rule in &policy_information.template_rules {
+                        if self.default_permission == Permission::Deny {
+                            self.interface_enabled = InterfaceEnabled {
+                                ingress: true,
+                                egress: true,
+                            };
+                        } else {
+                            match rule.flow {
+                                InterceptorFlow::Ingress => {
+                                    self.interface_enabled.ingress = true;
+                                }
+                                InterceptorFlow::Egress => {
+                                    self.interface_enabled.egress = true;
+                                }
+                            }
+                        }
+                    }
                     self.policy_map = main_policy;
+                    self.template_rules = policy_information.template_rules;
                     self.subject_store = policy_information.subject_map;
                 }
             } else {
@@ -384,6 +526,7 @@ impl PolicyEnforcer {
         policies: Vec<AclConfigPolicyEntry>,
     ) -> ZResult<PolicyInformation> {
         let mut policy_rules: Vec<PolicyRule> = Vec::new();
+        let mut template_rules: Vec<TemplatePolicyRule> = Vec::new();
         let mut rule_map = HashMap::new();
         let mut subject_id_map = HashMap::<String, Vec<usize>>::new();
         let mut policy_id_set = HashSet::<String>::new();
@@ -431,6 +574,16 @@ impl PolicyEnforcer {
                     config_subject.id
                 );
             }
+            if config_subject
+                .cert_common_name_prefixes
+                .as_ref()
+                .is_some_and(|prefixes| prefixes.iter().any(|ccn| ccn.0.trim().is_empty()))
+            {
+                bail!(
+                    "Found empty cert_common_name_prefixes value in subject '{}'",
+                    config_subject.id
+                );
+            }
             if config_subject.usernames.as_ref().is_some_and(|usernames| {
                 usernames
                     .iter()
@@ -452,8 +605,8 @@ impl PolicyEnforcer {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or(vec![SubjectProperty::Wildcard]);
-            // FIXME: Unnecessary .collect() because of different iterator types
-            let cert_common_names = config_subject
+            // exact matches and prefix matches are combined into a single OR-list
+            let mut cert_common_names: Vec<SubjectProperty<CertCommonName>> = config_subject
                 .cert_common_names
                 .map(|cert_common_names| {
                     cert_common_names
@@ -461,7 +614,13 @@ impl PolicyEnforcer {
                         .map(SubjectProperty::Exactly)
                         .collect::<Vec<_>>()
                 })
-                .unwrap_or(vec![SubjectProperty::Wildcard]);
+                .unwrap_or_default();
+            if let Some(prefixes) = config_subject.cert_common_name_prefixes {
+                cert_common_names.extend(prefixes.into_iter().map(SubjectProperty::Prefix));
+            }
+            if cert_common_names.is_empty() {
+                cert_common_names.push(SubjectProperty::Wildcard);
+            }
             // FIXME: Unnecessary .collect() because of different iterator types
             let usernames = config_subject
                 .usernames
@@ -564,14 +723,27 @@ impl PolicyEnforcer {
                             .expect("flows list should be defined in rule")
                         {
                             for message in &rule.messages {
-                                for key_expr in &rule.key_exprs {
-                                    policy_rules.push(PolicyRule {
-                                        subject_id: *subject_id,
-                                        key_expr: key_expr.clone(),
-                                        message: *message,
-                                        permission: rule.permission,
-                                        flow: *flow,
-                                    });
+                                if let Some(key_exprs) = &rule.key_exprs {
+                                    for key_expr in key_exprs.iter() {
+                                        policy_rules.push(PolicyRule {
+                                            subject_id: *subject_id,
+                                            key_expr: key_expr.clone(),
+                                            message: *message,
+                                            permission: rule.permission,
+                                            flow: *flow,
+                                        });
+                                    }
+                                }
+                                if let Some(templates) = &rule.key_expr_templates {
+                                    for template in templates.iter() {
+                                        template_rules.push(TemplatePolicyRule {
+                                            subject_id: *subject_id,
+                                            template: template.clone(),
+                                            message: *message,
+                                            permission: rule.permission,
+                                            flow: *flow,
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -582,52 +754,167 @@ impl PolicyEnforcer {
         Ok(PolicyInformation {
             subject_map: subject_map_builder.build(),
             policy_rules,
+            template_rules,
         })
     }
 
-    /**
-     * Check each msg against the ACL ruleset for allow/deny
-     */
-    pub fn policy_decision_point(
+    /// Builds the per-connection policies for a transport, expanding template rules with
+    /// the identity attributes authenticated on that transport. `subject_vars` pairs
+    /// each matched subject id with the identity attributes of the transport link(s)
+    /// that satisfied its subject config. The result maps each subject id to the policy
+    /// expanded for it, so that these policies can be evaluated as part of their subject
+    /// (a subject's effective policy is the union of its static rules and its expanded
+    /// template rules). Returns `None` when no template rule applies to this transport.
+    pub(crate) fn build_connection_policies(
         &self,
-        subject: usize,
-        flow: InterceptorFlow,
-        message: AclMessage,
-        key_expr: &keyexpr,
-    ) -> ZResult<Permission> {
-        let policy_map = &self.policy_map;
-        if policy_map.is_empty() {
-            return Ok(self.default_permission);
+        subject_vars: &[(usize, TemplateVars)],
+    ) -> Option<HashMap<usize, FlowPolicy>> {
+        if self.template_rules.is_empty() || subject_vars.is_empty() {
+            return None;
         }
-        match policy_map.get(&subject) {
-            Some(single_policy) => {
-                let deny_result = single_policy
-                    .flow(flow)
-                    .action(message)
-                    .deny
-                    .nodes_including(key_expr)
-                    .any(|n| n.weight().is_some());
-                if deny_result {
-                    return Ok(Permission::Deny);
-                }
-                if self.default_permission == Permission::Allow {
-                    Ok(Permission::Allow)
-                } else {
-                    let allow_result = single_policy
-                        .flow(flow)
-                        .action(message)
-                        .allow
-                        .nodes_including(key_expr)
-                        .any(|n| n.weight().is_some());
-
-                    if allow_result {
-                        Ok(Permission::Allow)
-                    } else {
-                        Ok(Permission::Deny)
+        let mut policies: HashMap<usize, FlowPolicy> = HashMap::new();
+        for rule in &self.template_rules {
+            for (subject_id, vars) in subject_vars
+                .iter()
+                .filter(|(subject_id, _)| *subject_id == rule.subject_id)
+            {
+                match expand_template(&rule.template, vars) {
+                    Ok(key_expr) => {
+                        policies
+                            .entry(*subject_id)
+                            .or_default()
+                            .flow_mut(rule.flow)
+                            .action_mut(rule.message)
+                            .permission_mut(rule.permission)
+                            .insert(&key_expr, true);
+                    }
+                    Err(e) => {
+                        // the rule is skipped: the connection falls back to whatever the
+                        // static rules and default permission decide
+                        tracing::warn!(
+                            "ACL: skipping template rule {:?} for connection identity {:?}: {}",
+                            rule.template,
+                            vars,
+                            e
+                        );
                     }
                 }
             }
-            None => Ok(self.default_permission),
         }
+        (!policies.is_empty()).then_some(policies)
+    }
+
+    /// Decision for a single subject: its effective policy is the union of its static
+    /// rules (`policy_map`) and its per-connection expanded template rules (`conn_policy`).
+    /// Precedence: explicit deny > explicit allow > default permission. A subject with
+    /// no rules at all yields the default permission.
+    pub(crate) fn subject_decision(
+        &self,
+        subject: usize,
+        conn_policy: Option<&FlowPolicy>,
+        flow: InterceptorFlow,
+        message: AclMessage,
+        key_expr: &keyexpr,
+    ) -> Permission {
+        let static_policy = self.policy_map.get(&subject);
+        let hit = |policy: &FlowPolicy, permission: Permission| {
+            policy
+                .flow(flow)
+                .action(message)
+                .permission(permission)
+                .nodes_including(key_expr)
+                .any(|n| n.weight().is_some())
+        };
+        if static_policy.is_some_and(|p| hit(p, Permission::Deny))
+            || conn_policy.is_some_and(|p| hit(p, Permission::Deny))
+        {
+            return Permission::Deny;
+        }
+        if self.default_permission == Permission::Allow {
+            return Permission::Allow;
+        }
+        if static_policy.is_some_and(|p| hit(p, Permission::Allow))
+            || conn_policy.is_some_and(|p| hit(p, Permission::Allow))
+        {
+            Permission::Allow
+        } else {
+            Permission::Deny
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vars(cert_common_name: Option<&str>, username: Option<&str>) -> TemplateVars {
+        TemplateVars {
+            cert_common_name: cert_common_name.map(str::to_string),
+            username: username.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn test_expand_template() {
+        let cn = vars(Some("t1"), None);
+        let ke = expand_template("tenant/${cert_common_name}/**", &cn).unwrap();
+        assert_eq!(ke.as_str(), "tenant/t1/**");
+        // placeholder inside a chunk
+        let ke = expand_template("ns_${cert_common_name}/**", &cn).unwrap();
+        assert_eq!(ke.as_str(), "ns_t1/**");
+        // multiple occurrences
+        let ke = expand_template("${cert_common_name}/sub/${cert_common_name}", &cn).unwrap();
+        assert_eq!(ke.as_str(), "t1/sub/t1");
+        // no placeholder: template is used as-is
+        let ke = expand_template("static/key", &cn).unwrap();
+        assert_eq!(ke.as_str(), "static/key");
+        // username placeholder
+        let ke = expand_template("tenant/${username}/**", &vars(None, Some("u1"))).unwrap();
+        assert_eq!(ke.as_str(), "tenant/u1/**");
+        // both placeholders in one template
+        let ke = expand_template(
+            "${cert_common_name}/${username}/**",
+            &vars(Some("t1"), Some("u1")),
+        )
+        .unwrap();
+        assert_eq!(ke.as_str(), "t1/u1/**");
+    }
+
+    #[test]
+    fn test_expand_template_requires_matching_identity() {
+        // template references an identity the connection does not have
+        assert!(expand_template("tenant/${cert_common_name}/**", &vars(None, Some("u1"))).is_err());
+        assert!(expand_template("tenant/${username}/**", &vars(Some("t1"), None)).is_err());
+        // no placeholder: no identity required
+        assert!(expand_template("static/key", &vars(None, None)).is_ok());
+        // unknown placeholders are not substituted, and are rejected by key expression
+        // validation ('$' is reserved), so typos fail at config time via probe expansion
+        assert!(expand_template("tenant/${unknown}/**", &vars(Some("t1"), Some("u1"))).is_err());
+    }
+
+    #[test]
+    fn test_expand_template_rejects_unsafe_substitutions() {
+        for value in ["", "*", "**", "a/b", "a*", "$*", "a?b", "a#b"] {
+            assert!(
+                expand_template("tenant/${cert_common_name}/**", &vars(Some(value), None)).is_err(),
+                "common name {value:?} should be rejected"
+            );
+            assert!(
+                expand_template("tenant/${username}/**", &vars(None, Some(value))).is_err(),
+                "username {value:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_subject_property_prefix_matches() {
+        let prefix = SubjectProperty::Prefix(CertCommonName("t".to_string()));
+        assert!(prefix.matches(Some(&CertCommonName("t1".to_string()))));
+        assert!(prefix.matches(Some(&CertCommonName("t".to_string()))));
+        assert!(!prefix.matches(Some(&CertCommonName("x1".to_string()))));
+        assert!(!prefix.matches(None));
+        // prefix matching is only supported for certificate common names
+        let prefix = SubjectProperty::Prefix(Username("user".to_string()));
+        assert!(!prefix.matches(Some(&Username("user1".to_string()))));
     }
 }
