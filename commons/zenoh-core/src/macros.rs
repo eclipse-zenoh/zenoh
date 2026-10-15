@@ -12,13 +12,27 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+// The three synchronous macros below wrap the guard they return in
+// `zenoh_core::tracking::TrackedGuard`, which counts live guards per thread so
+// that `tracking::assert_no_locks_held` can catch calls into user code made
+// while a lock is held. The wrapper is `Deref`/`DerefMut`-transparent, and in
+// release builds it is a `repr(transparent)` newtype with no `Drop` impl.
+//
+// The async macros further down are deliberately NOT wrapped: a task migrates
+// threads across `.await`, so a thread-local count is wrong in both directions
+// for a guard held across a suspension point. See the `tracking` module docs.
+
 // This macro performs a standard lock on Mutex<T>
 // For performance reasons, it first performs a try_lock() and,
 // if it fails, it falls back on lock().unwrap()
 #[macro_export]
 macro_rules! zlock {
     ($var:expr) => {
-        $var.lock().unwrap()
+        $crate::tracking::TrackedGuard::new_at(
+            $var.lock().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
     };
 }
 
@@ -28,7 +42,11 @@ macro_rules! zlock {
 #[macro_export]
 macro_rules! zread {
     ($var:expr) => {
-        $var.read().unwrap()
+        $crate::tracking::TrackedGuard::new_at(
+            $var.read().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
     };
 }
 
@@ -38,7 +56,29 @@ macro_rules! zread {
 #[macro_export]
 macro_rules! zwrite {
     ($var:expr) => {
-        $var.write().unwrap()
+        $crate::tracking::TrackedGuard::new_at(
+            $var.write().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::State,
+        )
+    };
+}
+
+// Like `zlock!`, but marks the lock as one held deliberately to serialise
+// delivery rather than to guard state. `assert_no_locks_held` ignores these.
+//
+// Use it only where holding the lock across a call into user code is the
+// intent — the transport RX channel lock, whose whole job is keeping multi-link
+// delivery ordered. Using it to silence a report about a state lock defeats the
+// check.
+#[macro_export]
+macro_rules! zlock_delivery {
+    ($var:expr) => {
+        $crate::tracking::TrackedGuard::new_at(
+            $var.lock().unwrap(),
+            concat!(file!(), ":", line!()),
+            $crate::tracking::LockKind::DeliveryOrdering,
+        )
     };
 }
 

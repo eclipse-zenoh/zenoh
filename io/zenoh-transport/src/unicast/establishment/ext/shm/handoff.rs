@@ -26,7 +26,6 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::zlock;
 use zenoh_protocol::core::{Priority, Reliability};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
@@ -210,7 +209,14 @@ impl TxHandoff {
 
     fn lock(&self) -> LockedTxHandoff {
         let inner = self.inner.clone();
-        let lock = zlock!(self.inner.not_commit);
+        // Deliberately bypasses zlock!/TrackedGuard: the transmute below
+        // depends on this being exactly a std::sync::MutexGuard, and
+        // wrapping it would change the transmuted type's size. This mutex
+        // is exempt from tracking for that reason -- the guard never
+        // survives across a user call-out (see LockedTxHandoff's own
+        // field-order safety comment), so there is no self-wait hazard
+        // here to catch in the first place.
+        let lock = self.inner.not_commit.lock().unwrap();
 
         // SAFETY: `inner` keeps the mutex alive. LockedTxHandoff drops the guard first.
         let lock: std::sync::MutexGuard<'static, VecDeque<ShmBufHardRef>> =

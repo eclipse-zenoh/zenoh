@@ -30,6 +30,16 @@ maintenance = { status = "actively-developed" }
 default = ["zenoh/default"]
 internal = []
 unstable = ["zenoh/internal", "zenoh/unstable"]
+# Assert, where `AdvancedSubscriber` calls user code, that no Zenoh sync lock
+# guard is held. Off by default: it is an instrument, not a fix, and it costs a
+# panic rather than a diagnostic when it fires. Requires `debug_assertions`;
+# a no-op otherwise.
+#
+# `zenoh-ext` itself is clean under it. It does still fire on the transport
+# receive path, which holds the per-priority RX channel lock across the whole
+# dispatch — that is deliberate delivery serialisation, not a defect, and is the
+# known false positive documented in `zenoh_core::tracking`.
+reentrancy-tripwire = ["zenoh/internal"]
 
 [dependencies]
 bincode = { workspace = true }

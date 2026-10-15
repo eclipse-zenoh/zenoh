@@ -34,6 +34,14 @@ tracing-instrument = ["zenoh-runtime/tracing-instrument"]
 
 [dependencies]
 lazy_static = { workspace = true }
+lock-tripwire = { git = "https://github.com/YuanYuYuan/lock-tripwire.git", tag = "v0.1.1" }
 tokio = { workspace = true, features = ["rt"] }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+harness = false
+name = "tracked_lock"
