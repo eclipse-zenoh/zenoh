@@ -15,7 +15,9 @@ use std::{collections::HashMap, fmt, sync::Arc, time::Duration};
 
 use rand::{RngCore, SeedableRng};
 use tokio::sync::Mutex as AsyncMutex;
-use zenoh_config::{ExpandedConfig, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf};
+use zenoh_config::{
+    ExpandedConfig, LinkRxConf, QueueAllocConf, QueueConf, QueueSizeConf, SocketPriorityConf,
+};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkKind, NewLinkChannelSender};
 use zenoh_protocol::{
@@ -133,6 +135,8 @@ pub struct TransportManagerConfig {
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
     pub queue_alloc: QueueAllocConf,
+    /// Socket priority of a link, indexed by the highest priority of its range.
+    pub socket_priority: Option<[u32; Priority::NUM]>,
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
@@ -163,6 +167,7 @@ impl fmt::Debug for TransportManagerConfig {
             .field("queue_size", &self.queue_size)
             .field("queue_backoff", &self.queue_backoff)
             .field("queue_alloc", &self.queue_alloc)
+            .field("socket_priority", &self.socket_priority)
             .field("defrag_buff_size", &self.defrag_buff_size)
             .field("link_rx_buffer_size", &self.link_rx_buffer_size)
             .field("unicast", &self.unicast)
@@ -237,6 +242,7 @@ pub struct TransportManagerBuilder {
     wait_before_close: Duration,
     queue_size: QueueSizeConf,
     queue_alloc: QueueAllocConf,
+    socket_priority: SocketPriorityConf,
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
@@ -271,6 +277,7 @@ impl fmt::Debug for TransportManagerBuilder {
             .field("wait_before_close", &self.wait_before_close)
             .field("queue_size", &self.queue_size)
             .field("queue_alloc", &self.queue_alloc)
+            .field("socket_priority", &self.socket_priority)
             .field("defrag_buff_size", &self.defrag_buff_size)
             .field("link_rx_buffer_size", &self.link_rx_buffer_size)
             .field("unicast", &self.unicast)
@@ -362,6 +369,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn socket_priority(mut self, socket_priority: SocketPriorityConf) -> Self {
+        self.socket_priority = socket_priority;
+        self
+    }
+
     pub fn defrag_buff_size(mut self, defrag_buff_size: usize) -> Self {
         self.defrag_buff_size = defrag_buff_size;
         self
@@ -438,6 +450,7 @@ impl TransportManagerBuilder {
         self = self.wait_before_close(duration_from_i64us(*cc_block.wait_before_close()));
         self = self.queue_size(link.tx().queue().size().clone());
         self = self.queue_alloc(*link.tx().queue().allocation());
+        self = self.socket_priority(link.tx().socket_priority().clone());
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
         self = self.region_name(config.region_name().clone());
@@ -491,6 +504,8 @@ impl TransportManagerBuilder {
         queue_size[Priority::DataLow as usize] = *self.queue_size.data_low();
         queue_size[Priority::Background as usize] = *self.queue_size.background();
 
+        let socket_priority = socket_priority_map(&self.socket_priority)?;
+
         let config = TransportManagerConfig {
             version: self.version,
             zid: self.zid,
@@ -504,6 +519,7 @@ impl TransportManagerBuilder {
             queue_size,
             queue_backoff: self.batching_time_limit,
             queue_alloc: self.queue_alloc,
+            socket_priority,
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
@@ -582,6 +598,36 @@ impl TransportManagerBuilder {
     }
 }
 
+fn socket_priority_map(conf: &SocketPriorityConf) -> ZResult<Option<[u32; Priority::NUM]>> {
+    if !*conf.enabled() {
+        return Ok(None);
+    }
+    if !cfg!(target_os = "linux") {
+        tracing::warn!(
+            "transport/link/tx/socket_priority is only supported on Linux, ignoring it on {}",
+            std::env::consts::OS
+        );
+        return Ok(None);
+    }
+    let m = conf.map();
+    let mut map = [0; Priority::NUM];
+    map[Priority::Control as usize] = *m.control();
+    map[Priority::RealTime as usize] = *m.real_time();
+    map[Priority::InteractiveHigh as usize] = *m.interactive_high();
+    map[Priority::InteractiveLow as usize] = *m.interactive_low();
+    map[Priority::DataHigh as usize] = *m.data_high();
+    map[Priority::Data as usize] = *m.data();
+    map[Priority::DataLow as usize] = *m.data_low();
+    map[Priority::Background as usize] = *m.background();
+    #[cfg(target_os = "linux")]
+    for priority in map {
+        if let Err(e) = zenoh_link::check_socket_priority(priority) {
+            bail!("transport/link/tx/socket_priority/map: can not set socket priority {priority}: {e}");
+        }
+    }
+    Ok(Some(map))
+}
+
 impl Default for TransportManagerBuilder {
     fn default() -> Self {
         let link_rx = LinkRxConf::default();
@@ -603,6 +649,7 @@ impl Default for TransportManagerBuilder {
             wait_before_close: duration_from_i64us(*cc_block.wait_before_close()),
             queue_size: queue.size,
             queue_alloc: queue.allocation,
+            socket_priority: SocketPriorityConf::default(),
             batching_time_limit: Duration::from_millis(backoff),
             defrag_buff_size: *link_rx.max_message_size(),
             link_rx_buffer_size: *link_rx.buffer_size(),

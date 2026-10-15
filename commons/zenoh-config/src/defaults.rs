@@ -259,6 +259,24 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
+            socket_priority: SocketPriorityConf::default(),
+        }
+    }
+}
+
+/// Follows the meaning of the Linux TC_PRIO_* values: 6 interactive, 4 interactive bulk, 0 best
+/// effort, 2 bulk. With the default `pfifo_fast` priomap they go to bands 0, 1, 1 and 2.
+impl Default for SocketPriorityMapConf {
+    fn default() -> Self {
+        Self {
+            control: 6,
+            real_time: 6,
+            interactive_high: 4,
+            interactive_low: 4,
+            data_high: 0,
+            data: 0,
+            data_low: 0,
+            background: 2,
         }
     }
 }
