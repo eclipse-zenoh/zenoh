@@ -32,7 +32,6 @@ quic = [
   "dep:quinn",
   "dep:quinn-proto",
   "dep:rcgen",
-  "dep:rustls-pemfile",
   "dep:rustls-pki-types",
   "dep:secrecy",
   "dep:webpki-roots",
@@ -54,7 +53,6 @@ quinn = { workspace = true, optional = true }
 quinn-proto = { workspace = true, optional = true }
 rcgen = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
-rustls-pemfile = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }
 rustls-webpki = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
