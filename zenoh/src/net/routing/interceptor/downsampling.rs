@@ -199,32 +199,52 @@ impl DownsamplingFilters {
     }
 }
 
-struct TimeState {
-    pub threshold: std::time::Duration,
-    pub latest_message_timestamp: Mutex<std::time::Instant>,
-}
-
 pub(crate) struct DownsamplingInterceptor {
     filters: DownsamplingFilters,
     ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider>,
-    ke_state: Vec<TimeState>,
+    // Per-rule minimal intervals, indexed by rule id.
+    thresholds: Vec<std::time::Duration>,
+    // Per-rule timestamps of the latest forwarded message, indexed by rule id.
+    // A single lock keeps the check-and-update over all matching rules atomic
+    // without allocating a guard per rule on the hot path.
+    latest_message_timestamps: Mutex<Vec<std::time::Instant>>,
     flow: InterceptorFlow,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::DropStats,
 }
 
 impl DownsamplingInterceptor {
-    fn get_ids(&self, key_expr: &keyexpr) -> Vec<usize> {
-        let mut ids: Vec<usize> = self
-            .ke_id
+    fn matching_ids<'a>(&'a self, key_expr: &'a keyexpr) -> impl Iterator<Item = usize> + 'a {
+        self.ke_id
             .intersecting_nodes(key_expr)
             .filter_map(|node| node.weight())
             .flatten()
             .copied()
-            .collect();
-        ids.sort_unstable();
-        ids.dedup();
-        ids
+    }
+
+    /// Returns `true` if every rule yielded by `ids()` has its budget available,
+    /// in which case the timestamps of all those rules are updated.
+    /// `ids()` is invoked twice (check, then update) to avoid collecting ids.
+    fn consume_budgets<I: Iterator<Item = usize>>(&self, ids: impl Fn() -> I) -> bool {
+        let mut latest = zlock!(self.latest_message_timestamps);
+        let timestamp = std::time::Instant::now();
+        let allowed = ids().all(|id| match (latest.get(id), self.thresholds.get(id)) {
+            (Some(latest), Some(threshold)) => {
+                timestamp.saturating_duration_since(*latest) >= *threshold
+            }
+            _ => {
+                tracing::debug!("unexpected rule ID {id}");
+                true
+            }
+        });
+        if allowed {
+            for id in ids() {
+                if let Some(latest) = latest.get_mut(id) {
+                    *latest = timestamp;
+                }
+            }
+        }
+        allowed
     }
 }
 
@@ -233,48 +253,28 @@ static INFO_FLAG: AtomicBool = AtomicBool::new(false);
 
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(self.get_ids(key_expr)))
+        Some(Box::new(
+            self.matching_ids(key_expr).collect::<Vec<usize>>(),
+        ))
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         if !self.filters.is_msg_filtered(msg) {
             return true;
         };
-        let owned_ids;
-        let ids = if let Some(ids) = ctx
+        let allowed = if let Some(ids) = ctx
             .get_cache(msg)
             .and_then(|c| c.downcast_ref::<Vec<usize>>())
         {
-            ids.as_slice()
+            ids.is_empty() || self.consume_budgets(|| ids.iter().copied())
         } else if let Some(ke) = ctx.full_keyexpr(msg) {
-            owned_ids = self.get_ids(&ke);
-            owned_ids.as_slice()
+            self.consume_budgets(|| self.matching_ids(&ke))
         } else {
-            return true;
+            true
         };
-        if ids.is_empty() {
-            return true;
-        }
-
-        let mut guards = Vec::with_capacity(ids.len());
-        for &id in ids {
-            let Some(state) = self.ke_state.get(id) else {
-                tracing::debug!("unexpected cache ID {id}");
-                return true;
-            };
-            guards.push((zlock!(state.latest_message_timestamp), state.threshold));
-        }
-        let timestamp = std::time::Instant::now();
-        if guards
-            .iter()
-            .all(|(latest, threshold)| timestamp.saturating_duration_since(**latest) >= *threshold)
-        {
-            for (mut latest, _) in guards {
-                *latest = timestamp;
-            }
+        if allowed {
             true
         } else {
-            drop(guards);
             if !INFO_FLAG.swap(true, Ordering::Relaxed) {
                 tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
             }
@@ -306,7 +306,8 @@ impl DownsamplingInterceptor {
     ) -> Self {
         let mut ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider> =
             KeBoxTree::default();
-        let mut ke_state = Vec::new();
+        let mut thresholds = Vec::with_capacity(rules.len().get());
+        let mut latest_message_timestamps = Vec::with_capacity(rules.len().get());
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
             let mut latest_message_timestamp = std::time::Instant::now();
@@ -321,10 +322,8 @@ impl DownsamplingInterceptor {
             } else {
                 node.insert_weight(vec![id]);
             }
-            ke_state.push(TimeState {
-                threshold,
-                latest_message_timestamp: latest_message_timestamp.into(),
-            });
+            thresholds.push(threshold);
+            latest_message_timestamps.push(latest_message_timestamp);
             tracing::debug!(
                 "New downsampler rule enabled: key_expr={key_expr:?}, threshold={threshold:?}, messages={filters:?}",
                 key_expr = rule.key_expr,
@@ -333,7 +332,8 @@ impl DownsamplingInterceptor {
         Self {
             filters,
             ke_id,
-            ke_state,
+            thresholds,
+            latest_message_timestamps: latest_message_timestamps.into(),
             flow,
             #[cfg(feature = "stats")]
             stats,
@@ -421,22 +421,27 @@ mod tests {
         for saturated in [[false, false], [true, true], [true, false], [false, true]] {
             // Set independent rule budgets without sleeps or random tree traversal assumptions.
             let now = Instant::now();
-            let mut before = Vec::new();
-            for (state, saturated) in interceptor.ke_state.iter().zip(saturated) {
-                let ts = if saturated {
-                    now
-                } else {
-                    now - Duration::from_secs(2)
-                };
-                *state.latest_message_timestamp.lock().unwrap() = ts;
-                before.push(ts);
-            }
-            let decision = interceptor.intercept(&mut msg, &mut ctx);
-            let after: Vec<Instant> = interceptor
-                .ke_state
+            let before: Vec<Instant> = saturated
                 .iter()
-                .map(|state| *state.latest_message_timestamp.lock().unwrap())
+                .map(|&saturated| {
+                    if saturated {
+                        now
+                    } else {
+                        now - Duration::from_secs(2)
+                    }
+                })
                 .collect();
+            interceptor
+                .latest_message_timestamps
+                .lock()
+                .unwrap()
+                .clone_from(&before);
+            let decision = interceptor.intercept(&mut msg, &mut ctx);
+            let after = interceptor
+                .latest_message_timestamps
+                .lock()
+                .unwrap()
+                .clone();
             if decision {
                 assert!(
                     after.iter().all(|&ts| ts >= now),
