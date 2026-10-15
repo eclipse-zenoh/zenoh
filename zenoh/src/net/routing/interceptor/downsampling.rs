@@ -27,6 +27,7 @@ use std::{
 };
 
 use nonempty_collections::NEVec;
+use smallvec::SmallVec;
 use zenoh_config::{DataMessage, DownsamplingItemConf, DownsamplingRuleConf};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
@@ -222,23 +223,24 @@ impl DownsamplingInterceptor {
             .copied()
     }
 
-    /// Returns `true` if every rule yielded by `ids()` has its budget available,
+    /// Returns `true` if every rule in `ids` has its budget available,
     /// in which case the timestamps of all those rules are updated.
-    /// `ids()` is invoked twice (check, then update) to avoid collecting ids.
-    fn consume_budgets<I: Iterator<Item = usize>>(&self, ids: impl Fn() -> I) -> bool {
+    fn consume_budgets(&self, ids: &[usize]) -> bool {
         let mut latest = zlock!(self.latest_message_timestamps);
         let timestamp = std::time::Instant::now();
-        let allowed = ids().all(|id| match (latest.get(id), self.thresholds.get(id)) {
-            (Some(latest), Some(threshold)) => {
-                timestamp.saturating_duration_since(*latest) >= *threshold
-            }
-            _ => {
-                tracing::debug!("unexpected rule ID {id}");
-                true
-            }
-        });
+        let allowed = ids
+            .iter()
+            .all(|&id| match (latest.get(id), self.thresholds.get(id)) {
+                (Some(latest), Some(threshold)) => {
+                    timestamp.saturating_duration_since(*latest) >= *threshold
+                }
+                _ => {
+                    tracing::debug!("unexpected rule ID {id}");
+                    true
+                }
+            });
         if allowed {
-            for id in ids() {
+            for &id in ids {
                 if let Some(latest) = latest.get_mut(id) {
                     *latest = timestamp;
                 }
@@ -266,9 +268,11 @@ impl InterceptorTrait for DownsamplingInterceptor {
             .get_cache(msg)
             .and_then(|c| c.downcast_ref::<Vec<usize>>())
         {
-            ids.is_empty() || self.consume_budgets(|| ids.iter().copied())
+            ids.is_empty() || self.consume_budgets(ids)
         } else if let Some(ke) = ctx.full_keyexpr(msg) {
-            self.consume_budgets(|| self.matching_ids(&ke))
+            // Walk the tree outside the lock; the buffer stays on the stack for typical rule counts.
+            let ids: SmallVec<[usize; 8]> = self.matching_ids(&ke).collect();
+            ids.is_empty() || self.consume_budgets(&ids)
         } else {
             true
         };
@@ -384,10 +388,15 @@ mod tests {
             key_expr: second_key_expr.try_into().unwrap(),
             freq: 1.0,
         };
+        // A rule that never matches the test key expression: its budget must stay untouched.
+        let unrelated = DownsamplingRuleConf {
+            key_expr: "unrelated/**".try_into().unwrap(),
+            freq: 1.0,
+        };
         let rules = if reverse_rules {
-            nev![second, first]
+            nev![second, first, unrelated]
         } else {
-            nev![first, second]
+            nev![first, second, unrelated]
         };
         let interceptor = DownsamplingInterceptor::new(
             DownsamplingFilters::new([DataMessage::Put]),
@@ -421,15 +430,11 @@ mod tests {
         for saturated in [[false, false], [true, true], [true, false], [false, true]] {
             // Set independent rule budgets without sleeps or random tree traversal assumptions.
             let now = Instant::now();
+            let stale = now - Duration::from_secs(2);
             let before: Vec<Instant> = saturated
                 .iter()
-                .map(|&saturated| {
-                    if saturated {
-                        now
-                    } else {
-                        now - Duration::from_secs(2)
-                    }
-                })
+                .map(|&saturated| if saturated { now } else { stale })
+                .chain([stale])
                 .collect();
             interceptor
                 .latest_message_timestamps
@@ -442,9 +447,13 @@ mod tests {
                 .lock()
                 .unwrap()
                 .clone();
+            assert_eq!(
+                after[2], stale,
+                "non-matching rule timestamp must never be touched"
+            );
             if decision {
                 assert!(
-                    after.iter().all(|&ts| ts >= now),
+                    after[..2].iter().all(|&ts| ts >= now),
                     "accepted message must update every matching rule timestamp"
                 );
                 assert_eq!(
