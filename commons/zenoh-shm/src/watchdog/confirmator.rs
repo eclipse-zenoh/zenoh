@@ -29,7 +29,7 @@ use crate::metadata::{
     segment::MetadataSegment,
 };
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 pub static mut GLOBAL_CONFIRMATOR: WatchdogConfirmator =
     WatchdogConfirmator::new(Duration::from_millis(50));
 
