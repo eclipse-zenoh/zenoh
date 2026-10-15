@@ -30,7 +30,8 @@ use nonempty_collections::NEVec;
 use zenoh_config::{DataMessage, DownsamplingItemConf, DownsamplingRuleConf};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
-    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut,
+    IKeyExprTreeNode, IKeyExprTreeNodeMut, KeBoxTree,
 };
 use zenoh_protocol::{
     network::{NetworkBodyMut, Push},
@@ -205,7 +206,7 @@ struct TimeState {
 
 pub(crate) struct DownsamplingInterceptor {
     filters: DownsamplingFilters,
-    ke_id: KeBoxTree<usize, UnknownWildness, KeyedSetProvider>,
+    ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider>,
     ke_state: Vec<TimeState>,
     flow: InterceptorFlow,
     #[cfg(feature = "stats")]
@@ -213,9 +214,17 @@ pub(crate) struct DownsamplingInterceptor {
 }
 
 impl DownsamplingInterceptor {
-    fn get_id(&self, key_expr: &keyexpr) -> Option<usize> {
-        let node = self.ke_id.intersecting_keys(key_expr).next()?;
-        self.ke_id.weight_at(&node).copied()
+    fn get_ids(&self, key_expr: &keyexpr) -> Vec<usize> {
+        let mut ids: Vec<usize> = self
+            .ke_id
+            .intersecting_nodes(key_expr)
+            .filter_map(|node| node.weight())
+            .flatten()
+            .copied()
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
     }
 }
 
@@ -224,31 +233,48 @@ static INFO_FLAG: AtomicBool = AtomicBool::new(false);
 
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(self.get_id(key_expr)))
+        Some(Box::new(self.get_ids(key_expr)))
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         if !self.filters.is_msg_filtered(msg) {
             return true;
         };
-        let cache = ctx
+        let owned_ids;
+        let ids = if let Some(ids) = ctx
             .get_cache(msg)
-            .and_then(|c| c.downcast_ref::<Option<usize>>().copied());
-        let Some(id) = cache.unwrap_or_else(|| self.get_id(&ctx.full_keyexpr(msg)?)) else {
+            .and_then(|c| c.downcast_ref::<Vec<usize>>())
+        {
+            ids.as_slice()
+        } else if let Some(ke) = ctx.full_keyexpr(msg) {
+            owned_ids = self.get_ids(&ke);
+            owned_ids.as_slice()
+        } else {
             return true;
         };
+        if ids.is_empty() {
+            return true;
+        }
 
-        let Some(state) = self.ke_state.get(id) else {
-            tracing::debug!("unexpected cache ID {id}");
-            return true;
-        };
-        let mut latest_message_timestamp = zlock!(state.latest_message_timestamp);
+        let mut guards = Vec::with_capacity(ids.len());
+        for &id in ids {
+            let Some(state) = self.ke_state.get(id) else {
+                tracing::debug!("unexpected cache ID {id}");
+                return true;
+            };
+            guards.push((zlock!(state.latest_message_timestamp), state.threshold));
+        }
         let timestamp = std::time::Instant::now();
-        if timestamp - *latest_message_timestamp >= state.threshold {
-            *latest_message_timestamp = timestamp;
+        if guards
+            .iter()
+            .all(|(latest, threshold)| timestamp.saturating_duration_since(**latest) >= *threshold)
+        {
+            for (mut latest, _) in guards {
+                *latest = timestamp;
+            }
             true
         } else {
-            drop(latest_message_timestamp);
+            drop(guards);
             if !INFO_FLAG.swap(true, Ordering::Relaxed) {
                 tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
             }
@@ -278,7 +304,8 @@ impl DownsamplingInterceptor {
         flow: InterceptorFlow,
         #[cfg(feature = "stats")] stats: zenoh_stats::DropStats,
     ) -> Self {
-        let mut ke_id = KeBoxTree::default();
+        let mut ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider> =
+            KeBoxTree::default();
         let mut ke_state = Vec::new();
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
@@ -288,7 +315,12 @@ impl DownsamplingInterceptor {
                     std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
-            ke_id.insert(&rule.key_expr, id);
+            let node = ke_id.node_mut_or_create(&rule.key_expr);
+            if let Some(ids) = node.weight_mut() {
+                ids.push(id);
+            } else {
+                node.insert_weight(vec![id]);
+            }
             ke_state.push(TimeState {
                 threshold,
                 latest_message_timestamp: latest_message_timestamp.into(),
