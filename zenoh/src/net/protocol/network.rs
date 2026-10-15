@@ -724,17 +724,29 @@ impl Network {
                     let node = &mut self.graph[idx];
                     let oldsn = node.sn;
                     if oldsn < ls.sn {
-                        node.sn = ls.sn;
-                        node.links.clone_from(&ls.links);
+                        let Node {
+                            zid: _,
+                            whatami,
+                            locators,
+                            sn,
+                            links,
+                            is_gateway,
+                        } = node;
+
+                        *sn = ls.sn;
+                        *whatami = Some(ls.whatami);
                         if ls.locators.is_some() {
-                            node.locators = ls.locators;
+                            *locators = ls.locators;
                         }
+                        links.clone_from(&ls.links);
+                        *is_gateway = ls.is_gateway;
+
                         if oldsn == 0 {
                             new_nodes.push(idx);
                         } else {
                             updated_nodes.insert(idx);
                         }
-                        node.is_gateway = ls.is_gateway;
+
                         idx
                     } else {
                         // outdated link state - ignore
@@ -1241,8 +1253,9 @@ mod tests {
     };
 
     /// Builds a minimal [`Runtime`] needed to construct a [`Network`].
-    fn minimal_runtime() -> Runtime {
+    fn minimal_runtime(mode: WhatAmI) -> Runtime {
         let mut config = Config::default();
+        config.set_mode(Some(mode)).unwrap();
         config.listen.endpoints.set(vec![]).unwrap();
         config.connect.endpoints.set(vec![]).unwrap();
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
@@ -1273,7 +1286,7 @@ mod tests {
         let mut net = Network::new(
             "[Test]".to_string(),
             gwy_zid,
-            minimal_runtime(),
+            minimal_runtime(WhatAmI::Peer),
             /* full_linkstate */ false,
             /* gossip */ true,
             /* gossip_multihop */ false,
@@ -1393,6 +1406,90 @@ mod tests {
                 .count(),
             1,
             "b1's links info in a's graph should be non-empty"
+        );
+    }
+
+    /// Verifies that [`Network`] calculates correct node values when they are
+    /// first known only through another node's `links` list. Thus when receiving
+    /// linkstate from the "origin," the corresponding graph node should be correctly
+    /// updated.
+    ///
+    /// See https://github.com/eclipse-zenoh/zenoh/pull/2827.
+    #[test]
+    fn test_reintroduced_router_node_is_fully_updated() {
+        use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
+
+        let r0_zid = "a0".parse::<ZenohIdProto>().unwrap();
+        let r1_zid = "a1".parse::<ZenohIdProto>().unwrap();
+        let r2_zid = "a2".parse::<ZenohIdProto>().unwrap();
+
+        let mut net = Network::new(
+            "[Test]".to_string(),
+            r0_zid,
+            minimal_runtime(WhatAmI::Router),
+            /* full_linkstate */ true,
+            /* gossip */ false,
+            /* gossip_multihop */ false,
+            WhatAmIMatcher::empty(),
+            AutoConnect::disabled(),
+            HashMap::new(),
+            Bound::default(),
+        );
+
+        let (transport, transport_guard) =
+            mock_transport_unicast(r1_zid, WhatAmI::Router, Arc::new(|_| {}));
+        mem::forget(transport_guard);
+        net.add_link(transport);
+
+        net.link_states(
+            vec![
+                LinkState {
+                    psid: 0,
+                    sn: 1, // NOTE: this should be > 0 so it overrides `add_link`
+                    zid: Some(r1_zid),
+                    whatami: Some(WhatAmI::Router),
+                    locators: None,
+                    links: vec![1, 2],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 1,
+                    sn: 0,
+                    zid: Some(r0_zid),
+                    whatami: Some(WhatAmI::Router),
+                    locators: None,
+                    links: vec![],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+                LinkState {
+                    psid: 2,
+                    sn: 1, // NOTE: this should be > 0 so it overrides the preliminary node
+                    zid: Some(r2_zid),
+                    whatami: Some(WhatAmI::Router),
+                    locators: Some(vec!["quic/example.com:7447".parse().unwrap()]),
+                    links: vec![0],
+                    link_weights: None,
+                    is_gateway: false,
+                },
+            ],
+            r1_zid,
+        );
+
+        assert_eq!(
+            net.graph
+                .node_weights()
+                .filter(|n| {
+                    n.zid == r2_zid
+                        && n.whatami.is_some_and(|w| w.is_router())
+                        && n.locators
+                            .as_ref()
+                            .is_some_and(|ls| ls == &["quic/example.com:7447".parse().unwrap()])
+                })
+                .count(),
+            1,
+            "node a2 in a0's graph should have `whatami.is_router()`"
         );
     }
 }

@@ -66,6 +66,8 @@ thread-priority = "=1.2.0"
 time = "=0.3.41"
 tinystr = "=0.8.0"
 tls-listener = "=0.11.0"
+# 0.7.20 requires Rust 1.85.
+tokio-util = { version = "=0.7.19", default-features = false }
 toml = "=0.9.6"
 toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
@@ -122,6 +124,7 @@ ignored = [
   "time",
   "tinystr",
   "tls-listener",
+  "tokio-util",
   "toml",
   "toml_datetime",
   "toml_parser",
