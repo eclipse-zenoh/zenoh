@@ -684,17 +684,16 @@
         socket_priority: {
           enabled: false,
           /// The socket priority for each Zenoh priority. Values above 6 need the CAP_NET_ADMIN capability.
-          /// The defaults follow the meaning of the Linux TC_PRIO_* values:
-          /// 6 interactive, 4 interactive bulk, 0 best effort, 2 bulk.
+          /// By default, real-time links get the Linux interactive class (6) and the others keep the OS default (0).
           map: {
             control: 6,
             real_time: 6,
-            interactive_high: 4,
-            interactive_low: 4,
+            interactive_high: 0,
+            interactive_low: 0,
             data_high: 0,
             data: 0,
             data_low: 0,
-            background: 2,
+            background: 0,
           },
         },
       },

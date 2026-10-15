@@ -264,19 +264,18 @@ impl Default for LinkTxConf {
     }
 }
 
-/// Follows the meaning of the Linux TC_PRIO_* values: 6 interactive, 4 interactive bulk, 0 best
-/// effort, 2 bulk. With the default `pfifo_fast` priomap they go to bands 0, 1, 1 and 2.
+/// Real-time links get the Linux interactive class (TC_PRIO_INTERACTIVE), the others keep the OS default.
 impl Default for SocketPriorityMapConf {
     fn default() -> Self {
         Self {
             control: 6,
             real_time: 6,
-            interactive_high: 4,
-            interactive_low: 4,
+            interactive_high: 0,
+            interactive_low: 0,
             data_high: 0,
             data: 0,
             data_low: 0,
-            background: 2,
+            background: 0,
         }
     }
 }

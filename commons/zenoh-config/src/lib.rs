@@ -1614,7 +1614,7 @@ fn config_socket_priority_partial_map() {
     assert!(*socket_priority.enabled());
     assert_eq!(*socket_priority.map().control(), 3);
     assert_eq!(*socket_priority.map().real_time(), 6);
-    assert_eq!(*socket_priority.map().background(), 2);
+    assert_eq!(*socket_priority.map().background(), 0);
 }
 
 #[test]
