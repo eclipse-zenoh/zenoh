@@ -767,6 +767,29 @@ validated_struct::validator! {
                     },
                     // Number of threads used for TX
                     threads: usize,
+                    /// Linux only. Sets the socket priority (SO_PRIORITY) of each TCP and TLS link that
+                    /// carries a priority range (multilink endpoints with `?prio=a-b`), on both ends of the link.
+                    /// A link takes the value mapped to the highest priority of its range.
+                    /// The kernel uses the socket priority to select the qdisc band and, on multi-queue
+                    /// NICs, the TX queue. A separate queue keeps high-priority links from waiting behind
+                    /// bulk data that is already queued for the NIC.
+                    pub socket_priority: #[derive(Default)]
+                    SocketPriorityConf {
+                        /// Whether the socket priority is set (default `false`).
+                        enabled: bool,
+                        /// The socket priority for each Zenoh priority.
+                        /// Values above 6 need the CAP_NET_ADMIN capability.
+                        pub map: SocketPriorityMapConf {
+                            control: u32,
+                            real_time: u32,
+                            interactive_high: u32,
+                            interactive_low: u32,
+                            data_high: u32,
+                            data: u32,
+                            data_low: u32,
+                            background: u32,
+                        },
+                    },
                 },
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
@@ -1576,6 +1599,22 @@ impl std::fmt::Display for Config {
                 fmt::Error
             })?
     }
+}
+
+#[test]
+fn config_socket_priority_partial_map() {
+    let config = Config::from_deserializer(
+        &mut json5::Deserializer::from_str(
+            r#"{transport: {link: {tx: {socket_priority: {enabled: true, map: {control: 3}}}}}}"#,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let socket_priority = config.transport().link().tx().socket_priority();
+    assert!(*socket_priority.enabled());
+    assert_eq!(*socket_priority.map().control(), 3);
+    assert_eq!(*socket_priority.map().real_time(), 6);
+    assert_eq!(*socket_priority.map().background(), 0);
 }
 
 #[test]
