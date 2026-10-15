@@ -134,7 +134,12 @@ fn config_from_args(args: &Args) -> Config {
         }
     }
     config.adminspace.set_enabled(true).unwrap();
-    config.plugins_loading.set_enabled(true).unwrap();
+    // Enable plugin loading if CLI args require plugins, but respect the user's
+    // config if no plugin-related CLI args are provided.
+    if !args.plugin.is_empty() || args.rest_http_port.is_some() || !args.plugin_search_dir.is_empty()
+    {
+        config.plugins_loading.set_enabled(true).unwrap();
+    }
     if !args.plugin_search_dir.is_empty() {
         config
             .plugins_loading
@@ -284,6 +289,50 @@ fn init_logging() -> Result<()> {
 
     tracing_sub.init();
     Ok(())
+}
+
+#[test]
+fn test_plugins_loading_respects_config() {
+    // Without plugin-related CLI args, plugins_loading.enabled should remain
+    // at whatever the config specifies (false by default).
+    let args = Args::parse_from(["zenohd"]);
+    let config = config_from_args(&args);
+    assert!(
+        !config.plugins_loading.enabled(),
+        "plugins_loading should be disabled by default without plugin CLI args"
+    );
+
+    // With --plugin, plugins_loading.enabled should be forced on.
+    let args = Args::parse_from(["zenohd", "--plugin", "rest"]);
+    let config = config_from_args(&args);
+    assert!(
+        config.plugins_loading.enabled(),
+        "plugins_loading should be enabled when --plugin is passed"
+    );
+
+    // With --rest-http-port, plugins_loading.enabled should be forced on.
+    let args = Args::parse_from(["zenohd", "--rest-http-port", "8000"]);
+    let config = config_from_args(&args);
+    assert!(
+        config.plugins_loading.enabled(),
+        "plugins_loading should be enabled when --rest-http-port is passed"
+    );
+
+    // With --plugin-search-dir, plugins_loading.enabled should be forced on.
+    let args = Args::parse_from(["zenohd", "--plugin-search-dir", "/tmp"]);
+    let config = config_from_args(&args);
+    assert!(
+        config.plugins_loading.enabled(),
+        "plugins_loading should be enabled when --plugin-search-dir is passed"
+    );
+
+    // When config explicitly enables plugins_loading but no CLI args, it should stay enabled.
+    let args = Args::parse_from(["zenohd", "--cfg", "plugins_loading/enabled:true"]);
+    let config = config_from_args(&args);
+    assert!(
+        config.plugins_loading.enabled(),
+        "plugins_loading should stay enabled when set via --cfg"
+    );
 }
 
 #[test]
