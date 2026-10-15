@@ -251,6 +251,9 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
+// One datagram per send without UDP segmentation offload: 100 MiB messages exceed the CI time budget.
+#[cfg(any(feature = "transport_udp", feature = "transport_quic"))]
+const MSG_SIZE_NO_SEGMENTATION_OFFLOAD: [usize; 2] = [1_024, 131_072];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
@@ -758,7 +761,13 @@ async fn transport_unicast_udp_reliable_without_segmentation_offload() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
 }
 
 #[cfg(feature = "transport_udp")]
@@ -1243,7 +1252,13 @@ async fn transport_unicast_quic_only_server_without_segmentation_offload() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
