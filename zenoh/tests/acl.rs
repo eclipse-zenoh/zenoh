@@ -23,7 +23,13 @@ use std::{
 use tokio::runtime::Handle;
 use zenoh::{config::WhatAmI, sample::SampleKind};
 use zenoh_config::Config;
+#[cfg(feature = "transport_multilink")]
+use zenoh_config::EndPoint;
 use zenoh_core::{zlock, ztimeout};
+#[cfg(feature = "transport_multilink")]
+use zenoh_protocol::core::EndPoints;
+#[cfg(feature = "transport_multilink")]
+use zenoh_test::get_locators_from_session;
 use zenoh_test::TestSessions;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -2112,5 +2118,216 @@ async fn test_pub_sub_network_interface() {
         assert!(*zlock!(deleted));
         ztimeout!(subscriber.undeclare()).unwrap();
     }
+    test_context.close().await;
+}
+
+fn get_acl_tcp_link_protocol_json5() -> &'static str {
+    r#"{
+            "enabled": true,
+            "default_permission": "deny",
+            "rules": [
+                {
+                    id: "allow tcp",
+                    permission: "allow",
+                    messages: ["put", "declare_subscriber"],
+                    flows: ["ingress", "egress"],
+                    key_exprs: ["test/demo"],
+                },
+            ],
+            "subjects": [
+                {
+                    id: "tcp",
+                    link_protocols: ["tcp"],
+                }
+            ],
+            "policies": [
+                {
+                    rules: ["allow tcp"],
+                    subjects: ["tcp"],
+                }
+            ],
+        }"#
+}
+
+#[cfg(feature = "transport_multilink")]
+fn get_inline_connect_endpoint(endpoint: &EndPoint) -> EndPoint {
+    format!("{endpoint}#retry_period_init_ms=0")
+        .parse()
+        .unwrap()
+}
+
+#[cfg(feature = "transport_multilink")]
+fn get_peer_config(
+    listen_endpoints: Option<Vec<EndPoint>>,
+    connect_endpoints: Option<Vec<EndPoints>>,
+    max_links: usize,
+) -> Config {
+    let mut config = Config::default();
+    config.set_mode(Some(WhatAmI::Peer)).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    if let Some(endpoints) = listen_endpoints {
+        config.listen.endpoints.set(endpoints).unwrap();
+    }
+    if let Some(endpoints) = connect_endpoints {
+        config.connect.endpoints.set(endpoints).unwrap();
+    }
+    config.transport.unicast.set_max_links(max_links).unwrap();
+    config
+        .insert_json5("access_control", get_acl_tcp_link_protocol_json5())
+        .unwrap();
+    config
+}
+
+#[cfg(feature = "transport_multilink")]
+async fn wait_for_transport_and_links(
+    session: &zenoh::Session,
+    expected_transports: usize,
+    expected_links: usize,
+) {
+    tokio::time::timeout(TIMEOUT, async {
+        loop {
+            let transports = session.info().transports().await.count();
+            let links = session.info().links().await.count();
+            if transports == expected_transports && links == expected_links {
+                break;
+            }
+            tokio::time::sleep(SLEEP).await;
+        }
+    })
+    .await
+    .expect("Timed out waiting for expected transport/link counts");
+}
+
+/// Test that interceptors are reloaded when a new link arrives on a transport.
+///
+/// ACL subjects referring to the TCP link protocol only match when a TCP link
+/// exists on the transport. On a UDP-only transport, communication is denied
+/// (default deny). On a multilink transport (UDP + TCP), communication is
+/// allowed once the TCP link arrives.
+#[cfg(feature = "transport_multilink")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_acl_pub_sub_link_protocols() {
+    zenoh::init_log_from_env_or("error");
+    test_pub_sub_denied_udp_only().await;
+    test_pub_sub_allowed_udp_tcp_multilink().await;
+}
+
+#[cfg(feature = "transport_multilink")]
+async fn test_pub_sub_denied_udp_only() {
+    println!("test_pub_sub_denied_udp_only");
+    let mut test_context = TestSessions::new();
+
+    let config01 = get_peer_config(Some(vec!["udp/127.0.0.1:0".parse().unwrap()]), None, 1);
+    let session01 = test_context.open_listener_with_cfg(config01).await;
+
+    let udp_locator = get_locators_from_session(&session01)
+        .await
+        .into_iter()
+        .find(|locator| locator.to_string().starts_with("udp/"))
+        .expect("Expected a UDP locator from session");
+
+    let config02 = get_peer_config(
+        None,
+        Some(vec![get_inline_connect_endpoint(&udp_locator).into()]),
+        1,
+    );
+    let session02 = test_context.open_connector_with_cfg(config02).await;
+    tokio::time::sleep(SLEEP).await;
+
+    let received_value = Arc::new(Mutex::new(String::new()));
+    let temp_recv_value = received_value.clone();
+    let _subscriber = session01
+        .declare_subscriber(KEY_EXPR)
+        .callback(move |sample| {
+            let mut temp_value = zlock!(temp_recv_value);
+            *temp_value = sample.payload().try_to_string().unwrap().into_owned();
+        })
+        .await
+        .unwrap();
+
+    tokio::time::sleep(SLEEP).await;
+    let publisher = session02.declare_publisher(KEY_EXPR).await.unwrap();
+    publisher.put(VALUE).await.unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    assert!(
+        zlock!(received_value).is_empty(),
+        "ACL should have denied communication over UDP-only transport"
+    );
+    test_context.close().await;
+}
+
+#[cfg(feature = "transport_multilink")]
+async fn test_pub_sub_allowed_udp_tcp_multilink() {
+    println!("test_pub_sub_allowed_udp_tcp_multilink");
+    let mut test_context = TestSessions::new();
+
+    let config01 = get_peer_config(
+        Some(vec![
+            "udp/127.0.0.1:0".parse().unwrap(),
+            "tcp/127.0.0.1:0".parse().unwrap(),
+        ]),
+        None,
+        2,
+    );
+    let session01 = test_context.open_listener_with_cfg(config01).await;
+
+    let locators = get_locators_from_session(&session01).await;
+    let udp_locator = locators
+        .iter()
+        .find(|l| l.to_string().starts_with("udp/"))
+        .expect("Expected a UDP locator from session")
+        .clone();
+    let tcp_locator = locators
+        .iter()
+        .find(|l| l.to_string().starts_with("tcp/"))
+        .expect("Expected a TCP locator from session")
+        .clone();
+
+    let config02 = get_peer_config(
+        None,
+        Some(vec![zenoh_protocol::core::EndPoints::Locators(
+            zenoh_protocol::core::Locators {
+                strategy: zenoh_protocol::core::LocatorsStrategy::AllOf,
+                locators: vec![
+                    get_inline_connect_endpoint(&udp_locator),
+                    get_inline_connect_endpoint(&tcp_locator),
+                ],
+            },
+        )]),
+        2,
+    );
+    let session02 = test_context.open_connector_with_cfg(config02).await;
+
+    wait_for_transport_and_links(&session01, 1, 2).await;
+    wait_for_transport_and_links(&session02, 1, 2).await;
+
+    let received_value = Arc::new(Mutex::new(String::new()));
+    let temp_recv_value = received_value.clone();
+    let _subscriber = session01
+        .declare_subscriber(KEY_EXPR)
+        .callback(move |sample| {
+            if sample.kind() == SampleKind::Put {
+                if let Ok(value) = sample.payload().try_to_string() {
+                    *zlock!(temp_recv_value) = value.into_owned();
+                }
+            }
+        })
+        .await
+        .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let publisher = session02.declare_publisher(KEY_EXPR).await.unwrap();
+    publisher.put(VALUE).await.unwrap();
+
+    tokio::time::timeout(TIMEOUT, async {
+        while *zlock!(received_value) != VALUE {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect(
+        "Timed out waiting for sample, ACL should have allowed communication over multilink transport with TCP link",
+    );
     test_context.close().await;
 }
