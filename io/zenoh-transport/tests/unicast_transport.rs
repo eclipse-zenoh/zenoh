@@ -251,6 +251,9 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
+// One datagram per send without UDP segmentation offload: 100 MiB messages exceed the CI time budget.
+#[cfg(any(feature = "transport_udp", feature = "transport_quic"))]
+const MSG_SIZE_NO_SEGMENTATION_OFFLOAD: [usize; 2] = [1_024, 131_072];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
@@ -732,6 +735,43 @@ async fn transport_unicast_udp_reliable() {
 
 #[cfg(feature = "transport_udp")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_reliable_without_segmentation_offload() {
+    use zenoh_link_commons::quic::QUIC_SEGMENTATION_OFFLOAD;
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("udp/localhost:{}?rel=1", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter([(QUIC_SEGMENTATION_OFFLOAD, "false")].iter().copied())
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_udp_only_with_lowlatency_transport() {
     zenoh_util::init_log_from_env_or("error");
 
@@ -1173,6 +1213,52 @@ async fn transport_unicast_quic_only_server() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server_without_segmentation_offload() {
+    use zenoh_link_commons::{quic::QUIC_SEGMENTATION_OFFLOAD, tls::config::*};
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEGMENTATION_OFFLOAD, "false"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1886,6 +1972,46 @@ async fn transport_unicast_quic_datagram_only_server() {
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
                 (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
+}
+
+#[cfg(feature = "transport_quic_datagram")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_datagram_only_server_without_segmentation_offload() {
+    use zenoh_link_commons::{quic::QUIC_SEGMENTATION_OFFLOAD, tls::config::*};
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}?rel=0", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEGMENTATION_OFFLOAD, "false"),
             ]
             .iter()
             .copied(),
