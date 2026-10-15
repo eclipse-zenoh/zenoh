@@ -12,14 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use zenoh::{bytes::ZBytes, qos::CongestionControl, shm::ShmProviderBuilder, Config, Wait};
+use zenoh::{
+    bytes::ZBytes, key_expr::KeyExpr, qos::CongestionControl, shm::ShmProviderBuilder, Config, Wait,
+};
 use zenoh_examples::CommonArgs;
 
 #[tokio::main]
 async fn main() {
     // initiate logging
     zenoh::init_log_from_env_or("error");
-    let (config, sm_size, size) = parse_args();
+    let (config, sm_size, size, key_expr) = parse_args();
 
     let z = zenoh::open(config).await.unwrap();
 
@@ -37,7 +39,7 @@ async fn main() {
     }
 
     let publisher = z
-        .declare_publisher("test/thr")
+        .declare_publisher(key_expr)
         // Make sure to not drop messages because of congestion control
         .congestion_control(CongestionControl::Block)
         .await
@@ -59,13 +61,17 @@ struct Args {
     shared_memory: usize,
     /// Sets the size of the payload to publish.
     payload_size: usize,
+    /// The key expression to be used for the throughput test
+    #[arg(short, long, default_value = "test/thr")]
+    key_expr: KeyExpr<'static>,
+    ///Common args for all examples
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, usize, usize) {
+fn parse_args() -> (Config, usize, usize, KeyExpr<'static>) {
     let args = Args::parse();
     let sm_size = args.shared_memory * 1024 * 1024;
     let size = args.payload_size;
-    (args.common.into(), sm_size, size)
+    (args.common.into(), sm_size, size, args.key_expr)
 }
