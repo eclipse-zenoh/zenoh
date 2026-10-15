@@ -200,56 +200,37 @@ impl DownsamplingFilters {
     }
 }
 
-/// Per-rule rate-limiting state, indexed by rule id.
-struct RuleBudgets {
-    /// Minimal interval between two forwarded messages for each rule.
-    thresholds: Vec<std::time::Duration>,
-    /// Timestamp of the latest forwarded message for each rule.
-    latest_message_timestamps: Vec<std::time::Instant>,
+/// Rate-limiting state of a single rule.
+struct RuleBudget {
+    /// Minimal interval between two forwarded messages.
+    threshold: std::time::Duration,
+    /// Timestamp of the latest forwarded message.
+    latest_message_timestamp: std::time::Instant,
 }
 
+/// Rate-limiting state of all rules, indexed by rule id.
+struct RuleBudgets(Vec<RuleBudget>);
+
 impl RuleBudgets {
-    fn with_capacity(capacity: usize) -> Self {
-        Self {
-            thresholds: Vec::with_capacity(capacity),
-            latest_message_timestamps: Vec::with_capacity(capacity),
-        }
-    }
-
-    fn push(
-        &mut self,
-        threshold: std::time::Duration,
-        latest_message_timestamp: std::time::Instant,
-    ) {
-        self.thresholds.push(threshold);
-        self.latest_message_timestamps
-            .push(latest_message_timestamp);
-    }
-
     /// Atomically acquires the budget of every rule in `ids` at instant `now`.
     ///
     /// Returns `true` and records `now` as the latest forwarded message for all
     /// those rules if every budget is available; otherwise returns `false` and
     /// leaves all timestamps untouched.
     fn try_acquire(&mut self, ids: &[usize], now: std::time::Instant) -> bool {
-        let available = ids.iter().all(|&id| {
-            match (
-                self.latest_message_timestamps.get(id),
-                self.thresholds.get(id),
-            ) {
-                (Some(latest), Some(threshold)) => {
-                    now.saturating_duration_since(*latest) >= *threshold
-                }
-                _ => {
-                    tracing::debug!("unexpected rule ID {id}");
-                    true
-                }
+        let available = ids.iter().all(|&id| match self.0.get(id) {
+            Some(budget) => {
+                now.saturating_duration_since(budget.latest_message_timestamp) >= budget.threshold
+            }
+            None => {
+                tracing::debug!("unexpected rule ID {id}");
+                true
             }
         });
         if available {
             for &id in ids {
-                if let Some(latest) = self.latest_message_timestamps.get_mut(id) {
-                    *latest = now;
+                if let Some(budget) = self.0.get_mut(id) {
+                    budget.latest_message_timestamp = now;
                 }
             }
         }
@@ -342,7 +323,7 @@ impl DownsamplingInterceptor {
     ) -> Self {
         let mut ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider> =
             KeBoxTree::default();
-        let mut budgets = RuleBudgets::with_capacity(rules.len().get());
+        let mut budgets = Vec::with_capacity(rules.len().get());
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
             let mut latest_message_timestamp = std::time::Instant::now();
@@ -357,7 +338,10 @@ impl DownsamplingInterceptor {
             } else {
                 node.insert_weight(vec![id]);
             }
-            budgets.push(threshold, latest_message_timestamp);
+            budgets.push(RuleBudget {
+                threshold,
+                latest_message_timestamp,
+            });
             tracing::debug!(
                 "New downsampler rule enabled: key_expr={key_expr:?}, threshold={threshold:?}, messages={filters:?}",
                 key_expr = rule.key_expr,
@@ -366,7 +350,7 @@ impl DownsamplingInterceptor {
         Self {
             filters,
             ke_id,
-            budgets: budgets.into(),
+            budgets: Mutex::new(RuleBudgets(budgets)),
             flow,
             #[cfg(feature = "stats")]
             stats,
@@ -465,19 +449,15 @@ mod tests {
                 .map(|&saturated| if saturated { now } else { stale })
                 .chain([stale])
                 .collect();
-            interceptor
-                .budgets
-                .lock()
-                .unwrap()
-                .latest_message_timestamps
-                .clone_from(&before);
+            for (budget, &timestamp) in zlock!(interceptor.budgets).0.iter_mut().zip(&before) {
+                budget.latest_message_timestamp = timestamp;
+            }
             let decision = interceptor.intercept(&mut msg, &mut ctx);
-            let after = interceptor
-                .budgets
-                .lock()
-                .unwrap()
-                .latest_message_timestamps
-                .clone();
+            let after: Vec<Instant> = zlock!(interceptor.budgets)
+                .0
+                .iter()
+                .map(|budget| budget.latest_message_timestamp)
+                .collect();
             assert_eq!(
                 after[2], stale,
                 "non-matching rule timestamp must never be touched"
