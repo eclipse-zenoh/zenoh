@@ -271,7 +271,7 @@ impl HatTokenTrait for Hat {
         tables: &TablesData,
         res: Option<&Resource>,
     ) -> HashSet<Arc<Resource>> {
-        self.owned_faces(tables)
+        self.owned_faces_incl_mcast(tables)
             .flat_map(|f| self.face_hat(f).remote_tokens.values())
             .filter(|token| res.is_none_or(|res| res.matches(token)))
             .cloned()
