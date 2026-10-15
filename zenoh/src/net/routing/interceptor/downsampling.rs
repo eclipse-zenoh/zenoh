@@ -369,34 +369,25 @@ mod tests {
         }
     }
 
-    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
-    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
-    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
-    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
-    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
-    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
-    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
-    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
-    fn overlapping_downsampling_enforces_every_matching_rule(
+    fn assert_matching_rules_enforced(
+        first_key_expr: &str,
+        second_key_expr: &str,
         reverse_rules: bool,
         cached: bool,
         flow: InterceptorFlow,
     ) {
-        // Regression for #2200: both matching maximum-frequency budgets must apply.
-        let specific = DownsamplingRuleConf {
-            key_expr: "*/thermal_image/sensor_msgs::msg::dds_::Image_/*"
-                .try_into()
-                .unwrap(),
+        let first = DownsamplingRuleConf {
+            key_expr: first_key_expr.try_into().unwrap(),
             freq: 10.0,
         };
-        let general = DownsamplingRuleConf {
-            key_expr: "**/sensor_msgs::msg::dds_::Image_/*".try_into().unwrap(),
+        let second = DownsamplingRuleConf {
+            key_expr: second_key_expr.try_into().unwrap(),
             freq: 1.0,
         };
         let rules = if reverse_rules {
-            nev![general, specific]
+            nev![second, first]
         } else {
-            nev![specific, general]
+            nev![first, second]
         };
         let interceptor = DownsamplingInterceptor::new(
             DownsamplingFilters::new([DataMessage::Put]),
@@ -430,20 +421,89 @@ mod tests {
         for saturated in [[false, false], [true, true], [true, false], [false, true]] {
             // Set independent rule budgets without sleeps or random tree traversal assumptions.
             let now = Instant::now();
+            let mut before = Vec::new();
             for (state, saturated) in interceptor.ke_state.iter().zip(saturated) {
-                *state.latest_message_timestamp.lock().unwrap() = if saturated {
+                let ts = if saturated {
                     now
                 } else {
                     now - Duration::from_secs(2)
                 };
+                *state.latest_message_timestamp.lock().unwrap() = ts;
+                before.push(ts);
             }
-            allowed.push(interceptor.intercept(&mut msg, &mut ctx));
+            let decision = interceptor.intercept(&mut msg, &mut ctx);
+            let after: Vec<Instant> = interceptor
+                .ke_state
+                .iter()
+                .map(|state| *state.latest_message_timestamp.lock().unwrap())
+                .collect();
+            if decision {
+                assert!(
+                    after.iter().all(|&ts| ts >= now),
+                    "accepted message must update every matching rule timestamp"
+                );
+                assert_eq!(
+                    after[0], after[1],
+                    "accepted message must update matching rules to the same timestamp"
+                );
+            } else {
+                assert_eq!(
+                    after, before,
+                    "rejected message must leave every matching rule timestamp unchanged"
+                );
+            }
+            allowed.push(decision);
         }
 
         assert_eq!(
             allowed,
             [true, false, false, false],
             "only a message with both matching rule budgets available may pass"
+        );
+    }
+
+    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
+    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
+    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
+    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
+    fn overlapping_downsampling_enforces_every_matching_rule(
+        reverse_rules: bool,
+        cached: bool,
+        flow: InterceptorFlow,
+    ) {
+        // Regression for #2200: both matching maximum-frequency budgets must apply.
+        assert_matching_rules_enforced(
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            "**/sensor_msgs::msg::dds_::Image_/*",
+            reverse_rules,
+            cached,
+            flow,
+        );
+    }
+
+    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
+    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
+    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
+    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
+    fn duplicate_keyexpr_downsampling_enforces_every_matching_rule(
+        reverse_rules: bool,
+        cached: bool,
+        flow: InterceptorFlow,
+    ) {
+        assert_matching_rules_enforced(
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            reverse_rules,
+            cached,
+            flow,
         );
     }
 }
