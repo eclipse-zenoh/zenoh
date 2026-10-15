@@ -4928,6 +4928,7 @@ dependencies = [
  "rustc_version",
  "serde",
  "serde_json",
+ "smallvec",
  "socket2 0.5.10",
  "test-case",
  "tokio",

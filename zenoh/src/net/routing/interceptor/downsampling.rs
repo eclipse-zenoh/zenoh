@@ -27,10 +27,12 @@ use std::{
 };
 
 use nonempty_collections::NEVec;
+use smallvec::SmallVec;
 use zenoh_config::{DataMessage, DownsamplingItemConf, DownsamplingRuleConf};
 use zenoh_core::zlock;
 use zenoh_keyexpr::keyexpr_tree::{
-    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+    impls::KeyedSetProvider, support::UnknownWildness, IKeyExprTree, IKeyExprTreeMut,
+    IKeyExprTreeNode, IKeyExprTreeNodeMut, KeBoxTree,
 };
 use zenoh_protocol::{
     network::{NetworkBodyMut, Push},
@@ -198,24 +200,66 @@ impl DownsamplingFilters {
     }
 }
 
-struct TimeState {
-    pub threshold: std::time::Duration,
-    pub latest_message_timestamp: Mutex<std::time::Instant>,
+/// Rate-limiting state of a single rule.
+struct RuleBudget {
+    /// Minimal interval between two forwarded messages.
+    threshold: std::time::Duration,
+    /// Timestamp of the latest forwarded message.
+    latest_message_timestamp: std::time::Instant,
+}
+
+/// Rate-limiting state of all rules, indexed by rule id.
+struct RuleBudgets(Vec<RuleBudget>);
+
+impl RuleBudgets {
+    /// Atomically acquires the budget of every rule in `ids` at instant `now`.
+    ///
+    /// Returns `true` and records `now` as the latest forwarded message for all
+    /// those rules if every budget is available; otherwise returns `false` and
+    /// leaves all timestamps untouched.
+    fn try_acquire(&mut self, ids: &[usize], now: std::time::Instant) -> bool {
+        let available = ids.iter().all(|&id| match self.0.get(id) {
+            Some(budget) => {
+                now.saturating_duration_since(budget.latest_message_timestamp) >= budget.threshold
+            }
+            None => {
+                tracing::debug!("unexpected rule ID {id}");
+                true
+            }
+        });
+        if available {
+            for &id in ids {
+                if let Some(budget) = self.0.get_mut(id) {
+                    budget.latest_message_timestamp = now;
+                }
+            }
+        }
+        available
+    }
 }
 
 pub(crate) struct DownsamplingInterceptor {
     filters: DownsamplingFilters,
-    ke_id: KeBoxTree<usize, UnknownWildness, KeyedSetProvider>,
-    ke_state: Vec<TimeState>,
+    ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider>,
+    // A single lock keeps the check-and-update over all matching rules atomic
+    // without allocating a guard per rule on the hot path.
+    budgets: Mutex<RuleBudgets>,
     flow: InterceptorFlow,
     #[cfg(feature = "stats")]
     stats: zenoh_stats::DropStats,
 }
 
 impl DownsamplingInterceptor {
-    fn get_id(&self, key_expr: &keyexpr) -> Option<usize> {
-        let node = self.ke_id.intersecting_keys(key_expr).next()?;
-        self.ke_id.weight_at(&node).copied()
+    fn matching_ids<'a>(&'a self, key_expr: &'a keyexpr) -> impl Iterator<Item = usize> + 'a {
+        self.ke_id
+            .intersecting_nodes(key_expr)
+            .filter_map(|node| node.weight())
+            .flatten()
+            .copied()
+    }
+
+    fn try_acquire_budgets(&self, ids: &[usize]) -> bool {
+        ids.is_empty() || zlock!(self.budgets).try_acquire(ids, std::time::Instant::now())
     }
 }
 
@@ -224,31 +268,30 @@ static INFO_FLAG: AtomicBool = AtomicBool::new(false);
 
 impl InterceptorTrait for DownsamplingInterceptor {
     fn compute_keyexpr_cache(&self, key_expr: &keyexpr) -> Option<Box<dyn Any + Send + Sync>> {
-        Some(Box::new(self.get_id(key_expr)))
+        Some(Box::new(
+            self.matching_ids(key_expr).collect::<Vec<usize>>(),
+        ))
     }
 
     fn intercept(&self, msg: &mut NetworkMessageMut, ctx: &mut dyn InterceptorContext) -> bool {
         if !self.filters.is_msg_filtered(msg) {
             return true;
         };
-        let cache = ctx
+        let allowed = if let Some(ids) = ctx
             .get_cache(msg)
-            .and_then(|c| c.downcast_ref::<Option<usize>>().copied());
-        let Some(id) = cache.unwrap_or_else(|| self.get_id(&ctx.full_keyexpr(msg)?)) else {
-            return true;
+            .and_then(|c| c.downcast_ref::<Vec<usize>>())
+        {
+            self.try_acquire_budgets(ids)
+        } else if let Some(ke) = ctx.full_keyexpr(msg) {
+            // Walk the tree outside the lock; the buffer stays on the stack for typical rule counts.
+            let ids: SmallVec<[usize; 8]> = self.matching_ids(&ke).collect();
+            self.try_acquire_budgets(&ids)
+        } else {
+            true
         };
-
-        let Some(state) = self.ke_state.get(id) else {
-            tracing::debug!("unexpected cache ID {id}");
-            return true;
-        };
-        let mut latest_message_timestamp = zlock!(state.latest_message_timestamp);
-        let timestamp = std::time::Instant::now();
-        if timestamp - *latest_message_timestamp >= state.threshold {
-            *latest_message_timestamp = timestamp;
+        if allowed {
             true
         } else {
-            drop(latest_message_timestamp);
             if !INFO_FLAG.swap(true, Ordering::Relaxed) {
                 tracing::info!("Some message(s) have been dropped by the downsampling interceptor. Enable trace level tracing for more details.");
             }
@@ -278,8 +321,9 @@ impl DownsamplingInterceptor {
         flow: InterceptorFlow,
         #[cfg(feature = "stats")] stats: zenoh_stats::DropStats,
     ) -> Self {
-        let mut ke_id = KeBoxTree::default();
-        let mut ke_state = Vec::new();
+        let mut ke_id: KeBoxTree<Vec<usize>, UnknownWildness, KeyedSetProvider> =
+            KeBoxTree::default();
+        let mut budgets = Vec::with_capacity(rules.len().get());
         for (id, rule) in rules.into_iter().enumerate() {
             let mut threshold = std::time::Duration::MAX;
             let mut latest_message_timestamp = std::time::Instant::now();
@@ -288,10 +332,15 @@ impl DownsamplingInterceptor {
                     std::time::Duration::from_nanos((1. / rule.freq * NANOS_PER_SEC) as u64);
                 latest_message_timestamp -= threshold;
             }
-            ke_id.insert(&rule.key_expr, id);
-            ke_state.push(TimeState {
+            let node = ke_id.node_mut_or_create(&rule.key_expr);
+            if let Some(ids) = node.weight_mut() {
+                ids.push(id);
+            } else {
+                node.insert_weight(vec![id]);
+            }
+            budgets.push(RuleBudget {
                 threshold,
-                latest_message_timestamp: latest_message_timestamp.into(),
+                latest_message_timestamp,
             });
             tracing::debug!(
                 "New downsampler rule enabled: key_expr={key_expr:?}, threshold={threshold:?}, messages={filters:?}",
@@ -301,7 +350,7 @@ impl DownsamplingInterceptor {
         Self {
             filters,
             ke_id,
-            ke_state,
+            budgets: Mutex::new(RuleBudgets(budgets)),
             flow,
             #[cfg(feature = "stats")]
             stats,
@@ -337,34 +386,30 @@ mod tests {
         }
     }
 
-    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
-    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
-    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
-    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
-    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
-    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
-    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
-    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
-    fn overlapping_downsampling_enforces_every_matching_rule(
+    fn assert_matching_rules_enforced(
+        first_key_expr: &str,
+        second_key_expr: &str,
         reverse_rules: bool,
         cached: bool,
         flow: InterceptorFlow,
     ) {
-        // Regression for #2200: both matching maximum-frequency budgets must apply.
-        let specific = DownsamplingRuleConf {
-            key_expr: "*/thermal_image/sensor_msgs::msg::dds_::Image_/*"
-                .try_into()
-                .unwrap(),
+        let first = DownsamplingRuleConf {
+            key_expr: first_key_expr.try_into().unwrap(),
             freq: 10.0,
         };
-        let general = DownsamplingRuleConf {
-            key_expr: "**/sensor_msgs::msg::dds_::Image_/*".try_into().unwrap(),
+        let second = DownsamplingRuleConf {
+            key_expr: second_key_expr.try_into().unwrap(),
+            freq: 1.0,
+        };
+        // A rule that never matches the test key expression: its budget must stay untouched.
+        let unrelated = DownsamplingRuleConf {
+            key_expr: "unrelated/**".try_into().unwrap(),
             freq: 1.0,
         };
         let rules = if reverse_rules {
-            nev![general, specific]
+            nev![second, first, unrelated]
         } else {
-            nev![specific, general]
+            nev![first, second, unrelated]
         };
         let interceptor = DownsamplingInterceptor::new(
             DownsamplingFilters::new([DataMessage::Put]),
@@ -398,20 +443,92 @@ mod tests {
         for saturated in [[false, false], [true, true], [true, false], [false, true]] {
             // Set independent rule budgets without sleeps or random tree traversal assumptions.
             let now = Instant::now();
-            for (state, saturated) in interceptor.ke_state.iter().zip(saturated) {
-                *state.latest_message_timestamp.lock().unwrap() = if saturated {
-                    now
-                } else {
-                    now - Duration::from_secs(2)
-                };
+            let stale = now - Duration::from_secs(2);
+            let before: Vec<Instant> = saturated
+                .iter()
+                .map(|&saturated| if saturated { now } else { stale })
+                .chain([stale])
+                .collect();
+            for (budget, &timestamp) in zlock!(interceptor.budgets).0.iter_mut().zip(&before) {
+                budget.latest_message_timestamp = timestamp;
             }
-            allowed.push(interceptor.intercept(&mut msg, &mut ctx));
+            let decision = interceptor.intercept(&mut msg, &mut ctx);
+            let after: Vec<Instant> = zlock!(interceptor.budgets)
+                .0
+                .iter()
+                .map(|budget| budget.latest_message_timestamp)
+                .collect();
+            assert_eq!(
+                after[2], stale,
+                "non-matching rule timestamp must never be touched"
+            );
+            if decision {
+                assert!(
+                    after[..2].iter().all(|&ts| ts >= now),
+                    "accepted message must update every matching rule timestamp"
+                );
+                assert_eq!(
+                    after[0], after[1],
+                    "accepted message must update matching rules to the same timestamp"
+                );
+            } else {
+                assert_eq!(
+                    after, before,
+                    "rejected message must leave every matching rule timestamp unchanged"
+                );
+            }
+            allowed.push(decision);
         }
 
         assert_eq!(
             allowed,
             [true, false, false, false],
             "only a message with both matching rule budgets available may pass"
+        );
+    }
+
+    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
+    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
+    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
+    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
+    fn overlapping_downsampling_enforces_every_matching_rule(
+        reverse_rules: bool,
+        cached: bool,
+        flow: InterceptorFlow,
+    ) {
+        // Regression for #2200: both matching maximum-frequency budgets must apply.
+        assert_matching_rules_enforced(
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            "**/sensor_msgs::msg::dds_::Image_/*",
+            reverse_rules,
+            cached,
+            flow,
+        );
+    }
+
+    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
+    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
+    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
+    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
+    fn duplicate_keyexpr_downsampling_enforces_every_matching_rule(
+        reverse_rules: bool,
+        cached: bool,
+        flow: InterceptorFlow,
+    ) {
+        assert_matching_rules_enforced(
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            "*/thermal_image/sensor_msgs::msg::dds_::Image_/*",
+            reverse_rules,
+            cached,
+            flow,
         );
     }
 }
