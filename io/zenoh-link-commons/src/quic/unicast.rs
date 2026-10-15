@@ -268,6 +268,17 @@ impl RecvStream {
     }
 }
 
+/// A maybe-pending [`quinn::SendStream`].
+///
+/// Mirrors [`RecvStream`] for the send side of the bi-directional Control stream,
+/// established by [`QuicStreams::bi_stream_task`].
+enum SendStream {
+    /// A pending channel waiting for the bi stream establishment.
+    Pending(oneshot::Receiver<quinn::SendStream>),
+    /// An established stream
+    Established(quinn::SendStream),
+}
+
 pub struct QuicServerBuilder<'a, F: AcceptorCallback> {
     endpoint: &'a EndPoint,
     acceptor_params: QuicAcceptorParams<F>,
@@ -586,7 +597,6 @@ impl QuicClient {
         let mut streams = None;
         if is_streamed {
             let quic_streams = QuicStreams::open(&quic_conn)
-                .await
                 .map_err(|e| zerror!("Cannot initialize QUIC streams {}: {}", host, e))?;
             streams = Some(quic_streams);
         }
@@ -728,7 +738,6 @@ impl<F: AcceptorCallback> QuicAcceptor<F> {
         let streams = if self.is_streamed {
             Some(
                 QuicStreams::accept(&quic_conn)
-                    .await
                     .map_err(|e| zerror!("cannot initialize QUIC streams: {:?}", e))?,
             )
         } else {
@@ -774,8 +783,17 @@ pub struct QuicLinkMaterial {
     pub tls_close_link_on_expiration: bool,
 }
 
+/// The per-priority streams of a QUIC connection.
+///
+/// Index 0 is the bi-directional Control stream: it is opened by the client, accepted by the
+/// server, and established by `QuicStreams::bi_stream_task` whose halves are notified to the
+/// pending channels on the first read/write on [`Priority::Control`]. When multistream is
+/// negotiated (`is_multistream`), one uni stream per priority above Control is opened eagerly,
+/// in priority order: the send streams are stored directly, while the receive
+/// streams are "accepted" only when data is received, so they start with a
+/// "pending" state, and are notified by `RecvStream::acceptor_task`.
 pub struct QuicStreams {
-    send: [UnsafeCell<Option<quinn::SendStream>>; Priority::NUM],
+    send: [UnsafeCell<Option<SendStream>>; Priority::NUM],
     recv: [UnsafeCell<Option<RecvStream>>; Priority::NUM],
     pub is_multistream: bool,
 }
@@ -803,35 +821,44 @@ impl fmt::Debug for QuicStreams {
 }
 
 impl QuicStreams {
-    async fn open(connection: &quinn::Connection) -> ZResult<Self> {
-        let (send, recv) = connection
-            .open_bi()
-            .await
-            .map_err(|e| zerror!("Can not open QUIC bi-directional channel: {e}"))?;
-        Self::new(connection, send, recv).await
+    /// Instantiates the streams of a QUIC connection as a client.
+    fn open(connection: &quinn::Connection) -> ZResult<Self> {
+        Self::new(connection.clone(), false)
     }
 
-    async fn accept(connection: &quinn::Connection) -> ZResult<Self> {
-        let (send, recv) = connection
-            .accept_bi()
-            .await
-            .map_err(|e| zerror!("Can not accept QUIC bi-directional channel: {e}"))?;
-        Self::new(connection, send, recv).await
+    /// Instantiates the streams of a QUIC connection as a server.
+    fn accept(connection: &quinn::Connection) -> ZResult<Self> {
+        Self::new(connection.clone(), true)
     }
 
-    async fn new(
-        connection: &quinn::Connection,
-        send: quinn::SendStream,
-        recv: quinn::RecvStream,
-    ) -> ZResult<Self> {
-        let uni_streams = UniStreams::try_open(connection)?;
-        // Initialize the streams with Control bi stream
-        let mut send = vec![UnsafeCell::new(Some(send))];
-        let mut recv = vec![UnsafeCell::new(Some(RecvStream::Accepted(recv)))];
+    /// Instantiates the streams of a QUIC connection.
+    ///
+    /// The bi-directional Control stream is not established here: [`QuicStreams::bi_stream_task`]
+    /// establishes it, opened (`is_accept == false`) or accepted (`is_accept == true`), and the
+    /// pending channels are notified upon the first read/write on [`Priority::Control`].
+    fn new(connection: quinn::Connection, is_accept: bool) -> ZResult<Self> {
+        let uni_streams = UniStreams::try_open(&connection)?;
+        // Initialize the streams with pending Control bi-stream
+        let (send_tx, send_rx) = oneshot::channel();
+        let (recv_tx, recv_rx) = oneshot::channel();
+        let mut send = vec![UnsafeCell::new(Some(SendStream::Pending(send_rx)))];
+        let mut recv = vec![UnsafeCell::new(Some(RecvStream::Pending(recv_rx)))];
+        zenoh_runtime::ZRuntime::Acceptor.spawn(Self::bi_stream_task(
+            connection.clone(),
+            is_accept,
+            send_tx,
+            recv_tx,
+        ));
         let is_multistream = uni_streams.is_some();
         // If multistream is enabled, initializes the priority-mapped streams
         if let Some(streams) = uni_streams {
-            send.extend(streams.0.into_iter().map(Some).map(UnsafeCell::new));
+            send.extend(
+                streams
+                    .0
+                    .into_iter()
+                    .map(|stream| Some(SendStream::Established(stream)))
+                    .map(UnsafeCell::new),
+            );
             let mut priority_txs = HashMap::new();
             // For each priority, creates a channel to notify the acceptation and initialize
             // the stream to pending
@@ -851,6 +878,35 @@ impl QuicStreams {
             recv: recv.try_into().unwrap(),
             is_multistream,
         })
+    }
+
+    /// Task establishing the bi-directional Control stream, once, and notifying the associated
+    /// pending channels.
+    ///
+    /// The stream is opened by the client, accepted by the server. The task stops when the
+    /// stream has been established, or with connection errors; there is no cancellation to
+    /// handle as the connection will be closed eventually, triggering an error if the task
+    /// is still alive.
+    async fn bi_stream_task(
+        connection: quinn::Connection,
+        is_accept: bool,
+        send_tx: oneshot::Sender<quinn::SendStream>,
+        recv_tx: oneshot::Sender<quinn::RecvStream>,
+    ) {
+        let streams = if is_accept {
+            connection.accept_bi().await
+        } else {
+            connection.open_bi().await
+        };
+        match streams {
+            Ok((send, recv)) => {
+                // If a channel is closed, then the link is closed, so we don't care
+                // as the task stops after the stream establishment
+                send_tx.send(send).ok();
+                recv_tx.send(recv).ok();
+            }
+            Err(e) => tracing::trace!("Cannot establish QUIC bi-directional stream: {e}"),
+        }
     }
 
     /// # Safety
@@ -884,7 +940,7 @@ impl QuicStreams {
     ///
     /// There should be no concurrent calls to write/write_all per priority.
     pub async unsafe fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize> {
-        unsafe { self.write_stream(priority) }
+        unsafe { self.write_stream(priority).await? }
             .write(buffer)
             .await
             .map_err(Into::into)
@@ -894,7 +950,7 @@ impl QuicStreams {
     ///
     /// There should be no concurrent calls to write/write_all per priority.
     pub async unsafe fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()> {
-        unsafe { self.write_stream(priority) }
+        unsafe { self.write_stream(priority).await? }
             .write_all(buffer)
             .await
             .map_err(Into::into)
@@ -902,15 +958,34 @@ impl QuicStreams {
 
     /// Retrieved the write-stream mapped to the priority
     ///
+    /// The stream may be pending, in which case we wait until the bi stream is established.
+    ///
     /// # Safety
     ///
     /// There should be only one caller per priority.
     #[allow(clippy::mut_from_ref)]
-    unsafe fn write_stream(&self, priority: Option<Priority>) -> &mut quinn::SendStream {
+    async unsafe fn write_stream(
+        &self,
+        priority: Option<Priority>,
+    ) -> ZResult<&mut quinn::SendStream> {
         let prio = priority.unwrap_or(Priority::Control) as usize;
-        unsafe { &mut *self.send[prio].get() }
+        match unsafe { &mut *self.send[prio].get() }
             .as_mut()
             .expect("multistream should have been started")
+        {
+            stream @ SendStream::Pending(_) => {
+                let SendStream::Pending(rx) = stream else {
+                    unreachable!()
+                };
+                let send = rx.await.map_err(|_| zerror!("Connection closed"))?;
+                *stream = SendStream::Established(send);
+                let SendStream::Established(send) = stream else {
+                    unreachable!()
+                };
+                Ok(send)
+            }
+            SendStream::Established(send) => Ok(send),
+        }
     }
 
     /// Retrieved the read-stream mapped to the priority
