@@ -20,6 +20,18 @@ set -e
 
 case "$1" in
     configure)
+        # Restore what an old postrm deleted during the upgrade (see preinst).
+        restored=
+        for dir in /etc/zenohd /var/zenohd; do
+            if [ -d "$dir.dpkg-backup" ]; then
+                if [ -e "$dir" ]; then
+                    rm -rf "$dir.dpkg-backup"
+                else
+                    mv "$dir.dpkg-backup" "$dir"
+                    restored=1
+                fi
+            fi
+        done
         if ! command -v systemctl > /dev/null 2>&1
         then
             echo "WARNING: 'systemctl' not found - cannot install zenohd as a service."
@@ -27,7 +39,8 @@ case "$1" in
         fi
         id -u zenohd > /dev/null 2>&1 || useradd -r -s /bin/false zenohd
         mkdir -p /var/zenohd
-        chown zenohd:zenohd /var/zenohd
+        # The old postrm also deleted the account; its new UID may differ.
+        chown ${restored:+-R} zenohd:zenohd /var/zenohd
         systemctl daemon-reload
         systemctl disable zenohd
     ;;
