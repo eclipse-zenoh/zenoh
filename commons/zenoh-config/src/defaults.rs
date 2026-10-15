@@ -50,6 +50,16 @@ pub mod connect {
 
 #[allow(non_upper_case_globals)]
 #[allow(dead_code)]
+pub mod rotation {
+    pub const enabled: bool = false;
+    pub const interval_ms: u64 = 300_000;
+    pub const jitter_ms: u64 = 30_000;
+    pub const fallback_enabled: bool = true;
+    pub const rotate_across_locators: bool = true;
+}
+
+#[allow(non_upper_case_globals)]
+#[allow(dead_code)]
 pub mod listen {
     use super::ModeDependentValue;
 
@@ -191,6 +201,7 @@ impl Default for ConnectConfig {
             endpoints: ModeDependentValue::Unique(vec![]),
             exit_on_failure: None,
             retry: None,
+            rotation: None,
         }
     }
 }
