@@ -151,7 +151,7 @@ impl HandoffReactor {
 struct TxHandoffTask {
     counter: ShmTXCounterLease,
     handoffs_len: AtomicUsize,
-    handoffs: lockfree::queue::Queue<Option<ShmBufHardRef>>,
+    handoffs: crossbeam_queue::SegQueue<ShmBufHardRef>,
 }
 
 impl TxHandoffTask {
@@ -240,7 +240,7 @@ impl LockedTxHandoff {
     pub fn commit(mut self) {
         let len = self.lock.len();
         while let Some(h) = self.lock.pop_front() {
-            self.inner.task.handoffs.push(Some(h));
+            self.inner.task.handoffs.push(h);
         }
         self.inner.task.handoffs_len.fetch_add(len, SeqCst);
     }
