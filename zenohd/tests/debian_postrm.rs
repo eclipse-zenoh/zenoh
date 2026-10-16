@@ -71,7 +71,7 @@ fn debian_postrm_purge_removes_configuration_state_and_account() {
     // Also verifies that userdel is recorded despite the script's redirections.
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
-        "userdel <zenohd>\nrm <-rf> </etc/zenohd> </var/zenohd>\n"
+        "userdel <zenohd>\nrm <-rf> </etc/zenohd> </var/zenohd> </etc/zenohd.dpkg-backup> </var/zenohd.dpkg-backup>\n"
     );
 }
 
