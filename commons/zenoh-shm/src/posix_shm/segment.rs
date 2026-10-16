@@ -12,12 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::Debug, num::NonZeroUsize};
+use std::{fmt::Debug, num::NonZeroUsize, ops::Deref};
 
 use rand::Rng;
-use zenoh_result::{bail, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
-use crate::{cleanup::CLEANUP, shm};
+use crate::{
+    cleanup::{Cleanup, CLEANUP},
+    shm,
+};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
@@ -65,6 +68,9 @@ where
 {
     // Automatically generate free id and create a new segment identified by this id
     pub fn create(len: NonZeroUsize) -> ZResult<Self> {
+        // Check before creating anything, so a failure does not leave an unregistered segment behind
+        let cleanup = Self::cleanup()?;
+
         for _ in 0..SEGMENT_DEDICATE_TRIES {
             // Generate random id
             let id: ID = rand::thread_rng().gen();
@@ -75,7 +81,7 @@ where
             match shm::Segment::create(id, len) {
                 Ok(shmem) => {
                     // Register cleanup routine to make sure Segment will be unlinked on exit
-                    CLEANUP.read().register_cleanup(id);
+                    cleanup.register_cleanup(id);
 
                     tracing::debug!("Created SHM segment, len: {len}, id: {id}");
                     return Ok(Segment { shmem });
@@ -91,6 +97,8 @@ where
 
     // Open an existing segment identified by id
     pub fn open(id: ID) -> ZResult<Self> {
+        let cleanup = Self::cleanup()?;
+
         // Open SHM segment
         let shmem = match shm::Segment::open(id) {
             Ok(val) => val,
@@ -103,11 +111,18 @@ where
         };
 
         // Register cleanup routine to make sure Segment will be unlinked on exit
-        CLEANUP.read().register_cleanup(id);
+        cleanup.register_cleanup(id);
 
         tracing::debug!("Opened SHM segment, id: {id}");
 
         Ok(Self { shmem })
+    }
+
+    // CLEANUP is finalized at process exit, while runtime threads may still create or open segments
+    fn cleanup() -> ZResult<impl Deref<Target = Cleanup>> {
+        crate::read_unless_finalized!(CLEANUP).map_err(|_| {
+            zerror!("Unable to use POSIX shm segment: SHM cleanup is finalized").into()
+        })
     }
 
     pub fn as_ptr(&self) -> *mut u8 {

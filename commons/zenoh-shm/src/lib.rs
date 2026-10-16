@@ -54,8 +54,27 @@ macro_rules! tested_crate_module {
     };
 }
 
+/// Read lock on a `#[dynamic(lazy, drop)]` static, initializing it on first access.
+///
+/// Returns an error instead of panicking once the static is finalized at process exit,
+/// as runtime threads may still access it during exit.
+#[macro_export]
+macro_rules! read_unless_finalized {
+    ($lazy:expr) => {
+        $lazy.try_read().or_else(|_| {
+            if $lazy.phase().is_empty() {
+                Ok($lazy.read())
+            } else {
+                $lazy.try_read()
+            }
+        })
+    };
+}
+
 pub mod api;
 mod cleanup;
+#[cfg(all(feature = "test", target_os = "linux"))]
+pub mod exit_test;
 pub mod header;
 pub mod init;
 pub mod metadata;
