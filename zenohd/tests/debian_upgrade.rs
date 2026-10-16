@@ -146,6 +146,25 @@ fn debian_upgrade_from_legacy_postrm_retried_after_unpack_keeps_configuration_an
 }
 
 #[test]
+fn debian_purge_of_unfinished_legacy_upgrade_is_not_undone_by_reinstall() {
+    let root = Root::installed("purged");
+    root.run(PREINST, &["upgrade", "1.10.1"]);
+    root.unpack();
+    root.run(LEGACY_POSTRM, &["upgrade", "1.11.0"]);
+    // The upgrade stops before postinst; the user purges, then installs anew.
+    root.run(POSTRM, &["remove"]);
+    root.run(POSTRM, &["purge"]);
+    assert!(!root.0.join("etc/zenohd.dpkg-backup").exists());
+    assert!(!root.0.join("var/zenohd.dpkg-backup").exists());
+    root.run(PREINST, &["install"]);
+    root.unpack();
+    root.configure();
+    assert_eq!(root.read("etc/zenohd/zenohd.json5"), "shipped");
+    assert!(!root.0.join("etc/zenohd/custom.json5").exists());
+    assert!(!root.0.join("var/zenohd/db").exists());
+}
+
+#[test]
 fn debian_upgrade_between_fixed_versions_keeps_configuration_and_state() {
     let root = Root::installed("fixed");
     root.run(PREINST, &["upgrade", "1.11.0"]);
