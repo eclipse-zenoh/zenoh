@@ -69,8 +69,15 @@ impl ClosableCallback {
             .filter(|_| !self.closed.load(Ordering::Relaxed))
     }
 
+    /// Returns the callback only on the first transition to closed.
+    ///
+    /// Several `delete()` calls can run concurrently (e.g. a user close racing with the close
+    /// scheduled after a failed non-droppable push): only the one winning this transition
+    /// notifies `closed()`, so the callback is notified exactly once.
     pub(crate) fn close(&self) -> Option<&Arc<dyn TransportPeerEventHandler>> {
-        self.closed.store(true, Ordering::Relaxed);
+        if self.closed.swap(true, Ordering::Relaxed) {
+            return None;
+        }
         self.callback.get()
     }
 }
@@ -162,23 +169,31 @@ impl TransportUnicastUniversal {
         // to avoid concurrent new_transport and closing/closed notifications
         let mut status_guard = self.get_status().await;
         *status_guard = TransportStatus::Closed;
-        let callback = self.callback.close();
 
-        // Close all the links
-        let mut links = zwrite!(self.links).take();
-        for l in links.drain(..) {
-            let _ = l.close().await;
-        }
-
-        // Notify the callback that we have closed the transport
-        if let Some(cb) = callback {
+        // Notify the callback that we have closed the transport. `close()` hands out the
+        // callback only on the first transition to closed, and the notification happens with
+        // no await point in between: even if this future is dropped right after (`delete()`
+        // may run under a timeout, e.g. through a session close), `closed()` has fired, and
+        // exactly once.
+        if let Some(cb) = self.callback.close() {
             cb.closed();
         }
+
+        // Close all the links, removing them one by one: if this future is dropped at one of
+        // these awaits, the links not yet closed stay in `self.links` and a later `delete()`
+        // (concurrent close, failed push, lease expiry) picks the teardown up from there.
+        loop {
+            // In its own statement so that the links lock is not held across the await.
+            let link = zwrite!(self.links).pop();
+            let Some(link) = link else { break };
+            let _ = link.close().await;
+        }
+
         // Delete the transport on the manager - this should be the last step to ensure that no new transport to the same peer can be added while we are closing this transport.
         // We also drop the status_guard, to avoid deadlock due to different lock acquisition order in init_existing_transport unicast.
         // The lock is no longer needed at this point, as we have already marked the transport as not alive and taken the callback to notify it of the closure.
         drop(status_guard);
-        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
+        let _ = self.manager.del_transport_unicast(self).await;
         Ok(())
     }
 
@@ -355,6 +370,10 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus> {
         zasynclock!(self.status)
+    }
+
+    fn get_status_mutex(&self) -> &Arc<AsyncMutex<TransportStatus>> {
+        &self.status
     }
 
     fn get_zid(&self) -> ZenohIdProto {
@@ -557,12 +576,15 @@ impl TransportLinks {
         ))
     }
 
-    fn take(&mut self) -> Vec<TransportLinkUnicastUniversal> {
-        std::mem::take(&mut self.inner)
-            .into_vec()
-            .into_iter()
-            .map(TransportLinkMarker::into_inner)
-            .collect()
+    /// Removes and returns one link, if any is left.
+    ///
+    /// `delete()` empties the container one link at a time so that, if it is cancelled while
+    /// closing one, the remaining links are still here for a later `delete()` to close.
+    fn pop(&mut self) -> Option<TransportLinkUnicastUniversal> {
+        let mut links = std::mem::take(&mut self.inner).into_vec();
+        let link = links.pop().map(TransportLinkMarker::into_inner);
+        self.inner = links.into_boxed_slice();
+        link
     }
 
     fn nb_links_multilink(&self, direction: TransportLinkUnicastDirection) -> usize {
