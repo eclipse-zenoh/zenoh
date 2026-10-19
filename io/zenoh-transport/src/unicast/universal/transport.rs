@@ -183,6 +183,12 @@ impl TransportUnicastUniversal {
     }
 
     pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
+        // Remove the link and, if it was the last one, mark the transport as closed in one step,
+        // under the status lock. Otherwise, until delete() below marks it closed (after the
+        // callback, which can be slow), the transport stays in the manager as alive with no link:
+        // a link from the same peer arriving meanwhile would be added to this transport by
+        // init_existing_transport_unicast, then closed with it right after its open succeeded.
+        let mut status_guard = zasynclock!(self.status);
         // Try to remove the link
         let Some((is_last, stl, associated_link)) = zwrite!(self.links).remove_link(&link) else {
             bail!(
@@ -191,6 +197,10 @@ impl TransportUnicastUniversal {
                 self.config.zid
             )
         };
+        if is_last {
+            *status_guard = TransportStatus::Closed;
+        }
+        drop(status_guard);
 
         // Notify the callback
         if let Some(callback) = self.callback.get().cloned() {
