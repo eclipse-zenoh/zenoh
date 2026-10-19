@@ -24,6 +24,8 @@ mod listener;
 mod multicast;
 #[cfg(feature = "quic")]
 pub mod quic;
+#[cfg(target_os = "linux")]
+mod socket_priority;
 pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
@@ -37,6 +39,8 @@ pub use dscp::*;
 pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
+#[cfg(target_os = "linux")]
+pub use socket_priority::*;
 pub use unicast::*;
 use zenoh_protocol::{
     core::{Locator, Metadata, PriorityRange, Reliability},

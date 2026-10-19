@@ -23,11 +23,11 @@ use sha3::{
     Shake128,
 };
 use zenoh_protocol::{
-    core::{Field, Resolution, ZenohIdProto},
+    core::{Field, Priority, Resolution, ZenohIdProto},
     transport::TransportSn,
 };
 
-use crate::common::seq_num;
+use crate::{common::seq_num, unicast::link::TransportLinkUnicast};
 
 /*************************************/
 /*             TRAITS                */
@@ -115,4 +115,20 @@ pub(super) fn compute_sn(
     let mut array = (0 as TransportSn).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
+}
+
+/// Sets the socket priority of a link that carries a priority range, from the highest priority of the range.
+pub(super) fn set_socket_priority(
+    link: &TransportLinkUnicast,
+    socket_priority: Option<&[u32; Priority::NUM]>,
+) {
+    let (Some(map), Some(priorities)) = (socket_priority, link.config.priorities.as_ref()) else {
+        return;
+    };
+    if let Err(e) = link
+        .link
+        .set_socket_priority(map[*priorities.start() as usize])
+    {
+        tracing::warn!("{e}");
+    }
 }

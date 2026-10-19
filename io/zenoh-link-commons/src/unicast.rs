@@ -88,6 +88,11 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn supports_priorities(&self) -> bool {
         false
     }
+    /// Sets the Linux socket priority (`SO_PRIORITY`) of the packets this link sends.
+    /// Links without such a socket do nothing.
+    fn set_socket_priority(&self, _priority: u32) -> ZResult<()> {
+        Ok(())
+    }
     async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8], priority: Option<Priority>) -> ZResult<usize>;

@@ -200,6 +200,12 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         &LinkAuthId::Tcp
     }
 
+    #[cfg(target_os = "linux")]
+    fn set_socket_priority(&self, priority: u32) -> ZResult<()> {
+        zenoh_link_commons::set_socket_priority(unsafe { &*self.socket.get() }, priority)
+            .map_err(|e| zerror!("Can not set socket priority {priority} on {self}: {e}").into())
+    }
+
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         match unsafe { &*self.socket.get() }.as_raw_fd() {

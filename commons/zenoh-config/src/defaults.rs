@@ -259,6 +259,23 @@ impl Default for LinkTxConf {
             batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
             threads: num,
+            socket_priority: SocketPriorityConf::default(),
+        }
+    }
+}
+
+/// Real-time links get the Linux interactive class (TC_PRIO_INTERACTIVE), the others keep the OS default.
+impl Default for SocketPriorityMapConf {
+    fn default() -> Self {
+        Self {
+            control: 6,
+            real_time: 6,
+            interactive_high: 0,
+            interactive_low: 0,
+            data_high: 0,
+            data: 0,
+            data_low: 0,
+            background: 0,
         }
     }
 }

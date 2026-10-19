@@ -262,6 +262,13 @@ impl LinkUnicastTrait for LinkUnicastTls {
         &self.auth_identifier
     }
 
+    #[cfg(target_os = "linux")]
+    fn set_socket_priority(&self, priority: u32) -> ZResult<()> {
+        let (tcp_stream, _) = unsafe { &*self.inner.get() }.get_ref();
+        zenoh_link_commons::set_socket_priority(tcp_stream, priority)
+            .map_err(|e| zerror!("Can not set socket priority {priority} on {self}: {e}").into())
+    }
+
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         bail!("Correct FD unavailable for TLS extension")
