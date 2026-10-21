@@ -1261,6 +1261,50 @@ async fn transport_unicast_quic_only_server_without_segmentation_offload() {
     .await;
 }
 
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server_with_socket_buffers() {
+    use zenoh_link_commons::{
+        quic::{QUIC_SO_RCV_BUF, QUIC_SO_SND_BUF},
+        tls::config::*,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SO_RCV_BUF, "2097152"),
+                (QUIC_SO_SND_BUF, "262144"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn transport_unicast_tls_only_mutual_success() {

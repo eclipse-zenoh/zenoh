@@ -26,8 +26,11 @@
   /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
   /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
   ///
-  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// For TCP, TLS and QUIC links, it is possible to specify the socket buffer sizes:
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  /// E.g. quic/192.168.0.1:7447#so_rcvbuf=2097152
+  /// For QUIC, so_sndbuf limits the UDP datagrams queued in the OS for sending, not the throughput.
+  /// The OS may cap the sizes, e.g. Linux caps them at net.core.rmem_max and net.core.wmem_max.
   /// For TCP, UDP, Quic and TLS links, it is possible to specify a `bind` address for the local socket:
   /// E.g. tcp/192.168.0.1:7447#bind=192.168.0.1:0
   ///  Note!: Currently it is unsupported to specify both `bind` and `iface`.
@@ -89,8 +92,11 @@
   /// It is also possible to specify a priority range and/or a reliability setting to be used on the link.
   /// For example `tcp/localhost?prio=6-7;rel=0` assigns priorities "data_low" and "background" to the established link.
   ///
-  /// For TCP and TLS links, it is possible to specify the TCP buffer sizes:
+  /// For TCP, TLS and QUIC links, it is possible to specify the socket buffer sizes:
   /// E.g. tcp/192.168.0.1:7447#so_sndbuf=65000;so_rcvbuf=65000
+  /// E.g. quic/192.168.0.1:7447#so_rcvbuf=2097152
+  /// For QUIC, so_sndbuf limits the UDP datagrams queued in the OS for sending, not the throughput.
+  /// The OS may cap the sizes, e.g. Linux caps them at net.core.rmem_max and net.core.wmem_max.
   ///
   /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
   /// E.g. tcp/192.168.0.1:7447#dscp=0x08
