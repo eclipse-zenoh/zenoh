@@ -44,6 +44,8 @@ use zenoh_protocol::{
     scouting::{HelloProto, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
+#[cfg(feature = "unstable")]
+use zenoh_transport::TransportManager;
 
 use super::{Runtime, RuntimeSession};
 use crate::net::{common::AutoConnect, protocol::linkstate::LinkInfo};
@@ -1471,6 +1473,51 @@ impl Runtime {
     }
 }
 
+/// Dials one unicast `endpoint` once, without retry and without leaving a
+/// background connector behind.
+///
+/// This is the single-endpoint, single-attempt counterpart of
+/// [`Runtime::connect_peer`]. When `expected_zid` is `Some`, a transport that
+/// already exists to that peer satisfies the call without dialing, and the
+/// handshake fails if the remote peer reports a different id. `open_timeout`
+/// bounds link setup plus the Init/Open handshake; `None` uses
+/// `transport/unicast/open_timeout`.
+///
+/// Returns the id of the peer the transport was established with.
+#[cfg(feature = "unstable")]
+pub(crate) async fn connect_peer_endpoint(
+    manager: &TransportManager,
+    whatami: WhatAmI,
+    endpoint: EndPoint,
+    expected_zid: Option<ZenohIdProto>,
+    open_timeout: Option<Duration>,
+) -> ZResult<ZenohIdProto> {
+    if whatami == WhatAmI::Client {
+        bail!("Connecting to a peer after open is not supported in client mode");
+    }
+    if let Some(zid) = expected_zid.as_ref() {
+        if zid == &manager.zid() {
+            bail!("Cannot connect the session to itself ({})", zid);
+        }
+        if manager.get_transport_unicast(zid).await.is_some() {
+            tracing::trace!("Already connected to peer {}", zid);
+            return Ok(*zid);
+        }
+    }
+    let open_timeout = open_timeout.unwrap_or(manager.config.unicast.open_timeout);
+    tracing::debug!(
+        "Try to connect to peer {:?} via {} (timeout {:?})",
+        expected_zid,
+        endpoint,
+        open_timeout
+    );
+    let transport = manager
+        .open_transport_unicast_with_timeout(endpoint.clone(), expected_zid.as_ref(), open_timeout)
+        .await
+        .map_err(|e| zerror!("Unable to connect to {}: {}", endpoint, e))?;
+    transport.get_zid()
+}
+
 #[cfg(test)]
 mod tests {
     use tokio::time::{timeout, Duration};
@@ -1502,6 +1549,83 @@ mod tests {
 
         assert!(!runtime.connect(&zid, &[locator]).await);
         assert!(!runtime.remove_pending_connection(&zid).await);
+    }
+
+    #[cfg(feature = "unstable")]
+    async fn peer_runtime_without_listeners() -> Runtime {
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Peer)).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        RuntimeBuilder::new(config).build().await.unwrap()
+    }
+
+    #[cfg(feature = "unstable")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn connect_peer_endpoint_rejects_own_zid() {
+        let runtime = peer_runtime_without_listeners().await;
+        let own = runtime.manager().zid();
+        let endpoint: EndPoint = "tcp/127.0.0.1:1".parse().unwrap();
+
+        let err =
+            connect_peer_endpoint(runtime.manager(), WhatAmI::Peer, endpoint, Some(own), None)
+                .await
+                .unwrap_err();
+        assert!(err.to_string().contains("itself"), "{err}");
+    }
+
+    #[cfg(feature = "unstable")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn connect_peer_endpoint_rejects_client_mode() {
+        let runtime = peer_runtime_without_listeners().await;
+        let endpoint: EndPoint = "tcp/127.0.0.1:1".parse().unwrap();
+
+        let err = connect_peer_endpoint(runtime.manager(), WhatAmI::Client, endpoint, None, None)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("client mode"), "{err}");
+    }
+
+    #[cfg(feature = "unstable")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn connect_peer_endpoint_rejects_multicast_endpoint() {
+        let runtime = peer_runtime_without_listeners().await;
+        let endpoint: EndPoint = "udp/224.0.0.224:7446".parse().unwrap();
+
+        let res =
+            connect_peer_endpoint(runtime.manager(), WhatAmI::Peer, endpoint, None, None).await;
+        assert!(res.is_err());
+        assert!(runtime.manager().get_transports_unicast().await.is_empty());
+    }
+
+    #[cfg(feature = "unstable")]
+    #[tokio::test(flavor = "multi_thread")]
+    async fn connect_peer_endpoint_timeout_overrides_open_timeout() {
+        // A TCP listener that accepts the connection but never answers the
+        // Init handshake: the attempt can only end through the timeout.
+        let silent = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = silent.local_addr().unwrap().port();
+        let runtime = peer_runtime_without_listeners().await;
+        let open_timeout = runtime.manager().config.unicast.open_timeout;
+        let attempt_timeout = Duration::from_millis(200);
+        assert!(open_timeout > attempt_timeout * 10);
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{port}").parse().unwrap();
+
+        let start = std::time::Instant::now();
+        let res = connect_peer_endpoint(
+            runtime.manager(),
+            WhatAmI::Peer,
+            endpoint,
+            None,
+            Some(attempt_timeout),
+        )
+        .await;
+        let elapsed = start.elapsed();
+
+        assert!(res.is_err());
+        assert!(elapsed >= attempt_timeout, "{elapsed:?}");
+        assert!(elapsed < open_timeout / 2, "{elapsed:?}");
+        drop(silent);
     }
 
     #[tokio::test(flavor = "multi_thread")]

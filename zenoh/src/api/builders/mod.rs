@@ -13,6 +13,8 @@
 //
 
 pub(crate) mod close;
+#[cfg(feature = "unstable")]
+pub(crate) mod connect_peer;
 pub(crate) mod info;
 pub(crate) mod info_links;
 pub(crate) mod info_transport;
