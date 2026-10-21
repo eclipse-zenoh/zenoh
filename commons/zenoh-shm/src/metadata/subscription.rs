@@ -25,7 +25,7 @@ use super::{
     segment::MetadataSegment,
 };
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 pub static mut GLOBAL_METADATA_SUBSCRIPTION: Subscription = Subscription::new();
 
 pub struct Subscription {
