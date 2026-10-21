@@ -96,6 +96,11 @@ fn main() {
         }
     };
 
+    #[cfg(all(feature = "systemd", target_os = "linux"))]
+    if let Err(e) = sd_notify::notify(&[sd_notify::NotifyState::Ready]) {
+        tracing::warn!("failed to notify systemd of readiness: {e}");
+    }
+
     std::thread::park();
 }
 
