@@ -15,7 +15,7 @@ use std::{fmt, sync::Arc};
 
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zcondfeat;
-use zenoh_link::{Link, LinkUnicast};
+use zenoh_link::{EndPoint, Link, LinkUnicast};
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
     transport::{BatchSize, Close, OpenAck, TransportMessage},
@@ -35,6 +35,17 @@ pub(crate) enum TransportLinkUnicastDirection {
     Outbound,
 }
 
+/// The endpoint, as given to `open_transport_unicast`, that an outbound link was opened from.
+#[derive(Clone)]
+pub(crate) struct OpenedFrom(pub(crate) EndPoint);
+
+// The config part can hold secrets, such as inline TLS keys.
+impl fmt::Debug for OpenedFrom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_locator())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct TransportLinkUnicastConfig {
     // Inbound / outbound
@@ -42,6 +53,7 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) batch: BatchConfig,
     pub(crate) priorities: Option<PriorityRange>,
     pub(crate) reliability: Option<Reliability>,
+    pub(crate) opened_from: Option<OpenedFrom>,
 }
 
 #[cfg(feature = "shared-memory")]
@@ -118,6 +130,10 @@ impl TransportLinkUnicast {
             #[cfg(feature = "shared-memory")]
             shm_handoff: Box::new(shm_handoff),
         }
+    }
+
+    pub(crate) fn opened_from(&self) -> Option<&EndPoint> {
+        self.config.opened_from.as_ref().map(|o| &o.0)
     }
 
     pub(crate) fn link(&self) -> Link {

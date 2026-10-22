@@ -37,7 +37,7 @@ use crate::{
     unicast::{
         establishment::{compute_sn, ext, OpenFsm},
         link::{
-            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
+            LinkUnicastWithOpenAck, OpenedFrom, TransportLinkUnicast, TransportLinkUnicastConfig,
             TransportLinkUnicastDirection,
         },
         TransportConfigUnicast, TransportUnicast,
@@ -603,6 +603,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
 
 pub(crate) async fn open_link(
     endpoint: EndPoint,
+    opened_from: EndPoint,
     link: LinkUnicast,
     manager: &TransportManager,
     expected_zid: Option<&ZenohIdProto>,
@@ -619,6 +620,7 @@ pub(crate) async fn open_link(
         },
         priorities: None,
         reliability: None,
+        opened_from: None,
     };
     let mut link_unicast = TransportLinkUnicast::new(
         link.clone(),
@@ -781,6 +783,7 @@ pub(crate) async fn open_link(
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
+        opened_from: Some(OpenedFrom(opened_from)),
     };
     let o_link = link_unicast.reconfigure(
         o_config,
@@ -809,6 +812,8 @@ pub(crate) async fn open_link(
                 priorities: state.transport.ext_qos.priorities(),
                 // Do not apply reliability override to MixedReliability associated links
                 reliability: None,
+                // Reopening the main link's endpoint also reopens this associated link
+                opened_from: None,
             };
             let link = TransportLinkUnicast::new(
                 LinkUnicast::from(best_effort),

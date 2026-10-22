@@ -124,7 +124,7 @@ mod tests {
         }
 
         fn new_link(&self, _link: Link) {}
-        fn del_link(&self, _link: Link) {}
+        fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
         fn closed(&self) {}
 
         fn as_any(&self) -> &dyn Any {
