@@ -192,17 +192,22 @@ impl TransportUnicastUniversal {
             )
         };
 
+        let opened_from = stl.link.opened_from().cloned();
+
         // Notify the callback
         if let Some(callback) = self.callback.get().cloned() {
             let associated_link = associated_link.clone();
             tokio::task::spawn_blocking(move || {
-                callback.del_link(link);
+                callback.del_link(link, opened_from.as_ref());
                 if let Some(asl) = &associated_link {
-                    callback.del_link(Link::new_unicast(
-                        &asl.link.link,
-                        asl.link.config.priorities.clone(),
-                        asl.link.config.reliability,
-                    ));
+                    callback.del_link(
+                        Link::new_unicast(
+                            &asl.link.link,
+                            asl.link.config.priorities.clone(),
+                            asl.link.config.reliability,
+                        ),
+                        asl.link.opened_from(),
+                    );
                 }
             })
             .await?;

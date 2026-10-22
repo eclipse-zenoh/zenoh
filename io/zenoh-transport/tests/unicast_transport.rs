@@ -326,7 +326,7 @@ impl TransportPeerEventHandler for SCRouter {
     }
 
     fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -365,7 +365,7 @@ impl TransportPeerEventHandler for SCClient {
     }
 
     fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -2081,7 +2081,7 @@ impl TransportPeerEventHandler for MultiRxCallback {
     }
 
     fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
@@ -3396,6 +3396,102 @@ async fn transport_unicast_close_link_single_link() {
         }
     });
     ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
+}
+
+// Transport Handler and Callback that record the `opened_from` of deleted links
+#[derive(Clone, Default)]
+struct SHOpenedFrom {
+    opened_from: Arc<Mutex<Vec<Option<EndPoint>>>>,
+}
+
+impl TransportEventHandler for SHOpenedFrom {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(self.clone()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
+}
+
+impl TransportPeerEventHandler for SHOpenedFrom {
+    fn handle_message(&self, _message: NetworkMessageMut) -> ZResult<()> {
+        Ok(())
+    }
+
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, opened_from: Option<&EndPoint>) {
+        self.opened_from.lock().unwrap().push(opened_from.cloned());
+    }
+    fn closed(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[cfg(feature = "transport_tcp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_del_link_opened_from() {
+    zenoh_util::init_log_from_env_or("error");
+
+    let port = get_free_tcp_port();
+    let listen: EndPoint = format!("tcp/127.0.0.1:{port}").parse().unwrap();
+    // The link's own locator keeps neither the hostname nor the config part
+    let connect: EndPoint = format!("tcp/localhost:{port}#so_sndbuf=65536")
+        .parse()
+        .unwrap();
+
+    let router_manager = TransportManager::builder()
+        .zid(ZenohIdProto::try_from([2]).unwrap())
+        .whatami(WhatAmI::Router)
+        .unicast(make_transport_manager_builder(
+            #[cfg(feature = "transport_multilink")]
+            1,
+            false,
+        ))
+        .build_test(Arc::new(SHRouter::default()))
+        .unwrap();
+    let _ = ztimeout!(router_manager.add_listener(listen.clone())).unwrap();
+
+    let client_handler = SHOpenedFrom::default();
+    let client_manager = TransportManager::builder()
+        .zid(ZenohIdProto::try_from([1]).unwrap())
+        .whatami(WhatAmI::Client)
+        .unicast(make_transport_manager_builder(
+            #[cfg(feature = "transport_multilink")]
+            1,
+            false,
+        ))
+        .build_test(Arc::new(client_handler.clone()))
+        .unwrap();
+    let client_transport =
+        ztimeout!(client_manager.open_transport_unicast(connect.clone())).unwrap();
+
+    let links = client_transport.get_links().unwrap();
+    ztimeout!(client_transport.close_link(links[0].clone())).unwrap();
+
+    assert_eq!(
+        *client_handler.opened_from.lock().unwrap(),
+        vec![Some(connect)]
+    );
+
+    // Clean up
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            tokio::time::sleep(SLEEP).await;
+        }
+    });
+    ztimeout!(router_manager.del_listener(&listen)).unwrap();
     ztimeout!(router_manager.close());
     ztimeout!(client_manager.close());
 }

@@ -76,7 +76,7 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-use self::orchestrator::StartConditions;
+use self::orchestrator::{SessionEndpoints, StartConditions};
 use super::{
     primitives::{DeMux, EPrimitives, Primitives},
     routing::{
@@ -1142,7 +1142,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
-                    endpoints: std::sync::RwLock::new(HashSet::new()),
+                    endpoints: std::sync::RwLock::new(SessionEndpoints::default()),
                     main_handler: runtime
                         .state
                         .router
@@ -1187,7 +1187,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
-    pub(super) endpoints: std::sync::RwLock<HashSet<EndPoint>>,
+    pub(super) endpoints: std::sync::RwLock<SessionEndpoints>,
     pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
@@ -1205,13 +1205,15 @@ impl TransportPeerEventHandler for RuntimeSession {
         }
     }
 
-    fn del_link(&self, link: zenoh_link::Link) {
+    fn del_link(&self, link: zenoh_link::Link, opened_from: Option<&EndPoint>) {
         let _span = self.runtime.state.span.enter();
-        self.main_handler.del_link(link.clone());
+        self.main_handler.del_link(link.clone(), opened_from);
         for handler in &self.slave_handlers {
-            handler.del_link(link.clone());
+            handler.del_link(link.clone(), opened_from);
         }
-        Runtime::closed_link(self, link.dst.to_endpoint());
+        if let Some(endpoint) = opened_from {
+            Runtime::closed_link(self, endpoint.clone());
+        }
     }
 
     fn closed(&self) {
@@ -1284,10 +1286,10 @@ impl TransportPeerEventHandler for RuntimeMulticastSession {
         }
     }
 
-    fn del_link(&self, link: zenoh_link::Link) {
-        self.main_handler.del_link(link.clone());
+    fn del_link(&self, link: zenoh_link::Link, opened_from: Option<&EndPoint>) {
+        self.main_handler.del_link(link.clone(), opened_from);
         for handler in &self.slave_handlers {
-            handler.del_link(link.clone());
+            handler.del_link(link.clone(), opened_from);
         }
     }
 
