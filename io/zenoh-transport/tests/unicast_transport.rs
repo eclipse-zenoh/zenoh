@@ -501,11 +501,12 @@ async fn test_transport(
     };
 
     // Create the message to send
-    let message = NetworkMessage::from(Push {
+    let mut message = NetworkMessage::from(Push {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, cctrl, false),
         ..Push::from(vec![0u8; msg_size])
     });
+    message.reliability = channel.reliability;
 
     for _ in 0..msg_count {
         let _ = client_transport.schedule(message.clone().as_mut());
@@ -2868,6 +2869,213 @@ async fn transport_unicast_udp_mixedrel() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(any(feature = "transport_quic", feature = "transport_udp"))]
+mod mixedrel_mtu {
+    use rand::{rngs::StdRng, RngCore, SeedableRng};
+    use zenoh_link_commons::quic::QUIC_INITIAL_MTU;
+    use zenoh_protocol::{network::NetworkMessageExt, transport::BatchSize};
+
+    use super::*;
+
+    // None reports unexpected link removal or transport closure while receiving.
+    #[derive(Clone, Debug)]
+    struct Handler(flume::Sender<Option<NetworkMessage>>);
+
+    impl TransportEventHandler for Handler {
+        fn new_unicast(
+            &self,
+            _peer: TransportPeer,
+            _transport: TransportUnicast,
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            Ok(Arc::new(self.clone()))
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            unreachable!()
+        }
+    }
+
+    impl TransportPeerEventHandler for Handler {
+        fn handle_message(&self, message: NetworkMessageMut) -> ZResult<()> {
+            self.0.send(Some(message.to_owned()))?;
+            Ok(())
+        }
+
+        fn new_link(&self, _link: Link) {}
+
+        fn del_link(&self, _link: Link) {
+            let _ = self.0.send(None);
+        }
+
+        fn closed(&self) {
+            let _ = self.0.send(None);
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+    }
+
+    fn manager(
+        zid: ZenohIdProto,
+        whatami: WhatAmI,
+        batch_size: BatchSize,
+        compression: bool,
+    ) -> (TransportManager, flume::Receiver<Option<NetworkMessage>>) {
+        let unicast = make_transport_manager_builder(
+            #[cfg(feature = "transport_multilink")]
+            1,
+            false,
+        );
+        #[cfg(feature = "transport_compression")]
+        let unicast = unicast.compression(compression);
+        #[cfg(not(feature = "transport_compression"))]
+        assert!(!compression);
+
+        let (tx, rx) = flume::unbounded();
+        let manager = TransportManager::builder()
+            .zid(zid)
+            .whatami(whatami)
+            .batch_size(batch_size)
+            .unicast(unicast)
+            .build_test(Arc::new(Handler(tx)))
+            .unwrap();
+        (manager, rx)
+    }
+
+    fn assert_companion_mtu(transport: &TransportUnicast) {
+        let links = transport.get_links().unwrap();
+        assert_eq!(links.len(), 2);
+        let mut companions = links.iter().filter(|link| !link.is_streamed);
+        assert_eq!(companions.next().unwrap().mtu, 1_150);
+        assert!(companions.next().is_none());
+    }
+
+    async fn run(protocol: &str, endpoint: impl Fn(&str) -> EndPoint) {
+        zenoh_util::init_log_from_env_or("error");
+
+        let client_id = ZenohIdProto::try_from([1]).unwrap();
+        let router_id = ZenohIdProto::try_from([2]).unwrap();
+        let mut incompressible = vec![0; 4_096];
+        StdRng::seed_from_u64(2813).fill_bytes(&mut incompressible);
+        let payloads = [vec![0x5a; 1_100], vec![0x5a; 4_096], incompressible];
+
+        for compression in [
+            false,
+            #[cfg(feature = "transport_compression")]
+            true,
+        ] {
+            // 1472 exceeds Quinn's default PMTUD search ceiling of 1452, giving
+            // asymmetric send budgets without depending on discovery timing.
+            // The smaller batch limit is exercised on both the opener and acceptor.
+            for (client_mtu, router_mtu, client_batch, router_batch, mixed_rel, multistream) in [
+                (None, None, BatchSize::MAX, BatchSize::MAX, "1", "1"),
+                (
+                    Some(1350),
+                    Some(1350),
+                    BatchSize::MAX,
+                    BatchSize::MAX,
+                    "1",
+                    "0",
+                ),
+                (
+                    Some(1472),
+                    Some(1200),
+                    BatchSize::MAX,
+                    BatchSize::MAX,
+                    "1",
+                    "1",
+                ),
+                (Some(1200), Some(1472), 512, 4096, "auto", "0"),
+                (Some(1472), Some(1200), 4096, 512, "auto", "1"),
+            ] {
+                let locator = format!(
+                    "{protocol}/localhost:{}?rel=1;mixed_rel={mixed_rel};multistream={multistream}",
+                    get_free_udp_port()
+                );
+                let mut client_endpoint = endpoint(&locator);
+                let mut router_endpoint = endpoint(&locator);
+                for (endpoint, mtu) in [
+                    (&mut client_endpoint, client_mtu),
+                    (&mut router_endpoint, router_mtu),
+                ] {
+                    if let Some(mtu) = mtu {
+                        endpoint
+                            .config_mut()
+                            .insert(QUIC_INITIAL_MTU, mtu.to_string())
+                            .unwrap();
+                    }
+                }
+
+                let (router_manager, router_rx) =
+                    manager(router_id, WhatAmI::Router, router_batch, compression);
+                let (client_manager, client_rx) =
+                    manager(client_id, WhatAmI::Client, client_batch, compression);
+                ztimeout!(router_manager.add_listener(router_endpoint)).unwrap();
+                let client_transport =
+                    ztimeout!(client_manager.open_transport_unicast(client_endpoint)).unwrap();
+                let router_transport =
+                    ztimeout!(router_manager.get_transport_unicast(&client_id)).unwrap();
+
+                assert_companion_mtu(&client_transport);
+                assert_companion_mtu(&router_transport);
+
+                // Pace messages by waiting for delivery, exercising fragmentation
+                // and payload integrity without flooding the best-effort queues.
+                // Reliable traffic after the datagrams must use the same transport.
+                for reliability in [Reliability::BestEffort, Reliability::Reliable] {
+                    for payload in &payloads {
+                        for (transport, rx) in [
+                            (&client_transport, &router_rx),
+                            (&router_transport, &client_rx),
+                        ] {
+                            let mut message = NetworkMessage::from(Push {
+                                wire_expr: "test/mixedrel_mtu".into(),
+                                ext_qos: QoSType::new(
+                                    Priority::Data,
+                                    CongestionControl::Block,
+                                    true,
+                                ),
+                                ..Push::from(payload.clone())
+                            });
+                            message.reliability = reliability;
+                            assert!(transport.schedule(message.as_mut()).unwrap());
+                            let received = ztimeout!(rx.recv_async())
+                                .unwrap()
+                                .expect("link or transport closed during MTU regression test");
+                            assert_eq!(received, message);
+                        }
+                    }
+                }
+
+                assert_companion_mtu(&client_transport);
+                assert_companion_mtu(&router_transport);
+                assert!(client_rx.is_empty());
+                assert!(router_rx.is_empty());
+
+                ztimeout!(client_transport.close()).unwrap();
+                ztimeout!(client_manager.close());
+                ztimeout!(router_manager.close());
+            }
+        }
+    }
+
+    #[cfg(feature = "transport_quic")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_quic() {
+        run("quic", quic_endpoint).await;
+    }
+
+    #[cfg(feature = "transport_udp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_udp() {
+        run("udp", |locator| locator.parse().unwrap()).await;
+    }
 }
 
 #[cfg(feature = "transport_udp")]
