@@ -218,7 +218,7 @@ uuid = { version = "1.20.0", default-features = false, features = [
 ] } # Default features are disabled due to usage in no_std crates
 validated_struct = "2.2.0"
 vec_map = "0.8.2"
-webpki-roots = "1.0.4"
+webpki-roots = "1.0.10"
 win-sys = "0.3"
 winapi = { version = "0.3.9", features = ["iphlpapi", "memoryapi", "winerror"] }
 windows-sys = { version = "0.61.2", features = [
