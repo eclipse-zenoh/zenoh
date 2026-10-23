@@ -40,8 +40,8 @@ use crate::{
         get_negotiated_alpn, get_quic_addr, get_quic_host,
         plaintext::{PlainTextClientConfig, PlainTextServerConfig},
         socket::QuicSocketConfig,
-        QuicMtuConfig, QuicTransportConfigurator, TlsClientConfig, TlsServerConfig,
-        PROTOCOL_LEGACY, PROTOCOL_MIXED_REL, PROTOCOL_MULTI_STREAM,
+        QuicMtuConfig, QuicSegmentationOffloadConfig, QuicTransportConfigurator, TlsClientConfig,
+        TlsServerConfig, PROTOCOL_LEGACY, PROTOCOL_MIXED_REL, PROTOCOL_MULTI_STREAM,
         PROTOCOL_MULTI_STREAM_MIXED_REL, PROTOCOL_SINGLE_STREAM,
     },
     LinkUnicast, NewLinkChannelSender,
@@ -394,7 +394,8 @@ impl<F: AcceptorCallback> QuicServer<F> {
             let transport_config = Arc::get_mut(&mut server_config.transport).unwrap();
             QuicTransportConfigurator(transport_config)
                 .configure_max_concurrent_streams(streams_conf.as_ref())
-                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
+                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?)
+                .configure_segmentation_offload(&QuicSegmentationOffloadConfig::try_from(&epconf)?);
         }
         // Initialize the Endpoint
         let quic_endpoint = async {
@@ -572,7 +573,8 @@ impl QuicClient {
             let mut transport_config = quinn::TransportConfig::default();
             QuicTransportConfigurator(&mut transport_config)
                 .configure_max_concurrent_streams(multistream.as_ref())
-                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?);
+                .configure_mtu(&QuicMtuConfig::try_from(&epconf)?)
+                .configure_segmentation_offload(&QuicSegmentationOffloadConfig::try_from(&epconf)?);
             client_config.transport_config(transport_config.into());
             client_config
         });

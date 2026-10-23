@@ -17,7 +17,6 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::{
     core::{Priority, PriorityRange, Reliability},
     network::{NetworkMessageExt, NetworkMessageMut, NetworkMessageRef},
-    transport::close,
 };
 use zenoh_result::ZResult;
 
@@ -81,10 +80,33 @@ impl TransportUnicastUniversal {
                 "Unable to push non droppable network message to {}. Closing transport!",
                 self.config.zid
             );
+            // Synchronously mark the transmission pipelines of this transport as disabled
+            // so that any subsequent push to this unresponsive transport fails fast with
+            // `TransportClosed` instead of blocking for another `wait_before_close` period.
+            //
+            // This is critical because the thread executing this code may be an RX runtime
+            // worker that is holding routing locks (e.g. the routing tables) while pushing
+            // declarations. If such a thread kept blocking on pushes to this transport,
+            // the close task spawned below on the same starved runtime would never get to
+            // run, leaving the whole session deadlocked
+            // (see https://github.com/eclipse-zenoh/zenoh/issues/1876 and
+            // https://github.com/eclipse-zenoh/zenoh/issues/2581).
+            {
+                let transport_links = self
+                    .links
+                    .read()
+                    .expect("reading `TransportUnicastUniversal::links` should not fail");
+                for tl in transport_links.get_links().iter() {
+                    tl.pipeline.mark_disabled();
+                }
+            }
             zenoh_runtime::ZRuntime::RX.spawn({
                 let transport = self.clone();
                 async move {
-                    if let Err(e) = transport.close(close::reason::UNRESPONSIVE).await {
+                    // Do not enqueue a Close frame on an unresponsive pipeline:
+                    // push_transport_message can wait indefinitely for a free batch,
+                    // preventing teardown from cancelling the stalled TX task.
+                    if let Err(e) = transport.delete().await {
                         tracing::error!(
                             "Error closing transport with {}: {}",
                             transport.config.zid,

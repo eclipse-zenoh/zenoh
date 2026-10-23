@@ -138,6 +138,10 @@ impl TransportManagerBuilderMulticast {
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
         self = self.qos(*config.transport().multicast().qos().enabled());
+        #[cfg(feature = "transport_compression")]
+        {
+            self = self.compression(*config.transport().multicast().compression().enabled());
+        }
 
         Ok(self)
     }

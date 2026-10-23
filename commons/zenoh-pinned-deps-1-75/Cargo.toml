@@ -35,6 +35,7 @@ clap_lex = "=1.0.0"
 derive_more = { version = "=2.0.1", features = ["as_ref"] }
 generic-array = "=0.14.7"
 home = "=0.5.9"
+hyper-util = "=0.1.20"
 icu_normalizer = "=1.5.0"
 indexmap = "=2.11.4"
 libloading = "=0.8.9"
@@ -47,6 +48,8 @@ pest_derive = "=2.8.0"
 pest_generator = "=2.8.0"
 pest_meta = "=2.8.0"
 potential_utf = "=0.1.0"
+# 0.2.1 requires Rust 1.79.
+powerfmt = { version = "=0.2.0", default-features = false }
 prost = "=0.14.1"
 prost-derive = "=0.14.1"
 quinn-proto = "=0.11.14"
@@ -58,10 +61,15 @@ serde_with = "=3.14.1"
 serde_with_macros = "=3.14.1"
 static_init = { version = "=1.0.3", features = ["debug_order"] }
 tempfile = "=3.24.0"
+thiserror = "=2.0.20"
 thread-priority = "=1.2.0"
 time = "=0.3.41"
 tinystr = "=0.8.0"
 tls-listener = "=0.11.0"
+# 1.54 requires Rust 1.85.
+tokio = { version = "=1.53.3", default-features = false }
+# 0.7.20 requires Rust 1.85.
+tokio-util = { version = "=0.7.19", default-features = false }
 toml = "=0.9.6"
 toml_datetime = "=0.7.1"
 toml_parser = "=1.0.2"
@@ -87,6 +95,7 @@ ignored = [
   "derive_more",
   "generic-array",
   "home",
+  "hyper-util",
   "icu_normalizer",
   "indexmap",
   "libloading",
@@ -99,6 +108,7 @@ ignored = [
   "pest_generator",
   "pest_meta",
   "potential_utf",
+  "powerfmt",
   "prost",
   "prost-derive",
   "quinn-proto",
@@ -111,10 +121,13 @@ ignored = [
   "serde_with_macros",
   "static_init",
   "tempfile",
+  "thiserror",
   "thread-priority",
   "time",
   "tinystr",
   "tls-listener",
+  "tokio",
+  "tokio-util",
   "toml",
   "toml_datetime",
   "toml_parser",
