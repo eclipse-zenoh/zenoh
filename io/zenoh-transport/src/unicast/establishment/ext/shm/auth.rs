@@ -266,18 +266,19 @@ impl<'a> ShmFsm<'a> {
     }
 
     pub fn shm_init_result(self) -> (Option<TransportShmConfig>, LinkShmHandoffConfig) {
-        let transport = self.rx_segment.into_inner().map(TransportShmConfig::new);
-
-        let rx_handoff = self.rx_lease.into_inner();
-        let tx_handoff = self.tx_lease.into_inner();
-
-        let zipped = rx_handoff.zip(tx_handoff);
-
-        let link = zipped
-            .map(|(rx_lease, tx_lease)| LinkShmHandoffConfig::new(rx_lease, tx_lease))
-            .unwrap_or(LinkShmHandoffConfig::new_disabled());
-
-        (transport, link)
+        // Opening the peer's auth segment is only the first negotiation step.
+        // Enable SHM only after both directions of the handshake have completed.
+        match (
+            self.rx_segment.into_inner(),
+            self.rx_lease.into_inner(),
+            self.tx_lease.into_inner(),
+        ) {
+            (Some(segment), Some(rx), Some(tx)) => (
+                Some(TransportShmConfig::new(segment)),
+                LinkShmHandoffConfig::new(rx, tx),
+            ),
+            _ => (None, LinkShmHandoffConfig::new_disabled()),
+        }
     }
 }
 
@@ -418,22 +419,25 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        let Some(segment) = self.rx_segment.get() else {
-            return Ok(());
-        };
+        // An SHM OpenAck commits the acceptor to SHM. If we cannot honor it,
+        // reject establishment instead of silently enabling SHM on one side.
+        let segment = self
+            .rx_segment
+            .get()
+            .ok_or_else(|| zerror!("{} Unexpected SHM acknowledgement", S))?;
+        if self.tx_lease.get().is_none() {
+            bail!("{} SHM acknowledgement without a local proposal", S);
+        }
 
         // Decode the extension
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
-        let Ok(open_ack): Result<OpenAck, _> = codec.read(&mut reader) else {
-            tracing::trace!("{} Decoding error.", S);
-            return Ok(());
-        };
+        let open_ack: OpenAck = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("{} Decoding error", S))?;
 
-        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_ack.bob_counters) else {
-            tracing::trace!("{} Handoff channel creation error.", S);
-            return Ok(());
-        };
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_ack.bob_counters)
+            .map_err(|e| zerror!("{} Handoff channel creation error: {}", S, e))?;
 
         self.rx_lease
             .set(rx_handoff)
@@ -589,6 +593,12 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Send OpenAck.";
 
+        // A missing or rejected SHM OpenSyn means the peer did not negotiate
+        // SHM. Do not advertise success or allocate outgoing handoff counters.
+        if self.rx_lease.get().is_none() {
+            return Ok(None);
+        }
+
         // Link is multipriority
         let reliability = input;
 
@@ -613,3 +623,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         Ok(Some(open::ext::Shm::new(buff.into())))
     }
 }
+
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;
