@@ -1289,7 +1289,7 @@ async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
     /// succeed), but performing no Zenoh exchange.
     fn quic_attacker_client_config() -> quinn::ClientConfig {
         let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let mut crypto = rustls::ClientConfig::builder_with_provider(provider.clone().into())
+        let mut crypto = rustls::ClientConfig::builder_with_provider(provider.clone())
             .with_protocol_versions(&[&rustls::version::TLS13])
             .unwrap()
             .dangerous()
