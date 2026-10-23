@@ -2963,7 +2963,16 @@ mod mixedrel_mtu {
         let router_id = ZenohIdProto::try_from([2]).unwrap();
         let mut incompressible = vec![0; 4_096];
         StdRng::seed_from_u64(2813).fill_bytes(&mut incompressible);
-        let payloads = [vec![0x5a; 1_100], vec![0x5a; 4_096], incompressible];
+        // 2 KiB exceeds the companion MTU but stays below the default 3 KiB SHM
+        // optimization threshold, preserving on-wire fragmentation coverage.
+        // The 4 KiB payloads remain eligible for implicit SHM conversion.
+        let payloads = [
+            vec![0x5a; 1_100],
+            vec![0x5a; 2_048],
+            incompressible[..2_048].to_vec(),
+            vec![0x5a; 4_096],
+            incompressible,
+        ];
 
         for compression in [
             false,
@@ -3044,7 +3053,9 @@ mod mixedrel_mtu {
                                 ..Push::from(payload.clone())
                             });
                             message.reliability = reliability;
-                            assert!(transport.schedule(message.as_mut()).unwrap());
+                            // Scheduling may rewrite SHM metadata in place, so
+                            // preserve the original message for comparison.
+                            assert!(transport.schedule(message.clone().as_mut()).unwrap());
                             let received = ztimeout!(rx.recv_async())
                                 .unwrap()
                                 .expect("link or transport closed during MTU regression test");
