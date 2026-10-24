@@ -174,12 +174,79 @@ async fn invalid_open_ack_counters_reject_establishment() {
     assert!(alice.recv_open_ack(Some(ack)).await.is_err());
 }
 
+/// An InitAck that offers SHM through a segment the initiator cannot map.
+async fn exchange_init_with_unreachable_segment(alice: &ShmFsm<'_>, bob: &ShmFsm<'_>) {
+    let syn = alice.send_init_syn(&StateOpen::new()).await.unwrap();
+    bob.recv_init_syn(syn).await.unwrap();
+    let mut ack = bob.send_init_ack(()).await.unwrap().unwrap();
+    let mut decoded: InitAck = Zenoh080.read(&mut ack.value.reader()).unwrap();
+    let removed = AuthUnicast::new(&[]).unwrap();
+    decoded.bob_segment = removed.segment_id();
+    drop(removed);
+    assert!(RXAuthSegment::open(decoded.bob_segment).is_err());
+    let mut bytes = vec![];
+    Zenoh080.write(&mut bytes.writer(), &decoded).unwrap();
+    ack.value = bytes.into();
+    alice.recv_init_ack(Some(ack)).await.unwrap();
+}
+
 #[tokio::test]
 async fn unsolicited_open_ack_rejects_establishment() {
-    let auth = AuthUnicast::new(&[]).unwrap();
-    let alice = ShmFsm::new(&auth);
+    // Positive control: the same flow with a reachable segment completes.
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let alice = ShmFsm::new(&alice_auth);
+    let bob = ShmFsm::new(&bob_auth);
+    exchange_init(&alice, &bob).await;
+    let syn = alice.send_open_syn(Reliability::Reliable).await.unwrap();
+    bob.recv_open_syn(syn).await.unwrap();
+    let ack = bob.send_open_ack(Reliability::Reliable).await.unwrap();
+    alice.recv_open_ack(ack).await.unwrap();
+
+    // The InitAck offered SHM but the initiator mapped no segment, then an OpenAck
+    // extension arrives. The acceptor runs with SHM, so the handshake must fail.
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let alice = ShmFsm::new(&alice_auth);
+    let bob = ShmFsm::new(&bob_auth);
+    exchange_init_with_unreachable_segment(&alice, &bob).await;
+    assert!(alice.rx_segment.get().is_none());
     let ack = ack_with_counters(HandoffCounterIds::Disabled);
-    assert!(alice.recv_open_ack(Some(ack)).await.is_err());
+    let err = alice.recv_open_ack(Some(ack)).await.unwrap_err();
+    assert!(
+        err.to_string().contains("Unexpected SHM acknowledgement"),
+        "unexpected error: {err}"
+    );
+}
+
+#[tokio::test]
+async fn open_ack_without_offer_is_ignored() {
+    // Every OpenAck below carries an extension that no offer asked for: a valid one,
+    // one with invalid counters and an undecodable one.
+    let counters = PriorityContainer::from_fn(|_| Ok::<_, ZError>(u16::MAX)).unwrap();
+    let acks = [
+        ack_with_counters(HandoffCounterIds::Disabled),
+        ack_with_counters(HandoffCounterIds::PerPrio(counters)),
+        open::ext::Shm::new(vec![].into()),
+    ];
+    for ack in acks {
+        // The InitAck carried no SHM extension, so the initiator ignores the OpenAck one
+        // and both the transport and the link run without SHM.
+        let alice_auth = AuthUnicast::new(&[]).unwrap();
+        let alice = ShmFsm::new(&alice_auth);
+        alice.recv_init_ack(None).await.unwrap();
+        alice.recv_open_ack(Some(ack.clone())).await.unwrap();
+        assert!(alice.rx_lease.get().is_none());
+        assert_disabled(alice);
+
+        // Negative control: after an InitAck that offered SHM the same extension fails.
+        let alice_auth = AuthUnicast::new(&[]).unwrap();
+        let bob_auth = AuthUnicast::new(&[]).unwrap();
+        let alice = ShmFsm::new(&alice_auth);
+        let bob = ShmFsm::new(&bob_auth);
+        exchange_init(&alice, &bob).await;
+        assert!(alice.recv_open_ack(Some(ack)).await.is_err());
+    }
 }
 
 #[tokio::test]

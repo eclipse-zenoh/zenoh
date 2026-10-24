@@ -11,7 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{ops::Deref, sync::Arc};
+use std::{
+    ops::Deref,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
@@ -250,6 +256,8 @@ where
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a AuthUnicast,
+    // Set when the acceptor's InitAck carried an SHM extension, whatever became of it.
+    acceptor_offered_shm: AtomicBool,
     tx_lease: std::sync::OnceLock<TxHandoffChannel>,
     rx_segment: std::sync::OnceLock<Arc<RXAuthSegment>>,
     rx_lease: std::sync::OnceLock<RxHandoffChannel>,
@@ -259,6 +267,7 @@ impl<'a> ShmFsm<'a> {
     pub(crate) const fn new(inner: &'a AuthUnicast) -> Self {
         Self {
             inner,
+            acceptor_offered_shm: AtomicBool::new(false),
             tx_lease: std::sync::OnceLock::new(),
             rx_segment: std::sync::OnceLock::new(),
             rx_lease: std::sync::OnceLock::new(),
@@ -333,6 +342,10 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         mut input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitAck.";
+
+        // Record the offer before any check can decline it.
+        self.acceptor_offered_shm
+            .store(input.is_some(), Ordering::Relaxed);
 
         let Some(ext) = input.take() else {
             return Ok(());
@@ -419,7 +432,14 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        // An SHM OpenAck commits the acceptor to SHM. If we cannot honor it,
+        // An acceptor that offered no SHM in its InitAck did not ask for SHM. An unpatched
+        // acceptor still puts an extension in every OpenAck, so ignore it and run without SHM.
+        if !self.acceptor_offered_shm.load(Ordering::Relaxed) {
+            tracing::trace!("{} Ignoring an SHM acknowledgement: no SHM offer.", S);
+            return Ok(());
+        }
+
+        // After an offer, an SHM OpenAck commits the acceptor to SHM. If we cannot honor it,
         // reject establishment instead of silently enabling SHM on one side.
         let segment = self
             .rx_segment
