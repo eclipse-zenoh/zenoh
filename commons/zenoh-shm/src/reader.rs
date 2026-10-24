@@ -51,9 +51,17 @@ impl ShmReader {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
-        let metadata = GLOBAL_METADATA_SUBSCRIPTION.read().link(&info.metadata)?;
+        let metadata = crate::read_unless_finalized!(GLOBAL_METADATA_SUBSCRIPTION)
+            .map_err(|_| {
+                zerror!("Unable to read SHM buffer: SHM metadata subscription is finalized")
+            })?
+            .link(&info.metadata)?;
         // attach to the watchdog before doing other things
-        let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(metadata);
+        let confirmed_metadata = crate::read_unless_finalized!(GLOBAL_CONFIRMATOR)
+            .map_err(|_| {
+                zerror!("Unable to read SHM buffer: SHM watchdog confirmator is finalized")
+            })?
+            .add(metadata);
 
         // retrieve data descriptor from metadata
         let data_descriptor = confirmed_metadata.owned.header().data_descriptor();
