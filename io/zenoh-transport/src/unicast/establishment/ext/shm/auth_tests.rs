@@ -304,3 +304,77 @@ async fn open_ack_without_local_proposal_rejects_establishment() {
         "unexpected error: {err}"
     );
 }
+
+/// Counts the TX counters that the segment of `auth` can still lease. The leases taken for the
+/// count return to the pool when the function ends.
+fn free_tx_counters(auth: &AuthUnicast) -> usize {
+    let mut held = vec![];
+    while let Ok(lease) = auth.lease_tx_counter() {
+        held.push(lease);
+    }
+    held.len()
+}
+
+#[tokio::test]
+async fn declined_open_syn_leaves_acceptor_tx_counters_free() {
+    let full = free_tx_counters(&AuthUnicast::new(&[]).unwrap());
+
+    // Positive control: an accepted proposal makes the acceptor lease counters, and dropping the
+    // acceptor returns them. Without this the count below could not show a leak.
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    {
+        let alice = ShmFsm::new(&alice_auth);
+        let bob = ShmFsm::new(&bob_auth);
+        exchange_init(&alice, &bob).await;
+        let syn = alice.send_open_syn(Reliability::Reliable).await.unwrap();
+        bob.recv_open_syn(syn).await.unwrap();
+        assert!(bob
+            .send_open_ack(Reliability::Reliable)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(free_tx_counters(&bob_auth) < full, "no counter was leased");
+    }
+    assert_eq!(free_tx_counters(&bob_auth), full);
+
+    let declines: [fn(&mut OpenSyn); 2] = [
+        |syn| syn.bob_challenge ^= 1,
+        |syn| {
+            syn.alice_counters = HandoffCounterIds::PerPrio(
+                PriorityContainer::from_fn(|_| Ok::<_, ZError>(u16::MAX)).unwrap(),
+            )
+        },
+    ];
+    for decline in declines {
+        let alice_auth = AuthUnicast::new(&[]).unwrap();
+        let bob_auth = AuthUnicast::new(&[]).unwrap();
+        let alice = ShmFsm::new(&alice_auth);
+        let bob = ShmFsm::new(&bob_auth);
+        exchange_init(&alice, &bob).await;
+        let mut syn = alice
+            .send_open_syn(Reliability::Reliable)
+            .await
+            .unwrap()
+            .unwrap();
+        let mut decoded: OpenSyn = Zenoh080.read(&mut syn.value.reader()).unwrap();
+        decline(&mut decoded);
+        let mut bytes = vec![];
+        Zenoh080.write(&mut bytes.writer(), &decoded).unwrap();
+        syn.value = bytes.into();
+        assert!(bob.recv_open_syn(Some(syn)).await.is_err());
+        // The acceptor is still alive here, so a counter that the declined path took and did not
+        // return shows up as a missing counter.
+        assert_eq!(
+            free_tx_counters(&bob_auth),
+            full,
+            "declined proposal kept an acceptor TX counter"
+        );
+        assert!(bob
+            .send_open_ack(Reliability::Reliable)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(free_tx_counters(&bob_auth), full);
+    }
+}
