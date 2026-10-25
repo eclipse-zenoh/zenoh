@@ -587,16 +587,16 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             bail!("");
         };
 
-        // Verify that Alice has correctly read Bob challenge
+        // Alice sent an SHM proposal and an unpatched Alice has already enabled SHM from the
+        // segment it mapped, without waiting for our OpenAck. If we declined here, we would run
+        // plain while she sends SHM descriptors. Refuse the link instead.
         if !self.inner.validate(open_syn.bob_challenge, S) {
-            return Ok(());
+            bail!("{} Challenge mismatch: refusing the SHM proposal", S);
         }
 
         // Allocate RX counter for this session
-        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_syn.alice_counters) else {
-            tracing::trace!("{} Handoff channel creation error.", S);
-            return Ok(());
-        };
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_syn.alice_counters)
+            .map_err(|e| zerror!("{} Handoff channel creation error: {}", S, e))?;
 
         self.rx_lease
             .set(rx_handoff)

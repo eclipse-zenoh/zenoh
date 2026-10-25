@@ -110,7 +110,7 @@ async fn absent_open_ack_disables_initiator_shm() {
 }
 
 #[tokio::test]
-async fn rejected_open_syn_does_not_advertise_shm() {
+async fn rejected_open_syn_refuses_the_link() {
     let alice_auth = AuthUnicast::new(&[]).unwrap();
     let bob_auth = AuthUnicast::new(&[]).unwrap();
     let alice = ShmFsm::new(&alice_auth);
@@ -126,14 +126,45 @@ async fn rejected_open_syn_does_not_advertise_shm() {
     let mut bytes = vec![];
     Zenoh080.write(&mut bytes.writer(), &decoded).unwrap();
     syn.value = bytes.into();
-    bob.recv_open_syn(Some(syn)).await.unwrap();
-    let ack = bob.send_open_ack(Reliability::Reliable).await.unwrap();
+    // An unpatched initiator enables SHM without waiting for an OpenAck, so the acceptor must
+    // refuse the link. Returning Ok here leaves the acceptor plain and the initiator on SHM.
     assert!(
-        ack.is_none(),
-        "acceptor acknowledged a rejected SHM proposal"
+        bob.recv_open_syn(Some(syn)).await.is_err(),
+        "acceptor declined an SHM proposal and kept the link"
     );
-    alice.recv_open_ack(ack).await.unwrap();
-    assert_disabled(alice);
+    assert_disabled(bob);
+}
+
+#[tokio::test]
+async fn unusable_open_syn_counters_reject_establishment() {
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let alice = ShmFsm::new(&alice_auth);
+    let bob = ShmFsm::new(&bob_auth);
+    exchange_init(&alice, &bob).await;
+    let mut syn = alice
+        .send_open_syn(Reliability::Reliable)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut decoded: OpenSyn = Zenoh080.read(&mut syn.value.reader()).unwrap();
+    decoded.alice_counters = HandoffCounterIds::PerPrio(
+        PriorityContainer::from_fn(|_| Ok::<_, ZError>(u16::MAX)).unwrap(),
+    );
+    let mut bytes = vec![];
+    Zenoh080.write(&mut bytes.writer(), &decoded).unwrap();
+    syn.value = bytes.into();
+    assert!(bob.recv_open_syn(Some(syn)).await.is_err());
+    assert_disabled(bob);
+}
+
+#[tokio::test]
+async fn absent_open_syn_keeps_acceptor_plain() {
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let bob = ShmFsm::new(&bob_auth);
+    bob.recv_open_syn(None).await.unwrap();
+    let ack = bob.send_open_ack(Reliability::Reliable).await.unwrap();
+    assert!(ack.is_none());
     assert_disabled(bob);
 }
 
