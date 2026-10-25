@@ -230,8 +230,6 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     pub fn ensure_not_persistent(id: ID) {
         #[cfg(not(shm_external_lockfile))]
         if let Some(lock_fd) = Self::lock_dangling_segment(id) {
-            #[cfg(all(test, target_os = "linux"))]
-            race_tests::pause(race_tests::Point::BeforeUnlink, id.into());
             Self::cleanup_locked_segment(id, &lock_fd);
         }
 
@@ -337,12 +335,21 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         // The caller holds an exclusive lock on this inode. If another cleanup
         // already unlinked it before we acquired that lock, the name may now
         // refer to a replacement. Never unlink the replacement through a stale FD.
+        //
+        // Mixed versions: a process without this change releases its lock before it
+        // unlinks. A creator running this code can pass the link-count check inside that
+        // window, so the race stays open when an old and a new process share a segment.
+        // That window existed before this change and cannot be closed from the new side.
         if fstat(lock_fd.as_raw_fd()).is_ok_and(|stat| stat.st_nlink != 0) {
             Self::cleanup_segment(id);
         }
     }
 
     fn cleanup_segment(id: ID) {
+        // Last point before the unlink: a test can observe whether the caller still holds its lock.
+        #[cfg(all(test, target_os = "linux"))]
+        race_tests::pause(race_tests::Point::BeforeUnlink, id.into());
+
         let id = Self::id_str(id);
         // TODO: we cannot use our logger inside of atexit() callstack!
         // tracing::trace!("shm_unlink(name={})", id);

@@ -6,7 +6,7 @@
 
 //! Force lifecycle interleavings without sleeps. Hooks exist only in unit-test builds.
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     process::Command,
     rc::Rc,
     sync::{
@@ -76,7 +76,10 @@ fn hook(point: Point, callback: impl FnOnce(u64) + 'static) {
     });
 }
 
-fn child(action: &str, id: u64) {
+/// Run `action` in another process and return the result line it printed.
+/// The caller asserts on that line, so a child that never ran its test cannot pass:
+/// `--exact` with a stale test path matches nothing, exits 0 and prints no result.
+fn child(action: &str, id: u64) -> String {
     let output = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -88,7 +91,13 @@ fn child(action: &str, id: u64) {
         .output()
         .unwrap();
     assert!(output.status.success(), "child failed: {output:?}");
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix(CHILD_RESULT).map(str::to_owned))
+        .unwrap_or_else(|| panic!("child printed no result, it did not run: {output:?}"))
 }
+
+const CHILD_RESULT: &str = "ZENOH_SHM_RACE_CHILD_RESULT ";
 
 #[test]
 fn child_process() {
@@ -99,17 +108,19 @@ fn child_process() {
         .unwrap()
         .parse::<u64>()
         .unwrap();
-    match action.as_str() {
-        "cleanup" => SegmentImpl::ensure_not_persistent(id),
-        "expect_locked" => assert!(
-            matches!(
-                SegmentImpl::open(id),
-                Err(SegmentOpenError::InvalidatedSegment)
-            ),
-            "cleanup must retain its exclusive lock until unlink"
-        ),
+    let result = match action.as_str() {
+        "cleanup" => {
+            SegmentImpl::ensure_not_persistent(id);
+            "cleaned".to_owned()
+        }
+        "open" => match SegmentImpl::open(id) {
+            Ok(_) => "opened".to_owned(),
+            Err(SegmentOpenError::InvalidatedSegment) => "invalidated".to_owned(),
+            Err(e) => format!("error {e:?}"),
+        },
         _ => panic!("unknown child action"),
-    }
+    };
+    println!("{CHILD_RESULT}{result}");
 }
 
 fn orphan(id: u64) -> OwnedFd {
@@ -126,8 +137,14 @@ fn orphan(id: u64) -> OwnedFd {
 #[test]
 fn creation_losing_to_cleanup_is_retryable() {
     let (_guard, id) = setup();
-    hook(Point::AfterCreate, |id| child("cleanup", id));
+    let raced = Rc::new(Cell::new(false));
+    let flag = raced.clone();
+    hook(Point::AfterCreate, move |id| {
+        assert_eq!(child("cleanup", id), "cleaned");
+        flag.set(true);
+    });
     let result = SegmentImpl::create(id, 1024.try_into().unwrap());
+    assert!(raced.get(), "the cleanup hook did not fire");
     assert!(
         matches!(result, Err(SegmentCreateError::SegmentExists)),
         "must not advertise an unlinked segment: {result:?}"
@@ -140,9 +157,21 @@ fn creation_losing_to_cleanup_is_retryable() {
 #[test]
 fn posix_creation_retries_cleanup_race() {
     let (_guard, _) = setup();
-    hook(Point::AfterCreate, |id| child("cleanup", id));
+    let lost = Rc::new(Cell::new(None));
+    let slot = lost.clone();
+    hook(Point::AfterCreate, move |id| {
+        assert_eq!(child("cleanup", id), "cleaned");
+        slot.set(Some(id));
+    });
     let segment =
         crate::posix_shm::segment::Segment::<u64>::create(1024.try_into().unwrap()).unwrap();
+    // The first attempt must have lost the race, or the retry path was never taken.
+    let lost = lost.get().expect("the first create did not lose the race");
+    assert_ne!(segment.id(), lost, "the retry reused the lost segment id");
+    assert!(
+        SegmentImpl::open(lost).is_err(),
+        "the lost segment is still published"
+    );
     assert!(
         SegmentImpl::open(segment.id()).is_ok(),
         "higher-level creation must retry the lost segment"
@@ -153,8 +182,14 @@ fn posix_creation_retries_cleanup_race() {
 fn opening_unlinked_segment_is_rejected() {
     let (_guard, id) = setup();
     let _fd = orphan(id);
-    hook(Point::AfterOpen, |id| child("cleanup", id));
+    let raced = Rc::new(Cell::new(false));
+    let flag = raced.clone();
+    hook(Point::AfterOpen, move |id| {
+        assert_eq!(child("cleanup", id), "cleaned");
+        flag.set(true);
+    });
     let result = SegmentImpl::open(id);
+    assert!(raced.get(), "the cleanup hook did not fire");
     assert!(
         matches!(result, Err(SegmentOpenError::InvalidatedSegment)),
         "must reject a descriptor unlinked before its shared lock: {result:?}"
@@ -165,8 +200,18 @@ fn opening_unlinked_segment_is_rejected() {
 fn cleanup_retains_lock_through_unlink() {
     let (_guard, id) = setup();
     let _fd = orphan(id);
-    hook(Point::BeforeUnlink, |id| child("expect_locked", id));
+    // Runs right before the unlink, after the link-count check. The lock must still be held.
+    let seen = Rc::new(RefCell::new(None));
+    let slot = seen.clone();
+    hook(Point::BeforeUnlink, move |id| {
+        *slot.borrow_mut() = Some(child("open", id));
+    });
     SegmentImpl::ensure_not_persistent(id);
+    assert_eq!(
+        seen.borrow().as_deref(),
+        Some("invalidated"),
+        "cleanup must retain its exclusive lock until the unlink"
+    );
     assert!(matches!(
         SegmentImpl::open(id),
         Err(SegmentOpenError::OsError(2))
@@ -181,7 +226,7 @@ fn stale_cleanup_cannot_unlink_replacement() {
     let slot = replacement.clone();
     hook(Point::AfterCleanupOpen, move |id| {
         // Another cleanup removes the old inode, then a creator reuses its name.
-        child("cleanup", id);
+        assert_eq!(child("cleanup", id), "cleaned");
         *slot.borrow_mut() = Some(SegmentImpl::create(id, 1024.try_into().unwrap()).unwrap());
     });
     SegmentImpl::ensure_not_persistent(id);
@@ -214,12 +259,24 @@ fn cleanup_preserves_live_segment_and_contents() {
     unsafe {
         segment.as_ptr().write(0xa5);
     }
-    child("cleanup", id);
+    assert_eq!(child("cleanup", id), "cleaned");
     let opened = SegmentImpl::open(id).unwrap();
     assert_eq!(unsafe { opened.as_ptr().read() }, 0xa5);
     drop(segment);
-    child("cleanup", id);
+    assert_eq!(child("cleanup", id), "cleaned");
     assert!(SegmentImpl::open(id).is_ok());
     drop(opened);
     assert!(SegmentImpl::open(id).is_err());
+}
+
+/// The nextest overrides select these tests by module path. A rename would drop them from
+/// the exclusive group and their retry setting without any warning, so pin the path here.
+#[test]
+fn nextest_filter_names_this_module() {
+    let path = module_path!().split_once("::").unwrap().1;
+    let config = include_str!("../../../../.config/nextest.toml");
+    assert!(
+        config.contains(&format!("test({path}::)")),
+        "update .config/nextest.toml: it must select `test({path}::)`"
+    );
 }
