@@ -183,7 +183,11 @@ async fn malformed_open_ack_rejects_establishment() {
         .unwrap()
         .unwrap();
     ack.value = vec![].into();
-    assert!(alice.recv_open_ack(Some(ack)).await.is_err());
+    let err = alice.recv_open_ack(Some(ack)).await.unwrap_err();
+    assert!(
+        err.to_string().contains("Recv OpenAck. Decoding error"),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
@@ -202,7 +206,12 @@ async fn invalid_open_ack_counters_reject_establishment() {
         .is_some());
     let counters = PriorityContainer::from_fn(|_| Ok::<_, ZError>(u16::MAX)).unwrap();
     let ack = ack_with_counters(HandoffCounterIds::PerPrio(counters));
-    assert!(alice.recv_open_ack(Some(ack)).await.is_err());
+    let err = alice.recv_open_ack(Some(ack)).await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("Recv OpenAck. Handoff channel creation error"),
+        "unexpected error: {err}"
+    );
 }
 
 /// An InitAck that offers SHM through a segment the initiator cannot map.
@@ -288,5 +297,10 @@ async fn open_ack_without_local_proposal_rejects_establishment() {
     let bob = ShmFsm::new(&bob_auth);
     exchange_init(&alice, &bob).await;
     let ack = ack_with_counters(HandoffCounterIds::Disabled);
-    assert!(alice.recv_open_ack(Some(ack)).await.is_err());
+    let err = alice.recv_open_ack(Some(ack)).await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("SHM acknowledgement without a local proposal"),
+        "unexpected error: {err}"
+    );
 }
