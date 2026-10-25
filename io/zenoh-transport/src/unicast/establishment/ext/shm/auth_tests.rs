@@ -378,3 +378,39 @@ async fn declined_open_syn_leaves_acceptor_tx_counters_free() {
         assert_eq!(free_tx_counters(&bob_auth), full);
     }
 }
+
+/// A 1.9.0 initiator puts its segment in the InitSyn, so the acceptor maps it. Its OpenSyn
+/// extension has the 1.9.0 format and arrives at the acceptor as no extension. This models what
+/// the acceptor sees, not the 1.9.0 code of the initiator.
+#[tokio::test]
+async fn initiator_without_open_syn_extension_keeps_acceptor_plain() {
+    let full = free_tx_counters(&AuthUnicast::new(&[]).unwrap());
+
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let alice = ShmFsm::new(&alice_auth);
+    let bob = ShmFsm::new(&bob_auth);
+    exchange_init(&alice, &bob).await;
+    // The acceptor holds the initiator segment. Enabling SHM from this alone is the old defect.
+    assert!(bob.rx_segment.get().is_some());
+    bob.recv_open_syn(None).await.unwrap();
+    assert!(bob
+        .send_open_ack(Reliability::Reliable)
+        .await
+        .unwrap()
+        .is_none());
+    assert_eq!(free_tx_counters(&bob_auth), full);
+    assert_disabled(bob);
+
+    // Positive control: the same InitSyn followed by a current OpenSyn enables SHM.
+    let alice_auth = AuthUnicast::new(&[]).unwrap();
+    let bob_auth = AuthUnicast::new(&[]).unwrap();
+    let alice = ShmFsm::new(&alice_auth);
+    let bob = ShmFsm::new(&bob_auth);
+    exchange_init(&alice, &bob).await;
+    let syn = alice.send_open_syn(Reliability::Reliable).await.unwrap();
+    bob.recv_open_syn(syn).await.unwrap();
+    let ack = bob.send_open_ack(Reliability::Reliable).await.unwrap();
+    alice.recv_open_ack(ack).await.unwrap();
+    assert!(bob.shm_init_result().0.is_some());
+}
