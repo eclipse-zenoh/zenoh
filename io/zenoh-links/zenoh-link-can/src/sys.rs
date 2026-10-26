@@ -61,6 +61,41 @@ impl Drop for RawCan {
 /// The kernel clamps the request to `net.core.rmem_max` without telling anyone,
 /// and then reports back double what it stored, so the only honest thing to do
 /// is read the value back and say when it fell short.
+/// Why a classic interface is refused, and the two ways out.
+fn classic_refusal(device: &str) -> String {
+    format!(
+        "This link is CAN FD only: a classic frame carries 7 bytes, and zenoh's JOIN -- a \
+         transport message it never fragments -- needs about 31, so no session could open. \
+         Enable FD on the interface (`ip link set {device} type can bitrate 500000 dbitrate \
+         2000000 fd on`; a vcan: `ip link set {device} mtu 72`), or use the ISO-TP link \
+         (`isotp/{device}#...`), which segments over classic frames."
+    )
+}
+
+/// The interface's MTU: `CANFD_MTU` (72) once FD is on, `CAN_MTU` (16) otherwise.
+fn interface_mtu(raw: &RawCan, name: &CString) -> io::Result<libc::c_int> {
+    // SAFETY: an all-zero `ifreq` is a valid value of this plain C struct.
+    let mut ifr: libc::ifreq = unsafe { mem::zeroed() };
+    let bytes = name.as_bytes();
+    if bytes.len() >= ifr.ifr_name.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "interface name too long",
+        ));
+    }
+    for (dst, src) in ifr.ifr_name.iter_mut().zip(bytes) {
+        *dst = *src as libc::c_char;
+    }
+    // SAFETY: `ifr` is a valid `ifreq` whose name is NUL-terminated (zeroed
+    // beyond `bytes`), and it outlives the call.
+    let rc = unsafe { libc::ioctl(raw.fd, libc::SIOCGIFMTU, &mut ifr) };
+    if rc < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: SIOCGIFMTU wrote the `ifru_mtu` member of the union.
+    Ok(unsafe { ifr.ifr_ifru.ifru_mtu })
+}
+
 fn set_rcvbuf(raw: &RawCan, requested: u32, device: &str) -> ZResult<()> {
     let value = requested as libc::c_int;
     // SAFETY: `value` outlives the call and its length is its own size.
@@ -130,7 +165,8 @@ impl CanSocket {
     pub(crate) fn open(ep: &CanEndpoint) -> ZResult<CanSocket> {
         // Bit rates are set out of band on Linux (`ip link set can0 type can
         // bitrate ...`) and a virtual interface has none at all, so `bitrate`
-        // is advisory here. `dbitrate` is not: zero selects classic framing.
+        // and `dbitrate` are advisory here. CAN FD versus classic is the
+        // interface's, read from its MTU below.
         let fd = unsafe {
             libc::socket(
                 libc::PF_CAN,
@@ -186,10 +222,17 @@ impl CanSocket {
             );
         }
 
-        // CAN FD is required, not preferred. Classic CAN leaves a 7-byte MTU
-        // against zenoh's ~16 bytes of per-fragment overhead, so a classic link
-        // cannot make progress at all. Failing here beats coming up in a mode
-        // whose only symptom is a session that appears to hang.
+        // CAN FD is required, not preferred. A multicast session opens with a
+        // JOIN, a transport message zenoh never fragments, so it must fit one
+        // batch -- one frame here. Classic CAN leaves 7 bytes after the length
+        // prefix and the smallest JOIN is 13 (about 31 with a 16-byte ZID), so a
+        // classic interface could never open a session.
+        //
+        // `CAN_RAW_FD_FRAMES` alone does NOT detect one: the kernel accepts the
+        // option on any CAN_RAW socket and checks the device only at send,
+        // where an FD-sized write to a classic interface fails with EINVAL. So
+        // the option is set for the FD frames this link writes, and the
+        // interface's MTU is what decides.
         let enable: libc::c_int = 1;
         // SAFETY: `enable` outlives the call and its length is its own size.
         let rc = unsafe {
@@ -204,12 +247,19 @@ impl CanSocket {
         if rc < 0 {
             let e = io::Error::last_os_error();
             bail!(
-                "CAN: interface {:?} does not support CAN FD ({e}). This link is CAN FD only: \
-                 classic CAN leaves a 7-byte MTU, which is smaller than zenoh's per-fragment \
-                 overhead, so no session could make progress. Enable FD on the interface, e.g. \
-                 `ip link set {} type can bitrate 500000 dbitrate 2000000 fd on`",
+                "CAN: interface {:?} refused CAN FD frames ({e}). {}",
                 ep.device,
-                ep.device
+                classic_refusal(&ep.device)
+            );
+        }
+        let if_mtu = interface_mtu(&raw, &name)
+            .map_err(|e| zerror!("CAN: reading the MTU of {:?} failed: {e}", ep.device))?;
+        if if_mtu != frame::CANFD_MTU_WIRE as libc::c_int {
+            bail!(
+                "CAN: interface {:?} is classic CAN (MTU {if_mtu}, not {}). {}",
+                ep.device,
+                frame::CANFD_MTU_WIRE,
+                classic_refusal(&ep.device)
             );
         }
 
