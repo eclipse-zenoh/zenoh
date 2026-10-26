@@ -3761,3 +3761,139 @@ impl Closeable for Session {
         self.downgrade()
     }
 }
+
+#[cfg(test)]
+mod routed_mapping_lifetime_tests {
+    use super::*;
+    use crate::net::{
+        primitives::{DummyPrimitives, EPrimitives, Primitives},
+        routing::RoutingContext,
+    };
+    use std::sync::Mutex;
+    use zenoh_protocol::{
+        core::Reliability,
+        network::Push,
+        zenoh::{PushBody, Put, Query, RequestBody},
+    };
+    use zenoh_sync::get_mut_unchecked;
+
+    struct QueuedDelivery {
+        original: Arc<dyn EPrimitives + Send + Sync>,
+        pushes: Mutex<Vec<Push>>,
+        requests: Mutex<Vec<Request>>,
+    }
+    impl EPrimitives for QueuedDelivery {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn send_interest(&self, ctx: RoutingContext<&mut Interest>) -> bool {
+            self.original.send_interest(ctx)
+        }
+        fn send_declare(&self, ctx: RoutingContext<&mut Declare>) -> bool {
+            self.original.send_declare(ctx)
+        }
+        fn send_push(&self, msg: &mut Push, _: Reliability) -> bool {
+            self.pushes.lock().unwrap().push(msg.clone());
+            false
+        }
+        fn send_request(&self, msg: &mut Request) -> bool {
+            self.requests.lock().unwrap().push(msg.clone());
+            false
+        }
+        fn send_response(&self, msg: &mut Response) -> bool {
+            self.original.send_response(msg)
+        }
+        fn send_response_final(&self, msg: &mut ResponseFinal) -> bool {
+            self.original.send_response_final(msg)
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn queued_data_and_queries_survive_receiver_keyexpr_undeclaration() {
+        let mut config = crate::Config::default();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        let receiver = crate::open(config).await.unwrap();
+        let subscriber = receiver.declare_subscriber("mapping/**").await.unwrap();
+        let queryable = receiver
+            .declare_queryable("mapping/**")
+            .complete(true)
+            .await
+            .unwrap();
+        let key = receiver.declare_keyexpr("mapping/topic").await.unwrap();
+        let retired_id = key.to_wire(&receiver).scope;
+        assert_ne!(retired_id, 0);
+        let gateway = receiver.static_runtime().unwrap().router();
+        let face_id = *receiver.0.face_id.get().unwrap();
+        // Delay only delivered data/queries, modeling messages already in flight.
+        // Control messages and both mapping tables use the real implementation.
+        let queued = {
+            let mut tables = gateway.tables.tables.write().unwrap();
+            let face = get_mut_unchecked(tables.data.faces.get_mut(&face_id).unwrap());
+            let queued = Arc::new(QueuedDelivery {
+                original: face.primitives.clone(),
+                pushes: Mutex::new(Vec::new()),
+                requests: Mutex::new(Vec::new()),
+            });
+            face.primitives = queued.clone();
+            queued
+        };
+        let source = gateway.new_session(Arc::new(DummyPrimitives));
+        source.send_push(
+            &mut Push {
+                wire_expr: "mapping/topic".into(),
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+                ext_nodeid: Default::default(),
+                ext_ts_stack: None,
+                payload: PushBody::Put(Put {
+                    payload: vec![42].into(),
+                    ..Default::default()
+                }),
+            },
+            Reliability::Reliable,
+        );
+        source.send_request(&mut Request {
+            id: 1,
+            wire_expr: "mapping/topic".into(),
+            ext_qos: Default::default(),
+            ext_tstamp: None,
+            ext_nodeid: Default::default(),
+            ext_target: Default::default(),
+            ext_budget: None,
+            ext_timeout: None,
+            ext_ts_stack: None,
+            payload: RequestBody::Query(Query::default()),
+        });
+        let mut pushes = std::mem::take(&mut *queued.pushes.lock().unwrap());
+        let mut requests = std::mem::take(&mut *queued.requests.lock().unwrap());
+        assert_eq!((pushes.len(), requests.len()), (1, 1));
+        drop(key);
+        assert!(!zread!(receiver.0.state)
+            .local_resources
+            .contains_key(&retired_id));
+        for push in &mut pushes {
+            queued.original.send_push(push, Reliability::Reliable);
+        }
+        for request in &mut requests {
+            queued.original.send_request(request);
+        }
+        let got_sample = subscriber.try_recv().unwrap().is_some();
+        let got_query = queryable.try_recv().unwrap().is_some();
+        {
+            let mut tables = gateway.tables.tables.write().unwrap();
+            get_mut_unchecked(tables.data.faces.get_mut(&face_id).unwrap()).primitives =
+                queued.original.clone();
+        }
+        source.send_close();
+        drop(subscriber);
+        drop(queryable);
+        receiver.close().await.unwrap();
+        assert_eq!(
+            (got_sample, got_query),
+            (true, true),
+            "in-flight messages used a key expression already retired by their receiver"
+        );
+    }
+}
