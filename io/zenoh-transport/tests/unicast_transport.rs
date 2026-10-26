@@ -501,11 +501,12 @@ async fn test_transport(
     };
 
     // Create the message to send
-    let message = NetworkMessage::from(Push {
+    let mut message = NetworkMessage::from(Push {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, cctrl, false),
         ..Push::from(vec![0u8; msg_size])
     });
+    message.reliability = channel.reliability;
 
     for _ in 0..msg_count {
         let _ = client_transport.schedule(message.clone().as_mut());
@@ -2868,6 +2869,86 @@ async fn transport_unicast_udp_mixedrel() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(any(feature = "transport_quic", feature = "transport_udp"))]
+mod mixedrel_mtu {
+    use zenoh_link_commons::quic::QUIC_INITIAL_MTU;
+
+    use super::*;
+
+    fn assert_companion_mtu(transport: &TransportUnicast) {
+        let links = transport.get_links().unwrap();
+        assert_eq!(links.len(), 2);
+        let mut companions = links.iter().filter(|link| !link.is_streamed);
+        assert_eq!(companions.next().unwrap().mtu, 1_150);
+        assert!(companions.next().is_none());
+    }
+
+    async fn run(protocol: &str, endpoint: impl Fn(&str) -> EndPoint) {
+        zenoh_util::init_log_from_env_or("error");
+
+        let client_id = ZenohIdProto::try_from([1]).unwrap();
+        // Both peers must expose the fixed companion MTU with defaults, equal
+        // overrides and asymmetric initial MTUs, for explicit and auto mode.
+        for (client_mtu, router_mtu, mixed_rel, multistream) in [
+            (None, None, "1", "1"),
+            (Some(1350), Some(1350), "1", "0"),
+            (Some(1472), Some(1200), "1", "1"),
+            (Some(1200), Some(1472), "auto", "0"),
+            (Some(1472), Some(1200), "auto", "1"),
+        ] {
+            let locator = format!(
+                "{protocol}/localhost:{}?rel=1;mixed_rel={mixed_rel};multistream={multistream}",
+                get_free_udp_port()
+            );
+            let mut client_endpoint = endpoint(&locator);
+            let mut router_endpoint = endpoint(&locator);
+            for (endpoint, mtu) in [
+                (&mut client_endpoint, client_mtu),
+                (&mut router_endpoint, router_mtu),
+            ] {
+                if let Some(mtu) = mtu {
+                    endpoint
+                        .config_mut()
+                        .insert(QUIC_INITIAL_MTU, mtu.to_string())
+                        .unwrap();
+                }
+            }
+
+            let (router_manager, _, client_manager, client_transport) = open_transport_unicast(
+                &[client_endpoint],
+                &[router_endpoint],
+                false,
+                #[cfg(feature = "transport_multilink")]
+                1,
+                #[cfg(feature = "transport_multilink")]
+                1,
+            )
+            .await;
+            let router_transport =
+                ztimeout!(router_manager.get_transport_unicast(&client_id)).unwrap();
+
+            assert_companion_mtu(&client_transport);
+            assert_companion_mtu(&router_transport);
+
+            ztimeout!(client_transport.close()).unwrap();
+            ztimeout!(client_manager.close());
+            ztimeout!(router_manager.close());
+        }
+    }
+
+    #[cfg(feature = "transport_quic")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_quic() {
+        run("quic", quic_endpoint).await;
+    }
+
+    #[cfg(feature = "transport_udp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_udp() {
+        run("udp", |locator| locator.parse().unwrap()).await;
+    }
 }
 
 #[cfg(feature = "transport_udp")]
