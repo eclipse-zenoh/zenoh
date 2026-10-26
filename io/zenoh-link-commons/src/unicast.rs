@@ -24,7 +24,7 @@ use std::os::fd::RawFd;
 use async_trait::async_trait;
 use serde::Serialize;
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority},
+    core::{EndPoint, Locator, Priority, PriorityRange},
     transport::BatchSize,
 };
 use zenoh_result::ZResult;
@@ -87,6 +87,11 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn get_auth_id(&self) -> &LinkAuthId;
     fn supports_priorities(&self) -> bool {
         false
+    }
+    /// Applies the `so_priority` option of the link's endpoint for the priority range the link
+    /// carries. Called once the range is known, after the transport handshake.
+    fn apply_socket_priority(&self, _priorities: Option<&PriorityRange>) -> ZResult<()> {
+        Ok(())
     }
     async fn write(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8], priority: Option<Priority>) -> ZResult<()>;

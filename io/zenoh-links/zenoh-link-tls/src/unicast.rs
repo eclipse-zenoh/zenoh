@@ -34,13 +34,13 @@ use tokio_util::sync::CancellationToken;
 use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::{bail, zasynclock};
 use zenoh_link_commons::{
-    get_ip_interface_names,
+    get_ip_interface_names, parse_socket_priority, set_socket_priority,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    NewLinkChannelSender, SocketPriority, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority},
+    core::{EndPoint, Locator, Priority, PriorityRange},
     transport::BatchSize,
 };
 use zenoh_result::{zerror, ZResult};
@@ -75,6 +75,7 @@ pub struct LinkUnicastTls {
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
     expiration_manager: Option<LinkCertExpirationManager>,
+    socket_priority: Option<SocketPriority>,
 }
 
 unsafe impl Send for LinkUnicastTls {}
@@ -87,6 +88,7 @@ impl LinkUnicastTls {
         dst_addr: SocketAddr,
         auth_identifier: LinkAuthId,
         expiration_manager: Option<LinkCertExpirationManager>,
+        socket_priority: Option<SocketPriority>,
     ) -> LinkUnicastTls {
         let (tcp_stream, _) = socket.get_ref();
         // Set the TLS nodelay option
@@ -147,6 +149,7 @@ impl LinkUnicastTls {
             auth_identifier,
             mtu,
             expiration_manager,
+            socket_priority,
         }
     }
 
@@ -262,6 +265,19 @@ impl LinkUnicastTrait for LinkUnicastTls {
         &self.auth_identifier
     }
 
+    fn apply_socket_priority(&self, priorities: Option<&PriorityRange>) -> ZResult<()> {
+        let Some(priority) = self
+            .socket_priority
+            .as_ref()
+            .and_then(|sp| sp.get(priorities))
+        else {
+            return Ok(());
+        };
+        let (tcp_stream, _) = unsafe { &*self.inner.get() }.get_ref();
+        set_socket_priority(tcp_stream, priority)
+            .map_err(|e| zerror!("Can not set socket priority {priority} on {self}: {e}").into())
+    }
+
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         bail!("Correct FD unavailable for TLS extension")
@@ -353,6 +369,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let client_config = TlsClientConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new TLS listener to {endpoint}: {e}"))?;
+        let socket_priority = parse_socket_priority(&epconf)?;
         let config = Arc::new(client_config.client_config);
         let connector = TlsConnector::from(config);
 
@@ -406,6 +423,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                 dst_addr,
                 auth_identifier.into(),
                 expiration_manager,
+                socket_priority,
             )
         });
 
@@ -423,6 +441,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let tls_server_config = TlsServerConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
+        let socket_priority = parse_socket_priority(&epconf)?;
 
         // Initialize the TcpListener
         let (socket, local_addr) = tls_server_config
@@ -448,6 +467,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     manager,
                     tls_server_config.tls_handshake_timeout,
                     tls_server_config.tls_close_link_on_expiration,
+                    socket_priority,
                 )
                 .await
             }
@@ -500,6 +520,7 @@ async fn accept_task(
     manager: NewLinkChannelSender,
     tls_handshake_timeout: Duration,
     tls_close_link_on_expiration: bool,
+    socket_priority: Option<SocketPriority>,
 ) -> ZResult<()> {
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TLS connections: {}", e);
@@ -575,6 +596,7 @@ async fn accept_task(
                                 dst_addr,
                                 auth_identifier.into(),
                                 expiration_manager,
+                                socket_priority.clone(),
                             )
                         });
 

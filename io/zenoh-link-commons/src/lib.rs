@@ -24,6 +24,7 @@ mod listener;
 mod multicast;
 #[cfg(feature = "quic")]
 pub mod quic;
+mod socket_priority;
 pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
@@ -37,6 +38,7 @@ pub use dscp::*;
 pub use listener::*;
 pub use multicast::*;
 use serde::Serialize;
+pub use socket_priority::*;
 pub use unicast::*;
 use zenoh_protocol::{
     core::{Locator, Metadata, PriorityRange, Reliability},
@@ -53,6 +55,7 @@ pub const BIND_INTERFACE: &str = "iface";
 pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
 pub const DSCP: &str = "dscp";
+pub const SO_PRIORITY: &str = "so_priority";
 
 #[derive(Clone, Debug, Serialize, Hash, PartialEq, Eq)]
 pub struct Link {
