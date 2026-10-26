@@ -2744,6 +2744,10 @@ impl Session {
             _ => 1,
         };
         let token = self.0.task_controller.get_cancellation_token();
+        // Each timer also belongs to its query. Final replies, cancellation and
+        // querier teardown remove the query; they must release a long-duration
+        // timeout task immediately instead of retaining it until session close.
+        let timeout_guard = token.clone().drop_guard();
         #[cfg(test)]
         let timer_count = QueryTimerCount::new(self.0.query_timer_count.clone());
         self.0
@@ -2780,6 +2784,7 @@ impl Session {
         state.queries.insert(
             qid,
             QueryState {
+                _timeout_guard: timeout_guard,
                 nb_final,
                 key_expr: key_expr.key_expr().into(),
                 parameters: parameters.clone().into_owned(),
@@ -2879,10 +2884,12 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.queries.remove(&qid) {
-            Some(_) => bail!("Unable to find query {qid}"),
-            None => Ok(()),
+        // Release the session lock before dropping the callback: foreign
+        // drop handlers may re-enter the session.
+        let query = zwrite!(self.0.state).queries.remove(&qid);
+        match query {
+            Some(_) => Ok(()),
+            None => bail!("Unable to find query {qid}"),
         }
     }
 
@@ -2916,6 +2923,10 @@ impl Session {
             &mut callback,
         )?;
         let token = self.0.task_controller.get_cancellation_token();
+        // Each timer also belongs to its query. Final replies, cancellation and
+        // querier teardown remove the query; they must release a long-duration
+        // timeout task immediately instead of retaining it until session close.
+        let timeout_guard = token.clone().drop_guard();
         #[cfg(test)]
         let timer_count = QueryTimerCount::new(self.0.query_timer_count.clone());
         self.0.task_controller
@@ -2949,9 +2960,13 @@ impl Session {
 
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
-        state
-            .liveliness_queries
-            .insert(id, LivelinessQueryState { callback });
+        state.liveliness_queries.insert(
+            id,
+            LivelinessQueryState {
+                _timeout_guard: timeout_guard,
+                callback,
+            },
+        );
         drop(state);
 
         primitives.send_interest(&mut Interest {
@@ -2970,10 +2985,10 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_liveliness_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling liveliness query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.liveliness_queries.remove(&qid) {
-            Some(_) => bail!("Unable to find liveliness query {qid}"),
-            None => Ok(()),
+        let query = zwrite!(self.0.state).liveliness_queries.remove(&qid);
+        match query {
+            Some(_) => Ok(()),
+            None => bail!("Unable to find liveliness query {qid}"),
         }
     }
 
