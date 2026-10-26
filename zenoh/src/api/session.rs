@@ -1497,16 +1497,25 @@ impl Session {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.0.state);
             let primitives = state.primitives()?;
+            let pending_same_prefix = !force
+                && state
+                    .local_resources
+                    .values()
+                    .any(|res| !res.declared && res.resource.name() == prefix);
             match state
                 .local_resources
                 .iter_mut()
-                .find(|(_expr_id, res)| res.resource.name() == prefix)
+                // A resource is usable on the wire only after its declaration
+                // was sent. Another thread may still be sending an identical
+                // prefix: forced callers must declare their own mapping rather
+                // than referring to that pending mapping out of order.
+                .find(|(_expr_id, res)| res.declared && res.resource.name() == prefix)
             {
-                Some((expr_id, res)) if force || res.declared => {
+                Some((expr_id, res)) => {
                     res.count += 1;
                     Ok(Some(*expr_id))
                 }
-                Some(_) => Ok(None),
+                None if pending_same_prefix => Ok(None),
                 None => {
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
