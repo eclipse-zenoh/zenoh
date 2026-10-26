@@ -2431,4 +2431,15 @@ fn test_interest_generation_routing(mode: WhatAmI, queryable: bool, scenario: u8
         1,
         "a retired or incomplete discovery snapshot must not suppress forwarding"
     );
+    if scenario != 0 {
+        let second = remote.recorder().interests().last().unwrap().id;
+        remote.declare_final(second);
+        remote.recorder().clear();
+        send(3);
+        assert_eq!(
+            forwarded(),
+            0,
+            "all completed empty snapshots should prune the route again"
+        );
+    }
 }
