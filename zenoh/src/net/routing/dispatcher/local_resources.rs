@@ -116,6 +116,19 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn interest_count(&self) -> usize {
+        self.simple_resources
+            .values()
+            .map(|r| r.simple_interest_ids.len())
+            .sum::<usize>()
+            + self
+                .aggregated_resources
+                .values()
+                .map(|r| r.aggregated_interest_ids.len())
+                .sum::<usize>()
+    }
+
     pub(crate) fn contains_simple_resource(&self, key: &Res) -> bool {
         self.simple_resources.contains_key(key)
     }
