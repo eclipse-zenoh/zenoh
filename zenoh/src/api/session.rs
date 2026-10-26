@@ -3761,3 +3761,146 @@ impl Closeable for Session {
         self.downgrade()
     }
 }
+
+#[cfg(test)]
+mod prefix_declaration_tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_prefix_declaration_never_reuses_an_unsent_mapping() {
+        let mut config = crate::Config::default();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        let session = crate::open(config).await.unwrap();
+        let prefix = "test/inflight/prefix";
+        let first = session
+            .declare_prefix(prefix, true)
+            .wait()
+            .unwrap()
+            .unwrap();
+        // Reproduce the state visible between inserting a resource and sending
+        // its DeclareKeyExpr. A concurrent forced declaration must not put this
+        // mapping on the wire until its declaration has been sent.
+        zwrite!(session.0.state)
+            .local_resources
+            .get_mut(&first)
+            .unwrap()
+            .declared = false;
+        assert_eq!(session.declare_prefix(prefix, false).wait().unwrap(), None);
+        let second = session
+            .declare_prefix(prefix, true)
+            .wait()
+            .unwrap()
+            .unwrap();
+        assert_ne!(
+            first, second,
+            "reused a mapping whose declaration is still pending"
+        );
+        // Once an independently declared mapping exists it can be shared by
+        // both forced and opportunistic declarations.
+        assert_eq!(
+            session.declare_prefix(prefix, false).wait().unwrap(),
+            Some(second)
+        );
+        assert_eq!(
+            session.declare_prefix(prefix, true).wait().unwrap(),
+            Some(second)
+        );
+        session.undeclare_prefix(first).unwrap();
+        for _ in 0..3 {
+            session.undeclare_prefix(second).unwrap();
+        }
+        assert!(zread!(session.0.state).local_resources.is_empty());
+        session.close().await.unwrap();
+    }
+}
+
+#[cfg(test)]
+mod prefix_ordering_tests {
+    use super::*;
+    use crate::net::primitives::Primitives;
+    use std::sync::{atomic::AtomicBool, mpsc, Mutex};
+    use zenoh_protocol::{core::Reliability, network::Push};
+
+    struct HoldFirstDeclaration {
+        entered: mpsc::Sender<ExprId>,
+        release: Mutex<mpsc::Receiver<()>>,
+        held: AtomicBool,
+        sent: Mutex<Vec<ExprId>>,
+    }
+
+    impl Primitives for HoldFirstDeclaration {
+        fn send_declare(&self, msg: &mut Declare) {
+            if let DeclareBody::DeclareKeyExpr(declaration) = &msg.body {
+                if !self.held.swap(true, Ordering::SeqCst) {
+                    self.entered.send(declaration.id).unwrap();
+                    self.release
+                        .lock()
+                        .unwrap()
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                }
+                self.sent.lock().unwrap().push(declaration.id);
+            }
+        }
+        fn send_interest(&self, _: &mut Interest) {}
+        fn send_push_consume(&self, _: &mut Push, _: Reliability, _: bool) {}
+        fn send_request(&self, _: &mut Request) {}
+        fn send_response(&self, _: &mut Response) {}
+        fn send_response_final(&self, _: &mut ResponseFinal) {}
+        fn send_close(&self) {}
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_keyexpr_is_declared_before_it_can_be_used() {
+        let mut config = crate::Config::default();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        let session = crate::open(config).await.unwrap();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let primitives = Arc::new(HoldFirstDeclaration {
+            entered: entered_tx,
+            release: Mutex::new(release_rx),
+            held: AtomicBool::new(false),
+            sent: Mutex::new(Vec::new()),
+        });
+        let original = zwrite!(session.0.state)
+            .primitives
+            .replace(primitives.clone())
+            .unwrap();
+        let first_session = session.clone();
+        let first = std::thread::spawn(move || {
+            first_session
+                .declare_keyexpr("test/concurrent/prefix")
+                .wait()
+                .unwrap()
+        });
+        // Pause after the first mapping is registered but before its declaration
+        // reaches the wire. The second public declaration runs concurrently.
+        let pending_id = entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let second = session
+            .declare_keyexpr("test/concurrent/prefix")
+            .wait()
+            .unwrap();
+        let scope = second.to_wire(&session).scope;
+        let sent_before_return = primitives.sent.lock().unwrap().clone();
+        // Unblock and join even on the broken implementation before asserting.
+        release_tx.send(()).unwrap();
+        let first = first.join().unwrap();
+        drop(first);
+        drop(second);
+        zwrite!(session.0.state).primitives = Some(original);
+        session.close().await.unwrap();
+        assert_ne!(scope, pending_id, "returned an unsent concurrent mapping");
+        assert!(
+            sent_before_return.contains(&scope),
+            "returned before sending its key expression declaration"
+        );
+    }
+}
