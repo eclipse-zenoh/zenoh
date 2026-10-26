@@ -565,15 +565,15 @@ impl Face {
 impl Primitives for Face {
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut declares = vec![];
         if msg.mode != InterestMode::Final {
-            let mut declares = vec![];
             self.interest(msg, &mut |p, m| declares.push((p.clone(), m)));
-            drop(ctrl_lock);
-            for (p, m) in declares {
-                m.with_mut(|m| p.send_declare(m));
-            }
         } else {
-            self.interest_final(msg);
+            self.interest_final(msg, &mut |p, m| declares.push((p.clone(), m)));
+        }
+        drop(ctrl_lock);
+        for (p, m) in declares {
+            m.with_mut(|m| p.send_declare(m));
         }
     }
 

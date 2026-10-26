@@ -337,7 +337,7 @@ impl Face {
     #[tracing::instrument(
         level = "debug",
         name = "interest",
-        skip(self, msg),
+        skip(self, msg, send_declare),
         fields(
             id = msg.id,
             mode = ?InterestMode::Final,
@@ -346,7 +346,7 @@ impl Face {
         ),
         ret
     )]
-    pub(crate) fn interest_final(&self, msg: &Interest) {
+    pub(crate) fn interest_final(&self, msg: &Interest, send_declare: &mut SendDeclare) {
         let mut wtables = zwrite!(self.tables.tables);
         let tables = &mut *wtables;
 
@@ -354,7 +354,7 @@ impl Face {
             tables_lock: &self.tables,
             tables: &mut tables.data,
             src_face: &mut self.state.clone(),
-            send_declare: &mut |_, _| unreachable!(),
+            send_declare,
         };
 
         // Unregister keyexpr interest

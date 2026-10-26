@@ -20,10 +20,13 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_protocol::network::{
-    declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+    declare::{
+        self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId,
+        SubscriberId, TokenId,
+    },
     interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
-    Interest,
+    Interest, UndeclareQueryable, UndeclareSubscriber,
 };
 
 use super::Hat;
@@ -477,6 +480,62 @@ impl HatInterestTrait for Hat {
             tracing::error!("Unknown interest");
             return None;
         };
+
+        let aggregate = remote_interest.options.aggregate();
+        // Aggregated interests without an expression never advertised a resource.
+        if !aggregate || remote_interest.res.is_some() {
+            let aggregate_res = aggregate.then_some(remote_interest.res.as_ref()).flatten();
+            let subscribers = if remote_interest.options.subscribers() {
+                self.face_hat_mut(ctx.src_face)
+                    .local_subs
+                    .remove_interest(msg.id, aggregate_res)
+            } else {
+                Vec::new()
+            };
+            let queryables = if remote_interest.options.queryables() {
+                self.face_hat_mut(ctx.src_face)
+                    .local_qabls
+                    .remove_interest(msg.id, aggregate_res)
+            } else {
+                Vec::new()
+            };
+            for (id, resource) in subscribers {
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        resource.expr().to_string(),
+                    ),
+                );
+            }
+            for (id, resource) in queryables {
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        resource.expr().to_string(),
+                    ),
+                );
+            }
+        }
 
         self.owned_faces(ctx.tables)
             .all(|face| {
