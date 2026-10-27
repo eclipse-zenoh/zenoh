@@ -275,6 +275,7 @@ mod tests {
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while peer02.handler.get_count() == 0 {
+                        peer01.transport.schedule(message.clone().as_mut()).unwrap();
                         tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
