@@ -1,7 +1,6 @@
-// SPDX-License-Identifier: (EPL-2.0 OR Apache-2.0) AND CC0-1.0
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
 //
 // AI Disclosure: Generated with assistance from OpenAI Codex.
-// AI-generated portions are made available under CC0-1.0.
 // Assisted-by: OpenAI Codex
 
 use super::*;
