@@ -35,6 +35,11 @@
   /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
   /// E.g. tcp/192.168.0.1:7447#dscp=0x08
   ///
+  /// For TCP and TLS links on Linux, it is possible to specify the socket priority (SO_PRIORITY) of the link:
+  /// E.g. tcp/192.168.0.1:7447?prio=0-5#so_priority=6
+  /// It is applied after the link is established and affects only what this side sends.
+  /// Values above 6 need the CAP_NET_ADMIN capability.
+  ///
   /// For QUIC links, it is possible to disable UDP generic segmentation offload (GSO), which is enabled by default:
   /// E.g. quic/192.168.0.1:7447#segmentation_offload=false
   /// It affects only what this side sends.
@@ -94,6 +99,13 @@
   ///
   /// For TCP/UDP links, it's possible to specify the DSCP field of the IP header:
   /// E.g. tcp/192.168.0.1:7447#dscp=0x08
+  ///
+  /// For TCP and TLS links on Linux, it is possible to specify the socket priority (SO_PRIORITY) of the accepted links.
+  /// A `<range>:<priority>` entry applies to the links whose priority range is within `<range>`,
+  /// and a value without a range applies to all other links. The first matching entry is used:
+  /// E.g. tcp/0.0.0.0:7447#so_priority=0-5:6|6-7:0
+  /// It is applied after the link is established and affects only what this side sends.
+  /// Values above 6 need the CAP_NET_ADMIN capability.
   ///
   /// For QUIC links, it is possible to disable UDP generic segmentation offload (GSO), which is enabled by default:
   /// E.g. quic/192.168.0.1:7447#segmentation_offload=false

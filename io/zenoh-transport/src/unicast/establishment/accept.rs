@@ -893,6 +893,12 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "shared-memory")]
         link_shm.into(),
     );
+    if let Err(e) = a_link
+        .link
+        .apply_socket_priority(a_link.config.priorities.as_ref())
+    {
+        tracing::warn!("{e}");
+    }
     let s_link = format!("{a_link:?}");
     // Handle MixedReliability links
     let best_effort_link = match link.0 {
