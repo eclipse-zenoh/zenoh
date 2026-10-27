@@ -214,6 +214,9 @@ mod tests {
         let mcast = "224.0.0.1:7447";
         let all: Vec<_> = get_ip_addrs(Address::from(mcast)).await.unwrap().collect();
         assert_eq!(all, [mcast.parse::<SocketAddr>().unwrap()]);
-        assert_eq!(get_tcp_addrs(Address::from(mcast)).await.unwrap().count(), 0);
+        assert_eq!(
+            get_tcp_addrs(Address::from(mcast)).await.unwrap().count(),
+            0
+        );
     }
 }
