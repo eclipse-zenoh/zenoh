@@ -979,7 +979,15 @@ impl QuicStreams {
                 let SendStream::Pending(rx) = stream else {
                     unreachable!()
                 };
-                let send = rx.await.map_err(|_| zerror!("Connection closed"))?;
+                let send = match rx.try_recv() {
+                    Ok(send) => send,
+                    Err(oneshot::error::TryRecvError::Closed) => {
+                        return Err(zerror!("Connection closed").into());
+                    }
+                    Err(oneshot::error::TryRecvError::Empty) => {
+                        rx.await.map_err(|_| zerror!("Connection closed"))?
+                    }
+                };
                 *stream = SendStream::Established(send);
                 let SendStream::Established(send) = stream else {
                     unreachable!()
