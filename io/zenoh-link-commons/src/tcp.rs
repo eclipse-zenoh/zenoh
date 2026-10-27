@@ -14,9 +14,17 @@
 use std::net::SocketAddr;
 
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
-use zenoh_result::{zerror, ZResult};
+use zenoh_protocol::core::endpoint::Address;
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
-use crate::set_dscp;
+use crate::{get_ip_addrs, set_dscp};
+
+/// Resolves `address` to its socket addresses, in resolver order, skipping multicast ones.
+pub async fn get_tcp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
+    Ok(get_ip_addrs(address)
+        .await?
+        .filter(|x| !x.ip().is_multicast()))
+}
 
 #[derive(Debug)]
 pub struct TcpSocketConfig<'a> {
@@ -107,6 +115,24 @@ impl<'a> TcpSocketConfig<'a> {
         Ok((stream, src_addr, dst_addr))
     }
 
+    /// Try TCP connections in iterator order, returning the first success or all connection errors.
+    pub async fn new_link_first_reachable(
+        &self,
+        dst_addrs: impl Iterator<Item = SocketAddr>,
+    ) -> ZResult<(TcpStream, SocketAddr, SocketAddr)> {
+        let mut errs: Vec<ZError> = vec![];
+        for da in dst_addrs {
+            match self.new_link(&da).await {
+                Ok(res) => return Ok(res),
+                Err(e) => errs.push(e),
+            }
+        }
+        if errs.is_empty() {
+            errs.push(zerror!("No unicast addresses available").into());
+        }
+        bail!("{:?}", errs)
+    }
+
     /// Creates a TcpSocket with the provided config
     fn socket_with_config(&self, addr: &SocketAddr) -> ZResult<TcpSocket> {
         let socket = match addr {
@@ -128,5 +154,66 @@ impl<'a> TcpSocketConfig<'a> {
         }
 
         Ok(socket)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tcp_config() -> TcpSocketConfig<'static> {
+        TcpSocketConfig::new(None, None, None, None, None)
+    }
+
+    // Keep listeners alive until all addresses are collected to prevent port reuse between binds.
+    async fn unreachable_addrs<const N: usize>() -> [SocketAddr; N] {
+        let mut listeners = vec![];
+        for _ in 0..N {
+            listeners.push(TcpListener::bind("127.0.0.1:0").await.unwrap());
+        }
+        core::array::from_fn(|i| listeners[i].local_addr().unwrap())
+    }
+
+    #[tokio::test]
+    async fn connect_falls_through_to_reachable_addr() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let live = listener.local_addr().unwrap();
+        let [dead] = unreachable_addrs().await;
+
+        let (_stream, _src, dst) = tcp_config()
+            .new_link_first_reachable([dead, live].into_iter())
+            .await
+            .unwrap();
+        assert_eq!(dst, live);
+    }
+
+    #[tokio::test]
+    async fn connect_failure_reports_every_addr() {
+        let [dead1, dead2] = unreachable_addrs().await;
+
+        let err = tcp_config()
+            .new_link_first_reachable([dead1, dead2].into_iter())
+            .await
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains(&dead1.to_string()), "{msg}");
+        assert!(msg.contains(&dead2.to_string()), "{msg}");
+    }
+
+    #[tokio::test]
+    async fn connect_no_addrs_is_error() {
+        let err = tcp_config()
+            .new_link_first_reachable(std::iter::empty())
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("No unicast addresses"));
+    }
+
+    #[tokio::test]
+    async fn only_tcp_addrs_skip_multicast() {
+        let mcast = "224.0.0.1:7447";
+        let all: Vec<_> = get_ip_addrs(Address::from(mcast)).await.unwrap().collect();
+        assert_eq!(all, [mcast.parse::<SocketAddr>().unwrap()]);
+        assert_eq!(get_tcp_addrs(Address::from(mcast)).await.unwrap().count(), 0);
     }
 }

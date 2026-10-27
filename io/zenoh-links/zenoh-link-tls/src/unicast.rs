@@ -35,6 +35,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::{bail, zasynclock};
 use zenoh_link_commons::{
     get_ip_interface_names,
+    tcp::get_tcp_addrs,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
@@ -46,10 +47,7 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 use crate::{
-    utils::{
-        connect_first_reachable, get_tls_addr, get_tls_addrs, get_tls_host, get_tls_server_name,
-        TlsClientConfig, TlsServerConfig,
-    },
+    utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
     TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 
@@ -341,7 +339,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let epconf = endpoint.config();
 
         let server_name = get_tls_server_name(&epaddr)?;
-        let addrs = get_tls_addrs(endpoint.address()).await?;
+        let addrs = get_tcp_addrs(endpoint.address()).await?;
 
         // if both `iface`, and `bind` are present, return error
         if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
@@ -359,17 +357,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let config = Arc::new(client_config.client_config);
         let connector = TlsConnector::from(config);
 
-        // Initialize the TcpStream, trying each resolved address like the TCP link does
-        let (tcp_stream, src_addr, dst_addr) =
-            connect_first_reachable(&client_config.tcp_socket_config, addrs)
-                .await
-                .map_err(|e| {
-                    zerror!(
-                        "Can not create a new TLS link bound to {:?}: {}",
-                        server_name,
-                        e
-                    )
-                })?;
+        // Initialize the TcpStream
+        let (tcp_stream, src_addr, dst_addr) = client_config
+            .tcp_socket_config
+            .new_link_first_reachable(addrs)
+            .await
+            .map_err(|e| {
+                zerror!(
+                    "Can not create a new TLS link bound to {:?}: {}",
+                    server_name,
+                    e
+                )
+            })?;
 
         // Initialize the TlsStream
         let tls_stream = connector
