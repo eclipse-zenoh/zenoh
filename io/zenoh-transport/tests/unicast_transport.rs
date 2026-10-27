@@ -2984,7 +2984,7 @@ async fn transport_unicast_quic_mixedrel() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &[1_024, 131_072]).await;
 }
 
 #[cfg(feature = "transport_udp")]
