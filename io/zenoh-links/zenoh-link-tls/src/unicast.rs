@@ -35,6 +35,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use zenoh_core::{bail, zasynclock};
 use zenoh_link_commons::{
     get_ip_interface_names,
+    tcp::get_tcp_addrs,
     tls::expiration::{LinkCertExpirationManager, LinkWithCertExpiration},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
@@ -338,7 +339,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let epconf = endpoint.config();
 
         let server_name = get_tls_server_name(&epaddr)?;
-        let addr = get_tls_addr(&epaddr).await?;
+        let addrs = get_tcp_addrs(endpoint.address()).await?;
 
         // if both `iface`, and `bind` are present, return error
         if let (Some(_), Some(_)) = (epconf.get(BIND_INTERFACE), epconf.get(BIND_SOCKET)) {
@@ -359,7 +360,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         // Initialize the TcpStream
         let (tcp_stream, src_addr, dst_addr) = client_config
             .tcp_socket_config
-            .new_link(&addr)
+            .new_link_first_reachable(addrs)
             .await
             .map_err(|e| {
                 zerror!(

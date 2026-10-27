@@ -28,12 +28,12 @@ use async_trait::async_trait;
 pub use multicast::*;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
-use zenoh_link_commons::LocatorInspector;
+use zenoh_link_commons::{get_ip_addrs, LocatorInspector};
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator, Metadata, Reliability},
+    core::{Locator, Metadata, Reliability},
     transport::BatchSize,
 };
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::ZResult;
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers
@@ -86,7 +86,7 @@ impl LocatorInspector for UdpLocatorInspector {
     }
 
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
-        let is_multicast = get_udp_addrs(locator.address())
+        let is_multicast = get_ip_addrs(locator.address())
             .await?
             .any(|x| x.ip().is_multicast());
         Ok(is_multicast)
@@ -110,13 +110,6 @@ pub mod config {
     pub const UDP_MULTICAST_IFACE: &str = "iface";
     pub const UDP_MULTICAST_JOIN: &str = "join";
     pub const UDP_MULTICAST_TTL: &str = "ttl";
-}
-
-pub async fn get_udp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
-    let iter = tokio::net::lookup_host(address.as_str().to_string())
-        .await
-        .map_err(|e| zerror!("{}", e))?;
-    Ok(iter)
 }
 
 pub(crate) fn socket_addr_to_udp_locator(addr: &SocketAddr) -> Locator {

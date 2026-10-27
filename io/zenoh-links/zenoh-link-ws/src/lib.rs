@@ -83,17 +83,10 @@ pub async fn get_ws_addr(address: Address<'_>) -> ZResult<SocketAddr> {
     }
 }
 
-pub async fn get_ws_url(address: Address<'_>) -> ZResult<Url> {
-    match Url::parse(&format!(
-        "{}://{}",
-        WS_LOCATOR_PREFIX,
-        get_ws_addr(address).await?
-    )) {
+pub fn get_ws_url(address: Address<'_>) -> ZResult<Url> {
+    // Keep the hostname: tokio-tungstenite resolves it and tries every address.
+    match Url::parse(&format!("{}://{}", WS_LOCATOR_PREFIX, address)) {
         Ok(url) => Ok(url),
-        Err(e) => bail!(
-            "Couldn't resolve WebSocket locator address: {}: {}",
-            address,
-            e
-        ),
+        Err(e) => bail!("Invalid WebSocket locator address: {}: {}", address, e),
     }
 }

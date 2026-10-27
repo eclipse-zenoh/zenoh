@@ -17,16 +17,16 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](https://docs.rs/zenoh/latest/zenoh)
-use std::{net::SocketAddr, str::FromStr};
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::{
-    core::{endpoint::Address, Locator, Metadata, Reliability},
+    core::{Locator, Metadata, Reliability},
     transport::BatchSize,
 };
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::ZResult;
 
 mod unicast;
 mod utils;
@@ -82,12 +82,4 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
-}
-
-pub async fn get_tcp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
-    let iter = tokio::net::lookup_host(address.as_str().to_string())
-        .await
-        .map_err(|e| zerror!("{}", e))?
-        .filter(|x| !x.ip().is_multicast());
-    Ok(iter)
 }
