@@ -19,9 +19,15 @@ set -e
 
 
 case "$1" in
-    purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    userdel zenohd > /dev/null 2>&1 || true
-    rm -rf /etc/zenohd /var/zenohd
+    purge)
+        userdel zenohd > /dev/null 2>&1 || true
+        # Also delete the snapshots of an unfinished upgrade (see preinst), so
+        # that a later install cannot restore purged data.
+        rm -rf /etc/zenohd /var/zenohd /etc/zenohd.dpkg-backup /var/zenohd.dpkg-backup
+    ;;
+
+    # Configuration, state and the service account survive everything but purge.
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
     ;;
 
     *)
