@@ -1361,6 +1361,8 @@ async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
 
     // Cleanup
     ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(client_manager.close());
+    ztimeout!(router_manager.close());
 }
 
 #[cfg(feature = "transport_quic")]
