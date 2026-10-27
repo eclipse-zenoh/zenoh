@@ -11,7 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{ops::Deref, sync::Arc};
+use std::{
+    ops::Deref,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
@@ -250,6 +256,8 @@ where
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a AuthUnicast,
+    // Set when the acceptor's InitAck carried an SHM extension, whatever became of it.
+    acceptor_offered_shm: AtomicBool,
     tx_lease: std::sync::OnceLock<TxHandoffChannel>,
     rx_segment: std::sync::OnceLock<Arc<RXAuthSegment>>,
     rx_lease: std::sync::OnceLock<RxHandoffChannel>,
@@ -259,6 +267,7 @@ impl<'a> ShmFsm<'a> {
     pub(crate) const fn new(inner: &'a AuthUnicast) -> Self {
         Self {
             inner,
+            acceptor_offered_shm: AtomicBool::new(false),
             tx_lease: std::sync::OnceLock::new(),
             rx_segment: std::sync::OnceLock::new(),
             rx_lease: std::sync::OnceLock::new(),
@@ -266,18 +275,19 @@ impl<'a> ShmFsm<'a> {
     }
 
     pub fn shm_init_result(self) -> (Option<TransportShmConfig>, LinkShmHandoffConfig) {
-        let transport = self.rx_segment.into_inner().map(TransportShmConfig::new);
-
-        let rx_handoff = self.rx_lease.into_inner();
-        let tx_handoff = self.tx_lease.into_inner();
-
-        let zipped = rx_handoff.zip(tx_handoff);
-
-        let link = zipped
-            .map(|(rx_lease, tx_lease)| LinkShmHandoffConfig::new(rx_lease, tx_lease))
-            .unwrap_or(LinkShmHandoffConfig::new_disabled());
-
-        (transport, link)
+        // Opening the peer's auth segment is only the first negotiation step.
+        // Enable SHM only after both directions of the handshake have completed.
+        match (
+            self.rx_segment.into_inner(),
+            self.rx_lease.into_inner(),
+            self.tx_lease.into_inner(),
+        ) {
+            (Some(segment), Some(rx), Some(tx)) => (
+                Some(TransportShmConfig::new(segment)),
+                LinkShmHandoffConfig::new(rx, tx),
+            ),
+            _ => (None, LinkShmHandoffConfig::new_disabled()),
+        }
     }
 }
 
@@ -332,6 +342,10 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         mut input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitAck.";
+
+        // Record the offer before any check can decline it.
+        self.acceptor_offered_shm
+            .store(input.is_some(), Ordering::Relaxed);
 
         let Some(ext) = input.take() else {
             return Ok(());
@@ -418,22 +432,32 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
             return Ok(());
         };
 
-        let Some(segment) = self.rx_segment.get() else {
+        // An acceptor that offered no SHM in its InitAck did not ask for SHM. An unpatched
+        // acceptor still puts an extension in every OpenAck, so ignore it and run without SHM.
+        if !self.acceptor_offered_shm.load(Ordering::Relaxed) {
+            tracing::trace!("{} Ignoring an SHM acknowledgement: no SHM offer.", S);
             return Ok(());
-        };
+        }
+
+        // After an offer, an SHM OpenAck commits the acceptor to SHM. If we cannot honor it,
+        // reject establishment instead of silently enabling SHM on one side.
+        let segment = self
+            .rx_segment
+            .get()
+            .ok_or_else(|| zerror!("{} Unexpected SHM acknowledgement", S))?;
+        if self.tx_lease.get().is_none() {
+            bail!("{} SHM acknowledgement without a local proposal", S);
+        }
 
         // Decode the extension
         let codec = Zenoh080::new();
         let mut reader = ext.value.reader();
-        let Ok(open_ack): Result<OpenAck, _> = codec.read(&mut reader) else {
-            tracing::trace!("{} Decoding error.", S);
-            return Ok(());
-        };
+        let open_ack: OpenAck = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("{} Decoding error", S))?;
 
-        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_ack.bob_counters) else {
-            tracing::trace!("{} Handoff channel creation error.", S);
-            return Ok(());
-        };
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_ack.bob_counters)
+            .map_err(|e| zerror!("{} Handoff channel creation error: {}", S, e))?;
 
         self.rx_lease
             .set(rx_handoff)
@@ -563,16 +587,16 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
             bail!("");
         };
 
-        // Verify that Alice has correctly read Bob challenge
+        // Alice sent an SHM proposal and an unpatched Alice has already enabled SHM from the
+        // segment it mapped, without waiting for our OpenAck. If we declined here, we would run
+        // plain while she sends SHM descriptors. Refuse the link instead.
         if !self.inner.validate(open_syn.bob_challenge, S) {
-            return Ok(());
+            bail!("{} Challenge mismatch: refusing the SHM proposal", S);
         }
 
         // Allocate RX counter for this session
-        let Ok(rx_handoff) = RxHandoffChannel::new_rx(segment, open_syn.alice_counters) else {
-            tracing::trace!("{} Handoff channel creation error.", S);
-            return Ok(());
-        };
+        let rx_handoff = RxHandoffChannel::new_rx(segment, open_syn.alice_counters)
+            .map_err(|e| zerror!("{} Handoff channel creation error: {}", S, e))?;
 
         self.rx_lease
             .set(rx_handoff)
@@ -588,6 +612,12 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Send OpenAck.";
+
+        // A missing or rejected SHM OpenSyn means the peer did not negotiate
+        // SHM. Do not advertise success or allocate outgoing handoff counters.
+        if self.rx_lease.get().is_none() {
+            return Ok(None);
+        }
 
         // Link is multipriority
         let reliability = input;
@@ -613,3 +643,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         Ok(Some(open::ext::Shm::new(buff.into())))
     }
 }
+
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;
