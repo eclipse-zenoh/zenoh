@@ -558,14 +558,14 @@ impl HatInterestTrait for Hat {
 
 #[cfg(test)]
 mod retention_tests {
-    use super::super::HatFace;
-    use super::*;
+    use zenoh_config::{Config, WhatAmI};
+    use zenoh_protocol::{core::Region, network::interest::InterestOptions};
+
+    use super::{super::HatFace, *};
     use crate::net::{
         primitives::{DummyPrimitives, Primitives},
         routing::gateway::{GatewayBuilder, NodeId},
     };
-    use zenoh_config::{Config, WhatAmI};
-    use zenoh_protocol::{core::Region, network::interest::InterestOptions};
 
     #[test]
     fn final_interest_reclaims_broker_subscriber_and_queryable_references() {
@@ -649,6 +649,7 @@ mod retention_tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn repeated_interests_do_not_leave_stale_matches() {
         use std::time::Duration;
+
         use tokio::time::{sleep, timeout};
 
         async fn open(mode: WhatAmI, endpoint: &str) -> crate::Session {
