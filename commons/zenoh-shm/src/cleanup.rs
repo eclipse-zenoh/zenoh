@@ -20,8 +20,11 @@ use zenoh_core::zlock;
 use crate::{posix_shm::cleanup::cleanup_orphaned_segments, shm::Segment};
 
 /// A global cleanup, that is guaranteed to be dropped at normal program exit and that will
-/// execute all registered cleanup routines at this moment
-#[dynamic(lazy, drop)]
+/// execute all registered cleanup routines at this moment.
+///
+/// `tolerate_leak`: a first use while the process is exiting, after the statics were
+/// finalized, initializes the static without registering its drop instead of panicking.
+#[dynamic(lazy, drop, tolerate_leak)]
 pub(crate) static mut CLEANUP: Cleanup = Cleanup::new();
 
 /// An RAII object that calls all registered routines upon destruction
