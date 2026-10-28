@@ -3827,10 +3827,12 @@ mod prefix_declaration_tests {
 
 #[cfg(test)]
 mod prefix_ordering_tests {
+    use std::sync::{atomic::AtomicBool, mpsc, Mutex};
+
+    use zenoh_protocol::{core::Reliability, network::Push};
+
     use super::*;
     use crate::net::primitives::Primitives;
-    use std::sync::{atomic::AtomicBool, mpsc, Mutex};
-    use zenoh_protocol::{core::Reliability, network::Push};
 
     struct HoldFirstDeclaration {
         entered: mpsc::Sender<ExprId>,
