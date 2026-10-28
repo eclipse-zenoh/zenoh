@@ -175,15 +175,17 @@ async fn establish_sender_mapping(
     key: &str,
     id: u32,
 ) -> crate::pubsub::Subscriber<()> {
-    use crate::net::routing::RoutingContext;
     use zenoh_protocol::network::{
         interest::{InterestMode, InterestOptions},
         Interest,
     };
+
+    use crate::net::routing::RoutingContext;
     let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
     let primitives = {
-        use crate::net::routing::dispatcher::face::InterestState;
         use zenoh_sync::get_mut_unchecked;
+
+        use crate::net::routing::dispatcher::face::InterestState;
         let gateway = receiver.static_runtime().unwrap().router();
         let mut tables = gateway.tables.tables.write().unwrap();
         let face = tables

@@ -3764,18 +3764,20 @@ impl Closeable for Session {
 
 #[cfg(test)]
 mod routed_mapping_lifetime_tests {
-    use super::*;
-    use crate::net::{
-        primitives::{DummyPrimitives, EPrimitives, Primitives},
-        routing::RoutingContext,
-    };
     use std::sync::Mutex;
+
     use zenoh_protocol::{
         core::Reliability,
         network::Push,
         zenoh::{PushBody, Put, Query, RequestBody},
     };
     use zenoh_sync::get_mut_unchecked;
+
+    use super::*;
+    use crate::net::{
+        primitives::{DummyPrimitives, EPrimitives, Primitives},
+        routing::RoutingContext,
+    };
 
     struct QueuedDelivery {
         original: Arc<dyn EPrimitives + Send + Sync>,

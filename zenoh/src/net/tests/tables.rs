@@ -1087,8 +1087,9 @@ fn big_key_expr() {
 
 #[test]
 fn routed_data_and_queries_do_not_borrow_receiver_owned_mappings() {
-    use crate::net::routing::dispatcher::tables::RoutingExpr;
     use zenoh_sync::get_mut_unchecked;
+
+    use crate::net::routing::dispatcher::tables::RoutingExpr;
 
     let router = new_router();
     let face = router.new_session(Arc::new(DummyPrimitives {}));
