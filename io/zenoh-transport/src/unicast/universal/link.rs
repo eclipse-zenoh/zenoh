@@ -260,8 +260,11 @@ impl TransportLinkUnicastUniversal {
 
     pub(super) async fn close(self) -> ZResult<()> {
         tracing::trace!("{}: closing", self.link);
-        self.task_controller.terminate_all_async().await;
+        // disable before terminating the TX task: its `drain()` otherwise waits for any
+        // producer blocked on a full queue to reach its deadline (`wait_before_close` for
+        // `CongestionControl::Block`).
         self.pipeline.disable();
+        self.task_controller.terminate_all_async().await;
 
         self.link.close(None).await
     }
