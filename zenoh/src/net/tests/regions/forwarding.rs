@@ -2365,3 +2365,81 @@ fn test_routing_after_queryable_undeclaration(mode: WhatAmI) {
         "gateway should forward the GET; it has stale knowledge of upstream queryables at this point"
     );
 }
+
+// These use the real interest dispatcher and route cache. Only transport is
+// replaced by the existing recording face harness; no routing state is edited.
+#[test_case::test_matrix([WhatAmI::Client, WhatAmI::Peer], [false, true], [0u8, 1u8, 2u8])]
+fn test_interest_generation_routing(mode: WhatAmI, queryable: bool, scenario: u8) {
+    const KEY: &str = "discovery/generation";
+    let gateway = HarnessBuilder::new()
+        .mode(mode)
+        .subregions([Region::Local])
+        .build();
+    let remote = gateway.new_face(
+        FaceDef::default()
+            .region(Region::North)
+            .remote_bound(Bound::South),
+    );
+    let local = gateway.new_session();
+    let options = InterestOptions::KEYEXPRS
+        + if queryable {
+            InterestOptions::QUERYABLES
+        } else {
+            InterestOptions::SUBSCRIBERS
+        };
+    local.interest(1, InterestMode::CurrentFuture, options, KEY);
+    let first = remote.recorder().interests().last().unwrap().id;
+    let send = |id| {
+        if queryable {
+            local.query(id, KEY);
+        } else {
+            local.put(KEY, vec![42]);
+        }
+    };
+    let forwarded = || {
+        if queryable {
+            remote.recorder().requests().len()
+        } else {
+            remote.recorder().pushes().len()
+        }
+    };
+    if scenario != 2 {
+        remote.declare_final(first);
+        send(1);
+        assert_eq!(
+            forwarded(),
+            0,
+            "a completed empty snapshot should prune the route"
+        );
+    }
+    if scenario == 0 {
+        // No entity declaration/undeclaration occurs to invalidate the cached
+        // empty route. Ending the snapshot must restore fallback forwarding.
+        local.interest(1, InterestMode::Final, options, KEY);
+    } else {
+        local.interest(2, InterestMode::CurrentFuture, options, KEY);
+        let second = remote.recorder().interests().last().unwrap().id;
+        assert_ne!(first, second);
+        if scenario == 2 {
+            remote.declare_final(first);
+        }
+        // In both orders, generation two still has an incomplete snapshot.
+    }
+    send(2);
+    assert_eq!(
+        forwarded(),
+        1,
+        "a retired or incomplete discovery snapshot must not suppress forwarding"
+    );
+    if scenario != 0 {
+        let second = remote.recorder().interests().last().unwrap().id;
+        remote.declare_final(second);
+        remote.recorder().clear();
+        send(3);
+        assert_eq!(
+            forwarded(),
+            0,
+            "all completed empty snapshots should prune the route again"
+        );
+    }
+}
