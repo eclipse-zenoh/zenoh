@@ -104,6 +104,11 @@ lazy_static::lazy_static! {
 type AtomicMicroSeconds = AtomicU32;
 type MicroSeconds = u32;
 
+// Re-poll delay used by `PipelineConsumer::pull()` after breaking a stuck-congestion
+// deadlock (~1 ms): long enough not to busy-spin, short enough to resume promptly instead of
+// waiting for the next keepalive.
+const STUCK_CONGESTION_REPOLL_MICROS: MicroSeconds = 1000;
+
 struct AtomicBackoff {
     active: CachePadded<AtomicBool>,
     bytes: CachePadded<AtomicBatchSize>,
@@ -799,6 +804,7 @@ impl TransmissionPipeline {
             stage_out: stage_out.into_boxed_slice(),
             n_out_r: (!link_supports_priority).then_some(n_out_r),
             status,
+            is_streamed: config.batch.is_streamed,
         };
 
         (producer, consumer)
@@ -908,6 +914,7 @@ impl TransmissionPipelineProducer {
             return Ok(false);
         }
         let mut sent = queue.push_network_message(msg, priority, &mut deadline)?;
+
         // If the message cannot be sent, mark the pipeline as congested.
         if !sent {
             self.status.set_congested(priority, true);
@@ -915,6 +922,7 @@ impl TransmissionPipelineProducer {
             // all batches could have been refilled (especially if there is a single one),
             // so try again with the same already expired deadline.
             sent = queue.push_network_message(msg, priority, &mut deadline)?;
+
             // If the message is sent in the end, reset the status.
             // Setting the status to `true` is only done with the stage_in mutex acquired,
             // so it is not possible that further messages see the congestion flag set
@@ -976,6 +984,11 @@ pub(crate) struct TransmissionPipelineConsumer {
     stage_out: Box<[StageOut]>,
     n_out_r: Option<Waiter>,
     status: Arc<TransmissionPipelineStatus>,
+    // The link's stream-vs-datagram property, mirrored from
+    // `TransmissionPipelineConf::batch.is_streamed` (i.e. `LinkUnicast::is_streamed()`).
+    // The stuck-congestion workaround in `pull()` runs only when this is false (non-streamed
+    // links, e.g. UDP) — the only place the deadlock can arm; see that block for why.
+    is_streamed: bool,
 }
 
 pub(crate) trait PipelineConsumer {
@@ -983,12 +996,47 @@ pub(crate) trait PipelineConsumer {
     fn status(&self) -> &TransmissionPipelineStatus;
     fn stage_pull(&mut self) -> Result<(BoxedWBatch, Priority), Option<MicroSeconds>>;
     fn n_out_r(&self) -> &Waiter;
+    // Link stream-vs-datagram property; gates the stuck-congestion workaround in `pull()`.
+    fn is_streamed(&self) -> bool;
+    // `congested` bits owned by this consumer; only these may be cleared by `pull()`.
+    fn congested_mask(&self) -> u8;
     async fn pull(&mut self) -> Option<(BoxedWBatch, Priority)> {
         while !self.status().is_disabled() {
-            let backoff = match self.stage_pull() {
+            #[allow(unused_mut)]
+            let mut backoff = match self.stage_pull() {
                 Ok(res) => return Some(res),
                 Err(b) => b,
             };
+
+            // Break a stuck-congestion deadlock. Reaching here with `backoff == None` means
+            // no priority lane owned by this consumer has a drainable batch. If a `congested` flag
+            // is nonetheless set, the producer is short-circuiting every push on a flag that is only
+            // ever cleared by `refill()` — which cannot happen when there is nothing to send.
+            // Clear it so producers resume, and re-poll in ~1 ms instead of sleeping until
+            // the next keepalive. No-op when idle (flag already 0) and self-correcting under
+            // genuine overload (a truly full pool re-sets it on the next push).
+            //
+            // Gated via `!is_streamed`. The deadlock can only arm on a real datagram NIC link (UDP)
+            // whose drain transiently starves the batch pool. Streamed links (loopback/remote TCP,
+            // TLS, WS) are excluded by the gate. Shared-memory is also non-streamed and so is NOT
+            // excluded, but its transmit is a local memory op that can't stall — `congested` never
+            // latches there and the branch is a no-op. Net effect: the workaround only ever fires on
+            // UDP; the gate is a blast-radius guard for the other transports.
+            if !self.is_streamed() && backoff.is_none() {
+                let congested =
+                    self.status().congested.load(Ordering::Relaxed) & self.congested_mask();
+                if congested != 0 {
+                    // Masked clear: clear only the bits we observed set. Producers mutate
+                    // `congested` per-priority with `fetch_or`/`fetch_and`, so an unconditional
+                    // `store(0)` could clobber a bit set for another priority between the load
+                    // above and here.
+                    self.status()
+                        .congested
+                        .fetch_and(!congested, Ordering::Relaxed);
+                    backoff = Some(STUCK_CONGESTION_REPOLL_MICROS);
+                }
+            }
+
             // In case of writing many small messages, `recv_async()` will most likely return immediately.
             // While trying to pull from the queue, the stage_in `lock()` will most likely taken, leading to
             // a spinning behaviour while attempting to take the lock. Yield the current task to avoid
@@ -1048,6 +1096,14 @@ impl PipelineConsumer for TransmissionPipelineConsumer {
         self.n_out_r.as_ref().unwrap()
     }
 
+    fn is_streamed(&self) -> bool {
+        self.is_streamed
+    }
+
+    fn congested_mask(&self) -> u8 {
+        u8::MAX
+    }
+
     fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
         if !batch.is_ephemeral() {
             self.stage_out[priority as usize].refill(batch);
@@ -1090,6 +1146,7 @@ impl TransmissionPipelineConsumer {
                 priority: Priority::try_from(prio as u8).unwrap(),
                 stage_out,
                 status: self.status.clone(),
+                is_streamed: self.is_streamed,
             })
             .collect()
     }
@@ -1099,6 +1156,8 @@ pub(crate) struct SplitTransmissionPipelineConsumer {
     priority: Priority,
     stage_out: StageOut,
     status: Arc<TransmissionPipelineStatus>,
+    // Mirrored from the parent `TransmissionPipelineConsumer`.
+    is_streamed: bool,
 }
 
 impl SplitTransmissionPipelineConsumer {
@@ -1123,6 +1182,14 @@ impl PipelineConsumer for SplitTransmissionPipelineConsumer {
 
     fn n_out_r(&self) -> &Waiter {
         &self.stage_out.n_out_r
+    }
+
+    fn is_streamed(&self) -> bool {
+        self.is_streamed
+    }
+
+    fn congested_mask(&self) -> u8 {
+        1 << self.priority as u8
     }
 
     fn refill(&mut self, batch: BoxedWBatch, priority: Priority) {
@@ -1422,6 +1489,7 @@ mod tests {
                         .into_boxed_slice(),
                     n_out_r: None,
                     status,
+                    is_streamed: true,
                 }
             } else {
                 timeout(
