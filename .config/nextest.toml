@@ -17,6 +17,7 @@ test(=transport_tcp_intermittent) |
 test(=transport_tcp_intermittent_for_lowlatency_transport) |
 test(=transport_unicast_quic_only_mutual_success) |
 test(=transport_unicast_quic_only_server) |
+test(=transport_unicast_quic_mixedrel) |
 test(=three_node_combination) |
 test(=watchdog_alloc_concurrent) |
 test(=header_check_memory_concurrent) |
