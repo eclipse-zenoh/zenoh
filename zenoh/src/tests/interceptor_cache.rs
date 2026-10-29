@@ -167,6 +167,95 @@ async fn open_router_and_client_configs(router_id: ZenohId) -> (Config, Session,
     (config_router, router, config_client1, config_client2)
 }
 
+// Explicitly establish a sender-owned scope to retain the cache-hit controls.
+async fn establish_sender_mapping(
+    router: &crate::Session,
+    source: &crate::Session,
+    receiver: &crate::Session,
+    key: &str,
+    id: u32,
+) -> crate::pubsub::Subscriber<()> {
+    use zenoh_protocol::network::{
+        interest::{InterestMode, InterestOptions},
+        Interest,
+    };
+
+    use crate::net::routing::RoutingContext;
+    let options = InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS;
+    let primitives = {
+        use zenoh_sync::get_mut_unchecked;
+
+        use crate::net::routing::dispatcher::face::InterestState;
+        let gateway = receiver.static_runtime().unwrap().router();
+        let mut tables = gateway.tables.tables.write().unwrap();
+        let face = tables
+            .data
+            .faces
+            .values_mut()
+            .find(|face| face.region.bound().is_north())
+            .unwrap();
+        let face_id = face.id;
+        // Keep the completion ID, just as the normal interest dispatcher does.
+        // This wire fixture deliberately avoids declaring a receiver-owned key.
+        get_mut_unchecked(face)
+            .local_interests
+            .insert(id, InterestState::new(face_id, options, None, false));
+        face.primitives.clone()
+    };
+    // A subsequent real declaration exercises the ordinary live-update path
+    // and establishes the sender scope.
+    primitives.send_interest(RoutingContext::new(&mut Interest {
+        id,
+        mode: InterestMode::Future,
+        options,
+        wire_expr: Some(key.to_string().into()),
+        ext_qos: Default::default(),
+        ext_tstamp: None,
+        ext_nodeid: Default::default(),
+    }));
+    ztimeout!(async {
+        loop {
+            let ready = {
+                let gateway = router.static_runtime().unwrap().router();
+                let tables = gateway.tables.tables.read().unwrap();
+                tables.data.faces.values().any(|face| {
+                    face.zid.to_string() == receiver.zid().to_string()
+                        && face.remote_key_interests.contains_key(&id)
+                })
+            };
+            if ready {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    });
+    let subscriber = source
+        .declare_subscriber(key)
+        .callback(|_| {})
+        .await
+        .unwrap();
+    ztimeout!(async {
+        loop {
+            let ready = {
+                let gateway = router.static_runtime().unwrap().router();
+                let tables = gateway.tables.tables.read().unwrap();
+                tables.data.faces.values().any(|face| {
+                    face.zid.to_string() == receiver.zid().to_string()
+                        && face
+                            .local_mappings
+                            .values()
+                            .any(|resource| resource.expr() == key)
+                })
+            };
+            if ready {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    });
+    subscriber
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_interceptors_cache_update_ingress() {
     let router_id = ZenohId::from_str("a1").unwrap();
@@ -188,6 +277,8 @@ async fn test_interceptors_cache_update_ingress() {
     let session1 = ztimeout!(open(config_client1)).unwrap();
     let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
+    let _mapping_sub =
+        establish_sender_mapping(&router, &session1, &session2, "test/cache", u32::MAX).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
     let pub2 = ztimeout!(session1.declare_publisher("test/*")).unwrap();
@@ -230,6 +321,8 @@ async fn test_interceptors_cache_update_ingress() {
     ztimeout!(pub1.put("some_data_1")).unwrap();
     tokio::time::sleep(SLEEP).await;
     ztimeout!(pub2.put("some_data_2")).unwrap();
+    let _mapping_sub2 =
+        establish_sender_mapping(&router, &session1, &session2, "test2/cache", u32::MAX - 1).await;
     let sub2 = ztimeout!(session2.declare_subscriber("test2/cache")).unwrap();
     let pub3 = ztimeout!(session1.declare_publisher("test2/cache")).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -273,6 +366,8 @@ async fn test_interceptors_cache_update_egress() {
     let session1 = ztimeout!(open(config_client1)).unwrap();
     let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
+    let _mapping_sub =
+        establish_sender_mapping(&router, &session1, &session2, "test/cache", u32::MAX).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
     let pub2 = ztimeout!(session1.declare_publisher("test/*")).unwrap();
@@ -315,6 +410,8 @@ async fn test_interceptors_cache_update_egress() {
     ztimeout!(pub1.put("some_data_1")).unwrap();
     tokio::time::sleep(SLEEP).await;
     ztimeout!(pub2.put("some_data_2")).unwrap();
+    let _mapping_sub2 =
+        establish_sender_mapping(&router, &session1, &session2, "test2/cache", u32::MAX - 1).await;
     let sub2 = ztimeout!(session2.declare_subscriber("test2/cache")).unwrap();
     let pub3 = ztimeout!(session1.declare_publisher("test2/cache")).unwrap();
     tokio::time::sleep(SLEEP).await;
@@ -358,6 +455,8 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
     let session1 = ztimeout!(open(config_client1)).unwrap();
     let session2 = ztimeout!(open(config_client2)).unwrap();
     tokio::time::sleep(SLEEP).await;
+    let _mapping_sub =
+        establish_sender_mapping(&router, &session1, &session2, "test/cache", u32::MAX).await;
     let sub = ztimeout!(session2.declare_subscriber("test/cache")).unwrap();
     let pub1 = ztimeout!(session1.declare_publisher("test/cache")).unwrap();
     let pub2 = ztimeout!(session1.declare_publisher("test/*")).unwrap();
@@ -400,6 +499,8 @@ async fn test_interceptors_cache_update_egress_then_ingress() {
     ztimeout!(pub1.put("some_data_1")).unwrap();
     tokio::time::sleep(SLEEP).await;
     ztimeout!(pub2.put("some_data_2")).unwrap();
+    let _mapping_sub2 =
+        establish_sender_mapping(&router, &session1, &session2, "test2/cache", u32::MAX - 1).await;
     let sub2 = ztimeout!(session2.declare_subscriber("test2/cache")).unwrap();
     let pub3 = ztimeout!(session1.declare_publisher("test2/cache")).unwrap();
     tokio::time::sleep(SLEEP).await;
