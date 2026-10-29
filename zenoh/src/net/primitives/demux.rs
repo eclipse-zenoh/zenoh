@@ -189,6 +189,9 @@ impl TransportPeerEventHandler for DeMux {
                     bail!("Received network OAM from face w/o transport");
                 }
 
+                let Some(_routing) = self.face.tables.routing.enter() else {
+                    return Ok(());
+                };
                 let mut declares = vec![];
                 let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
                 let mut wtables = zwrite!(self.face.tables.tables);

@@ -1319,8 +1319,22 @@ impl Closee for Arc<RuntimeState> {
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
+        let drained = self
+            .router
+            .tables
+            .routing
+            .stop(std::time::Duration::from_secs(10))
+            .await;
         let mut tables = self.router.tables.tables.write().unwrap();
-        tables.data.root_res.close();
+        if drained {
+            tables.data.root_res.close();
+        } else {
+            // Leaking the resource tree is better than clearing it under a call that will unwrap it.
+            tracing::warn!(
+                "closing with {} routing calls still under way: resources left uncleared",
+                self.router.tables.routing.in_flight()
+            );
+        }
         tables.data.faces.clear();
     }
 }
