@@ -147,7 +147,7 @@ impl Hat {
                                 .next_id
                                 .fetch_add(1, Ordering::SeqCst),
                             ext_wire_expr: WireExprType {
-                                wire_expr: Resource::get_best_key(res, "", dst_face.id),
+                                wire_expr: res.expr().to_string().into(),
                             },
                         }),
                     },

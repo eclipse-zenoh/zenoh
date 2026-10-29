@@ -119,7 +119,7 @@ impl Hat {
                         body: DeclareBody::UndeclareToken(UndeclareToken {
                             id: TokenId::default(),
                             ext_wire_expr: WireExprType {
-                                wire_expr: Resource::get_best_key(res, "", dst.id),
+                                wire_expr: res.expr().to_string().into(),
                             },
                         }),
                     },
