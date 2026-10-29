@@ -305,3 +305,81 @@ fn keyexpr_test_dummy() {
     let non_dummy_expr = KeyExpr::try_from("dummy").unwrap();
     assert!(!non_dummy_expr.is_dummy());
 }
+
+#[cfg(feature = "unstable")]
+#[test]
+fn keyexpr_tree_weighted_nodes_from_public_api() {
+    use std::collections::BTreeMap;
+
+    use zenoh::key_expr::{
+        keyexpr,
+        keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
+    };
+
+    let mut tree = KeBoxTree::<String>::new();
+    tree.insert(keyexpr::new("sensor/temperature").unwrap(), "warm".into());
+    tree.insert(keyexpr::new("sensor/humidity").unwrap(), "dry".into());
+    tree.insert(keyexpr::new("other/value").unwrap(), "outside".into());
+    // Structural nodes can exist without a weight.
+    let empty = keyexpr::new("sensor/empty").unwrap();
+    tree.node_mut_or_create(empty);
+    assert!(tree.node(empty).unwrap().weight().is_none());
+
+    let query = keyexpr::new("sensor/**").unwrap();
+    assert!(tree
+        .intersecting_nodes(query)
+        .any(|node| node.weight().is_none()));
+    assert!(tree
+        .included_nodes(query)
+        .any(|node| node.weight().is_none()));
+    let expected = BTreeMap::from([
+        ("sensor/humidity".to_owned(), "dry".to_owned()),
+        ("sensor/temperature".to_owned(), "warm".to_owned()),
+    ]);
+    let intersecting: BTreeMap<_, _> = tree
+        .intersecting_nodes(query)
+        .filter_map(|node| {
+            node.weight()
+                .map(|w| (node.keyexpr().to_string(), w.clone()))
+        })
+        .collect();
+    assert_eq!(intersecting, expected);
+    let included: BTreeMap<_, _> = tree
+        .included_nodes(query)
+        .filter_map(|node| {
+            node.weight()
+                .map(|w| (node.keyexpr().to_string(), w.clone()))
+        })
+        .collect();
+    assert_eq!(included, expected);
+
+    tree.insert(query, "all sensors".into());
+    assert!(tree
+        .nodes_including(empty)
+        .any(|node| node.weight().is_none()));
+    let empty_including: Vec<_> = tree
+        .nodes_including(empty)
+        .filter_map(|node| {
+            node.weight()
+                .map(|w| (node.keyexpr().to_string(), w.clone()))
+        })
+        .collect();
+    assert_eq!(
+        empty_including,
+        vec![("sensor/**".to_owned(), "all sensors".to_owned())]
+    );
+    let including: BTreeMap<_, _> = tree
+        .nodes_including(keyexpr::new("sensor/temperature").unwrap())
+        .filter_map(|node| {
+            node.weight()
+                .map(|w| (node.keyexpr().to_string(), w.clone()))
+        })
+        .collect();
+    assert_eq!(
+        including,
+        BTreeMap::from([
+            ("sensor/**".to_owned(), "all sensors".to_owned()),
+            ("sensor/temperature".to_owned(), "warm".to_owned()),
+        ])
+    );
+}

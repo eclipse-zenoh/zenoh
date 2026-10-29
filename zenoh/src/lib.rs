@@ -345,7 +345,7 @@ pub mod key_expr {
         pub use zenoh_keyexpr::keyexpr_tree::{
             impls::KeyedSetProvider,
             support::{NonWild, UnknownWildness},
-            IKeyExprTree, IKeyExprTreeMut, KeBoxTree,
+            IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree,
         };
     }
     #[zenoh_macros::unstable]
