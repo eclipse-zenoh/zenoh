@@ -12,9 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Closing a session must not wait for a connect still under way. A peer that accepts the TCP
-//! connection and never answers the handshake holds the connect until `open_timeout`, and close
-//! used to wait for it.
+#![cfg(feature = "transport_tcp")]
+
+//! Closing a session must not wait for a connect still under way, nor for a listener waiting to
+//! retry. A peer that accepts the TCP connection and never answers the handshake holds the connect
+//! until `open_timeout`, and a listener that cannot bind waits out its retry period. Close used to
+//! wait for both.
 
 use std::time::{Duration, Instant};
 
@@ -22,6 +25,7 @@ use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const OPEN_TIMEOUT_MS: u64 = 20_000;
+const RETRY_PERIOD_MS: u64 = 20_000;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn close_does_not_wait_for_a_pending_connect() {
@@ -62,5 +66,41 @@ async fn close_does_not_wait_for_a_pending_connect() {
     assert!(
         took < Duration::from_millis(OPEN_TIMEOUT_MS / 4),
         "close waited {took:?} for a connect that could only end at open_timeout"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn close_does_not_wait_for_a_listener_retry() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut config = zenoh::Config::default();
+    config.insert_json5("mode", r#""peer""#).unwrap();
+    // An address this host does not hold, so every attempt to listen on it fails.
+    config
+        .insert_json5("listen/endpoints", r#"["tcp/8.8.8.8:8"]"#)
+        .unwrap();
+    // Retried in the background, so open returns while the listener waits for its next attempt.
+    config.insert_json5("listen/timeout_ms", "-1").unwrap();
+    config
+        .insert_json5("listen/exit_on_failure", "false")
+        .unwrap();
+    config
+        .insert_json5(
+            "listen/retry",
+            &format!("{{ period_init_ms: {RETRY_PERIOD_MS}, period_max_ms: {RETRY_PERIOD_MS} }}"),
+        )
+        .unwrap();
+    config
+        .insert_json5("scouting/multicast/enabled", "false")
+        .unwrap();
+
+    let session = ztimeout!(zenoh::open(config)).unwrap();
+
+    let started = Instant::now();
+    ztimeout!(session.close()).unwrap();
+    let took = started.elapsed();
+    assert!(
+        took < Duration::from_millis(RETRY_PERIOD_MS / 4),
+        "close waited {took:?} for a listener that could only retry after its period"
     );
 }
