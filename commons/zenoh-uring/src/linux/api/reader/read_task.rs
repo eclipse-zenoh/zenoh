@@ -93,3 +93,63 @@ impl ReadTask {
         e.unwrap_or_else(|| zerror!("Task stopped").into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{num::NonZeroU32, sync::Arc, time::Duration};
+
+    use nix::sys::eventfd::{EfdFlags, EventFd};
+
+    use super::ReadTask;
+    use crate::reader::{
+        index::IndexGeneration, reactor_cmd::ReactorCmd, submission::SubmissionIface,
+    };
+
+    /// `stop` returns once the reactor has retired the task, however long
+    /// that takes.
+    #[test]
+    fn stop_waits_for_retirement() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let waker = Arc::new(EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap());
+            let (cmd_tx, cmd_rx) = flume::unbounded();
+            let (retire_tx, retire_rx) = std::sync::mpsc::channel::<()>();
+            // registers the task, and retires it when told to
+            let reactor = std::thread::spawn(move || {
+                let mut retiring = Vec::new();
+                while let Ok(cmd) = cmd_rx.recv() {
+                    match cmd {
+                        ReactorCmd::StartRx(_, _, index, error_sender) => {
+                            index.set(IndexGeneration::new(0, NonZeroU32::MIN)).unwrap();
+                            retiring.push(error_sender);
+                        }
+                        ReactorCmd::StopRx(_) => {
+                            let _ = retire_rx.recv();
+                            retiring.clear();
+                        }
+                    }
+                }
+            });
+            let mut task = ReadTask::new(0, |_| Ok(()), SubmissionIface::new(waker, cmd_tx))
+                .await
+                .unwrap();
+            let mut stop = Box::pin(task.stop());
+            assert!(
+                tokio::time::timeout(Duration::from_millis(1500), &mut stop)
+                    .await
+                    .is_err(),
+                "stop() returned before the retirement"
+            );
+            retire_tx.send(()).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), stop)
+                .await
+                .expect("stop() did not return after the retirement");
+            drop(retire_tx);
+            drop(task);
+            reactor.join().unwrap();
+        });
+    }
+}

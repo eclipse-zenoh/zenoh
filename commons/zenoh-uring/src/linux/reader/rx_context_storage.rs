@@ -77,6 +77,11 @@ impl RxContextStorage {
         self.data[id.index() as usize].get(id.generation())
     }
 
+    /// The contexts of the running tasks.
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &Rx> {
+        self.data.iter().filter_map(|cell| cell.context.as_ref())
+    }
+
     pub(crate) fn take(&mut self, id: IndexGeneration) -> Option<Rx> {
         self.data[id.index() as usize].take(id.generation())
     }

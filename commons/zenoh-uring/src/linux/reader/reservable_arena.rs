@@ -20,7 +20,7 @@ use zenoh_result::ZResult;
 use crate::{
     api::types::BufferCount,
     batch_arena::{BatchArena, Batches},
-    reader::submission::SubmissionIface,
+    reader::{index::IndexGeneration, submission::SubmissionIface},
     types::{BufferGroupId, BufferId},
 };
 
@@ -76,7 +76,8 @@ impl ReservableArenaInner {
                 buf_id as BufferId,
             )
             .build()
-            .flags(Flags::SKIP_SUCCESS);
+            .flags(Flags::SKIP_SUCCESS)
+            .user_data(IndexGeneration::provide_user_data(group_id));
 
             unsafe {
                 sq.push(&entry)?;
@@ -105,7 +106,8 @@ impl ReservableArenaInner {
                     primary.start_bid as BufferId,
                 )
                 .build()
-                .flags(Flags::SKIP_SUCCESS);
+                .flags(Flags::SKIP_SUCCESS)
+                .user_data(IndexGeneration::provide_user_data(group_id));
 
                 unsafe {
                     sq.push(&entry)?;

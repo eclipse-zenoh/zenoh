@@ -53,6 +53,8 @@ pub(crate) struct Rx {
 pub(crate) struct Retiring {
     pub buffer_group: BufferGroup,
     _error_sender: UnboundedSender<zenoh_result::Error>,
+    /// Cancellations of the task's receive issued again after a miss.
+    pub cancel_retries: u32,
 }
 
 impl Rx {
@@ -84,6 +86,7 @@ impl Rx {
         Retiring {
             buffer_group: self.buffer_group,
             _error_sender: self.error_sender,
+            cancel_retries: 0,
         }
     }
 

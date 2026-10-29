@@ -30,7 +30,7 @@ use io_uring::{
     squeue, types, IoUring, SubmissionQueue,
 };
 use nix::sys::eventfd::EfdFlags;
-use zenoh_core::bail;
+use zenoh_core::{bail, zerror};
 use zenoh_result::ZResult;
 use zenoh_runtime::ZRuntime;
 
@@ -51,6 +51,7 @@ use crate::{
         window::RxWindow,
         ReaderInner,
     },
+    types::BufferGroupId,
 };
 
 #[derive(Clone, Debug)]
@@ -64,6 +65,14 @@ impl Drop for Reader {
         tracing::debug!("Drop Reader: {:?}", self);
     }
 }
+
+/// Delay before the cancellation of a stopped task's receive is issued again
+/// after missing it. Read by the kernel when the retry is submitted.
+static CANCEL_RETRY_DELAY: types::Timespec = types::Timespec::new().nsec(1_000_000);
+
+/// Cancellations missed in a row before a warning: the stop of the task is
+/// taking unusually long.
+const CANCEL_RETRIES_WARNING: u32 = 1000;
 
 impl Reader {
     pub async fn setup_fragmented_read<Cb>(&self, fd: RawFd, mut callback: Cb) -> ZResult<ReadTask>
@@ -180,13 +189,7 @@ impl Reader {
                                 // wait for the receive to terminate before
                                 // touching its buffers
                                 retiring.insert(index_generation.into(), group);
-
-                                let cancel_builder =
-                                    types::CancelBuilder::user_data(index_generation.into()).all();
-                                let event = AsyncCancel2::new(cancel_builder)
-                                    .build()
-                                    .user_data(IndexGeneration::INVALID_MIN);
-                                unsafe { sq.push(&event)? }
+                                Reader::cancel_recv(index_generation, sq)?;
                             } else {
                                 Reader::retire(index_generation, group, retiring, sq)?;
                             }
@@ -213,14 +216,32 @@ impl Reader {
                         batch_count,
                     )?;
 
+                    // whether a new receive must reach the kernel right away
+                    let mut to_submit = false;
                     match e.user_data() {
                         IndexGeneration::INVALID_MIN => {
+                            // e.g. the delay before a cancellation is issued again
                             tracing::debug!("Zero-user-data entry: {:?}", e);
+                        }
+                        user_data if IndexGeneration::is_provide_user_data(user_data) => {
+                            Reader::provide_failed(
+                                IndexGeneration::provided_group(user_data),
+                                e.result(),
+                                &context_storage,
+                            );
                         }
                         user_data if IndexGeneration::is_retire_user_data(user_data) => {
                             if let Some(group) = retiring.remove(&user_data) {
                                 group.buffer_group.buffers_removed(e.result());
                             }
+                        }
+                        user_data if IndexGeneration::is_cancel_user_data(user_data) => {
+                            Reader::cancel_completed(
+                                IndexGeneration::cancel_target(user_data),
+                                e.result(),
+                                &mut retiring,
+                                &mut sq,
+                            )?;
                         }
                         IndexGeneration::INVALID_MAX => {
                             tracing::debug!("Waker event: {:?}", e);
@@ -234,7 +255,7 @@ impl Reader {
                             }
 
                             let index = unsafe { IndexGeneration::new_unchecked(index) };
-                            let to_submit = Reader::multi(
+                            to_submit = Reader::multi(
                                 &context_storage,
                                 &mut retiring,
                                 &e,
@@ -242,18 +263,21 @@ impl Reader {
                                 &arena,
                                 &mut sq,
                             )?;
-                            let len = sq.len() as u32;
-                            if to_submit || len >= (batch_count / 2) as u32 {
-                                drop(sq);
-                                unsafe {
-                                    ring.submitter().enter::<libc::sigset_t>(
-                                        len,
-                                        0,
-                                        io_uring::EnterFlags::GETEVENTS.bits(),
-                                        None,
-                                    )?;
-                                }
-                            }
+                        }
+                    }
+                    // every kind of completion can queue entries (e.g. a
+                    // missed cancellation queues its retry): submit before
+                    // the queue fills up
+                    let len = sq.len() as u32;
+                    if to_submit || len >= (batch_count / 2) as u32 {
+                        drop(sq);
+                        unsafe {
+                            ring.submitter().enter::<libc::sigset_t>(
+                                len,
+                                0,
+                                io_uring::EnterFlags::GETEVENTS.bits(),
+                                None,
+                            )?;
                         }
                     }
                 }
@@ -304,6 +328,76 @@ impl Reader {
         match r.changed().await {
             Ok(_) => Err((*r.borrow_and_update()).clone().into()),
             Err(_) => Ok(()),
+        }
+    }
+
+    /// Cancellation of the receive of a stopped task.
+    fn cancel_entry(index: IndexGeneration) -> squeue::Entry {
+        let cancel_builder = types::CancelBuilder::user_data(index.into()).all();
+        AsyncCancel2::new(cancel_builder)
+            .build()
+            .user_data(index.cancel_user_data())
+    }
+
+    /// Ask the kernel to terminate the receive of a stopped task.
+    fn cancel_recv(index: IndexGeneration, sq: &mut SubmissionQueue<'_>) -> ZResult<()> {
+        unsafe { sq.push(&Reader::cancel_entry(index))? };
+        Ok(())
+    }
+
+    /// Completion of a cancellation, with the number of receives cancelled.
+    /// A receive can escape a cancellation (seen while it moves to io-wq):
+    /// as long as its terminal completion has not been seen, it keeps the
+    /// task retiring, so cancel it again after `CANCEL_RETRY_DELAY`. Returns
+    /// whether a cancellation was queued.
+    fn cancel_completed(
+        index: IndexGeneration,
+        cancelled: i32,
+        retiring: &mut HashMap<u64, Retiring>,
+        sq: &mut SubmissionQueue<'_>,
+    ) -> ZResult<bool> {
+        // gone when the receive already terminated
+        let Some(group) = retiring.get_mut(&index.into()) else {
+            return Ok(false);
+        };
+        // otherwise its terminal completion follows
+        if cancelled > 0 {
+            return Ok(false);
+        }
+        group.cancel_retries = group.cancel_retries.saturating_add(1);
+        if group.cancel_retries == CANCEL_RETRIES_WARNING {
+            tracing::warn!(
+                "Read task {:?}: receive missed by {} cancellations, still trying",
+                index,
+                CANCEL_RETRIES_WARNING
+            );
+        }
+        // the delay completes with -ETIME and a zero user_data
+        let delay = opcode::Timeout::new(&CANCEL_RETRY_DELAY)
+            .flags(types::TimeoutFlags::ETIME_SUCCESS)
+            .build()
+            .flags(squeue::Flags::IO_LINK);
+        unsafe { sq.push_multiple(&[delay, Reader::cancel_entry(index)])? };
+        Ok(true)
+    }
+
+    /// Failed `ProvideBuffers` to `group` (only failures complete, see
+    /// `SKIP_SUCCESS`). The buffers stay tracked as provided, so the
+    /// retirement of the group finds fewer in the kernel and keeps the group
+    /// reserved. Its task may be left without buffers, its receive failing
+    /// with `ENOBUFS`: the task is failed.
+    fn provide_failed(group: BufferGroupId, error: i32, context_storage: &RxContextStorage) {
+        let error = std::io::Error::from_raw_os_error(error.neg());
+        match context_storage
+            .iter()
+            .find(|rx| rx.buffer_group().id() == group)
+        {
+            Some(rx) => rx.post_error(
+                zerror!("Buffer group {group}: kernel rejected provided buffers: {error}").into(),
+            ),
+            None => tracing::error!(
+                "Buffer group {group} of a stopped task: kernel rejected provided buffers: {error}"
+            ),
         }
     }
 
@@ -458,6 +552,7 @@ mod tests {
         batch_arena::BatchArena,
         reader::{
             buffer_group::{BufferGroup, GroupedArena},
+            index::IndexGeneration,
             reservable_arena::ReservableArena,
             rx_context::{Retiring, Rx, RxCallback},
             rx_context_storage::RxContextStorage,
@@ -525,5 +620,147 @@ mod tests {
     #[test]
     fn failed_restart_is_not_live() {
         assert!(!terminal_buffer_completion(0));
+    }
+
+    fn grouped_arena() -> GroupedArena {
+        let arena = BatchArena::new(64, 4, BufferCount::MAX).unwrap();
+        let waker = Arc::new(EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap());
+        let (cmd_tx, _cmd_rx) = flume::unbounded();
+        GroupedArena::new(ReservableArena::new(
+            arena,
+            SubmissionIface::new(waker, cmd_tx),
+        ))
+    }
+
+    /// A stopped task, retiring under `index` while waiting for its receive
+    /// to terminate.
+    fn stopped_task(
+        ring: &mut IoUring<squeue::Entry, cqueue::Entry>,
+        arena: &GroupedArena,
+        fd: i32,
+        index: IndexGeneration,
+    ) -> HashMap<u64, Retiring> {
+        let group = BufferGroup::new(arena, 1, &mut ring.submission()).unwrap();
+        let (err_tx, _err_rx) = tokio::sync::mpsc::unbounded_channel();
+        let callback = RxCallback::new(UnsafeCell::new(Box::new(|_| Ok(()))));
+        let mut retiring = HashMap::new();
+        retiring.insert(
+            index.into(),
+            Rx::new(fd, callback, err_tx, group).into_retiring(),
+        );
+        retiring
+    }
+
+    fn task_index() -> IndexGeneration {
+        IndexGeneration::new(3, std::num::NonZeroU32::new(7).unwrap())
+    }
+
+    /// Submits the queued entries and waits for `want` completions, failing
+    /// after a few seconds instead of hanging.
+    fn wait_completions(
+        ring: &mut IoUring<squeue::Entry, cqueue::Entry>,
+        want: usize,
+    ) -> Vec<(u64, i32)> {
+        let deadline = types::Timespec::new().sec(5);
+        let args = types::SubmitArgs::new().timespec(&deadline);
+        let mut cqes = Vec::new();
+        while cqes.len() < want {
+            ring.submitter()
+                .submit_with_args(want - cqes.len(), &args)
+                .unwrap_or_else(|e| panic!("{e} after {cqes:?}"));
+            cqes.extend(ring.completion().map(|e| (e.user_data(), e.result())));
+        }
+        cqes
+    }
+
+    /// A cancellation can miss the receive of a stopped task (seen while the
+    /// receive moves to io-wq). While the receive has not terminated, the
+    /// cancellation is issued again after a delay, and this one terminates
+    /// the receive.
+    #[test]
+    fn missed_cancellation_is_issued_again() {
+        let mut ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::new(8).unwrap();
+        let arena = grouped_arena();
+        let (peer, _writer) = UnixStream::pair().unwrap();
+        let index = task_index();
+        let mut retiring = stopped_task(&mut ring, &arena, peer.as_raw_fd(), index);
+        // the receive of the stopped task, armed on an idle socket
+        let group_id = retiring[&index.into()].buffer_group.id();
+        let recv = opcode::RecvMulti::new(types::Fd(peer.as_raw_fd()), group_id)
+            .build()
+            .user_data(index.into());
+        unsafe { ring.submission().push(&recv).unwrap() };
+        ring.submit().unwrap();
+
+        // the first cancellation found nothing
+        let resubmit = Reader::cancel_completed(index, 0, &mut retiring, &mut ring.submission());
+        assert!(resubmit.unwrap());
+        let cqes = wait_completions(&mut ring, 3);
+        assert!(cqes.contains(&(0, -libc::ETIME)), "{cqes:?}");
+        assert!(cqes.contains(&(index.cancel_user_data(), 1)), "{cqes:?}");
+        assert!(cqes.contains(&(index.into(), -libc::ECANCELED)), "{cqes:?}");
+    }
+
+    /// The cancellation is issued again for as long as it misses a receive
+    /// that has not terminated, and only then.
+    #[test]
+    fn cancellation_is_issued_again_until_the_receive_terminates() {
+        const MISSES: usize = 100;
+        let mut ring: IoUring<squeue::Entry, cqueue::Entry> =
+            IoUring::new(4 * MISSES as u32).unwrap();
+        let arena = grouped_arena();
+        let (peer, _writer) = UnixStream::pair().unwrap();
+        let index = task_index();
+        let mut retiring = stopped_task(&mut ring, &arena, peer.as_raw_fd(), index);
+        ring.submit().unwrap();
+        let mut sq = ring.submission();
+
+        // the cancellation hit: the terminal completion follows
+        assert!(!Reader::cancel_completed(index, 1, &mut retiring, &mut sq).unwrap());
+        assert_eq!(sq.len(), 0);
+        // a delay and a cancellation per miss
+        for _ in 0..MISSES {
+            assert!(Reader::cancel_completed(index, 0, &mut retiring, &mut sq).unwrap());
+        }
+        assert_eq!(sq.len(), 2 * MISSES);
+        // the receive terminated
+        retiring.clear();
+        assert!(!Reader::cancel_completed(index, 0, &mut retiring, &mut sq).unwrap());
+        assert_eq!(sq.len(), 2 * MISSES);
+    }
+
+    /// The kernel refuses buffers provided to a group: the task reading into
+    /// that group fails, the other tasks keep reading.
+    #[test]
+    fn failed_provision_fails_its_task() {
+        let mut ring: IoUring<squeue::Entry, cqueue::Entry> = IoUring::new(8).unwrap();
+        let arena = grouped_arena();
+        let mut storage = RxContextStorage::new();
+        let mut task = || {
+            let group = BufferGroup::new(&arena, 1, &mut ring.submission()).unwrap();
+            let (err_tx, err_rx) = tokio::sync::mpsc::unbounded_channel();
+            let callback = RxCallback::new(UnsafeCell::new(Box::new(|_| Ok(()))));
+            let id = group.id();
+            storage.alloc(Rx::new(0, callback, err_tx, group));
+            (id, err_rx)
+        };
+        let (failing, mut failing_err) = task();
+        let (_, mut other_err) = task();
+        ring.submit().unwrap();
+
+        // zero buffers: rejected by the kernel
+        let mut buf = [0u8; 64];
+        let provide = opcode::ProvideBuffers::new(buf.as_mut_ptr(), 64, 0, failing, 0)
+            .build()
+            .flags(squeue::Flags::SKIP_SUCCESS)
+            .user_data(IndexGeneration::provide_user_data(failing));
+        unsafe { ring.submission().push(&provide).unwrap() };
+        let (user_data, result) = wait_completions(&mut ring, 1)[0];
+        assert!(IndexGeneration::is_provide_user_data(user_data));
+        assert!(result < 0);
+
+        Reader::provide_failed(IndexGeneration::provided_group(user_data), result, &storage);
+        assert!(failing_err.try_recv().is_ok(), "the task was not failed");
+        assert!(other_err.try_recv().is_err(), "another task was failed");
     }
 }
