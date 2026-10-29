@@ -1084,3 +1084,40 @@ fn big_key_expr() {
     res.get_best_key("/a", face.state.id + 1);
     Resource::get_matches(&face.tables.tables.read().unwrap().data, &key_expr);
 }
+
+#[tokio::test]
+async fn face_refuses_routing_once_the_close_has_begun() {
+    let router = new_router();
+    let tables = router.tables.clone();
+    let face = router.new_session(Arc::new(DummyPrimitives {}));
+
+    let declare_expr = |id, expr: &'static str| Declare {
+        interest_id: None,
+        ext_qos: ext::QoSType::DECLARE,
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::DEFAULT,
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id,
+            wire_expr: expr.into(),
+        }),
+    };
+    let declared =
+        |expr| Resource::get_resource(zread!(tables.tables).data._get_root(), expr).is_some();
+
+    Primitives::send_declare(face.as_ref(), &mut declare_expr(1, "gate/open"));
+    assert!(
+        declared("gate/open"),
+        "a declare before the close was refused"
+    );
+
+    assert!(tables.routing.stop(std::time::Duration::from_secs(1)).await);
+
+    Primitives::send_declare(face.as_ref(), &mut declare_expr(2, "gate/closed"));
+    assert!(
+        !declared("gate/closed"),
+        "a declare after the close reached the tables"
+    );
+    // Closing the face after the close must not touch the tables either.
+    Primitives::send_close(face.as_ref());
+    assert_eq!(tables.routing.in_flight(), 0);
+}
