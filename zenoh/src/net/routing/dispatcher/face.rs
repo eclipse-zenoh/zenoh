@@ -564,6 +564,9 @@ impl Face {
 
 impl Primitives for Face {
     fn send_interest(&self, msg: &mut zenoh_protocol::network::Interest) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         if msg.mode != InterestMode::Final {
             let mut declares = vec![];
@@ -578,6 +581,9 @@ impl Primitives for Face {
     }
 
     fn send_declare(&self, msg: &mut zenoh_protocol::network::Declare) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         match &mut msg.body {
             zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
@@ -690,6 +696,9 @@ impl Primitives for Face {
 
     #[inline]
     fn send_push_consume(&self, msg: &mut Push, reliability: Reliability, consume: bool) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         let _span = tracing::enabled!(tracing::Level::DEBUG).then(|| {
             tracing::debug_span!(
                 "send_push",
@@ -705,6 +714,9 @@ impl Primitives for Face {
 
     #[tracing::instrument(level = "debug", skip(msg), fields(id = msg.id, expr = %msg.wire_expr), ret)]
     fn send_request(&self, msg: &mut Request) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         match msg.payload {
             RequestBody::Query(_) => {
                 self.route_query(msg);
@@ -714,16 +726,25 @@ impl Primitives for Face {
 
     #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid, expr = %msg.wire_expr), ret)]
     fn send_response(&self, msg: &mut Response) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         route_send_response(&self.tables, &mut self.state.clone(), msg);
     }
 
     #[tracing::instrument(level = "debug", skip(msg), fields(rid = msg.rid), ret)]
     fn send_response_final(&self, msg: &mut ResponseFinal) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
     #[tracing::instrument(level = "debug", skip(self), fields(src = %self), ret)]
     fn send_close(&self) {
+        let Some(_routing) = self.tables.routing.enter() else {
+            return;
+        };
         let mut state = self.state.clone();
         state.task_controller.terminate_all(Duration::from_secs(10));
         finalize_pending_queries(&self.tables, &mut state);

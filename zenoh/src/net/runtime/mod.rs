@@ -1319,6 +1319,9 @@ impl Closee for Arc<RuntimeState> {
         // the task responsible for resource clean up was aborted earlier than expected.
         // This should be resolved by identifying corresponding task, and placing
         // cancellation token manually inside it.
+        // Bounded by the close timeout: if that cancels the wait, the tables are left uncleared,
+        // which is better than clearing them under a call that will unwrap them.
+        self.router.tables.routing.stop().await;
         let mut tables = self.router.tables.tables.write().unwrap();
         tables.data.root_res.close();
         tables.data.faces.clear();
