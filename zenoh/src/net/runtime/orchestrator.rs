@@ -14,7 +14,6 @@
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    ops::DerefMut,
     str::FromStr,
     time::Duration,
 };
@@ -149,6 +148,31 @@ impl StartConditions {
         }
         if peer_connectors.iter().all(|pc| pc.terminated) {
             self.notify.notify_one()
+        }
+    }
+}
+
+/// The configured endpoints of a session's live outbound links.
+///
+/// Every connector that opens a configured endpoint must call `link_opened` after the open.
+/// A link can close before that call. Its `link_closed` then leaves a tombstone that cancels
+/// the late `link_opened`, so the endpoint is not reconnected twice.
+#[derive(Default)]
+pub(crate) struct SessionEndpoints {
+    live: HashSet<EndPoint>,
+    tombstones: HashSet<EndPoint>,
+}
+
+impl SessionEndpoints {
+    fn link_opened(&mut self, endpoint: EndPoint) {
+        if !self.tombstones.remove(&endpoint) {
+            self.live.insert(endpoint);
+        }
+    }
+
+    fn link_closed(&mut self, endpoint: &EndPoint) {
+        if !self.live.remove(endpoint) {
+            self.tombstones.insert(endpoint.clone());
         }
     }
 }
@@ -497,7 +521,7 @@ impl Runtime {
                     .as_any()
                     .downcast_ref::<super::RuntimeSession>()
                     .ok_or_else(|| zerror!("Unexpected callback type"))?;
-                zwrite!(session.endpoints).insert(peer.clone());
+                zwrite!(session.endpoints).link_opened(peer.clone());
                 Ok(())
             });
 
@@ -956,7 +980,7 @@ impl Runtime {
                             .as_any()
                             .downcast_ref::<super::RuntimeSession>()
                             .ok_or_else(|| zerror!("Unexpected callback type"))?;
-                        zwrite!(session.endpoints).insert(peer.clone());
+                        zwrite!(session.endpoints).link_opened(peer.clone());
                         Ok(zid)
                     });
 
@@ -1389,7 +1413,7 @@ impl Runtime {
             return;
         }
 
-        if zread!(session.endpoints).is_empty() {
+        if zread!(session.endpoints).live.is_empty() {
             return;
         }
         let endpoints = session
@@ -1408,7 +1432,7 @@ impl Runtime {
         }
 
         if session.runtime.whatami() != WhatAmI::Client {
-            let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
+            let endpoints = std::mem::take(&mut zwrite!(session.endpoints).live);
             peers.retain(|p| endpoints.contains(p));
         }
 
@@ -1446,7 +1470,8 @@ impl Runtime {
             peers.extend(peer.flatten());
         }
 
-        if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
+        if peers.contains(&endpoint) {
+            zwrite!(session.endpoints).link_closed(&endpoint);
             let runtime = session.runtime.clone();
             session.runtime.spawn_abortable(async move {
                 let _ = runtime.peer_connector_retry(endpoint).await;
@@ -1530,5 +1555,31 @@ mod tests {
             .expect("timed out waiting for loopback multicast packet")
             .unwrap();
         assert_eq!(&buf[..n], payload);
+    }
+
+    #[test]
+    fn session_endpoints_link_closed_before_link_opened() {
+        let endpoint: EndPoint = "tcp/127.0.0.1:7447".parse().unwrap();
+        let mut endpoints = SessionEndpoints::default();
+
+        endpoints.link_closed(&endpoint);
+        endpoints.link_opened(endpoint.clone());
+        assert!(endpoints.live.is_empty());
+
+        endpoints.link_opened(endpoint.clone());
+        assert_eq!(endpoints.live, HashSet::from([endpoint]));
+    }
+
+    #[test]
+    fn session_endpoints_link_opened_before_link_closed() {
+        let endpoint: EndPoint = "tcp/127.0.0.1:7447".parse().unwrap();
+        let mut endpoints = SessionEndpoints::default();
+
+        endpoints.link_opened(endpoint.clone());
+        endpoints.link_closed(&endpoint);
+        assert!(endpoints.live.is_empty());
+
+        endpoints.link_opened(endpoint.clone());
+        assert_eq!(endpoints.live, HashSet::from([endpoint]));
     }
 }
