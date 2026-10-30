@@ -1110,7 +1110,7 @@ async fn face_refuses_routing_once_the_close_has_begun() {
         "a declare before the close was refused"
     );
 
-    assert!(tables.routing.stop(std::time::Duration::from_secs(1)).await);
+    tables.routing.stop().await;
 
     Primitives::send_declare(face.as_ref(), &mut declare_expr(2, "gate/closed"));
     assert!(

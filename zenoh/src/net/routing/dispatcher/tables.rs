@@ -296,18 +296,13 @@ impl RoutingGate {
         Some(call)
     }
 
-    /// Stops new routing calls and waits for those under way, for at most `limit`. False where
-    /// some are still under way, in which case the tables must not be cleared under them.
-    pub(crate) async fn stop(&self, limit: Duration) -> bool {
+    /// Stops new routing calls and waits for those under way. Cancelling the wait leaves routing
+    /// stopped.
+    pub(crate) async fn stop(&self) {
         self.closed.store(true, Ordering::SeqCst);
-        let deadline = tokio::time::Instant::now() + limit;
         while self.in_flight() > 0 {
-            if tokio::time::Instant::now() >= deadline {
-                return false;
-            }
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
-        true
     }
 
     pub(crate) fn in_flight(&self) -> usize {
@@ -609,7 +604,7 @@ mod routing_gate_tests {
     async fn a_call_under_way_holds_the_close_and_later_calls_are_refused() {
         let gate = RoutingGate::default();
         let call = gate.enter().expect("routing is open");
-        let stopping = gate.stop(Duration::from_secs(5));
+        let stopping = gate.stop();
         tokio::pin!(stopping);
         assert!(
             tokio::time::timeout(Duration::from_millis(50), &mut stopping)
@@ -622,14 +617,9 @@ mod routing_gate_tests {
             "a call was let in after the close began"
         );
         drop(call);
-        assert!(stopping.await, "the close did not see the call finish");
+        tokio::time::timeout(Duration::from_secs(5), stopping)
+            .await
+            .expect("the close did not see the call finish");
         assert_eq!(gate.in_flight(), 0);
-    }
-
-    #[tokio::test]
-    async fn the_close_gives_up_at_its_limit_and_says_so() {
-        let gate = RoutingGate::default();
-        let _call = gate.enter().expect("routing is open");
-        assert!(!gate.stop(Duration::from_millis(10)).await);
     }
 }

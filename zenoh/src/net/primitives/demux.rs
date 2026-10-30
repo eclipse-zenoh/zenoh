@@ -127,6 +127,11 @@ impl TransportPeerEventHandler for DeMux {
             .entered()
         });
 
+        // Held through interception too, as it reads resource contexts the close clears.
+        let Some(_routing) = self.face.tables.routing.enter() else {
+            return Ok(());
+        };
+
         if has_interceptor(&self.interceptor) {
             if let Some(interceptor) = self.interceptor.load().as_ref() {
                 let mut ctx = DeMuxContext {
@@ -189,9 +194,6 @@ impl TransportPeerEventHandler for DeMux {
                     bail!("Received network OAM from face w/o transport");
                 }
 
-                let Some(_routing) = self.face.tables.routing.enter() else {
-                    return Ok(());
-                };
                 let mut declares = vec![];
                 let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
                 let mut wtables = zwrite!(self.face.tables.tables);
