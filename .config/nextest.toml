@@ -28,6 +28,14 @@ test(=zenoh_querier_matching_status)
 slow-timeout = { period = "60s", terminate-after = 6 }
 threads-required = 'num-cpus'
 
+# The SHM race tests force one interleaving each, so a retry would hide a flaky result.
+# The test `nextest_filter_names_this_module` fails if the module path below goes stale.
+[[profile.default.overrides]]
+filter = 'test(shm::unix::race_tests::)'
+retries = 0
+slow-timeout = { period = "60s", terminate-after = 6 }
+threads-required = 'num-cpus'
+
 [test-groups]
 serial = { max-threads = 1 }
 
