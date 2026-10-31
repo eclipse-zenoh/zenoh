@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::ops::{Index, IndexMut};
+use std::{
+    ops::{Index, IndexMut},
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use zenoh_result::ZResult;
 
@@ -49,6 +52,8 @@ impl Batches {
 pub(crate) struct BatchArena {
     arena: PageArena,
     batch_size: usize,
+    /// Bytes already handed out by `allocate_more_batches`.
+    offered: AtomicUsize,
 }
 
 impl Index<usize> for BatchArena {
@@ -78,15 +83,26 @@ impl BatchArena {
         let size = batch_size * batch_count as usize;
         let capacity = batch_size * max_batch_count as usize;
         let arena = PageArena::new(size, capacity)?;
-        Ok(Self { arena, batch_size })
+        Ok(Self {
+            arena,
+            batch_size,
+            offered: AtomicUsize::new(0),
+        })
     }
 
     pub(crate) fn allocate_more_batches(&self) -> Option<Batches> {
         tracing::debug!("Add batches");
 
-        let (addr, size) = self
-            .arena
-            .add_memory(self.arena.size.load(std::sync::atomic::Ordering::Relaxed))?;
+        // serve the region locked at construction first, then grow
+        let offered = self.offered.load(Ordering::Relaxed);
+        let locked = self.arena.size.load(Ordering::Relaxed);
+        let (addr, size) = if offered < locked {
+            let base = self.arena.memory.load(Ordering::Relaxed);
+            (unsafe { base.add(offered) }, locked - offered)
+        } else {
+            self.arena.add_memory(locked)?
+        };
+        self.offered.store(offered + size, Ordering::Relaxed);
         let additional_batch_count = size / self.batch_size;
         if additional_batch_count == 0 {
             return None;
