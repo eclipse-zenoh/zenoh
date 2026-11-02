@@ -22,13 +22,13 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names,
+    get_ip_interface_names, parse_socket_priority, set_socket_priority,
     tcp::{get_tcp_addrs, TcpSocketConfig},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
-    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    NewLinkChannelSender, SocketPriority, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority},
+    core::{EndPoint, Locator, Priority, PriorityRange},
     transport::BatchSize,
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
@@ -49,12 +49,18 @@ pub struct LinkUnicastTcp {
     dst_locator: Locator,
     // The computed mtu
     mtu: BatchSize,
+    socket_priority: Option<SocketPriority>,
 }
 
 unsafe impl Sync for LinkUnicastTcp {}
 
 impl LinkUnicastTcp {
-    fn new(socket: TcpStream, src_addr: SocketAddr, dst_addr: SocketAddr) -> LinkUnicastTcp {
+    fn new(
+        socket: TcpStream,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        socket_priority: Option<SocketPriority>,
+    ) -> LinkUnicastTcp {
         // Set the TCP nodelay option
         if let Err(err) = socket.set_nodelay(true) {
             tracing::warn!(
@@ -109,6 +115,7 @@ impl LinkUnicastTcp {
             dst_addr,
             dst_locator: Locator::new(TCP_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             mtu,
+            socket_priority,
         }
     }
 
@@ -202,6 +209,18 @@ impl LinkUnicastTrait for LinkUnicastTcp {
         &LinkAuthId::Tcp
     }
 
+    fn apply_socket_priority(&self, priorities: Option<&PriorityRange>) -> ZResult<()> {
+        let Some(priority) = self
+            .socket_priority
+            .as_ref()
+            .and_then(|sp| sp.get(priorities))
+        else {
+            return Ok(());
+        };
+        set_socket_priority(unsafe { &*self.socket.get() }, priority)
+            .map_err(|e| zerror!("Can not set socket priority {priority} on {self}: {e}").into())
+    }
+
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd> {
         match unsafe { &*self.socket.get() }.as_raw_fd() {
@@ -280,13 +299,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         }
 
         let socket_config = TcpSocketConfig::from(TcpLinkConfig::new(&config).await?);
+        let socket_priority = parse_socket_priority(&config)?;
 
         let (stream, src_addr, dst_addr) = socket_config
             .new_link_first_reachable(dst_addrs)
             .await
             .map_err(|e| zerror!("Can not create a new TCP link bound to {}: {}", endpoint, e))?;
 
-        let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
+        let link = Arc::new(LinkUnicastTcp::new(
+            stream,
+            src_addr,
+            dst_addr,
+            socket_priority,
+        ));
         Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
@@ -296,6 +321,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let config = endpoint.config();
 
         let socket_config = TcpSocketConfig::from(TcpLinkConfig::new(&config).await?);
+        let socket_priority = parse_socket_priority(&config)?;
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
@@ -314,8 +340,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     let task = {
                         let token = token.clone();
                         let manager = self.manager.clone();
+                        let socket_priority = socket_priority.clone();
 
-                        async move { accept_task(socket, token, manager).await }
+                        async move { accept_task(socket, token, manager, socket_priority).await }
                     };
 
                     let locator = endpoint.to_locator();
@@ -389,6 +416,7 @@ async fn accept_task(
     socket: TcpListener,
     token: CancellationToken,
     manager: NewLinkChannelSender,
+    socket_priority: Option<SocketPriority>,
 ) -> ZResult<()> {
     async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
@@ -419,7 +447,7 @@ async fn accept_task(
 
                         tracing::debug!("Accepted TCP connection on {:?}: {:?}", src_addr, dst_addr);
                         // Create the new link object
-                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
+                        let link: Arc<dyn LinkUnicastTrait> = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr, socket_priority.clone()));
 
                         // Communicate the new link to the initial transport manager
                         if let Err(e) = manager.send_async(LinkUnicast::from(link)).await {

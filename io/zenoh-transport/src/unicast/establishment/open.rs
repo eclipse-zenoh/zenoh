@@ -787,6 +787,12 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         link_shm.into(),
     );
+    if let Err(e) = o_link
+        .link
+        .apply_socket_priority(o_link.config.priorities.as_ref())
+    {
+        tracing::warn!("{e}");
+    }
     let s_link = format!("{o_link:?}");
     // Handle MixedReliability links
     let best_effort_link = match link.0 {
