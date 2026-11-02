@@ -40,7 +40,9 @@ kedefine!(
 );
 
 #[zenoh_macros::unstable]
-/// Configure replies.
+/// Configure the QoS of cache replies for history and recovery.
+///
+/// Defaults to [`Priority::Data`], [`CongestionControl::Block`], and batching enabled.
 #[derive(Clone, Debug)]
 pub struct RepliesConfig {
     priority: Priority,
@@ -92,6 +94,8 @@ impl QoSBuilderTrait for RepliesConfig {
 
 #[derive(Debug, Clone)]
 /// Configure an [`AdvancedPublisher`](crate::AdvancedPublisher) cache.
+///
+/// Keeps the most recent publications in memory while the publisher is alive.
 #[zenoh_macros::unstable]
 pub struct CacheConfig {
     max_samples: usize,
@@ -110,9 +114,11 @@ impl Default for CacheConfig {
 
 #[zenoh_macros::unstable]
 impl CacheConfig {
-    /// Specify how many samples to keep for each resource.
+    /// Set the number of publications retained by this publisher's cache (default: 1).
     ///
-    /// Builder will fail if `max_samples` is set to zero.
+    /// A fragmented publication occupies one entry; its fragments are evicted together.
+    /// This is a publication-count limit, not a byte limit. Publisher declaration fails
+    /// if `depth` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = depth;

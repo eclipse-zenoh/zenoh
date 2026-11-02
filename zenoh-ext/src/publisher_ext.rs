@@ -15,44 +15,42 @@ use zenoh::pubsub::PublisherBuilder;
 
 use crate::{advanced_cache::CacheConfig, AdvancedPublisherBuilder, MissDetectionConfig};
 
-/// Some extensions to the [`zenoh::publication::PublisherBuilder`](zenoh::publication::PublisherBuilder)
+/// Extend a [`PublisherBuilder`] with advanced publishing options.
 #[zenoh_macros::unstable]
 pub trait AdvancedPublisherBuilderExt<'a, 'b, 'c> {
-    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to recover history and/or missed samples.
+    /// Attach a history/recovery cache; see [`AdvancedPublisherBuilder::cache`] for prerequisites.
     #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
-    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect lost samples and optionally ask for retransimission.
-    ///
-    /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is also enabled.
+    /// Enable loss detection; see [`AdvancedPublisherBuilder::sample_miss_detection`].
     #[zenoh_macros::unstable]
     fn sample_miss_detection(
         self,
         config: MissDetectionConfig,
     ) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
-    /// Allow this publisher to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
-    ///
-    /// This allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to retrieve the local history.
+    /// Advertise publisher presence; see [`AdvancedPublisherBuilder::publisher_detection`].
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 
-    /// Turn this [`Publisher`](zenoh::publication::Publisher) into an [`AdvancedPublisher`](crate::AdvancedPublisher).
+    /// Convert this builder into an [`AdvancedPublisherBuilder`].
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c>;
 }
 
 #[zenoh_macros::unstable]
 impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a, 'b> {
-    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to recover history and/or missed samples.
+    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to retrieve history and recover missed publications.
+    ///
+    /// See [`AdvancedPublisherBuilder::cache`] for timestamping requirements.
     #[zenoh_macros::unstable]
     fn cache(self, config: CacheConfig) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self).cache(config)
     }
 
-    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect lost samples and optionally ask for retransimission.
+    /// Allow matching [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed publications.
     ///
-    /// Retransmission can only be achieved if [`cache`](crate::AdvancedPublisherBuilder::cache) is also enabled.
+    /// Recovery also requires [`cache`](AdvancedPublisherBuilder::cache).
     #[zenoh_macros::unstable]
     fn sample_miss_detection(
         self,
@@ -61,15 +59,16 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilderExt<'a, 'b, 'c> for PublisherBuilder<'a
         AdvancedPublisherBuilder::new(self).sample_miss_detection(config)
     }
 
-    /// Allow this publisher to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
+    /// Advertise this publisher's presence through liveliness.
     ///
-    /// This allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to retrieve the local history.
+    /// Subscribers using [`HistoryConfig::detect_late_publishers`](crate::HistoryConfig::detect_late_publishers)
+    /// can retrieve its history when [`cache`](AdvancedPublisherBuilder::cache) is also enabled.
     #[zenoh_macros::unstable]
     fn publisher_detection(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self).publisher_detection()
     }
 
-    /// Turn this [`Publisher`](zenoh::publication::Publisher) into an [`AdvancedPublisher`](crate::AdvancedPublisher).
+    /// Convert this [`PublisherBuilder`] into an [`AdvancedPublisherBuilder`].
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedPublisherBuilder<'a, 'b, 'c> {
         AdvancedPublisherBuilder::new(self)

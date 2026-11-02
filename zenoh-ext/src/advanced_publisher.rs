@@ -61,12 +61,11 @@ pub(crate) enum Sequencing {
     SequenceNumber,
 }
 
-/// Configuration for sample miss detection
+/// Configure sample miss detection.
 ///
-/// Enabling [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) in [`AdvancedPublisher`](crate::AdvancedPublisher)
-/// allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to detect missed samples
-/// through [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
-/// and to recover missed samples through [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
+/// By default, misses are detected when later publications arrive. Enable a heartbeat
+/// to also allow detection of missing trailing publications. Recovery additionally
+/// requires a publisher [`cache`](AdvancedPublisherBuilder::cache).
 #[zenoh_macros::unstable]
 #[derive(Debug, Default, Clone)]
 pub struct MissDetectionConfig {
@@ -107,8 +106,8 @@ impl MissDetectionConfig {
     }
 }
 
-/// The builder of AdvancedPublisher, allowing to configure it.
-#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+/// Configure an [`AdvancedPublisher`].
+#[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[zenoh_macros::unstable]
 pub struct AdvancedPublisherBuilder<'a, 'b, 'c> {
     session: &'a Session,
@@ -208,7 +207,10 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
 
     /// Attach a cache to this [`AdvancedPublisher`].
     ///
-    /// The cache can be used for history and/or recovery.
+    /// The cache serves history and recovery while this publisher is alive. Without
+    /// [`sample_miss_detection`](Self::sample_miss_detection), the session must enable
+    /// `timestamping/enabled` or publisher declaration fails. Recovery is limited to
+    /// publications still retained in the cache.
     #[zenoh_macros::unstable]
     pub fn cache(mut self, config: CacheConfig) -> Self {
         if self.sequencing == Sequencing::None {
@@ -220,7 +222,8 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
 
     /// Allow this [`AdvancedPublisher`] to be detected by [`AdvancedSubscribers`](crate::AdvancedSubscriber).
     ///
-    /// This allows [`AdvancedSubscribers`](crate::AdvancedSubscriber) to retrieve the local history.
+    /// Subscribers using [`HistoryConfig::detect_late_publishers`](crate::HistoryConfig::detect_late_publishers)
+    /// can retrieve this publisher's cached history when they discover it.
     #[zenoh_macros::unstable]
     pub fn publisher_detection(mut self) -> Self {
         self.liveliness = true;
@@ -229,7 +232,7 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
 
     /// A key expression added to the liveliness token key expression and to the cache queryable key expression.
     ///
-    /// It can be used to convey meta data.
+    /// It can be used to convey metadata.
     #[zenoh_macros::unstable]
     pub fn publisher_detection_metadata<TryIntoKeyExpr>(mut self, meta: TryIntoKeyExpr) -> Self
     where
@@ -240,29 +243,29 @@ impl<'a, 'b, 'c> AdvancedPublisherBuilder<'a, 'b, 'c> {
         self
     }
 
-    /// Fragment samples with payload larger than given size.
+    /// Split payloads larger than `size` bytes into independently delivered fragments.
     ///
-    /// Fragmentation requires sequence-number sequencing, which is enabled by
-    /// [`sample_miss_detection`](Self::sample_miss_detection). Enable sequencing
-    /// on the builder before resolving it; resolving a builder with fragmentation
-    /// but without sequencing will fail.
+    /// Requires [`sample_miss_detection`](Self::sample_miss_detection). Publisher
+    /// declaration fails if it is disabled or `size` is zero. Payloads at or below
+    /// `size` are sent whole. The size excludes metadata and attachments, so it is not a packet-size limit.
     ///
-    /// Each fragment is published as an independent sample: subscribers that
-    /// are not [`AdvancedSubscriber`](crate::AdvancedSubscriber) receive
-    /// the raw fragments with partial payloads. Only the first fragment
-    /// is timestamped by the publisher, and carries the full attachment of the message.
+    /// [`AdvancedSubscriber`](crate::AdvancedSubscriber) automatically reassembles
+    /// fragments; ordinary subscribers and direct cache queries receive partial payloads.
+    /// The first fragment carries the publication's timestamp and attachment, which
+    /// are preserved on the reassembled sample. Missing fragments can be recovered
+    /// when the publisher enables [`cache`](Self::cache) and the subscriber enables
+    /// [`recovery`](crate::AdvancedSubscriberBuilder::recovery).
     ///
-    /// A publication whose payload would require more than `u32::MAX`
-    /// fragments errors out at publication time. Fragment caps below that
-    /// are enforced on the subscriber side: the fragment count must comply
-    /// with each [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s
-    /// `max_fragments` (default 4096), or that fragment is rejected by that
-    /// subscriber. `size` should be chosen so that typical payloads stay
-    /// within the receivers' caps.
+    /// Choose `size` to stay within the receivers' [`max_fragments`](crate::AdvancedSubscriberBuilder::max_fragments)
+    /// limit; receivers reject publications exceeding it. More than `u32::MAX`
+    /// fragments causes a publication error.
     ///
     /// Once a fragmented publication is prepared, the publisher attempts to send
     /// every fragment and discards individual send errors. Preparation errors, including
     /// fragment-count overflow, are still returned to the caller.
+    ///
+    /// NOTE: to filter fragmented publications on ordinary subscribers, use the Sample's frag_info API
+    /// to discard samples with fragmentation metadata.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn fragmentation(self, size: usize) -> Self {
@@ -341,21 +344,15 @@ impl IntoFuture for AdvancedPublisherBuilder<'_, '_, '_> {
     }
 }
 
-/// The extension to a [`Publisher`](zenoh::pubsub::Publisher) providing advanced functionalities.
+/// A publisher supporting caching, loss detection, discovery, and fragmentation.
 ///
-/// The `AdvancedPublisher` is constructed over a regular [`Publisher`](zenoh::pubsub::Publisher) through
-/// [`advanced`](crate::AdvancedPublisherBuilderExt::advanced) method or by using
-/// any other method of [`AdvancedPublisherBuilder`](crate::AdvancedPublisherBuilder).
+/// Create one through [`AdvancedPublisherBuilderExt`](crate::AdvancedPublisherBuilderExt).
+/// Features are opt-in:
 ///
-/// The `AdvancedPublisher` works with [`AdvancedSubscriber`](crate::AdvancedSubscriber) to provide additional functionalities such as:
-/// - [`fragmentation`](AdvancedPublisherBuilder::fragmentation) of large payloads into independently sent fragments,
-///   reassembled by advanced subscribers and individually recoverable from the cache
-/// - [`cache`](crate::AdvancedPublisherBuilderExt::cache) last published samples to be retrieved by
-///   [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`history`](crate::AdvancedSubscriberBuilderExt::history) mechanism
-/// - [`sample_miss_detection`](crate::AdvancedPublisherBuilderExt::sample_miss_detection) to allow detecting missed samples
-///   using [`AdvancedSubscriber`](crate::AdvancedSubscriber)'s [`sample_miss_listener`](crate::AdvancedSubscriber::sample_miss_listener)
-/// - [`publisher_detection`](crate::AdvancedPublisherBuilderExt::publisher_detection) to create a Liveliness token to assert its presence and
-///   allow it to be requested for missed samples if [`detect_late_publishers`](crate::HistoryConfig::detect_late_publishers) is enabled
+/// - [`cache`](AdvancedPublisherBuilder::cache): retain publications for history and recovery.
+/// - [`sample_miss_detection`](AdvancedPublisherBuilder::sample_miss_detection): enable subscriber loss detection.
+/// - [`publisher_detection`](AdvancedPublisherBuilder::publisher_detection): advertise presence for discovery.
+/// - [`fragmentation`](AdvancedPublisherBuilder::fragmentation): split large payloads for advanced subscribers.
 ///
 /// # Example
 /// ```no_run
@@ -698,11 +695,11 @@ impl<'a> AdvancedPublisher<'a> {
         self.publisher.matching_status()
     }
 
-    /// Return a [`MatchingListener`](zenoh::matching::MatchingStatus) for this Publisher.
+    /// Return a [`MatchingListener`](zenoh::matching::MatchingListener) for this Publisher.
     ///
     /// Wraps [`Publisher::matching_listener`](zenoh::pubsub::Publisher::matching_listener) method.
     ///
-    /// The [`MatchingListener`](zenoh::matching::MatchingStatus) that will send a notification each time
+    /// The [`MatchingListener`](zenoh::matching::MatchingListener) will send a notification each time
     /// the [`MatchingStatus`](zenoh::matching::MatchingStatus) of the Publisher changes.
     ///
     /// # Examples
@@ -755,12 +752,15 @@ impl<'a> AdvancedPublisher<'a> {
     }
 }
 
+/// Builder for publishing data through an [`AdvancedPublisher`].
 #[zenoh_macros::unstable]
 pub type AdvancedPublisherPutBuilder<'a> = AdvancedPublicationBuilder<'a, PublicationBuilderPut>;
+/// Builder for publishing a deletion through an [`AdvancedPublisher`].
 #[zenoh_macros::unstable]
 pub type AdvancedPublisherDeleteBuilder<'a> =
     AdvancedPublicationBuilder<'a, PublicationBuilderDelete>;
 
+/// Configure an advanced publication and send it with `.await` or [`Wait::wait`].
 #[must_use = "Resolvables do nothing unless you resolve them using `.await` or `zenoh::Wait::wait`"]
 #[derive(Clone)]
 #[zenoh_macros::unstable]
@@ -793,20 +793,13 @@ impl EncodingBuilderTrait for AdvancedPublicationBuilder<'_, PublicationBuilderP
 }
 
 #[zenoh_macros::unstable]
-impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
-    #[zenoh_macros::unstable]
-    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
-        Self {
-            builder: self.builder.source_info(source_info),
-            ..self
-        }
-    }
+impl<P> AdvancedPublicationBuilder<'_, P> {
     /// Sets an optional attachment to be sent along with the publication.
     ///
     /// The argument is converted via [`OptionZBytes`], which supports both `T: Into<ZBytes>`
     /// and `Option<T>` where `T: Into<ZBytes>`.
     #[zenoh_macros::unstable]
-    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+    pub fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
         let attachment: OptionZBytes = attachment.into();
         Self {
             builder: self.builder.attachment(attachment),
@@ -816,17 +809,32 @@ impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
 }
 
 #[zenoh_macros::unstable]
+impl<P> SampleBuilderTrait for AdvancedPublicationBuilder<'_, P> {
+    #[zenoh_macros::unstable]
+    fn source_info<TS: Into<Option<SourceInfo>>>(self, source_info: TS) -> Self {
+        Self {
+            builder: self.builder.source_info(source_info),
+            ..self
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    fn attachment<TA: Into<OptionZBytes>>(self, attachment: TA) -> Self {
+        self.attachment(attachment)
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
 impl<P> FragInfoBuilderTrait for AdvancedPublicationBuilder<'_, P> {
-    /// Attach fragmentation information.
+    /// Attach fragmentation metadata without splitting the payload.
     ///
-    /// Even though [`AdvancedPublisher`] handles fragmentation itself via
-    /// [`fragmentation`](AdvancedPublisherBuilder::fragmentation) — which
-    /// sets `frag_info` (and `SourceInfo`) on every fragment — manually
-    /// setting `frag_info` on an advanced publication is allowed. Note
-    /// that [`AdvancedSubscriber`](crate::AdvancedSubscriber) discards fragmented samples without
-    /// [`SourceInfo`], so `source_info` must be set (or
-    /// [`sample_miss_detection`](crate::MissDetectionConfig) enabled on
-    /// the publisher) for fragments to be reassembled.
+    /// This is an internal API used by [`AdvancedPublisher`]. Applications should use
+    /// [`AdvancedPublisherBuilder::fragmentation`] instead of setting metadata manually.
+    /// Fragments of one publication share the same [`SourceInfo`] and fragment count,
+    /// with zero-based indices less than that count.
+    /// [`AdvancedSubscriber`](crate::AdvancedSubscriber) discards fragments without
+    /// [`SourceInfo`].
     #[zenoh_macros::unstable]
     fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self {
         Self {
@@ -1003,10 +1011,7 @@ impl IntoFuture for AdvancedPublisherDeleteBuilder<'_> {
 mod tests {
     use std::{cell::RefCell, time::Duration};
 
-    use zenoh::{
-        internal::traits::SampleBuilderTrait, sample::SampleKind, time::Timestamp, Config,
-        Resolvable, Result as ZResult, Wait,
-    };
+    use zenoh::{sample::SampleKind, time::Timestamp, Config, Resolvable, Result as ZResult, Wait};
 
     use crate::{AdvancedPublisherBuilderExt, MissDetectionConfig};
 

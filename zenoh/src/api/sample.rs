@@ -38,11 +38,15 @@ use crate::api::{
 #[zenoh_macros::unstable]
 pub type SourceSn = u32;
 
-#[zenoh_macros::unstable]
 /// The total number of fragments in the original publication.
+///
+/// Internal fragmentation metadata; see [`FragInfo`].
+#[zenoh_macros::unstable]
 pub type FragCount = u32;
 
 /// The zero-based index of a fragment within the original publication.
+///
+/// Internal fragmentation metadata; see [`FragInfo`].
 #[zenoh_macros::unstable]
 pub type FragNum = u32;
 
@@ -151,19 +155,11 @@ impl<const ID: u8> From<SourceInfo> for zenoh_protocol::zenoh::ext::SourceInfoTy
     }
 }
 
-/// Information on the fragmentation of a zenoh [`Sample`].
+/// Fragmentation metadata attached to a [`Sample`].
 ///
-/// This is an internal API intended for use by
-/// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
-/// [`AdvancedSubscriber`](https://docs.rs/zenoh-ext)
-/// reassembles fragmented samples by keying slots on
-/// [`SourceInfo`]; fragmented samples without `SourceInfo` cannot be
-/// reassembled and are discarded by `AdvancedSubscriber`.
-///
-/// All fragments of a publication share its source identifier, source sequence
-/// number, and fragment count. Each fragment has a zero-based index less than
-/// that count. The advanced subscriber validates these fields and its configured
-/// fragment limit during reassembly; the base Zenoh API transports the metadata.
+/// This is an internal API, not intended for direct application use.
+/// It carries the total fragment count, a zero-based fragment index, and an optional
+/// original timestamp. Zenoh transports this metadata without splitting or reassembling payloads.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct FragInfo {
@@ -188,8 +184,8 @@ impl FragInfo {
     #[zenoh_macros::unstable]
     /// Build fragmentation information carrying the timestamp of the original sample.
     ///
-    /// The timestamp is transported as metadata. Advanced subscribers currently
-    /// still require [`SourceInfo`] to identify and reassemble fragments.
+    /// Advanced subscribers currently still require [`SourceInfo`]
+    /// to identify and reassemble fragments.
     pub fn new_with_timestamp(
         frag_count: FragCount,
         frag_num: FragNum,
@@ -437,7 +433,9 @@ impl Sample {
         self.source_info.as_ref()
     }
 
-    /// Gets infos on the fragmentation of this Sample.
+    /// Gets the optional fragmentation metadata of this sample.
+    ///
+    /// This is an internal API intended for use by Advanced Pub/Sub; see [`FragInfo`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn frag_info(&self) -> Option<&FragInfo> {

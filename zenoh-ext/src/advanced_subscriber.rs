@@ -67,7 +67,9 @@ use source::{ArrivalContext, DeliveryContext, ReceiveOutcome, SequencedSource, T
 pub(crate) const DEFAULT_MAX_PENDING_SAMPLES: usize = 100;
 
 #[derive(Debug, Default, Clone)]
-/// Configure query for historical data for [`history`](crate::AdvancedSubscriberBuilder::history) method.
+/// Configure cached history retrieval through [`AdvancedSubscriberBuilder::history`].
+///
+/// By default, query all retained publications at startup, without an age limit.
 #[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
@@ -79,8 +81,8 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Late joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Requires publishers to enable [`publisher_detection`](crate::AdvancedPublisherBuilder::publisher_detection)
+    /// and [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[inline]
     #[zenoh_macros::unstable]
     pub fn detect_late_publishers(mut self) -> Self {
@@ -88,23 +90,26 @@ impl HistoryConfig {
         self
     }
 
-    /// Specify how many samples to query for each resource.
+    /// Request at most `depth` of the newest publications from each publisher cache.
     ///
-    /// This also bounds the number of samples buffered per source for
-    /// reordering and fragment reassembly, unless
+    /// A fragmented publication counts once. The limit applies to each cache,
+    /// rather than the total across matching publishers. It also bounds samples
+    /// buffered per source for reordering and reassembly, unless
     /// [`max_pending_samples`](AdvancedSubscriberBuilder::max_pending_samples)
     /// is set.
     ///
-    /// Builder will fail if `max_samples` is set to zero.
+    /// Subscriber declaration fails if `depth` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = Some(depth);
         self
     }
 
-    /// Specify the maximum age of samples to query.
+    /// Specify the maximum age of historical publications, in seconds.
     ///
-    /// Builder will fail if `max_age` is set to zero.
+    /// Age filtering uses publication timestamps. Enable `timestamping/enabled`
+    /// on publishers to apply the limit; untimestamped cached samples are included.
+    /// Subscriber declaration fails if `seconds` is zero.
     #[zenoh_macros::unstable]
     pub fn max_age(mut self, seconds: f64) -> Self {
         self.max_age = Some(seconds);
@@ -113,11 +118,17 @@ impl HistoryConfig {
 }
 
 #[derive(Debug, Clone, Copy)]
-/// Configure retransmission.
+/// Configure recovery of missing publications and fragments.
 ///
-/// Missing fragments are queried only when recovery is enabled. If recovery
-/// fails or times out, the subscriber waits before retrying. It gives up on an
-/// incomplete sample when needed to deliver a newer complete sample.
+/// Used by [`AdvancedSubscriberBuilder::recovery`]. By default, later publications
+/// reveal gaps; [`heartbeat`](RecoveryConfig::heartbeat) or
+/// [`periodic_queries`](RecoveryConfig::periodic_queries) also detect missing trailing publications.
+/// These two options are mutually exclusive.
+///
+/// Incomplete samples survive history-query completion. Failed fragment recovery
+/// is retried after a delay, until a newer complete sample needs delivery or the
+/// buffer or source-retention limit discards the sample. Recovery depends on the
+/// publisher's cache remaining available and retaining the requested publications.
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig<const CONFIGURED: bool = true> {
     frag_recovery_delay: Duration,
@@ -139,19 +150,13 @@ impl<const CONFIGURED: bool> Default for RecoveryConfig<CONFIGURED> {
 
 #[zenoh_macros::unstable]
 impl<const CONFIGURED: bool> RecoveryConfig<CONFIGURED> {
-    /// Set how often to check for missing fragments and how long to wait before retrying.
+    /// Set the fragment check and retry delay (default: 1 second).
     ///
-    /// Missing fragments before the highest received fragment are queried right
-    /// away. For example, receiving fragments 0, 1 and 3 triggers a query for
-    /// fragment 2. Only one recovery attempt runs at a time for each sample.
-    /// If it fails, the subscriber waits for this delay before retrying, or gives
-    /// up on the sample if needed to deliver a newer complete sample.
+    /// Gaps before received fragments can be queried immediately. Missing trailing
+    /// fragments are queried after no new fragment has arrived for this delay.
+    /// Failed attempts wait at least this delay before retrying.
     ///
-    /// Fragments after the highest received fragment may still be on their way.
-    /// The subscriber queries for them only after no new fragment has arrived
-    /// for this delay. Duplicate fragments do not restart the wait.
-    ///
-    /// Builder will fail if `delay` is zero.
+    /// Subscriber declaration fails if `delay` is zero.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn fragments_recovery_delay(self, delay: Duration) -> RecoveryConfig<CONFIGURED> {
@@ -164,13 +169,10 @@ impl<const CONFIGURED: bool> RecoveryConfig<CONFIGURED> {
 
 #[zenoh_macros::unstable]
 impl RecoveryConfig<false> {
-    /// Enable periodic queries for not yet received Samples and specify their period.
+    /// Periodically query known publishers for missing publications.
     ///
-    /// This allows retrieving the last Sample(s) if the last Sample(s) is/are lost.
-    /// So it is useful for sporadic publications but useless for periodic publications
-    /// with a period smaller or equal to this period.
-    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// This can recover trailing publications when no later publication reveals the loss.
+    /// Requires publishers to enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
@@ -185,9 +187,8 @@ impl RecoveryConfig<false> {
 
     /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
     ///
-    /// This allows receiving the last published Sample's sequence number and check for misses.
-    /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// Heartbeats reveal missing trailing publications. Requires publishers to enable
+    /// [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with
     /// [`heartbeat`](crate::advanced_publisher::MissDetectionConfig::heartbeat) or
     /// [`sporadic_heartbeat`](crate::advanced_publisher::MissDetectionConfig::sporadic_heartbeat).
@@ -207,11 +208,11 @@ impl RecoveryConfig<false> {
 impl<const CONFIGURED: bool> RecoveryConfig<CONFIGURED> {
     const RETENTION_PERIOD_DEFAULT: Duration = Duration::from_secs(3600);
 
-    /// Set the retention period of publishers last Sample state (default to 1h).
+    /// Set how long to retain inactive publisher state (default: 1 hour).
     ///
-    /// Valid samples, fragments, and duplicates refresh the source's activity.
-    /// Rejected fragments and samples already marked evicted or abandoned do not.
-    /// Sources marked alive through publisher detection are retained while alive.
+    /// Expiry forgets buffered samples and the ordering/deduplication baseline.
+    /// Publishers tracked by [`HistoryConfig::detect_late_publishers`] retain their
+    /// state while their liveliness token remains present.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn retention_period(mut self, period: Duration) -> RecoveryConfig<CONFIGURED> {
@@ -309,7 +310,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Make the built AdvancedSubscriber an [`AdvancedSubscriber`](AdvancedSubscriber).
+    /// Set the handler used to receive samples.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>
@@ -337,7 +338,8 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
 impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
     /// Make the subscriber run in background until the session is closed.
     ///
-    /// Background builder doesn't return a `AdvancedSubscriber` object anymore.
+    /// Resolves to `()` instead of an [`AdvancedSubscriber`].
+    #[zenoh_macros::unstable]
     pub fn background(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>, true> {
         AdvancedSubscriberBuilder {
             session: self.session,
@@ -360,7 +362,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
 impl<'a, 'c, Handler, const BACKGROUND: bool>
     AdvancedSubscriberBuilder<'a, '_, 'c, Handler, BACKGROUND>
 {
-    /// Restrict the matching publications that will be received by this [`Subscriber`] to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Restrict received publications to the given [`Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -368,20 +370,14 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Ask for retransmission of detected lost Samples.
+    /// Request retransmission of missing publications and fragments.
     ///
     /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     ///
-    /// Samples buffered while awaiting retransmission are bounded: see
-    /// [`max_pending_samples`](AdvancedSubscriberBuilder::max_pending_samples).
-    ///
-    /// Finishing a history or sample-recovery query does not discard samples
-    /// with missing fragments. The subscriber keeps trying to recover them. It gives up if
-    /// recovery fails and a newer complete sample needs to be delivered, or if
-    /// the buffer limit requires discarding them. If no newer complete sample
-    /// is waiting, failed recovery can be retried.
+    /// See [`RecoveryConfig`] for retry behavior and [`max_pending_samples`](Self::max_pending_samples)
+    /// for buffering limits. Fragment reassembly itself is automatic, even without recovery.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
@@ -397,7 +393,10 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     //     self
     // }
 
-    /// Change the timeout to be used for queries (history, retransmission).
+    /// Set the timeout for each history or recovery query (default: 10 seconds).
+    ///
+    /// Includes fragment queries. This limits each query, rather than the total
+    /// recovery time; failed fragment recovery may be retried.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -405,12 +404,10 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Set the maximum number of fragments a single sample may carry.
+    /// Set the maximum fragments per publication (default: 4096).
     ///
-    /// Fragments advertised with a [`FragInfo::frag_count`](zenoh::sample::FragInfo::frag_count)
-    /// larger than this value are rejected.
-    ///
-    /// Resolving a builder with `max` set to zero will fail.
+    /// Publications advertising a larger count are rejected. This is a fragment-count
+    /// limit, not a byte limit. Subscriber declaration fails if `max` is zero.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn max_fragments(mut self, max: u32) -> Self {
@@ -418,16 +415,15 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Set the maximum number of samples buffered per source.
+    /// Set the maximum publications buffered per source for reordering and reassembly.
     ///
-    /// Samples are buffered for reordering and fragment reassembly. When the
-    /// buffer exceeds this bound, the oldest entry is delivered if complete,
-    /// otherwise discarded and reported as missed through
-    /// [`sample_miss_listener`](AdvancedSubscriber::sample_miss_listener).
+    /// Fragmented publications count once. When the bound is exceeded, the oldest
+    /// buffered publication is delivered if complete, otherwise discarded. Misses
+    /// are reported on a later delivery; see [`sample_miss_listener`](AdvancedSubscriber::sample_miss_listener).
     ///
-    /// This setting takes precedence over
-    /// [`HistoryConfig::max_samples`](crate::HistoryConfig::max_samples). It
-    /// defaults to 100. Resolving a builder with `max` set to zero will fail.
+    /// The bound is this explicit setting, otherwise [`HistoryConfig::max_samples`]
+    /// if configured, otherwise 100. It limits counts per source, not total bytes.
+    /// Subscriber declaration fails if `max` is zero.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn max_pending_samples(mut self, max: usize) -> Self {
@@ -435,9 +431,12 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Enable query for historical data.
+    /// Retrieve cached publications when the subscriber is declared.
     ///
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Requires publishers to enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// [`HistoryConfig::detect_late_publishers`] additionally retrieves history on discovery.
+    /// Declaration starts the query; it does not wait for all history to arrive.
+    /// Use [`recovery`](Self::recovery) to recover losses during the subscription.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn history(mut self, config: HistoryConfig) -> Self {
@@ -583,78 +582,19 @@ impl State {
     }
 }
 
-/*
-use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
-
-let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-let subscriber = session
-    .declare_subscriber("key/expression")
-    .history(HistoryConfig::default().detect_late_publishers())
-    .recovery(RecoveryConfig::default())
-    .await
-    .unwrap();
-
-let miss_listener = subscriber.sample_miss_listener().await.unwrap();
-loop {
-    tokio::select! {
-        sample = subscriber.recv_async() => {
-            if let Ok(sample) = sample {
-                // ...
-            }
-        },
-        miss = miss_listener.recv_async() => {
-            if let Ok(miss) = miss {
-                // ...
-            }
-        },
-    }
-}
-*/
-
-/// The extension to [`Subscriber`](zenoh::pubsub::Subscriber) that provides advanced functionalities
+/// A subscriber supporting reassembly, history, loss recovery, and discovery.
 ///
-/// The `AdvancedSubscriber` is constructed over a regular [`Subscriber`](zenoh::pubsub::Subscriber)
-/// through [`advanced`](crate::AdvancedSubscriberBuilderExt::advanced) method or by using
-/// any other method of [`AdvancedSubscriberBuilder`](crate::AdvancedSubscriberBuilder).
+/// Create one through [`AdvancedSubscriberBuilderExt`](crate::AdvancedSubscriberBuilderExt).
+/// It automatically reassembles fragmented publications. Other features are opt-in:
 ///
-/// The `AdvancedSubscriber` works with [`AdvancedPublisher`](crate::AdvancedPublisher) to provide additional functionalities such as:
-/// * fragment reassembly, bounded by [`max_fragments`](crate::AdvancedSubscriberBuilder::max_fragments)
-///   and [`max_pending_samples`](crate::AdvancedSubscriberBuilder::max_pending_samples), with missing-fragment queries when recovery is enabled
-/// * missing samples detection using periodic queries or heartbeat subscription configurable with [`recovery`](crate::AdvancedSubscriberBuilder::recovery) method
-/// * recovering missing samples, configured with [`history`](crate::AdvancedSubscriberBuilder::history) method
-///   (max age and sample count, late joiner detection and requesting)
-/// * liveliness-based subscriber detection with [`subscriber_detection`](crate::AdvancedSubscriberBuilder::subscriber_detection) method
+/// - [`history`](AdvancedSubscriberBuilder::history): retrieve cached publications at startup and optionally on discovery.
+/// - [`recovery`](AdvancedSubscriberBuilder::recovery): request missing publications and fragments.
+/// - [`sample_miss_listener`](Self::sample_miss_listener): receive notifications of delivery gaps.
+/// - [`subscriber_detection`](AdvancedSubscriberBuilder::subscriber_detection): advertise this subscriber's presence.
 ///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .history(HistoryConfig::default().detect_late_publishers())
-///     .recovery(RecoveryConfig::default().heartbeat())
-///     .subscriber_detection()
-///     .await
-///     .unwrap();
-/// let miss_listener = subscriber.sample_miss_listener().await.unwrap();
-/// loop {
-///     tokio::select! {
-///         sample = subscriber.recv_async() => {
-///             if let Ok(sample) = sample {
-///                 // ...
-///             }
-///         },
-///         miss = miss_listener.recv_async() => {
-///             if let Ok(miss) = miss {
-///                 // ...
-///             }
-///         },
-///     }
-/// }
-/// # }
-/// ```
+/// Buffering is bounded by [`max_fragments`](AdvancedSubscriberBuilder::max_fragments)
+/// and [`max_pending_samples`](AdvancedSubscriberBuilder::max_pending_samples).
+/// See the [paired publisher/subscriber example](crate#advanced-pubsub).
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
     statesref: Arc<Mutex<State>>,
@@ -939,10 +879,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
         &mut self.receiver
     }
 
-    /// Declares a listener to detect missed samples.
+    /// Declare a listener for gaps in delivered publications.
     ///
-    /// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
-    /// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// Requires publishers to enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// A notification is emitted when a later complete publication is delivered across
+    /// a sequence-number gap, including after eviction or failed recovery. It counts
+    /// whole publications, not fragments. No notification is emitted before the first
+    /// delivery from a source, or for a trailing loss without a later delivery.
     #[zenoh_macros::unstable]
     pub fn sample_miss_listener(&self) -> SampleMissListenerBuilder<'_, DefaultHandler> {
         SampleMissListenerBuilder {
@@ -990,10 +933,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 }
 
-/// A struct that represent missed samples.
+/// The number and source of missed publications.
 ///
-/// Reports are emitted when the delivery of a full sample crates a gap
-/// in sequence number, not at fragment reception or eviction.
+/// See [`AdvancedSubscriber::sample_miss_listener`] for notification timing.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct Miss {
@@ -1003,11 +945,13 @@ pub struct Miss {
 
 impl Miss {
     /// The source of missed samples.
+    #[zenoh_macros::unstable]
     pub fn source(&self) -> EntityGlobalId {
         self.source
     }
 
     /// The number of missed samples.
+    #[zenoh_macros::unstable]
     pub fn nb(&self) -> u32 {
         self.nb
     }
@@ -1020,10 +964,9 @@ impl CallbackParameter for Miss {
     }
 }
 
-/// A listener to detect missed samples.
+/// A listener for missed-publication notifications.
 ///
-/// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
-/// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+/// Created by [`AdvancedSubscriber::sample_miss_listener`].
 #[zenoh_macros::unstable]
 pub struct SampleMissListener<Handler> {
     id: usize,
@@ -1046,6 +989,8 @@ impl<Handler> fmt::Debug for SampleMissListener<Handler> {
 
 #[zenoh_macros::unstable]
 impl<Handler> SampleMissListener<Handler> {
+    /// Stop receiving missed-publication notifications.
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn undeclare(self) -> SampleMissHandlerUndeclaration<Handler>
     where
@@ -1118,6 +1063,7 @@ impl<Handler> fmt::Debug for SampleMissHandlerUndeclaration<Handler> {
 
 impl<Handler> SampleMissHandlerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
+    #[zenoh_macros::unstable]
     pub fn wait_callbacks(self) -> Self {
         // Note: no particular synchronization is required as of now since miss listener callbacks are always executed
         // under state lock
@@ -1206,7 +1152,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
 impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
     /// Make the sample miss notification run in the background until the advanced subscriber is undeclared.
     ///
-    /// Background builder doesn't return a `SampleMissHandler` object anymore.
+    /// Resolves to `()` instead of a [`SampleMissListener`].
     #[zenoh_macros::unstable]
     pub fn background(self) -> SampleMissListenerBuilder<'a, Callback<Miss>, true> {
         SampleMissListenerBuilder {

@@ -65,22 +65,15 @@ pub trait SampleBuilderTrait {
 /// Attach fragmentation information to a [`Sample`] or publication builder.
 ///
 /// This is an internal API intended for use by
-/// [`AdvancedPublisher`](https://docs.rs/zenoh-ext) with sample miss
-/// detection enabled, which sets both `frag_info` and `SourceInfo` for each
-/// fragment. [`AdvancedSubscriber`](https://docs.rs/zenoh-ext) reassembles
-/// fragments by keying slots on `SourceInfo`: fragmented samples without
-/// `SourceInfo` cannot be reassembled and are discarded by
-/// `AdvancedSubscriber`.
-///
-/// This attaches metadata only; it does not split the payload. Fragments of one
-/// publication share the same source identifier, source sequence number, and
-/// fragment count, and each carries its own zero-based fragment index.
+/// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+/// This attaches metadata only; it does not split the payload.
 #[zenoh_macros::unstable]
 pub trait FragInfoBuilderTrait {
     /// Attach fragmentation information.
     ///
     /// This is an internal API intended for use by
     /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+    /// Manually setting `frag_info` on a Sample is not recommended.
     fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self;
 }
 
@@ -275,15 +268,10 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
 #[zenoh_macros::internal_trait]
 #[zenoh_macros::unstable]
 impl<T> FragInfoBuilderTrait for SampleBuilder<T> {
-    /// Attach fragmentation information.
+    /// Attach fragmentation metadata.
     ///
     /// This is an internal API intended for use by
-    /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext) — see the
-    /// `FragInfoBuilderTrait` documentation for details. Manually setting `frag_info`
-    /// on a sample without [`SourceInfo`](crate::sample::SourceInfo) is
-    /// unsupported: such fragments are discarded by
-    /// [`AdvancedSubscriber`](https://docs.rs/zenoh-ext) and never
-    /// reassembled.
+    /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
     #[zenoh_macros::unstable]
     fn frag_info<F: Into<Option<FragInfo>>>(self, frag_info: F) -> Self {
         Self {

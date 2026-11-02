@@ -1033,9 +1033,11 @@ pub mod internal {
         }
     }
     pub mod traits {
+        #[cfg(feature = "unstable")]
+        pub use crate::api::builders::sample::FragInfoBuilderTrait;
         pub use crate::api::builders::sample::{
-            EncodingBuilderTrait, FragInfoBuilderTrait, QoSBuilderTrait, SampleBuilderTrait,
-            TimestampBuilderTrait, TimestampInstrumentationBuilderTrait,
+            EncodingBuilderTrait, QoSBuilderTrait, SampleBuilderTrait, TimestampBuilderTrait,
+            TimestampInstrumentationBuilderTrait,
         };
     }
     pub use zenoh_core::{zasynclock, zerror, zlock, zread, ztimeout, zwrite, ResolveFuture};

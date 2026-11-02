@@ -34,15 +34,55 @@
 //!
 //! # Advanced Pub/Sub
 //!
-//! The [`AdvancedPublisher`] and [`AdvancedSubscriber`] provide advanced pub/sub
-//! functionalities, including support for message history, recovery, and more.
-//!
-//! With [`AdvancedPublisherBuilder::fragmentation`], a publication is sent as
-//! several independently delivered fragments sharing one source sequence number.
-//! [`AdvancedSubscriber`] reassembles them into one sample. Enabling its
-//! [`recovery`](AdvancedSubscriberBuilder::recovery) lets it request missing
-//! fragments from the publisher's [`cache`](AdvancedPublisherBuilder::cache).
-//! History limits and miss notifications count publications, not their fragments.
+//! Advanced pub/sub requires the **`unstable`** feature: `cargo add zenoh-ext --features unstable`.
+//! These APIs may change between releases. Serialization is available without this feature.
+#![cfg_attr(
+    feature = "unstable",
+    doc = r#"
+
+[`AdvancedPublisher`] and [`AdvancedSubscriber`] provide:
+- **History:** retrieve cached publications at startup and optionally when publishers are discovered.
+- **Recovery:** request missing publications and fragments while they remain cached and reachable.
+- **Fragmentation:** split large payloads and automatically reassemble them in advanced subscribers.
+- **Discovery:** advertise publisher/subscriber presence through liveliness.
+
+History and recovery are opt-in. Cache/history limits and miss notifications count
+publications, not fragments. See the configuration methods for limits and prerequisites.
+
+## Example
+
+```no_run
+# #[tokio::main]
+# async fn main() -> zenoh::Result<()> {
+use std::time::Duration;
+use zenoh_ext::{
+    AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt,
+    CacheConfig, HistoryConfig, MissDetectionConfig, RecoveryConfig,
+};
+
+let session = zenoh::open(zenoh::Config::default()).await?;
+let publisher = session.declare_publisher("example/data")
+    .cache(CacheConfig::default().max_samples(10))
+    .sample_miss_detection(MissDetectionConfig::default().heartbeat(Duration::from_secs(1)))
+    .fragmentation(1024)
+    .publisher_detection()
+    .await?;
+publisher.put(vec![0u8; 8192]).attachment("metadata").await?;
+
+let subscriber = session.declare_subscriber("example/data")
+    .history(HistoryConfig::default().detect_late_publishers())
+    .recovery(RecoveryConfig::default().heartbeat())
+    .await?;
+let sample = subscriber.recv_async().await?;
+assert_eq!(sample.payload().len(), 8192);
+# Ok(())
+# }
+```
+
+Use [`AdvancedSubscriber::sample_miss_listener`] to observe gaps in delivered publications.
+"#
+)]
+
 #[cfg(feature = "unstable")]
 mod advanced_cache;
 #[cfg(feature = "unstable")]

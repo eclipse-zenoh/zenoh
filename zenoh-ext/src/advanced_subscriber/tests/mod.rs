@@ -20,7 +20,7 @@ use std::{
 use zenoh::{
     bytes::ZBytes,
     config::{Config, WhatAmI},
-    internal::{runtime::ZRuntime, traits::SampleBuilderTrait, ztimeout},
+    internal::{runtime::ZRuntime, ztimeout},
     query::{ConsolidationMode, Query, Reply, ReplyKeyExpr, Selector},
     sample::{FragInfo, SampleBuilder, SourceInfo},
     time::Timestamp,
