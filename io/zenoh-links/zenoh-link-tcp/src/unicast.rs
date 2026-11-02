@@ -22,7 +22,8 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use zenoh_link_commons::{
-    get_ip_interface_names, parse_socket_priority, set_socket_priority, tcp::TcpSocketConfig,
+    get_ip_interface_names, parse_socket_priority, set_socket_priority,
+    tcp::{get_tcp_addrs, TcpSocketConfig},
     LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
     NewLinkChannelSender, SocketPriority, BIND_INTERFACE, BIND_SOCKET,
 };
@@ -33,8 +34,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use crate::{
-    get_tcp_addrs, utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU,
-    TCP_LINGER_TIMEOUT, TCP_LOCATOR_PREFIX,
+    utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
+    TCP_LOCATOR_PREFIX,
 };
 
 pub struct LinkUnicastTcp {
@@ -300,33 +301,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let socket_config = TcpSocketConfig::from(TcpLinkConfig::new(&config).await?);
         let socket_priority = parse_socket_priority(&config)?;
 
-        let mut errs: Vec<ZError> = vec![];
-        for da in dst_addrs {
-            match socket_config.new_link(&da).await {
-                Ok((stream, src_addr, dst_addr)) => {
-                    let link = Arc::new(LinkUnicastTcp::new(
-                        stream,
-                        src_addr,
-                        dst_addr,
-                        socket_priority,
-                    ));
-                    return Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>));
-                }
-                Err(e) => {
-                    errs.push(e);
-                }
-            }
-        }
+        let (stream, src_addr, dst_addr) = socket_config
+            .new_link_first_reachable(dst_addrs)
+            .await
+            .map_err(|e| zerror!("Can not create a new TCP link bound to {}: {}", endpoint, e))?;
 
-        if errs.is_empty() {
-            errs.push(zerror!("No TCP unicast addresses available").into());
-        }
-
-        bail!(
-            "Can not create a new TCP link bound to {}: {:?}",
-            endpoint,
-            errs
-        )
+        let link = Arc::new(LinkUnicastTcp::new(
+            stream,
+            src_addr,
+            dst_addr,
+            socket_priority,
+        ));
+        Ok(LinkUnicast::from(link as Arc<dyn LinkUnicastTrait>))
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {

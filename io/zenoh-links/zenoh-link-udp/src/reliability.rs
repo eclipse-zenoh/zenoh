@@ -59,13 +59,12 @@ impl LinkUnicastQuicUnsecure {
             LinkUnicastUdpVariant::Reliable(Box::new(quic_link)),
         ));
         if is_mixed_rel {
-            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new_mixed_reliability(
                 quic_conn,
                 src_addr,
                 endpoint.clone().into(),
                 LinkAuthId::Udp,
                 UDP_LOCATOR_PREFIX,
-                None,
             ));
             Ok(LinkUnicast(zenoh_link_commons::NewLink::MixedReliability {
                 reliable: link,
@@ -193,13 +192,12 @@ impl LinkUnicastQuicUnsecure {
         ));
         if is_mixed_rel {
             let dst_locator = Locator::new(UDP_LOCATOR_PREFIX, dst_addr.to_string(), "")?;
-            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new_mixed_reliability(
                 quic_conn,
                 src_addr,
                 dst_locator,
                 LinkAuthId::Udp,
                 UDP_LOCATOR_PREFIX,
-                None,
             ));
             Ok(LinkUnicast(zenoh_link_commons::NewLink::MixedReliability {
                 reliable: link,

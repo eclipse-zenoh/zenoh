@@ -321,8 +321,16 @@ mod tests {
 
         ztimeout!(async {
             let mut buffer = vec![0u8; observer.get_mtu() as usize];
+            let mut retry = tokio::time::interval(SLEEP_COUNT);
+            retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
-                let (wire_len, _) = observer.read(&mut buffer).await.unwrap();
+                let (wire_len, _) = tokio::select! {
+                    received = observer.read(&mut buffer) => received.unwrap(),
+                    _ = retry.tick(), if channel.reliability == Reliability::BestEffort => {
+                        peer01.transport.schedule(message.as_mut()).unwrap();
+                        continue;
+                    }
+                };
                 if let Some(decoded_len) = get_decoded_len(&buffer[..wire_len]) {
                     assert!(
                         wire_len < decoded_len,
@@ -345,6 +353,7 @@ mod tests {
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while peer02.handler.get_count() == 0 {
+                        peer01.transport.schedule(message.as_mut()).unwrap();
                         tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });

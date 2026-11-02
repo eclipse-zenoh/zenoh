@@ -77,6 +77,10 @@ toml_writer = "=1.0.2"
 twox-hash = "=1.6.3"
 unescaper = "=0.1.8"
 unzip-n = "=0.1.2"
+# 1.1.0 requires Rust 1.83.
+utf16_iter = "=1.0.5"
+# 1.1.0 requires Rust 1.83.
+utf8_iter = "=1.0.4"
 uuid = "=1.20.0"
 zerofrom = "=0.1.5"
 zeroize = "=1.8.2"
@@ -135,6 +139,8 @@ ignored = [
   "twox-hash",
   "unescaper",
   "unzip-n",
+  "utf16_iter",
+  "utf8_iter",
   "uuid",
   "zerofrom",
   "zeroize",

@@ -293,6 +293,8 @@ mod tests {
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while router_handler.get_count() == 0 {
+                        // A droppable burst may enqueue nothing; retry until receipt.
+                        client_transport.schedule(message.clone().as_mut()).unwrap();
                         tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
@@ -301,6 +303,38 @@ mod tests {
 
         // Wait a little bit
         tokio::time::sleep(SLEEP).await;
+    }
+
+    #[tokio::test]
+    async fn transport_compression_test_retries_dropped_burst() {
+        let router_handler = Arc::new(SHRouter::default());
+        let received = router_handler.count.clone();
+        let attempts = AtomicUsize::new(0);
+        let (transport, _inner) = zenoh_transport::unicast::test_helpers::mock_transport_unicast(
+            ZenohIdProto::try_from([2]).unwrap(),
+            WhatAmI::Router,
+            Arc::new(move |_| {
+                if attempts.fetch_add(1, Ordering::SeqCst) >= MSG_COUNT {
+                    received.fetch_add(1, Ordering::SeqCst);
+                }
+            }),
+        );
+
+        tokio::time::timeout(
+            Duration::from_secs(3),
+            test_transport(
+                router_handler.clone(),
+                transport,
+                Channel {
+                    priority: Priority::DEFAULT,
+                    reliability: Reliability::BestEffort,
+                },
+                131_072,
+            ),
+        )
+        .await
+        .expect("delivery should resume after an entirely dropped burst");
+        assert_eq!(router_handler.get_count(), 1);
     }
 
     async fn run_single(

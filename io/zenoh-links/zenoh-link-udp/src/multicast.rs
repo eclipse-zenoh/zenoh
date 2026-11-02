@@ -23,8 +23,8 @@ use async_trait::async_trait;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use zenoh_link_commons::{
-    parse_dscp, set_dscp, LinkAuthId, LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait,
-    BIND_SOCKET,
+    get_ip_addrs, parse_dscp, set_dscp, LinkAuthId, LinkManagerMulticastTrait, LinkMulticast,
+    LinkMulticastTrait, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Config, EndPoint, Locator},
@@ -33,7 +33,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 use super::{config::*, UDP_DEFAULT_MTU};
-use crate::{get_udp_addrs, socket_addr_to_udp_locator};
+use crate::socket_addr_to_udp_locator;
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link
@@ -394,7 +394,7 @@ impl LinkManagerMulticastUdp {
 #[async_trait]
 impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
     async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast> {
-        let mcast_addrs = get_udp_addrs(endpoint.address())
+        let mcast_addrs = get_ip_addrs(endpoint.address())
             .await?
             .filter(|a| a.ip().is_multicast())
             .collect::<Vec<SocketAddr>>();

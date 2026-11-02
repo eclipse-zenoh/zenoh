@@ -26,9 +26,9 @@ use tokio::{net::UdpSocket, sync::Mutex as AsyncMutex};
 use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link_commons::{
-    get_ip_interface_names, parse_dscp, set_dscp, ConstructibleLinkManagerUnicast, LinkAuthId,
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP, LocatorInspector,
-    NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
+    get_ip_addrs, get_ip_interface_names, parse_dscp, set_dscp, ConstructibleLinkManagerUnicast,
+    LinkAuthId, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, ListenersUnicastIP,
+    LocatorInspector, NewLinkChannelSender, BIND_INTERFACE, BIND_SOCKET,
 };
 use zenoh_protocol::{
     core::{Address, EndPoint, Locator, Priority},
@@ -37,10 +37,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 
-use super::{
-    get_udp_addrs, socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU,
-    UDP_MAX_MTU,
-};
+use super::{socket_addr_to_udp_locator, UDP_ACCEPT_THROTTLE_TIME, UDP_DEFAULT_MTU, UDP_MAX_MTU};
 use crate::{pktinfo, reliability::LinkUnicastQuicUnsecure};
 
 type LinkHashMap = Arc<Mutex<HashMap<(SocketAddr, SocketAddr), Weak<LinkUnicastUdpUnconnected>>>>;
@@ -348,7 +345,7 @@ impl LinkManagerUnicastUdp {
     ) -> ZResult<(UdpSocket, SocketAddr, SocketAddr)> {
         let src_socket_addr = if let Some(bind_socket) = bind_socket {
             let address = Address::from(bind_socket);
-            get_udp_addrs(address)
+            get_ip_addrs(address)
                 .await?
                 .next()
                 .ok_or_else(|| zerror!("No UDP socket addr found bound to {}", address))?
@@ -441,7 +438,7 @@ impl LinkManagerUnicastUdp {
     }
 
     async fn new_udp_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_addrs = get_udp_addrs(endpoint.address())
+        let dst_addrs = get_ip_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
         let config = endpoint.config();
@@ -491,7 +488,7 @@ impl LinkManagerUnicastUdp {
     }
 
     async fn new_udp_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addrs = get_udp_addrs(endpoint.address())
+        let addrs = get_ip_addrs(endpoint.address())
             .await?
             .filter(|a| !a.ip().is_multicast());
         let config = endpoint.config();
@@ -573,7 +570,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addrs = get_udp_addrs(endpoint.address())
+        let addrs = get_ip_addrs(endpoint.address())
             .await?
             .filter(|x| !x.ip().is_multicast());
 

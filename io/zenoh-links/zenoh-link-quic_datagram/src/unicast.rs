@@ -43,6 +43,13 @@ use super::{
     QUIC_DATAGRAM_ACCEPT_THROTTLE_TIME, QUIC_DATAGRAM_DEFAULT_MTU, QUIC_DATAGRAM_LOCATOR_PREFIX,
 };
 
+// Mixed-reliability companions do not negotiate their link MTU. Both peers must use
+// the same payload budget, independently of local PMTUD progress. Starting from
+// QUIC's 1200-byte UDP payload baseline, reserve 1 byte for flags, 20 for the CID,
+// 4 for the packet number, 16 for the AEAD tag and 9 for Quinn's DATAGRAM framing
+// bound. This also fits plaintext QUIC, which has no AEAD tag.
+const MIXED_RELIABILITY_MTU: BatchSize = 1_150;
+
 pub struct LinkUnicastQuicDatagram {
     connection: QuicConnection,
     src_addr: SocketAddr,
@@ -69,6 +76,45 @@ impl LinkUnicastQuicDatagram {
             .map(|mtu| mtu as BatchSize)
             .unwrap_or(*QUIC_DATAGRAM_DEFAULT_MTU);
 
+        Self::new_with_mtu(
+            connection,
+            src_addr,
+            dst_locator,
+            auth_identifier,
+            locator_prefix,
+            expiration_manager,
+            mtu,
+        )
+    }
+
+    /// Creates a mixed-reliability companion with a fixed, PMTUD-independent MTU.
+    pub fn new_mixed_reliability(
+        connection: QuicConnection,
+        src_addr: SocketAddr,
+        dst_locator: Locator,
+        auth_identifier: LinkAuthId,
+        locator_prefix: &str,
+    ) -> Self {
+        Self::new_with_mtu(
+            connection,
+            src_addr,
+            dst_locator,
+            auth_identifier,
+            locator_prefix,
+            None, // The reliable link manages certificate expiration for both links.
+            MIXED_RELIABILITY_MTU,
+        )
+    }
+
+    fn new_with_mtu(
+        connection: QuicConnection,
+        src_addr: SocketAddr,
+        dst_locator: Locator,
+        auth_identifier: LinkAuthId,
+        locator_prefix: &str,
+        expiration_manager: Option<LinkCertExpirationManager>,
+        mtu: BatchSize,
+    ) -> Self {
         // Build the Quic object
         LinkUnicastQuicDatagram {
             connection,

@@ -84,5 +84,8 @@ zenoh-util = { workspace = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]
