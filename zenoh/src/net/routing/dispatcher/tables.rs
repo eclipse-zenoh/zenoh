@@ -103,8 +103,8 @@ impl<'a> RoutingExpr<'a> {
 
     pub(crate) fn get_best_key(&self, sid: usize) -> WireExpr<'a> {
         match self.resource() {
-            Some(res) => res.get_best_key("", sid),
-            None => self.prefix.get_best_key(self.suffix, sid),
+            Some(res) => res.get_best_sender_key("", sid),
+            None => self.prefix.get_best_sender_key(self.suffix, sid),
         }
     }
 

@@ -1084,3 +1084,58 @@ fn big_key_expr() {
     res.get_best_key("/a", face.state.id + 1);
     Resource::get_matches(&face.tables.tables.read().unwrap().data, &key_expr);
 }
+
+#[test]
+fn routed_data_and_queries_do_not_borrow_receiver_owned_mappings() {
+    use zenoh_sync::get_mut_unchecked;
+
+    use crate::net::routing::dispatcher::tables::RoutingExpr;
+
+    let router = new_router();
+    let face = router.new_session(Arc::new(DummyPrimitives {}));
+    let root = zread!(router.tables.tables).data._get_root().clone();
+    register_expr(
+        &router.tables,
+        &mut face.state.clone(),
+        10,
+        &"owned/topic".into(),
+    );
+    let mut res = Resource::get_resource(&root, "owned/topic").unwrap();
+
+    // Control messages may still use the receiver's mapping. A data/query
+    // route must not: the receiver can retire it before queued traffic arrives,
+    // while an overlapping subscriber or queryable remains alive.
+    let control = res.get_best_key("", face.state.id);
+    assert_eq!((control.scope, control.mapping), (10, Mapping::Receiver));
+    let routing = RoutingExpr::new(&root, "owned/topic");
+    let unowned = routing.get_best_key(face.state.id);
+    assert_eq!(
+        unowned.scope, 0,
+        "borrowed a mapping the receiver can retire"
+    );
+    assert_eq!(unowned.suffix, "owned/topic");
+
+    // An existing sender mapping remains usable: its lifetime belongs to this
+    // router face, which only clears local_mappings when the face closes.
+    let sender_id = 42;
+    let context = get_mut_unchecked(&mut res)
+        .face_ctxs
+        .get_mut(&face.state.id)
+        .unwrap();
+    get_mut_unchecked(context).local_expr_id = Some(sender_id);
+    get_mut_unchecked(&mut face.state.clone())
+        .local_mappings
+        .insert(sender_id, res.clone());
+    let owned = routing.get_best_key(face.state.id).to_owned();
+    assert_eq!((owned.scope, owned.mapping), (sender_id, Mapping::Sender));
+    assert!(owned.suffix.is_empty());
+    let child = RoutingExpr::new(&res, "/child")
+        .get_best_key(face.state.id)
+        .to_owned();
+    assert_eq!((child.scope, child.mapping), (sender_id, Mapping::Sender));
+    assert_eq!(child.suffix, "/child");
+
+    unregister_expr(&router.tables, &mut face.state.clone(), 10);
+    assert_eq!(routing.get_best_key(face.state.id), owned);
+    assert!(face.state.local_mappings.contains_key(&sender_id));
+}
