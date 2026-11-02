@@ -37,7 +37,7 @@ use zenoh_config::{
     wrappers::ZenohId,
 };
 #[cfg(feature = "unstable")]
-use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
+use zenoh_config::{wrappers::EntityGlobalId, EndPoint, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
 use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
 use zenoh_protocol::{
@@ -72,6 +72,8 @@ use super::{
     builders::close::{CloseBuilder, Closeable, Closee},
     connectivity,
 };
+#[cfg(feature = "unstable")]
+use crate::api::builders::connect_peer::ConnectPeerBuilder;
 #[cfg(feature = "unstable")]
 use crate::api::timestamp_stack::{push_ts_interception, TimestampInstrumentation, TimestampStack};
 #[cfg(feature = "unstable")]
@@ -1064,6 +1066,54 @@ impl Session {
         SessionInfo {
             session: self.downgrade(),
         }
+    }
+
+    /// Connect to a peer at `endpoint` after the session is open.
+    ///
+    /// The returned [`ConnectPeerBuilder`](crate::session::ConnectPeerBuilder) dials the
+    /// endpoint once and resolves to the [`ZenohId`] of the peer the session connected to.
+    /// It does not retry, and it leaves no background connector behind when the attempt
+    /// fails: the caller decides whether and when to try again, for example with another
+    /// endpoint of the same peer.
+    ///
+    /// The attempt (link setup plus the Init/Open handshake) is bounded by
+    /// `transport/unicast/open_timeout`, or by the value given to
+    /// [`timeout`](crate::session::ConnectPeerBuilder::timeout) for this call only.
+    /// Use [`expected_zid`](crate::session::ConnectPeerBuilder::expected_zid) to refuse a link
+    /// to a different peer; with it, a peer that already has a unicast transport to this
+    /// session resolves to `Ok` without dialing.
+    ///
+    /// Only unicast endpoints are accepted, and the session must be in `peer` or `router`
+    /// mode. The endpoint's configuration is merged with the session's link configuration,
+    /// as for `connect/endpoints`.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// use std::time::Duration;
+    ///
+    /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
+    /// // Try QUIC first and fall back to TLS if QUIC does not answer in time.
+    /// for endpoint in ["quic/192.168.1.10:7447", "tls/192.168.1.10:7448"] {
+    ///     let endpoint: zenoh::config::EndPoint = endpoint.parse().unwrap();
+    ///     match session
+    ///         .connect_peer(endpoint)
+    ///         .timeout(Duration::from_millis(1500))
+    ///         .await
+    ///     {
+    ///         Ok(zid) => {
+    ///             println!("connected to {zid}");
+    ///             break;
+    ///         }
+    ///         Err(e) => println!("{e}"),
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn connect_peer<E: Into<EndPoint>>(&self, endpoint: E) -> ConnectPeerBuilder<'_> {
+        ConnectPeerBuilder::new(self, endpoint.into())
     }
 
     /// Returns the [`ShmProviderState`](ShmProviderState) associated with the current [`Session`](Session)’s [`Runtime`](Runtime).

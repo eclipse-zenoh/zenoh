@@ -392,6 +392,7 @@ pub mod session {
     pub use crate::api::session::WeakSession;
     #[zenoh_macros::unstable]
     pub use crate::api::{
+        builders::connect_peer::ConnectPeerBuilder,
         builders::info_links::{
             LinkEventsListener, LinkEventsListenerBuilder, LinkEventsListenerUndeclaration,
             LinksBuilder,

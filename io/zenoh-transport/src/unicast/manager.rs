@@ -841,7 +841,8 @@ impl TransportManager {
     }
 
     pub async fn open_transport_unicast(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        self.open_transport_unicast_inner(endpoint, None).await
+        self.open_transport_unicast_inner(endpoint, None, self.config.unicast.open_timeout)
+            .await
     }
 
     pub async fn open_transport_unicast_with_zid(
@@ -849,7 +850,27 @@ impl TransportManager {
         endpoint: EndPoint,
         expected_zid: &ZenohIdProto,
     ) -> ZResult<TransportUnicast> {
-        self.open_transport_unicast_inner(endpoint, Some(expected_zid))
+        self.open_transport_unicast_inner(
+            endpoint,
+            Some(expected_zid),
+            self.config.unicast.open_timeout,
+        )
+        .await
+    }
+
+    /// Opens a unicast transport to `endpoint`, bounding the link setup and the
+    /// Init/Open handshake by `open_timeout` instead of the configured
+    /// `transport/unicast/open_timeout`.
+    ///
+    /// When `expected_zid` is `Some`, the handshake fails if the remote peer
+    /// reports a different [`ZenohIdProto`].
+    pub async fn open_transport_unicast_with_timeout(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: Option<&ZenohIdProto>,
+        open_timeout: Duration,
+    ) -> ZResult<TransportUnicast> {
+        self.open_transport_unicast_inner(endpoint, expected_zid, open_timeout)
             .await
     }
 
@@ -857,6 +878,7 @@ impl TransportManager {
         &self,
         mut endpoint: EndPoint,
         expected_zid: Option<&ZenohIdProto>,
+        open_timeout: Duration,
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
@@ -889,7 +911,7 @@ impl TransportManager {
         };
 
         // Open the link
-        tokio::time::timeout(self.config.unicast.open_timeout, async {
+        tokio::time::timeout(open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
                 Ok(link) => {
                     super::establishment::open::open_link(endpoint, link, self, expected_zid).await
