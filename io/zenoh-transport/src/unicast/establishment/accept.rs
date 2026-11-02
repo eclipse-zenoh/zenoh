@@ -731,6 +731,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         },
         priorities: None,
         reliability: None,
+        opened_from: None,
     };
     let mut link_unicast = TransportLinkUnicast::new(
         link.clone(),
@@ -887,6 +888,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         },
         priorities: state.transport.ext_qos.priorities(),
         reliability: state.transport.ext_qos.reliability(),
+        opened_from: None,
     };
     let a_link = link_unicast.reconfigure(
         a_config,
@@ -911,6 +913,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
                 priorities: state.transport.ext_qos.priorities(),
                 // Do not apply reliability override to MixedReliability associated links
                 reliability: None,
+                opened_from: None,
             };
             let link = TransportLinkUnicast::new(
                 LinkUnicast::from(best_effort),

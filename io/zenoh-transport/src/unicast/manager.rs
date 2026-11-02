@@ -871,6 +871,8 @@ impl TransportManager {
 
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.new_link_manager_unicast(&endpoint).await?;
+        // Keep the caller's endpoint as given, before the link config is merged into it.
+        let opened_from = endpoint.clone();
         // Fill and merge the endpoint configuration
         if let Some(config) = self
             .config
@@ -892,7 +894,14 @@ impl TransportManager {
         tokio::time::timeout(self.config.unicast.open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
                 Ok(link) => {
-                    super::establishment::open::open_link(endpoint, link, self, expected_zid).await
+                    super::establishment::open::open_link(
+                        endpoint,
+                        opened_from,
+                        link,
+                        self,
+                        expected_zid,
+                    )
+                    .await
                 }
                 Err(e) => Err(e),
             }
