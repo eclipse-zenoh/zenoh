@@ -3725,6 +3725,12 @@ impl Closee for WeakSession {
             let _local_resources = std::mem::take(&mut state.local_resources);
             let _remote_resources = std::mem::take(&mut state.remote_resources);
             let _queries = std::mem::take(&mut state.queries);
+            // Also drop publisher and querier states. Their key expressions can hold a
+            // `KeyExprWireDeclaration`, which keeps a strong reference to this session; an entity
+            // still alive here cannot remove its state on undeclare once primitives are gone, so
+            // the cycle would leak the whole runtime.
+            let _publishers = std::mem::take(&mut state.publishers);
+            let _queriers = std::mem::take(&mut state.queriers);
             let _matching_listeners = std::mem::take(&mut state.matching_listeners);
             let _transport_event_listeners = std::mem::take(&mut state.transport_events_listeners);
             let _link_event_listeners = std::mem::take(&mut state.link_events_listeners);
