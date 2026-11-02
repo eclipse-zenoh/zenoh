@@ -70,6 +70,19 @@ impl<T> Mvar<T> {
         }
     }
 
+    /// Store `inner` only if the slot is currently empty, without waiting.
+    /// Returns the value back if the slot is already occupied.
+    pub async fn try_put(&self, inner: T) -> Result<(), T> {
+        let mut guard = zasynclock!(self.inner);
+        if guard.is_some() {
+            return Err(inner);
+        }
+        *guard = Some(inner);
+        drop(guard);
+        self.cond_take.notify_one();
+        Ok(())
+    }
+
     pub async fn put(&self, inner: T) {
         loop {
             let mut guard = zasynclock!(self.inner);
@@ -127,5 +140,17 @@ mod tests {
         let _ = tokio::time::timeout(TIMEOUT, ch).await?;
         println!();
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn try_put() {
+        use super::Mvar;
+
+        let mvar: Mvar<usize> = Mvar::new();
+        assert!(mvar.try_put(1).await.is_ok());
+        assert_eq!(mvar.try_put(2).await, Err(2));
+        assert_eq!(mvar.take().await, 1);
+        assert!(mvar.try_put(3).await.is_ok());
+        assert_eq!(mvar.take().await, 3);
     }
 }

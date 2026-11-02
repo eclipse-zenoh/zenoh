@@ -77,7 +77,12 @@ struct LinkUnicastUdpUnconnected {
 
 impl LinkUnicastUdpUnconnected {
     async fn received(&self, buffer: Vec<u8>, len: usize) {
-        self.input.put((buffer, len)).await;
+        // Never wait here: this is called from the single accept loop, and a link whose
+        // reader is gone (e.g. expired lease) would otherwise block all other peers.
+        // UDP is lossy, so the datagram is dropped if the previous one is still unread.
+        if self.input.try_put((buffer, len)).await.is_err() {
+            tracing::debug!("UDP link input is full, dropping datagram");
+        }
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
@@ -728,4 +733,28 @@ async fn accept_read_task(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, sync::Mutex};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn received_does_not_block_when_input_is_full() {
+        let link = LinkUnicastUdpUnconnected {
+            socket: Weak::new(),
+            links: Arc::new(Mutex::new(HashMap::new())),
+            input: Mvar::new(),
+            leftover: AsyncMutex::new(None),
+        };
+        // Nobody reads from the link: the second datagram must be dropped, not awaited
+        link.received(vec![1], 1).await;
+        tokio::time::timeout(Duration::from_secs(5), link.received(vec![2], 1))
+            .await
+            .expect("received() must not block on a full input");
+        let (buf, len) = link.input.take().await;
+        assert_eq!((buf, len), (vec![1], 1));
+    }
 }
