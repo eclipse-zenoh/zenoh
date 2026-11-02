@@ -116,6 +116,19 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn interest_count(&self) -> usize {
+        self.simple_resources
+            .values()
+            .map(|r| r.simple_interest_ids.len())
+            .sum::<usize>()
+            + self
+                .aggregated_resources
+                .values()
+                .map(|r| r.aggregated_interest_ids.len())
+                .sum::<usize>()
+    }
+
     pub(crate) fn contains_simple_resource(&self, key: &Res) -> bool {
         self.simple_resources.contains_key(key)
     }
@@ -274,6 +287,55 @@ impl<Id: Copy, Res: LocalResourceTrait, Info: LocalResourceInfoTrait<Res>>
         updated_resources
     }
 
+    // Remove one interest and return only advertisements that no surviving
+    // simple or aggregate interest owns. Both forms can share the same wire ID.
+    pub(crate) fn remove_interest(
+        &mut self,
+        interest: InterestId,
+        aggregate: Option<&Res>,
+    ) -> Vec<(Id, Res)>
+    where
+        Id: PartialEq,
+    {
+        let mut removed = if let Some(key) = aggregate {
+            self.aggregated_resources
+                .get(key)
+                .filter(|data| {
+                    data.aggregated_interest_ids.contains(&interest)
+                        && data.aggregated_interest_ids.len() == 1
+                        && data.info.is_some()
+                })
+                .map(|data| vec![(data.id, key.clone())])
+                .unwrap_or_default()
+        } else {
+            self.simple_resources
+                .iter()
+                .filter(|(_, data)| {
+                    data.simple_interest_ids.contains(&interest)
+                        && data.simple_interest_ids.len() == 1
+                })
+                .map(|(key, data)| (data.id, key.clone()))
+                .collect()
+        };
+        if let Some(key) = aggregate {
+            self.remove_aggregated_resource_interest(key, interest);
+        } else {
+            self.remove_simple_resource_interest(interest);
+        }
+        removed.retain(|(id, key)| {
+            !self
+                .simple_resources
+                .get(key)
+                .is_some_and(|data| data.id == *id && !data.simple_interest_ids.is_empty())
+                && !self.aggregated_resources.get(key).is_some_and(|data| {
+                    data.id == *id
+                        && !data.aggregated_interest_ids.is_empty()
+                        && data.info.is_some()
+                })
+        });
+        removed
+    }
+
     pub(crate) fn remove_simple_resource_interest(&mut self, simple_interest: InterestId) {
         self.simple_resources.retain(|_, res_data| {
             !(res_data.simple_interest_ids.remove(&simple_interest)
@@ -371,6 +433,43 @@ mod tests {
 
     fn ke(s: &str) -> OwnedKeyExpr {
         s.try_into().unwrap()
+    }
+
+    #[test]
+    fn final_interest_preserves_shared_simple_and_aggregate_wire_id() {
+        for simple_first in [false, true] {
+            let mut resources = LocalTestResources::new();
+            let key = ke("retention/shared");
+            resources.insert_simple_resource(
+                key.clone(),
+                TestInfo { count: 1 },
+                || 7,
+                HashSet::from([1]),
+            );
+            let (id, _) =
+                resources.insert_aggregated_resource(key.clone(), || 8, HashSet::from([2]));
+            assert_eq!(
+                id, 7,
+                "same-key simple and aggregate declarations share an ID"
+            );
+            if simple_first {
+                assert!(resources.remove_interest(1, None).is_empty());
+                assert_eq!(resources.remove_interest(2, Some(&key)), vec![(7, key)]);
+            } else {
+                assert!(resources.remove_interest(2, Some(&key)).is_empty());
+                assert_eq!(resources.remove_interest(1, None), vec![(7, key)]);
+            }
+            assert_eq!(resources.interest_count(), 0);
+            assert!(resources.simple_resources.is_empty());
+            assert!(resources.aggregated_resources.is_empty());
+        }
+        let mut resources = LocalTestResources::new();
+        let aggregate = ke("retention/**");
+        resources.insert_aggregated_resource(aggregate.clone(), || 9, HashSet::from([3]));
+        assert!(
+            resources.remove_interest(3, Some(&aggregate)).is_empty(),
+            "an empty aggregate was never advertised and needs no undeclare"
+        );
     }
 
     #[test]
