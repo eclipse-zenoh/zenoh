@@ -458,7 +458,7 @@ impl HatPubSubTrait for Hat {
         tables: &TablesData,
         res: Option<&Resource>,
     ) -> HashMap<Arc<Resource>, SubscriberInfo> {
-        self.owned_faces(tables)
+        self.owned_faces_incl_mcast(tables)
             .flat_map(|f| self.face_hat(f).remote_subs.values())
             .filter(|&sub| res.is_none_or(|res| res.matches(sub)))
             .map(|sub| (sub.clone(), SubscriberInfo))
