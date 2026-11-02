@@ -127,6 +127,11 @@ impl TransportPeerEventHandler for DeMux {
             .entered()
         });
 
+        // Held through interception too, as it reads resource contexts the close clears.
+        let Some(_routing) = self.face.tables.routing.enter() else {
+            return Ok(());
+        };
+
         if has_interceptor(&self.interceptor) {
             if let Some(interceptor) = self.interceptor.load().as_ref() {
                 let mut ctx = DeMuxContext {
