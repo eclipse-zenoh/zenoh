@@ -398,7 +398,13 @@ impl StageIn {
 
         let mut writer = self.fragbuf.writer();
         let codec = Zenoh080::new();
-        codec.write(&mut writer, msg).unwrap();
+        if let Err(e) = codec.write(&mut writer, msg) {
+            // The message cannot be serialized (e.g. a wire expression too long for its length
+            // prefix): restore the sequence number and drop the message
+            tch.sn.set(sn).unwrap();
+            tracing::warn!("Zenoh message dropped because it cannot be serialized: {e:?}");
+            return Ok(false);
+        }
 
         // Fragment the whole message
         let mut fragment = FragmentHeader {

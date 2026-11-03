@@ -39,12 +39,15 @@ use zenoh_config::{
 #[cfg(feature = "unstable")]
 use zenoh_config::{wrappers::EntityGlobalId, GenericConfig};
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Wait};
-use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree};
+use zenoh_keyexpr::{
+    keyexpr_tree::{IKeyExprTree, IKeyExprTreeNode, KeBoxTree},
+    OwnedNonWildKeyExpr,
+};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, CongestionControl, EntityId, ExprId, Parameters, Reliability, WireExpr,
-        ZenohIdProto, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, EntityId, ExprId, ExprLen, Parameters, Reliability,
+        WireExpr, ZenohIdProto, EMPTY_EXPR_ID,
     },
     network::{
         self,
@@ -695,6 +698,9 @@ pub(crate) struct SessionInner {
     strong_counter: AtomicUsize,
     runtime: GenericRuntime,
     state: RwLock<SessionState>,
+    /// Length of the namespace prefix (including the separator) prepended to the key expressions
+    /// sent by this session, or 0 if it has no namespace.
+    namespace_len: usize,
     id: EntityId,
     task_controller: TaskController,
     face_id: OnceCell<usize>,
@@ -872,6 +878,11 @@ impl Session {
                 .get_config()
                 .get_typed::<PublisherQoSConfList>("qos/publication")
                 .unwrap();
+            let namespace_len = runtime
+                .get_config()
+                .get_typed::<Option<OwnedNonWildKeyExpr>>("namespace")
+                .unwrap()
+                .map_or(0, |namespace| namespace.len() + 1);
             let state = RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
@@ -882,6 +893,7 @@ impl Session {
                 strong_counter: AtomicUsize::new(1),
                 runtime: runtime.clone(),
                 state,
+                namespace_len,
                 id: runtime.next_id(),
                 task_controller: TaskController::default(),
                 face_id: OnceCell::new(),
@@ -1488,6 +1500,27 @@ impl Session {
         Duration::from_millis(self.0.runtime.get_config().queries_default_timeout_ms())
     }
 
+    /// Whether a wire expression sent by this session fits in the length prefix of the wire
+    /// format, once the namespace (if any) has been prepended to it.
+    fn fits_wire(&self, wire_expr: &WireExpr) -> bool {
+        let namespace_len = if wire_expr.scope == EMPTY_EXPR_ID {
+            self.0.namespace_len
+        } else {
+            0
+        };
+        wire_expr.suffix.len() + namespace_len <= usize::from(ExprLen::MAX)
+    }
+
+    fn check_wire_expr(&self, wire_expr: &WireExpr) -> ZResult<()> {
+        if !self.fits_wire(wire_expr) {
+            bail!(
+                "Key expression (including the namespace, if any) exceeds the maximum of {} bytes",
+                ExprLen::MAX
+            )
+        }
+        Ok(())
+    }
+
     pub(crate) fn declare_prefix<'a>(
         &'a self,
         prefix: &'a str,
@@ -1508,6 +1541,17 @@ impl Session {
                 }
                 Some(_) => Ok(None),
                 None => {
+                    let wire_expr = WireExpr {
+                        scope: 0,
+                        suffix: prefix.into(),
+                        mapping: Mapping::Sender,
+                    };
+                    // Declaring the prefix is only an optimization unless it is forced
+                    if force {
+                        self.check_wire_expr(&wire_expr)?;
+                    } else if !self.fits_wire(&wire_expr) {
+                        return Ok(None);
+                    }
                     let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
                     if let Resource::Node(res_node) = &mut res {
@@ -1538,11 +1582,7 @@ impl Session {
                         ext_nodeid: declare::ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                             id: expr_id,
-                            wire_expr: WireExpr {
-                                scope: 0,
-                                suffix: prefix.to_owned().into(),
-                                mapping: Mapping::Sender,
-                            },
+                            wire_expr: wire_expr.to_owned(),
                         }),
                     });
                     let mut state = zwrite!(self.0.state);
@@ -1588,6 +1628,9 @@ impl Session {
             return Err(SessionClosedError.into());
         }
         tracing::trace!("declare_publisher({:?})", key_expr);
+        if destination != Locality::SessionLocal {
+            self.check_wire_expr(&key_expr.to_wire(self))?;
+        }
         let id = self.0.runtime.next_id();
 
         let mut pub_state = PublisherState {
@@ -1686,6 +1729,9 @@ impl Session {
         destination: Locality,
     ) -> ZResult<EntityId> {
         tracing::trace!("declare_querier({:?})", key_expr);
+        if destination != Locality::SessionLocal {
+            self.check_wire_expr(&key_expr.to_wire(self))?;
+        }
         let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         let id = self.0.runtime.next_id();
@@ -1777,6 +1823,9 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         tracing::trace!("declare_subscriber({:?})", key_expr);
+        if origin != Locality::SessionLocal {
+            self.check_wire_expr(&key_expr.to_wire(self))?;
+        }
         let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
@@ -1906,6 +1955,9 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<QueryableState>> {
         tracing::trace!("declare_queryable({:?})", key_expr);
+        if origin != Locality::SessionLocal {
+            self.check_wire_expr(&key_expr.to_wire(self))?;
+        }
         let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
@@ -1996,6 +2048,7 @@ impl Session {
 
     pub(crate) fn declare_liveliness_inner(&self, key_expr: &KeyExpr) -> ZResult<Id> {
         tracing::trace!("declare_liveliness({:?})", key_expr);
+        self.check_wire_expr(&key_expr.to_wire(self))?;
         let id = self.0.runtime.next_id();
         let primitives = zread!(self.0.state).primitives()?;
         primitives.send_declare(&mut Declare {
@@ -2021,6 +2074,7 @@ impl Session {
         callback_drop_notifier: Option<SyncGroupNotifier>,
     ) -> ZResult<Arc<SubscriberState>> {
         trace!("declare_liveliness_subscriber({:?})", key_expr);
+        self.check_wire_expr(&key_expr.to_wire(self))?;
         let mut state = zwrite!(self.0.state);
         let primitives = state.primitives()?;
         self.register_callback_drop_notifier(callback_drop_notifier, &mut callback);
@@ -2520,6 +2574,9 @@ impl Session {
         let state = zread!(self.0.state);
         let primitives = state.primitives()?;
         let wire_expr = key_expr.to_wire(self);
+        if destination != Locality::SessionLocal {
+            self.check_wire_expr(&wire_expr)?;
+        }
         let mut callbacks = SubscriberCallbacks::default();
         if destination != Locality::Remote {
             callbacks =
@@ -2711,6 +2768,9 @@ impl Session {
             target,
             consolidation
         );
+        if destination != Locality::SessionLocal {
+            self.check_wire_expr(&key_expr.to_wire(self))?;
+        }
         let mut state = zwrite!(self.0.state);
         let consolidation = match consolidation.mode {
             #[cfg(feature = "unstable")]
@@ -2887,6 +2947,7 @@ impl Session {
         #[cfg(feature = "unstable")] cancellation_token: Option<CancellationToken>,
     ) -> ZResult<()> {
         tracing::trace!("liveliness.get({}, {:?})", key_expr, timeout);
+        self.check_wire_expr(&key_expr.to_wire(self))?;
         let mut state = zwrite!(self.0.state);
         // Queries must use the same id generator as liveliness subscribers.
         // This is because both query's id and subscriber's id are used as interest id,

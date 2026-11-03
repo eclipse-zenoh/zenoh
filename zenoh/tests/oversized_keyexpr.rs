@@ -30,7 +30,7 @@ const SLEEP: Duration = Duration::from_secs(1);
 const MAX_LEN: usize = u16::MAX as usize;
 
 async fn assert_session_usable(local: &Session, remote: &Session) {
-    let subscriber = ztimeout!(remote.declare_subscriber("test/oversized")).unwrap();
+    let subscriber = ztimeout!(remote.declare_subscriber("**")).unwrap();
     tokio::time::sleep(SLEEP).await;
     ztimeout!(local.put("test/oversized", "ok")).unwrap();
     let sample = ztimeout!(subscriber.recv_async()).unwrap();
@@ -75,6 +75,26 @@ async fn declare_subscriber_with_oversized_keyexpr_is_rejected() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn other_operations_with_oversized_keyexpr_are_rejected() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut test_context = TestSessions::new();
+    let (remote, local) = test_context.open_pairs().await;
+
+    let key_expr = "a".repeat(MAX_LEN + 1);
+    assert!(ztimeout!(local.declare_queryable(&key_expr)).is_err());
+    assert!(ztimeout!(local.declare_publisher(&key_expr)).is_err());
+    assert!(ztimeout!(local.declare_querier(&key_expr)).is_err());
+    assert!(ztimeout!(local.get(&key_expr)).is_err());
+    assert!(ztimeout!(local.liveliness().declare_token(&key_expr)).is_err());
+    assert!(ztimeout!(local.liveliness().declare_subscriber(&key_expr)).is_err());
+    assert!(ztimeout!(local.liveliness().get(&key_expr)).is_err());
+
+    assert_session_usable(&local, &remote).await;
+    test_context.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn session_local_oversized_keyexpr_is_accepted() {
     zenoh::init_log_from_env_or("error");
 
@@ -110,6 +130,9 @@ async fn put_with_keyexpr_oversized_by_namespace_is_rejected() {
     let mut config = test_context.get_connector_config();
     config.namespace = Some(nonwild_ke!("ns").to_owned());
     let local = test_context.open_connector_with_cfg(config).await;
+
+    let _remote_subscriber = ztimeout!(remote.declare_subscriber("**")).unwrap();
+    tokio::time::sleep(SLEEP).await;
 
     // Fits in the length prefix on its own, but not once the namespace is prepended
     let key_expr = "a".repeat(MAX_LEN);
