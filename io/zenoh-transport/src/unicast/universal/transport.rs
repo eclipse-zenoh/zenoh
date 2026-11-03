@@ -120,6 +120,7 @@ impl TransportUnicastUniversal {
             priority_rx.push(TransportPriorityRx::make(
                 config.sn_resolution,
                 manager.config.defrag_buff_size,
+                manager.config.best_effort_reorder_window,
             )?);
         }
 
