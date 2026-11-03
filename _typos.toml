@@ -5,6 +5,7 @@ extend-exclude = [
   "zenoh/src/net/tests/regions",
   "zenoh/tests/authentication.rs",
   "zenoh/tests/open_time.rs",
+  "io/zenoh-links/zenoh-link-tls/src/concurrent_io_tests.rs",
 ]
 
 
