@@ -83,9 +83,9 @@ fn handle_bytes(bytes: &mut ZBytes) -> (&str, Cow<'_, str>) {
 
         // if Zenoh is built with SHM support and with SHM API we can detect the exact buffer type
         #[cfg(all(feature = "shared-memory", feature = "unstable"))]
-        match bytes.as_shm_mut() {
+        match unsafe { bytes.as_shm_mut() } {
             // try to mutate SHM buffer to get it's mutability property
-            Some(shm) => match <&mut zshmmut>::try_from(shm) {
+            Some(mut shm) => match <&mut zshmmut>::try_from(&mut *shm) {
                 Ok(_shm_mut) => "SHM (MUT)",
                 Err(_) => "SHM (IMMUT)",
             },
