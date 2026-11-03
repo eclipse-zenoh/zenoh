@@ -13,6 +13,7 @@
 //
 
 use std::{
+    cell::{Cell, RefCell},
     collections::HashSet,
     rc::Rc,
     sync::{atomic::AtomicU16, Arc, Mutex},
@@ -26,8 +27,11 @@ use zenoh_result::ZResult;
 use crate::{
     api::{reader::rx_buffer::RxBuffer, types::BufferCount},
     batch_arena::Batches,
-    reader::reservable_arena::{ReservableArena, ReservableArenaInner},
-    types::BufferGroupId,
+    reader::{
+        index::IndexGeneration,
+        reservable_arena::{ReservableArena, ReservableArenaInner},
+    },
+    types::{BufferGroupId, BufferId},
 };
 
 // Absolute maximum ratings:
@@ -99,10 +103,19 @@ pub(crate) struct BufferGroup {
     id: BufferGroupId,
     arena: Rc<GroupedArenaInner>,
     buffers_missing: AtomicU16,
+    /// Buffers provided to the kernel and not yet handed back by a completion.
+    provided: RefCell<HashSet<BufferId>>,
+    /// Set when the kernel may still hold buffers of this group: its id is
+    /// then never handed out again.
+    quarantined: Cell<bool>,
 }
 
 impl Drop for BufferGroup {
     fn drop(&mut self) {
+        if self.quarantined.get() {
+            tracing::warn!("Buffer group {} stays reserved", self.id);
+            return;
+        }
         tracing::debug!("Freeing buffer group {}", self.id);
         self.arena.index.free(self.id);
     }
@@ -122,6 +135,8 @@ impl BufferGroup {
             id,
             arena: arena.inner.clone(),
             buffers_missing: AtomicU16::new(required_buffers_in_ring),
+            provided: RefCell::new(HashSet::new()),
+            quarantined: Cell::new(false),
         };
 
         group.ensure_batches_to_ring(sq)?;
@@ -143,10 +158,13 @@ impl BufferGroup {
             .buffers_missing
             .load(std::sync::atomic::Ordering::Relaxed)
             + 1;
-        let leftover = self
-            .arena
-            .arena
-            .provide_batches_to_group(self.id, count, sq)?;
+        let mut provided = self.provided.borrow_mut();
+        provided.remove(&buf_id);
+        let leftover =
+            self.arena
+                .arena
+                .provide_batches_to_group(self.id, count, sq, &mut provided)?;
+        drop(provided);
         self.buffers_missing
             .store(leftover, std::sync::atomic::Ordering::Relaxed);
 
@@ -188,14 +206,121 @@ impl BufferGroup {
             batches.start_bid,
         )
         .build()
-        .flags(Flags::SKIP_SUCCESS);
+        .flags(Flags::SKIP_SUCCESS)
+        .user_data(IndexGeneration::provide_user_data(self.id));
 
         unsafe {
             sq.push(&entry)?;
         }
+        self.provided
+            .borrow_mut()
+            .extend(batches.start_bid..batches.start_bid + batches.nbufs);
 
         self.buffers_missing
             .fetch_sub(batches.nbufs, std::sync::atomic::Ordering::Relaxed);
         Ok(())
+    }
+
+    /// A completion of the stopped task consumed `buf_id`: nobody will read
+    /// it, return it to the arena.
+    pub(crate) fn release_consumed(&self, buf_id: BufferId) {
+        self.provided.borrow_mut().remove(&buf_id);
+        self.arena.arena.recycle_batch(buf_id);
+    }
+
+    /// Once no receive can select from this group anymore, ask the kernel to
+    /// give back the buffers still queued in it. Returns `false` when there
+    /// is nothing to remove.
+    pub(crate) fn remove_buffers(
+        &self,
+        user_data: u64,
+        sq: &mut SubmissionQueue<'_>,
+    ) -> ZResult<bool> {
+        let count = self.provided.borrow().len();
+        if count == 0 {
+            return Ok(false);
+        }
+        let entry = opcode::RemoveBuffers::new(count as u16, self.id)
+            .build()
+            .user_data(user_data);
+        unsafe {
+            sq.push(&entry)?;
+        }
+        Ok(true)
+    }
+
+    /// Completion of `remove_buffers`: the kernel reported how many buffers
+    /// it gave back. Recycle them only if that matches what we tracked; on a
+    /// mismatch the ownership is unknown, so neither the buffers nor the
+    /// group id are used again.
+    pub(crate) fn buffers_removed(&self, removed: i32) {
+        let provided = std::mem::take(&mut *self.provided.borrow_mut());
+        if removed != provided.len() as i32 {
+            tracing::error!(
+                "Buffer group {}: kernel removed {removed} buffers, {} tracked; leaking them",
+                self.id,
+                provided.len()
+            );
+            self.quarantined.set(true);
+            return;
+        }
+        for buf_id in provided {
+            self.arena.arena.recycle_batch(buf_id);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use io_uring::{cqueue, squeue, IoUring};
+    use nix::sys::eventfd::{EfdFlags, EventFd};
+
+    use super::*;
+    use crate::{batch_arena::BatchArena, reader::submission::SubmissionIface};
+
+    const RETIRE: u64 = 0x5EED;
+
+    fn fixture() -> (IoUring<squeue::Entry, cqueue::Entry>, GroupedArena) {
+        let ring = IoUring::new(16).unwrap();
+        let arena = BatchArena::new(64, 16, BufferCount::MAX).unwrap();
+        let waker = Arc::new(EventFd::from_value_and_flags(0, EfdFlags::EFD_CLOEXEC).unwrap());
+        let (tx, _rx) = flume::unbounded();
+        let arena = ReservableArena::new(arena, SubmissionIface::new(waker, tx));
+        (ring, GroupedArena::new(arena))
+    }
+
+    fn reserved(arena: &GroupedArena, id: BufferGroupId) -> bool {
+        zlock!(arena.inner.index.used).contains(&id)
+    }
+
+    /// Retire a 4-buffer group; `skew` is added to the count the kernel
+    /// reports. Returns whether its id is still reserved once dropped.
+    fn retire(skew: i32) -> bool {
+        let (mut ring, arena) = fixture();
+        let group = BufferGroup::new(&arena, 4, &mut ring.submission()).unwrap();
+        let id = group.id();
+        assert!(group
+            .remove_buffers(RETIRE, &mut ring.submission())
+            .unwrap());
+        ring.submit_and_wait(1).unwrap();
+        let cqe = ring.completion().next().unwrap();
+        assert_eq!((cqe.user_data(), cqe.result()), (RETIRE, 4));
+        group.buffers_removed(cqe.result() + skew);
+        drop(group);
+        reserved(&arena, id)
+    }
+
+    #[test]
+    fn reclaimed_group_releases_its_id() {
+        assert!(!retire(0));
+    }
+
+    /// The kernel's buffer ownership is unknown after a count mismatch: the
+    /// group id must never be handed out again.
+    #[test]
+    fn group_with_unknown_ownership_keeps_its_id() {
+        assert!(retire(-1));
     }
 }
