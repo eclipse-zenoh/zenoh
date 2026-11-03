@@ -19,7 +19,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock, RwLockReadGuard};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::Link;
@@ -95,6 +95,19 @@ impl TransportUnicastLowlatency {
             #[cfg(feature = "shared-memory")]
             shm_context,
         }) as Arc<dyn TransportUnicastTrait>
+    }
+
+    /// Takes the link read lock from a synchronous context.
+    ///
+    /// A thread with a Tokio handle keeps the current-handle path. A thread without one
+    /// cannot use `Handle::current`, so it uses the TX runtime, as `send` does.
+    fn read_link(&self) -> RwLockReadGuard<'_, Option<TransportLinkUnicast>> {
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }))
+            }
+            Err(_) => zenoh_runtime::ZRuntime::TX.block_in_place(async { zasyncread!(self.link) }),
+        }
     }
 
     /*************************************/
@@ -187,9 +200,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        let handle = tokio::runtime::Handle::current();
-        let guard =
-            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        let guard = self.read_link();
         guard.as_ref().map(|l| vec![l.link()]).unwrap_or_default()
     }
 
@@ -200,9 +211,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     fn get_auth_ids(&self) -> TransportAuthId {
         // Convert LinkUnicast auth id to AuthId
         let mut transport_auth_id = TransportAuthId::new(self.get_zid());
-        let handle = tokio::runtime::Handle::current();
-        let guard =
-            tokio::task::block_in_place(|| handle.block_on(async { zasyncread!(self.link) }));
+        let guard = self.read_link();
         if let Some(val) = guard.as_ref() {
             transport_auth_id.push_link_auth_id(val.link.get_auth_id().clone());
         }
