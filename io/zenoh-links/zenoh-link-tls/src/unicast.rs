@@ -14,7 +14,6 @@
 #[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::RawFd;
 use std::{
-    cell::UnsafeCell,
     convert::TryInto,
     fmt::{self, Debug},
     net::SocketAddr,
@@ -25,7 +24,7 @@ use std::{
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{split, AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
     sync::Mutex as AsyncMutex,
 };
@@ -55,31 +54,29 @@ use crate::{
 pub struct TlsCommonName(String);
 
 pub struct LinkUnicastTls {
-    // The underlying socket as returned from the async-rustls library
-    // NOTE: TlsStream requires &mut for read and write operations. This means
-    //       that concurrent reads and writes are not possible. To achieve that,
-    //       we use an UnsafeCell for interior mutability. Using an UnsafeCell
-    //       is safe in our case since the transmission and reception logic
-    //       already ensures that no concurrent reads or writes can happen on
-    //       the same stream: there is only one task at the time that writes on
-    //       the stream and only one task at the time that reads from the stream.
-    inner: UnsafeCell<TlsStream<TcpStream>>,
+    // rustls::Connection is one object for both directions. A read
+    // (`process_new_packets`) takes that object out and puts
+    // `HandshakeNotComplete` in its place while it runs, and it may also append
+    // to the send queue (TLS 1.3 key updates, alerts). A write on another
+    // thread observes or frees that same state. rustls does not support this
+    // (rustls/rustls#288).
+    //
+    // `tokio::io::split` locks the stream only for the duration of each poll, so
+    // a blocked read does not hold rustls across the await, and a read poll and
+    // a write poll never enter it together. The per-half mutexes still stop one
+    // `read_exact` / `write_all` from interleaving with another on the same half.
+    reader: AsyncMutex<ReadHalf<TlsStream<TcpStream>>>,
+    writer: AsyncMutex<WriteHalf<TlsStream<TcpStream>>>,
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
     src_locator: Locator,
     // The destination socket address of this link (address used on the local host)
     dst_addr: SocketAddr,
     dst_locator: Locator,
-    // Make sure there are no concurrent read or writes
-    write_mtx: AsyncMutex<()>,
-    read_mtx: AsyncMutex<()>,
     auth_identifier: LinkAuthId,
     mtu: BatchSize,
     expiration_manager: Option<LinkCertExpirationManager>,
 }
-
-unsafe impl Send for LinkUnicastTls {}
-unsafe impl Sync for LinkUnicastTls {}
 
 impl LinkUnicastTls {
     fn new(
@@ -136,39 +133,31 @@ impl LinkUnicastTls {
             mtu = (mtu as u32).min(tgt) as BatchSize;
         }
 
+        // Split before any task can read and write. TCP options above must be
+        // applied first: the halves do not expose the TcpStream.
+        let (reader, writer) = split(socket);
+
         // Build the Tls object
         LinkUnicastTls {
-            inner: UnsafeCell::new(socket),
+            reader: AsyncMutex::new(reader),
+            writer: AsyncMutex::new(writer),
             src_addr,
             src_locator: Locator::new(TLS_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
             dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
-            write_mtx: AsyncMutex::new(()),
-            read_mtx: AsyncMutex::new(()),
             auth_identifier,
             mtu,
             expiration_manager,
         }
     }
 
-    // NOTE: It is safe to suppress Clippy warning since no concurrent reads
-    //       or concurrent writes will ever happen. The read_mtx and write_mtx
-    //       are respectively acquired in any read and write operation.
-    #[allow(clippy::mut_from_ref)]
-    fn get_mut_socket(&self) -> &mut TlsStream<TcpStream> {
-        unsafe { &mut *self.inner.get() }
-    }
-
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing TLS link: {}", self);
-        // Flush the TLS stream
-        let _guard = zasynclock!(self.write_mtx);
-        let tls_stream = self.get_mut_socket();
-        let res = tls_stream.flush().await;
+        let mut writer = zasynclock!(self.writer);
+        let res = writer.flush().await;
         tracing::trace!("TLS link flush {}: {:?}", self, res);
-        // Close the underlying TCP stream
-        let (tcp_stream, _) = tls_stream.get_mut();
-        let res = tcp_stream.shutdown().await;
+        // close_notify, then the underlying TCP shutdown.
+        let res = writer.shutdown().await;
         tracing::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
@@ -192,40 +181,42 @@ impl LinkUnicastTrait for LinkUnicastTls {
     }
 
     async fn write(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<usize> {
-        let _guard = zasynclock!(self.write_mtx);
-        self.get_mut_socket().write(buffer).await.map_err(|e| {
+        let mut writer = zasynclock!(self.writer);
+        writer.write(buffer).await.map_err(|e| {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
     }
 
     async fn write_all(&self, buffer: &[u8], _priority: Option<Priority>) -> ZResult<()> {
-        let _guard = zasynclock!(self.write_mtx);
-        self.get_mut_socket().write_all(buffer).await.map_err(|e| {
+        let mut writer = zasynclock!(self.writer);
+        if let Err(e) = writer.write_all(buffer).await {
             tracing::trace!("Write error on TLS link {}: {}", self, e);
-            zerror!(e).into()
-        })
+            return Err(zerror!(e).into());
+        }
+        // tokio-rustls can accept plaintext and still leave ciphertext buffered
+        // once the socket is full. The peer cannot read those bytes until flush.
+        if let Err(e) = writer.flush().await {
+            tracing::trace!("Flush error on TLS link {}: {}", self, e);
+            return Err(zerror!(e).into());
+        }
+        Ok(())
     }
 
     async fn read(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<usize> {
-        let _guard = zasynclock!(self.read_mtx);
-        self.get_mut_socket().read(buffer).await.map_err(|e| {
+        let mut reader = zasynclock!(self.reader);
+        reader.read(buffer).await.map_err(|e| {
             tracing::trace!("Read error on TLS link {}: {}", self, e);
             zerror!(e).into()
         })
     }
 
     async fn read_exact(&self, buffer: &mut [u8], _priority: Option<Priority>) -> ZResult<()> {
-        let _guard = zasynclock!(self.read_mtx);
-        let _ = self
-            .get_mut_socket()
-            .read_exact(buffer)
-            .await
-            .map_err(|e| {
-                tracing::trace!("Read error on TLS link {}: {}", self, e);
-                zerror!(e)
-            })?;
-        Ok(())
+        let mut reader = zasynclock!(self.reader);
+        reader.read_exact(buffer).await.map(|_| ()).map_err(|e| {
+            tracing::trace!("Read error on TLS link {}: {}", self, e);
+            zerror!(e).into()
+        })
     }
 
     #[inline(always)]
@@ -281,15 +272,6 @@ impl LinkWithCertExpiration for LinkUnicastTls {
         }
         // Transport is already closing the link
         Ok(())
-    }
-}
-
-impl Drop for LinkUnicastTls {
-    fn drop(&mut self) {
-        // Close the underlying TCP stream
-        let (tcp_stream, _) = self.get_mut_socket().get_mut();
-        let _ = zenoh_runtime::ZRuntime::Acceptor
-            .block_in_place(async move { tcp_stream.shutdown().await });
     }
 }
 
@@ -680,3 +662,7 @@ impl From<TlsAuthId> for LinkAuthId {
         LinkAuthId::Tls(value.auth_value.clone())
     }
 }
+
+#[cfg(test)]
+#[path = "concurrent_io_tests.rs"]
+mod concurrent_io_tests;
