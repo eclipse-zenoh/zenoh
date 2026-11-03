@@ -86,6 +86,14 @@ pub(crate) struct QueryTargetQabl {
     pub(crate) dir: Direction,
     pub(crate) info: Option<QueryableInfoType>,
     pub(crate) region: Region,
+    /// A *transparent forwarder*: a non-complete route entry toward a router whose resource
+    /// covers the query key-expr (e.g. a northbound `${prefix}/**` aggregate that suppresses its
+    /// per-key — possibly `complete=true` — children upstream). `QueryTarget::AllComplete` forwards
+    /// to such entries so the next router can re-apply the filter against its real children;
+    /// forwarding to a genuinely-incomplete remote is harmless (dropped one hop later). It never
+    /// affects `BestMatching` (which only short-circuits on `info.complete`), so it cannot shadow a
+    /// distinct complete source. Always `false` for terminal/face-local queryables.
+    pub(crate) forwarder: bool,
 }
 
 impl QueryTargetQabl {
@@ -109,6 +117,7 @@ impl QueryTargetQabl {
                 distance: if ctx.face.is_local { 0 } else { 1 },
             }),
             region: *region,
+            forwarder: false,
         })
     }
 }
