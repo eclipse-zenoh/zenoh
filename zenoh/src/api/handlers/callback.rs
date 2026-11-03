@@ -14,9 +14,59 @@
 
 //! Callback handler trait.
 
-use std::{fmt, sync::Arc};
+use std::{cell::RefCell, fmt, sync::Arc};
 
-use crate::api::handlers::IntoHandler;
+use crate::api::{cancellation::GroupId, handlers::IntoHandler};
+
+thread_local! {
+    /// The `SyncGroup`s whose callbacks run now on this thread. The
+    /// list orders them from outer to inner.
+    ///
+    /// This uses a `Vec`, not a counter. `SyncGroup::wait` must ask
+    /// "does a callback of THIS group run now?", not "does any
+    /// callback run now?". The second question also flags safe
+    /// cases, and answering it that way would break a guarantee
+    /// the API makes.
+    ///
+    /// A callback may call into another entity, so nesting can
+    /// happen. Each call pushes its own groups. Each return pops
+    /// them. Depth is usually zero or one, but user code can nest
+    /// further.
+    static EXECUTING_GROUPS: RefCell<Vec<GroupId>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Returns true if a callback of `group` runs now on this thread.
+pub(crate) fn callback_of_group_running_on_this_thread(group: GroupId) -> bool {
+    EXECUTING_GROUPS.with_borrow(|groups| groups.contains(&group))
+}
+
+/// Pushes a callback's groups for the length of one call.
+///
+/// `Drop` makes this safe across a panic. A user callback may
+/// panic. If it does, its groups must still pop, or every later
+/// wait on them would take the async path forever.
+struct ExecutingGroups(usize);
+
+impl ExecutingGroups {
+    fn enter(groups: &[GroupId]) -> Self {
+        if groups.is_empty() {
+            return Self(0);
+        }
+        EXECUTING_GROUPS.with_borrow_mut(|stack| stack.extend_from_slice(groups));
+        Self(groups.len())
+    }
+}
+
+impl Drop for ExecutingGroups {
+    fn drop(&mut self) {
+        if self.0 == 0 {
+            return;
+        }
+        EXECUTING_GROUPS.with_borrow_mut(|stack| {
+            stack.truncate(stack.len().saturating_sub(self.0));
+        });
+    }
+}
 
 /// A function that can transform an [`FnMut`]`(T)` into
 /// an [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
@@ -72,6 +122,13 @@ impl<F> DropperTrait for Dropper<F> where F: FnOnce() + Send + Sync {}
 pub struct Callback<T> {
     callable: Arc<dyn CallbackImpl<T>>,
     drop: Option<Arc<dyn DropperTrait + Send + Sync>>,
+    /// The `SyncGroup`s this callback holds an on-drop permit in.
+    ///
+    /// Every clone shares this list, because every clone holds the
+    /// same permits. The dropper releases them, and it runs only
+    /// when the last clone dies. The list is empty for a callback
+    /// never registered with a group.
+    groups: Arc<[GroupId]>,
 }
 
 impl<T> fmt::Debug for Callback<T> {
@@ -88,6 +145,7 @@ impl<T> Clone for Callback<T> {
         Self {
             callable: self.callable.clone(),
             drop: self.drop.clone(),
+            groups: self.groups.clone(),
         }
     }
 }
@@ -105,6 +163,7 @@ impl<T> Callback<T> {
     /// Call the inner callback.
     #[inline]
     pub fn call(&self, arg: T) {
+        let _executing = ExecutingGroups::enter(&self.groups);
         self.callable.call(arg)
     }
 
@@ -112,12 +171,20 @@ impl<T> Callback<T> {
     where
         T: CallbackParameter,
     {
+        let _executing = ExecutingGroups::enter(&self.groups);
         self.callable.call_with_message(msg)
     }
 
     #[zenoh_macros::pub_visibility_if_internal]
     pub(crate) fn set_on_drop(&mut self, drop: impl FnOnce() + Send + Sync + 'static) {
         self.drop = Some(Arc::new(Dropper { drop: Some(drop) }));
+    }
+
+    /// Records which `SyncGroup`s this callback holds a permit in.
+    /// A `wait` on one of those groups can then find its own
+    /// callback on this thread.
+    pub(crate) fn set_groups(&mut self, groups: impl IntoIterator<Item = GroupId>) {
+        self.groups = groups.into_iter().collect();
     }
 }
 
@@ -126,6 +193,7 @@ impl<T, F: Fn(T) + Send + Sync + 'static> From<F> for Callback<T> {
         Self {
             callable: Arc::new(value),
             drop: None,
+            groups: Arc::from([]),
         }
     }
 }

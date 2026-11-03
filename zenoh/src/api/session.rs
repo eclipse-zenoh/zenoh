@@ -1762,6 +1762,17 @@ impl Session {
         T: CallbackParameter,
     {
         let n = self.0.callbacks_drop_sync_group.notifier();
+        // Record the groups before the notifiers move into the dropper.
+        // `SyncGroup::wait` checks this list. It tells a self-join
+        // apart from a wait it can honor. Without this list, it
+        // would fall back to "does any callback run now?". That
+        // fallback drops barriers it could keep.
+        callback.set_groups(
+            external_notifier
+                .iter()
+                .chain(n.iter())
+                .map(SyncGroupNotifier::group),
+        );
         callback.set_on_drop(move || {
             drop(external_notifier);
             drop(n);
@@ -2669,6 +2680,19 @@ impl Session {
             if let Some(ct_notifier) = ct.notifier() {
                 if let Ok(handler_id) = ct.add_on_cancel_handler(on_cancel.clone()) {
                     let session_notifier = self.0.callbacks_drop_sync_group.notifier();
+                    // This path installs its own dropper instead of
+                    // going through `register_callback_drop_notifier`,
+                    // so it must record the groups itself. Without
+                    // this, `Callback::groups` stays empty here, and
+                    // `SyncGroup::wait`'s self-join check has nothing
+                    // to check against.
+                    callback.set_groups(
+                        session_notifier
+                            .iter()
+                            .chain(std::iter::once(&ct_notifier))
+                            .chain(querier_notifier.iter())
+                            .map(SyncGroupNotifier::group),
+                    );
                     callback.set_on_drop(move || {
                         drop(session_notifier);
                         ct.remove_on_cancel_handler(handler_id);
