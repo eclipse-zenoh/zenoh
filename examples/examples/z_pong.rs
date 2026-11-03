@@ -38,7 +38,7 @@ fn main() {
 
     session
         .declare_subscriber(key_expr_ping)
-        .callback(move |sample| publisher.put(sample.payload().clone()).wait().unwrap())
+        .callback(move |sample| publisher.put(sample.payload()).wait().unwrap())
         .background()
         .wait()
         .unwrap();
