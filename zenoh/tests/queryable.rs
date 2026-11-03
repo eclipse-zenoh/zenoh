@@ -544,6 +544,7 @@ async fn test_query_not_routed_to_closed_face() {
     const KEY: &str = "test/query_not_routed_to_closed_face";
     const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
     const MAX_QUERY_DURATION: Duration = Duration::from_secs(3);
+    const HELD_QUERY_CHECK: Duration = Duration::from_secs(1);
 
     let mut test_context = TestSessions::new();
     let mut queryable_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
@@ -597,16 +598,28 @@ async fn test_query_not_routed_to_closed_face() {
         .unwrap();
     short_lived_config.listen.endpoints.set(vec![]).unwrap();
     let short_lived = tokio::spawn(async move { zenoh::open(short_lived_config).await });
-    ztimeout!(async {
-        while peer_count(&querier).await != 2 {
+
+    // The transport is registered before its routing face is created, so a peer count does not
+    // tell whether the face receives queries yet. Wait instead until a query is held by the
+    // face: its final reply never reaches the querier, so with the default consolidation the
+    // query yields nothing until the face is closed. A query routed before the face exists
+    // completes at once and is retried.
+    let replies = ztimeout!(async {
+        loop {
+            let replies = querier.get(KEY).timeout(QUERY_TIMEOUT).await.unwrap();
+            if tokio::time::timeout(HELD_QUERY_CHECK, replies.recv_async())
+                .await
+                .is_err()
+            {
+                break replies;
+            }
+            while replies.recv_async().await.is_ok() {}
             tokio::time::sleep(SLEEP).await;
         }
     });
 
-    // A query issued while the face is open is routed to it as well: it completes once the
-    // face is closed.
+    // Closing the face completes the query it holds.
     let start = Instant::now();
-    let replies = ztimeout!(querier.get(KEY).timeout(QUERY_TIMEOUT)).unwrap();
     cut.send(()).unwrap();
     let mut ok = 0;
     while let Ok(reply) = replies.recv_async().await {
@@ -615,7 +628,7 @@ async fn test_query_not_routed_to_closed_face() {
     assert_eq!(ok, 1);
     assert!(
         start.elapsed() < MAX_QUERY_DURATION,
-        "query issued before the face was closed took {:?}",
+        "query held by the face took {:?} to complete after the face was closed",
         start.elapsed()
     );
     ztimeout!(async {
