@@ -196,7 +196,14 @@ jobs:
       - name: Perform no_std checks
         run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
 
+      - name: Run doctests (prlimit)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo test --doc
+
       - name: Run doctests
+        if: ${{ matrix.os != 'ubuntu-latest' }}
         run: cargo test --doc
 
       - name: Build doc
