@@ -82,6 +82,7 @@ async fn other_operations_with_oversized_keyexpr_are_rejected() {
     let (remote, local) = test_context.open_pairs().await;
 
     let key_expr = "a".repeat(MAX_LEN + 1);
+    assert!(ztimeout!(local.declare_keyexpr(&key_expr)).is_err());
     assert!(ztimeout!(local.declare_queryable(&key_expr)).is_err());
     assert!(ztimeout!(local.declare_publisher(&key_expr)).is_err());
     assert!(ztimeout!(local.declare_querier(&key_expr)).is_err());
@@ -89,6 +90,27 @@ async fn other_operations_with_oversized_keyexpr_are_rejected() {
     assert!(ztimeout!(local.liveliness().declare_token(&key_expr)).is_err());
     assert!(ztimeout!(local.liveliness().declare_subscriber(&key_expr)).is_err());
     assert!(ztimeout!(local.liveliness().get(&key_expr)).is_err());
+
+    assert_session_usable(&local, &remote).await;
+    test_context.close().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn reply_with_oversized_keyexpr_is_rejected() {
+    zenoh::init_log_from_env_or("error");
+
+    let mut test_context = TestSessions::new();
+    let (remote, local) = test_context.open_pairs().await;
+
+    let queryable = ztimeout!(remote.declare_queryable("**")).unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    let replies = ztimeout!(local.get("**")).unwrap();
+    let query = ztimeout!(queryable.recv_async()).unwrap();
+    let key_expr = "a".repeat(MAX_LEN + 1);
+    assert!(ztimeout!(query.reply(&key_expr, "x")).is_err());
+    drop(query);
+    assert!(ztimeout!(replies.recv_async()).is_err());
 
     assert_session_usable(&local, &remote).await;
     test_context.close().await;

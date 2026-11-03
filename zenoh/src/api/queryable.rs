@@ -98,6 +98,19 @@ impl ReplyPrimitives {
         }
     }
 
+    /// Checks that a reply wire expression can be sent, i.e. it fits in the length prefix of the
+    /// wire format. Replies to local queries never leave the session, and replies without a
+    /// session (e.g. from the admin space) are not checked.
+    pub(crate) fn check_wire_expr(&self, wire_expr: &WireExpr) -> ZResult<()> {
+        match self {
+            ReplyPrimitives::Remote(RemoteReplyPrimitives {
+                session: Some(session),
+                ..
+            }) => session.check_wire_expr(wire_expr),
+            _ => Ok(()),
+        }
+    }
+
     pub(crate) fn keyexpr_to_wire(&self, key_expr: &KeyExpr) -> WireExpr<'static> {
         match self {
             ReplyPrimitives::Local(local) => key_expr.to_wire_local(&local.session).to_owned(),
@@ -585,13 +598,15 @@ impl Query {
         if !self._accepts_any_replies() && !self.key_expr().intersects(&sample.key_expr) {
             bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.key_expr())
         }
+        let wire_expr = self.inner.primitives.keyexpr_to_wire(&sample.key_expr);
+        self.inner.primitives.check_wire_expr(&wire_expr)?;
         #[cfg(not(feature = "unstable"))]
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.map(Into::into);
         let mut response = Response {
             rid: self.inner.qid,
-            wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
+            wire_expr,
             payload: ResponseBody::Reply(zenoh::Reply {
                 consolidation: zenoh::ConsolidationMode::DEFAULT,
                 ext_unknown: vec![],

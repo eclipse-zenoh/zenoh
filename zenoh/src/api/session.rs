@@ -1511,7 +1511,7 @@ impl Session {
         wire_expr.suffix.len() + namespace_len <= usize::from(ExprLen::MAX)
     }
 
-    fn check_wire_expr(&self, wire_expr: &WireExpr) -> ZResult<()> {
+    pub(crate) fn check_wire_expr(&self, wire_expr: &WireExpr) -> ZResult<()> {
         if !self.fits_wire(wire_expr) {
             bail!(
                 "Key expression (including the namespace, if any) exceeds the maximum of {} bytes",
