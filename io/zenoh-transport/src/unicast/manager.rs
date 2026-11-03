@@ -869,6 +869,24 @@ impl TransportManager {
             )
         }
 
+        // The endpoint can override the open timeout, e.g. `tcp/10.0.0.1:7447#open_timeout_ms=2000`
+        let open_timeout = match endpoint.config().get(OPEN_TIMEOUT_MS) {
+            Some(ms) => match ms.parse() {
+                Ok(ms) => Duration::from_millis(ms),
+                Err(_) => {
+                    tracing::warn!(
+                        "Invalid {}={} on endpoint {}, using {:?}",
+                        OPEN_TIMEOUT_MS,
+                        ms,
+                        endpoint,
+                        self.config.unicast.open_timeout
+                    );
+                    self.config.unicast.open_timeout
+                }
+            },
+            None => self.config.unicast.open_timeout,
+        };
+
         // Automatically create a new link manager for the protocol if it does not exist
         let manager = self.new_link_manager_unicast(&endpoint).await?;
         // Fill and merge the endpoint configuration
@@ -889,7 +907,7 @@ impl TransportManager {
         };
 
         // Open the link
-        tokio::time::timeout(self.config.unicast.open_timeout, async {
+        tokio::time::timeout(open_timeout, async {
             match manager.new_link(endpoint.clone()).await {
                 Ok(link) => {
                     super::establishment::open::open_link(endpoint, link, self, expected_zid).await

@@ -65,6 +65,8 @@
     /// The configuration can also be specified for the separate endpoint
     /// it will override the global one
     /// E.g. tcp/192.168.0.1:7447#retry_period_init_ms=20000;retry_period_max_ms=10000"
+    /// An endpoint can also override transport/unicast/open_timeout, the time allowed for each attempt:
+    /// E.g. tcp/192.168.0.1:7447#open_timeout_ms=2000
 
     /// exit from application, if timeout exceeds
     exit_on_failure: { router: false, peer: false, client: true },
@@ -552,6 +554,7 @@
   transport: {
     unicast: {
       /// Timeout in milliseconds when opening a link
+      /// A connect endpoint can override it, e.g. quic/192.168.0.1:7447#open_timeout_ms=2000
       open_timeout: 10000,
       /// Timeout in milliseconds when accepting a link
       accept_timeout: 10000,
