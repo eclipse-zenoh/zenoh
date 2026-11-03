@@ -19,7 +19,7 @@ use std::{
     ops::Deref,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        Arc, Mutex, RwLock, RwLockReadGuard,
+        Arc, Mutex, RwLock,
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -2871,8 +2871,11 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.queries.remove(&qid) {
+        // Same reasoning as cancel_liveliness_query: drop the write guard
+        // before the removed QueryState (and its Callback's possible Drop
+        // hook) does.
+        let removed = zwrite!(self.0.state).queries.remove(&qid);
+        match removed {
             Some(_) => bail!("Unable to find query {qid}"),
             None => Ok(()),
         }
@@ -2958,8 +2961,11 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_liveliness_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling liveliness query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.liveliness_queries.remove(&qid) {
+        // Drop `state` before the removed value: `LivelinessQueryState` owns a
+        // `Callback`, whose own `Drop` can run an arbitrary user-supplied hook --
+        // that must not happen with this write guard live.
+        let removed = zwrite!(self.0.state).liveliness_queries.remove(&qid);
+        match removed {
             Some(_) => bail!("Unable to find liveliness query {qid}"),
             None => Ok(()),
         }
@@ -2968,7 +2974,7 @@ impl Session {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_query(
         &self,
-        state: RwLockReadGuard<'_, SessionState>,
+        state: zenoh_core::tracking::TrackedReadGuard<'_, SessionState>,
         local: bool,
         key_expr: &KeyExpr<'_>,
         parameters: &str,
@@ -3219,7 +3225,16 @@ impl Primitives for WeakSession {
                 {
                     Ok(key_expr) => {
                         if let Some(interest_id) = msg.interest_id {
-                            if let Some(query) = state.liveliness_queries.get(&interest_id) {
+                            // Clone the callback and drop `state` before calling
+                            // it -- `callback.call(reply)` runs user code, and
+                            // this write guard must not still be live when it
+                            // does.
+                            if let Some(callback) = state
+                                .liveliness_queries
+                                .get(&interest_id)
+                                .map(|query| query.callback.clone())
+                            {
+                                drop(state);
                                 let reply = Reply {
                                     result: Ok(Sample {
                                         key_expr,
@@ -3240,7 +3255,10 @@ impl Primitives for WeakSession {
                                     replier_id: None,
                                 };
 
-                                query.callback.call(reply);
+                                zenoh_core::tracking::invoke_user_callback!(
+                                    "Session::DeclareToken (liveliness query reply)",
+                                    callback.call(reply)
+                                );
                                 return;
                             }
                         }
@@ -3326,8 +3344,13 @@ impl Primitives for WeakSession {
                     return;
                 };
 
-                let mut state = zwrite!(self.0.state);
-                let _ = state.liveliness_queries.remove(&interest_id);
+                // Same reasoning as cancel_liveliness_query above: the write
+                // guard must not still be live when the removed value's
+                // Callback (and its possible Drop hook) runs.
+                let removed = zwrite!(self.0.state)
+                    .liveliness_queries
+                    .remove(&interest_id);
+                drop(removed);
             }
         }
     }

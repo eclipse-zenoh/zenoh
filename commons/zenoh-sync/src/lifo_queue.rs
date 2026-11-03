@@ -53,7 +53,7 @@ impl<T> LifoQueue<T> {
                 self.not_empty.notify_one();
                 return;
             }
-            guard = self.not_full.wait(guard).unwrap();
+            guard = guard.wait_on(&self.not_full).unwrap();
         }
     }
 
@@ -76,7 +76,7 @@ impl<T> LifoQueue<T> {
                 self.not_full.notify_one();
                 return e;
             }
-            guard = self.not_empty.wait(guard).unwrap();
+            guard = guard.wait_on(&self.not_empty).unwrap();
         }
     }
 }
