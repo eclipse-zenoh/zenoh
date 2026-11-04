@@ -24,33 +24,55 @@
 ))]
 
 use std::{
+    io::Write,
+    os::{fd::AsRawFd, unix::net::UnixStream},
     process::Command,
+    sync::mpsc,
     time::{Duration, Instant},
 };
 
+use zenoh_runtime::ZRuntime;
 use zenoh_uring::api::reader::Reader;
 
 #[test]
 fn initialization() {
     const CHILD: &str = "ZENOH_URING_INIT_TEST";
     let Ok(case) = std::env::var(CHILD) else {
-        // Resource limits and seccomp must not affect other tests or their runtimes.
-        for case in ["available", "setup", "enter", "memlock"] {
-            let mut child = Command::new(std::env::current_exe().unwrap())
+        // Resource limits, seccomp and runtime parameters must not affect other tests or
+        // their runtimes.
+        for (case, runtime) in [
+            ("available", None),
+            ("setup", None),
+            ("enter", None),
+            ("memlock", None),
+            ("callback", None),
+            ("blocking", Some("(rx: (max_blocking_threads: 1))")),
+            (
+                "blocking",
+                Some("(rx: (handover: app), app: (max_blocking_threads: 1))"),
+            ),
+        ] {
+            let mut command = Command::new(std::env::current_exe().unwrap());
+            command
                 .args(["--exact", "initialization", "--nocapture"])
-                .env(CHILD, case)
-                .spawn()
-                .unwrap();
+                .env(CHILD, case);
+            if let Some(runtime) = runtime {
+                command.env("ZENOH_RUNTIME", runtime);
+            }
+            let mut child = command.spawn().unwrap();
             let deadline = Instant::now() + Duration::from_secs(20);
             loop {
                 if let Some(status) = child.try_wait().unwrap() {
-                    assert!(status.success(), "initialization case {case}: {status}");
+                    assert!(
+                        status.success(),
+                        "initialization case {case} ({runtime:?}): {status}"
+                    );
                     break;
                 }
                 if Instant::now() >= deadline {
                     child.kill().unwrap();
                     child.wait().unwrap();
-                    panic!("initialization case {case} timed out");
+                    panic!("initialization case {case} ({runtime:?}) timed out");
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
@@ -125,6 +147,35 @@ fn initialization() {
                 rlim_max: 65536,
             };
             assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &limit) }, 0);
+        }
+        "blocking" => {
+            // A running reactor must not hold the only blocking thread of the RX runtime.
+            let _first = Reader::new(1024, 16).unwrap();
+            let _second = Reader::new(1024, 16).unwrap();
+            return;
+        }
+        "callback" => {
+            // Callbacks run on the reactor thread and may rely on the RX runtime context.
+            let reader = Reader::new(1024, 16).unwrap();
+            let (local, remote) = UnixStream::pair().unwrap();
+            let (sender, receiver) = mpsc::channel();
+            let _task = ZRuntime::Application
+                .block_on(reader.setup_read(local.as_raw_fd(), move |_| {
+                    let spawned = sender.clone();
+                    tokio::spawn(async move { spawned.send("spawned").unwrap() });
+                    ZRuntime::Net.block_in_place(async {});
+                    sender.send("called").unwrap();
+                    Ok(())
+                }))
+                .unwrap();
+            (&remote).write_all(&[0]).unwrap();
+            let mut received = [
+                receiver.recv_timeout(Duration::from_secs(5)).unwrap(),
+                receiver.recv_timeout(Duration::from_secs(5)).unwrap(),
+            ];
+            received.sort();
+            assert_eq!(received, ["called", "spawned"]);
+            return;
         }
         "available" => {}
         _ => unreachable!(),

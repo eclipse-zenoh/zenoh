@@ -258,14 +258,21 @@ impl Reader {
             Ok(())
         };
 
-        ZRuntime::RX.spawn_blocking(move || {
-            if let Err(e) = ring_worker() {
-                tracing::error!("Uring reactor error: {e}");
-                let _ = join_sender.send(e.to_string());
-                let _ = init_sender.send(Err(e));
-            }
-            tracing::debug!("Uring reactor thread finished!");
-        });
+        // The reactor runs for the Reader's lifetime: a dedicated thread, as a blocking task
+        // could wait for a free thread of the bounded blocking pool forever. Callbacks run on
+        // it, so it keeps the RX runtime context.
+        let runtime = (*ZRuntime::RX).clone();
+        std::thread::Builder::new()
+            .name("rx-uring".into())
+            .spawn(move || {
+                let _runtime = runtime.enter();
+                if let Err(e) = ring_worker() {
+                    tracing::error!("Uring reactor error: {e}");
+                    let _ = join_sender.send(e.to_string());
+                    let _ = init_sender.send(Err(e));
+                }
+                tracing::debug!("Uring reactor thread finished!");
+            })?;
 
         init_receiver.recv()??;
         let inner = Arc::new(ReaderInner::new(submitter, exit_flag));
