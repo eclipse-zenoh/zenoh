@@ -206,6 +206,7 @@ impl HatInterestTrait for Hat {
                             .map(|res| res.expr().to_string())
                             .unwrap_or_default(),
                     ));
+                    local_interest.unset_finalized();
                     return false;
                 }
                 true

@@ -30,6 +30,9 @@ pub(super) fn protocol(s: &str) -> &str {
 }
 
 pub(super) fn address(s: &str) -> &str {
+    if s.is_empty() {
+        return "";
+    }
     let pdix = s.find(PROTO_SEPARATOR).unwrap_or(s.len());
     let midx = s.find(METADATA_SEPARATOR).unwrap_or(s.len());
     let cidx = s.find(CONFIG_SEPARATOR).unwrap_or(s.len());
@@ -852,6 +855,23 @@ fn endpoints() {
             ]
         })
     );
+}
+
+#[cfg(feature = "internal")]
+#[test]
+fn empty_endpoint_address() {
+    let mut endpoint = EndPoint::empty();
+    assert_eq!(endpoint.address().as_str(), "");
+    assert_eq!(endpoint.split().1.as_str(), "");
+    assert_eq!(endpoint.address_mut().as_str(), "");
+}
+
+#[cfg(feature = "internal")]
+#[test]
+fn empty_locator_address() {
+    let mut locator = Locator::empty();
+    assert_eq!(locator.address().as_str(), "");
+    assert_eq!(locator.address_mut().as_str(), "");
 }
 
 #[test]

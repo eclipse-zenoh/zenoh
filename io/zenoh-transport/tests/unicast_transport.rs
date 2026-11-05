@@ -251,6 +251,9 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
+// One datagram per send without UDP segmentation offload: 100 MiB messages exceed the CI time budget.
+#[cfg(any(feature = "transport_udp", feature = "transport_quic"))]
+const MSG_SIZE_NO_SEGMENTATION_OFFLOAD: [usize; 2] = [1_024, 131_072];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
@@ -498,11 +501,12 @@ async fn test_transport(
     };
 
     // Create the message to send
-    let message = NetworkMessage::from(Push {
+    let mut message = NetworkMessage::from(Push {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, cctrl, false),
         ..Push::from(vec![0u8; msg_size])
     });
+    message.reliability = channel.reliability;
 
     for _ in 0..msg_count {
         let _ = client_transport.schedule(message.clone().as_mut());
@@ -520,6 +524,8 @@ async fn test_transport(
                     tokio::time::sleep(SLEEP_COUNT).await;
                 } else {
                     while router_handler.get_count() == 0 {
+                        // A droppable burst may enqueue nothing; retry until receipt.
+                        client_transport.schedule(message.clone().as_mut()).unwrap();
                         tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 }
@@ -529,6 +535,38 @@ async fn test_transport(
 
     // Wait a little bit
     tokio::time::sleep(SLEEP).await;
+}
+
+#[tokio::test]
+async fn transport_test_retries_dropped_burst() {
+    let router_handler = Arc::new(SHRouter::default());
+    let received = router_handler.count.clone();
+    let attempts = AtomicUsize::new(0);
+    let (transport, _inner) = zenoh_transport::unicast::test_helpers::mock_transport_unicast(
+        ZenohIdProto::try_from([2]).unwrap(),
+        WhatAmI::Router,
+        Arc::new(move |_| {
+            if attempts.fetch_add(1, Ordering::SeqCst) >= MSG_COUNT {
+                received.fetch_add(1, Ordering::SeqCst);
+            }
+        }),
+    );
+
+    tokio::time::timeout(
+        Duration::from_secs(3),
+        test_transport(
+            router_handler.clone(),
+            transport,
+            Channel {
+                priority: Priority::DEFAULT,
+                reliability: Reliability::BestEffort,
+            },
+            131_072,
+        ),
+    )
+    .await
+    .expect("delivery should resume after an entirely dropped burst");
+    assert_eq!(router_handler.get_count(), 1);
 }
 
 async fn run_single(
@@ -728,6 +766,43 @@ async fn transport_unicast_udp_reliable() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_reliable_without_segmentation_offload() {
+    use zenoh_link_commons::quic::QUIC_SEGMENTATION_OFFLOAD;
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("udp/localhost:{}?rel=1", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter([(QUIC_SEGMENTATION_OFFLOAD, "false")].iter().copied())
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
 }
 
 #[cfg(feature = "transport_udp")]
@@ -1173,6 +1248,202 @@ async fn transport_unicast_quic_only_server() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+/// Regression test for https://github.com/eclipse-zenoh/zenoh/issues/2719:
+/// a connection that completes QUIC's TLS handshake but never opens its first bi-stream
+/// must not prevent the QUIC listener from admitting other connections.
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
+    use std::net::SocketAddr;
+
+    use zenoh_link_commons::{
+        quic::PROTOCOL_SINGLE_STREAM, tls::config::TLS_VERIFY_NAME_ON_CONNECT,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+
+    const ATTACKER_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Victim connection should succeed relatively quickly.
+    /// Using 5s here which is half Zenoh's default accept_timeout.
+    const VICTIM_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+
+    /// A `ServerCertVerifier` accepting any server certificate, for the attacker client:
+    /// no client certificate is needed as mTLS is disabled by default.
+    #[derive(Debug)]
+    struct AcceptAnyServerCert(Arc<rustls::crypto::CryptoProvider>);
+
+    impl rustls::client::danger::ServerCertVerifier for AcceptAnyServerCert {
+        fn verify_server_cert(
+            &self,
+            _end_entity: &rustls::pki_types::CertificateDer<'_>,
+            _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+            _server_name: &rustls::pki_types::ServerName<'_>,
+            _ocsp_response: &[u8],
+            _now: rustls::pki_types::UnixTime,
+        ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+            Ok(rustls::client::danger::ServerCertVerified::assertion())
+        }
+
+        fn verify_tls12_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls12_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn verify_tls13_signature(
+            &self,
+            message: &[u8],
+            cert: &rustls::pki_types::CertificateDer<'_>,
+            dss: &rustls::DigitallySignedStruct,
+        ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+            rustls::crypto::verify_tls13_signature(
+                message,
+                cert,
+                dss,
+                &self.0.signature_verification_algorithms,
+            )
+        }
+
+        fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+            self.0.signature_verification_algorithms.supported_schemes()
+        }
+    }
+
+    /// Builds the QUIC client config of the attacker: a plain quinn client accepting any
+    /// server certificate and negotiating a Zenoh ALPN (required for the handshake to
+    /// succeed), but performing no Zenoh exchange.
+    fn quic_attacker_client_config() -> quinn::ClientConfig {
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let mut crypto = rustls::ClientConfig::builder_with_provider(provider.clone())
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert(provider)))
+            .with_no_client_auth();
+        crypto.alpn_protocols = vec![PROTOCOL_SINGLE_STREAM.to_vec()];
+        quinn::ClientConfig::new(Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(crypto).unwrap(),
+        ))
+    }
+
+    let port = get_free_udp_port();
+    let mut endpoint = quic_endpoint(&format!("quic/127.0.0.1:{port}"));
+    endpoint
+        .config_mut()
+        .extend_from_iter([(TLS_VERIFY_NAME_ON_CONNECT, "false")].iter().copied())
+        .unwrap();
+
+    // Create the router transport manager and the listener
+    let router_id = ZenohIdProto::try_from([2]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .unicast(unicast)
+        .build_test(Arc::new(SHRouter::default()))
+        .unwrap();
+    println!("Add endpoint: {endpoint}");
+    ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+
+    // Attacker: completes the QUIC handshake but never opens any stream.
+    // A connection handle is kept alive for the whole test.
+    let mut attacker_endpoint = quinn::Endpoint::client("0.0.0.0:0".parse().unwrap()).unwrap();
+    attacker_endpoint.set_default_client_config(quic_attacker_client_config());
+    let dst_addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    println!("Attacker connects to {dst_addr} without opening any stream");
+    let _attacker_conn = tokio::time::timeout(ATTACKER_CONNECT_TIMEOUT, {
+        attacker_endpoint.connect(dst_addr, "localhost").unwrap()
+    })
+    .await
+    .expect("attacker connection should complete its handshake")
+    .expect("attacker connection should be accepted");
+
+    // Victim: the same listener should still admit a transport with a QUIC link.
+    let client_id = ZenohIdProto::try_from([1]).unwrap();
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        1,
+        false,
+    );
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .unicast(unicast)
+        .build_test(Arc::new(SHClient))
+        .unwrap();
+    println!("Victim opens transport while the attacker connection is parked");
+    tokio::time::timeout(
+        VICTIM_OPEN_TIMEOUT,
+        client_manager.open_transport_unicast(endpoint.clone()),
+    )
+    .await
+    .expect("QUIC listener should admit connections while a stream-less connection is parked")
+    .unwrap();
+
+    // Cleanup
+    ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
+    ztimeout!(client_manager.close());
+    ztimeout!(router_manager.close());
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server_without_segmentation_offload() {
+    use zenoh_link_commons::{quic::QUIC_SEGMENTATION_OFFLOAD, tls::config::*};
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEGMENTATION_OFFLOAD, "false"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
+    )
+    .await;
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1886,6 +2157,46 @@ async fn transport_unicast_quic_datagram_only_server() {
                 (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
                 (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
                 (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
+}
+
+#[cfg(feature = "transport_quic_datagram")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_datagram_only_server_without_segmentation_offload() {
+    use zenoh_link_commons::{quic::QUIC_SEGMENTATION_OFFLOAD, tls::config::*};
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}?rel=0", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEGMENTATION_OFFLOAD, "false"),
             ]
             .iter()
             .copied(),
@@ -2742,6 +3053,86 @@ async fn transport_unicast_udp_mixedrel() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+#[cfg(any(feature = "transport_quic", feature = "transport_udp"))]
+mod mixedrel_mtu {
+    use zenoh_link_commons::quic::QUIC_INITIAL_MTU;
+
+    use super::*;
+
+    fn assert_companion_mtu(transport: &TransportUnicast) {
+        let links = transport.get_links().unwrap();
+        assert_eq!(links.len(), 2);
+        let mut companions = links.iter().filter(|link| !link.is_streamed);
+        assert_eq!(companions.next().unwrap().mtu, 1_150);
+        assert!(companions.next().is_none());
+    }
+
+    async fn run(protocol: &str, endpoint: impl Fn(&str) -> EndPoint) {
+        zenoh_util::init_log_from_env_or("error");
+
+        let client_id = ZenohIdProto::try_from([1]).unwrap();
+        // Both peers must expose the fixed companion MTU with defaults, equal
+        // overrides and asymmetric initial MTUs, for explicit and auto mode.
+        for (client_mtu, router_mtu, mixed_rel, multistream) in [
+            (None, None, "1", "1"),
+            (Some(1350), Some(1350), "1", "0"),
+            (Some(1472), Some(1200), "1", "1"),
+            (Some(1200), Some(1472), "auto", "0"),
+            (Some(1472), Some(1200), "auto", "1"),
+        ] {
+            let locator = format!(
+                "{protocol}/localhost:{}?rel=1;mixed_rel={mixed_rel};multistream={multistream}",
+                get_free_udp_port()
+            );
+            let mut client_endpoint = endpoint(&locator);
+            let mut router_endpoint = endpoint(&locator);
+            for (endpoint, mtu) in [
+                (&mut client_endpoint, client_mtu),
+                (&mut router_endpoint, router_mtu),
+            ] {
+                if let Some(mtu) = mtu {
+                    endpoint
+                        .config_mut()
+                        .insert(QUIC_INITIAL_MTU, mtu.to_string())
+                        .unwrap();
+                }
+            }
+
+            let (router_manager, _, client_manager, client_transport) = open_transport_unicast(
+                &[client_endpoint],
+                &[router_endpoint],
+                false,
+                #[cfg(feature = "transport_multilink")]
+                1,
+                #[cfg(feature = "transport_multilink")]
+                1,
+            )
+            .await;
+            let router_transport =
+                ztimeout!(router_manager.get_transport_unicast(&client_id)).unwrap();
+
+            assert_companion_mtu(&client_transport);
+            assert_companion_mtu(&router_transport);
+
+            ztimeout!(client_transport.close()).unwrap();
+            ztimeout!(client_manager.close());
+            ztimeout!(router_manager.close());
+        }
+    }
+
+    #[cfg(feature = "transport_quic")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_quic() {
+        run("quic", quic_endpoint).await;
+    }
+
+    #[cfg(feature = "transport_udp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_mixedrel_mtu_udp() {
+        run("udp", |locator| locator.parse().unwrap()).await;
+    }
 }
 
 #[cfg(feature = "transport_udp")]

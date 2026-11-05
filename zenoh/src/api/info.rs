@@ -451,6 +451,15 @@ impl Link {
         &self.interfaces
     }
 
+    /// Iterate over the network interfaces associated with the link without allocating.
+    ///
+    /// The iterator borrows the interface names from this link, in the same order as
+    /// [`Self::interfaces`].
+    #[inline]
+    pub fn interfaces_iter(&self) -> std::slice::Iter<'_, String> {
+        self.interfaces.iter()
+    }
+
     /// Gets the authentication identifier used for the link (if any).
     #[inline]
     pub fn auth_identifier(&self) -> Option<&str> {
@@ -565,6 +574,27 @@ mod tests {
     use zenoh_protocol::core::WhatAmI;
 
     use super::*;
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn link_interfaces_iter() {
+        let mut link = Link::empty();
+        assert_eq!(link.interfaces_iter().next(), None);
+
+        link.interfaces = vec!["eth0".into(), "lo".into()];
+        let mut iter = link.interfaces_iter();
+        let mut independent = iter.clone();
+        assert_eq!(iter.len(), link.interfaces().len());
+        for interface in link.interfaces() {
+            assert!(std::ptr::eq(iter.next().unwrap(), interface));
+        }
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+        assert!(std::ptr::eq(
+            independent.next_back().unwrap(),
+            &link.interfaces()[1]
+        ));
+    }
 
     #[test]
     fn test_new_from_fields_equals_new_from_peer() {

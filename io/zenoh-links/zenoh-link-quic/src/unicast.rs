@@ -281,13 +281,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         });
 
         if is_mixed_rel {
-            let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+            let best_effort = Arc::new(LinkUnicastQuicDatagram::new_mixed_reliability(
                 quic_conn,
                 src_addr,
                 endpoint.into(),
                 auth_id.into(),
                 QUIC_LOCATOR_PREFIX,
-                None, // One link with expiration manager causes both to close
             ));
             Ok(LinkUnicast(NewLink::MixedReliability {
                 reliable: link,
@@ -409,13 +408,12 @@ fn acceptor_callback(link_material: QuicLinkMaterial) -> ZResult<LinkUnicast> {
     });
 
     if is_mixed_rel {
-        let best_effort = Arc::new(LinkUnicastQuicDatagram::new(
+        let best_effort = Arc::new(LinkUnicastQuicDatagram::new_mixed_reliability(
             quic_conn,
             src_addr,
             dst_locator,
             auth_id.into(),
             QUIC_LOCATOR_PREFIX,
-            None, // One link with expiration manager causes both to close
         ));
         Ok(LinkUnicast(NewLink::MixedReliability {
             reliable: link,

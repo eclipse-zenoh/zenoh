@@ -15,13 +15,12 @@ use std::net::SocketAddr;
 
 use zenoh_config::Config as ZenohConfig;
 use zenoh_link_commons::{
-    parse_dscp, tcp::TcpSocketConfig, ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET,
-    TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
+    parse_dscp,
+    tcp::{get_tcp_addrs, TcpSocketConfig},
+    ConfigurationInspector, BIND_INTERFACE, BIND_SOCKET, TCP_SO_RCV_BUF, TCP_SO_SND_BUF,
 };
 use zenoh_protocol::core::{parameters, Address, Config};
 use zenoh_result::{zerror, ZResult};
-
-use crate::get_tcp_addrs;
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TcpConfigurator;

@@ -64,6 +64,12 @@ pub const PROTOCOL_MULTI_STREAM_MIXED_REL: &[u8] = b"zenoh-ms-mr";
 pub const QUIC_INITIAL_MTU: &str = "initial_mtu";
 pub const QUIC_MTU_DISCOVERY_INTERVAL: &str = "mtu_discovery_interval_secs";
 
+// QUIC segmentation offload config
+/// Enables or disables UDP generic segmentation offload (GSO) for the link: `true` (default) or `false`.
+///
+/// When disabled, each QUIC datagram is passed to the OS in its own system call.
+pub const QUIC_SEGMENTATION_OFFLOAD: &str = "segmentation_offload";
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
 
@@ -726,6 +732,26 @@ impl TryFrom<&Config<'_>> for QuicMtuConfig {
     }
 }
 
+pub(crate) struct QuicSegmentationOffloadConfig {
+    enabled: Option<bool>,
+}
+
+impl TryFrom<&Config<'_>> for QuicSegmentationOffloadConfig {
+    type Error = zenoh_result::Error;
+
+    fn try_from(config: &Config) -> ZResult<Self> {
+        let mut enabled = None;
+        if let Some(v) = config.get(QUIC_SEGMENTATION_OFFLOAD) {
+            enabled = Some(v.parse::<bool>().map_err(|err| {
+                zerror!(
+                    "could not parse QUIC endpoint's {QUIC_SEGMENTATION_OFFLOAD} value `{v}`: {err}"
+                )
+            })?);
+        }
+        Ok(Self { enabled })
+    }
+}
+
 /// Helper wrapper for configuring QUIC transport
 pub(crate) struct QuicTransportConfigurator<'a>(pub(crate) &'a mut quinn::TransportConfig);
 
@@ -747,6 +773,16 @@ impl QuicTransportConfigurator<'_> {
         mtu_config.apply_to_transport(self.0);
         self
     }
+
+    pub(crate) fn configure_segmentation_offload(
+        self,
+        segmentation_offload_config: &QuicSegmentationOffloadConfig,
+    ) -> Self {
+        if let Some(enabled) = segmentation_offload_config.enabled {
+            self.0.enable_segmentation_offload(enabled);
+        }
+        self
+    }
 }
 
 pub(crate) fn get_negotiated_alpn(connection: &quinn::Connection) -> ZResult<Option<Vec<u8>>> {
@@ -757,4 +793,30 @@ pub(crate) fn get_negotiated_alpn(connection: &quinn::Connection) -> ZResult<Opt
         .downcast_ref::<HandshakeData>()
         .expect("HandshakeData should be only existing implementation");
     Ok(handshake_data.protocol.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use zenoh_protocol::core::EndPoint;
+
+    use super::*;
+
+    fn segmentation_offload(endpoint: &str) -> ZResult<Option<bool>> {
+        let endpoint: EndPoint = endpoint.parse().unwrap();
+        QuicSegmentationOffloadConfig::try_from(&endpoint.config()).map(|c| c.enabled)
+    }
+
+    #[test]
+    fn segmentation_offload_config() {
+        assert_eq!(segmentation_offload("quic/localhost:7447").unwrap(), None);
+        assert_eq!(
+            segmentation_offload("quic/localhost:7447#segmentation_offload=true").unwrap(),
+            Some(true)
+        );
+        assert_eq!(
+            segmentation_offload("quic/localhost:7447#segmentation_offload=false").unwrap(),
+            Some(false)
+        );
+        assert!(segmentation_offload("quic/localhost:7447#segmentation_offload=0").is_err());
+    }
 }

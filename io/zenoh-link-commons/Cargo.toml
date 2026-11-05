@@ -81,5 +81,8 @@ zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-util = { workspace = true }
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]

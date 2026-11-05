@@ -35,6 +35,10 @@ use nix::{
 
 use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "unix_race_tests.rs"]
+mod race_tests;
+
 pub struct SegmentImpl<ID: SegmentID> {
     lock_fd: OwnedFd,
     len: NonZeroUsize,
@@ -87,6 +91,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             }
         };
 
+        #[cfg(all(test, target_os = "linux"))]
+        race_tests::pause(race_tests::Point::AfterCreate, id.into());
+
         // on non-bsd we use our SHM file also for locking
         #[cfg(not(shm_external_lockfile))]
         let lock_fd = fd;
@@ -106,6 +113,18 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                     SegmentCreateError::OsError(e.raw_os_error().unwrap_or(0) as _)
                 }
             })?;
+
+        // Cleanup can unlink the name between shm_open and the shared lock.
+        // Do not publish that detached inode. SegmentExists is the existing
+        // retryable creation result: the POSIX provider will choose another ID.
+        #[cfg(not(shm_external_lockfile))]
+        if fstat(fd.as_raw_fd())
+            .map_err(|e| SegmentCreateError::OsError(e as u32))?
+            .st_nlink
+            == 0
+        {
+            return Err(SegmentCreateError::SegmentExists);
+        }
 
         // resize shm segment to requested size
         tracing::trace!("ftruncate(fd={}, len={})", fd.as_raw_fd(), len);
@@ -162,6 +181,9 @@ impl<ID: SegmentID> SegmentImpl<ID> {
             }
         };
 
+        #[cfg(all(test, target_os = "linux"))]
+        race_tests::pause(race_tests::Point::AfterOpen, id.into());
+
         // on non-bsd we use our SHM file also for locking
         #[cfg(not(shm_external_lockfile))]
         let lock_fd = fd;
@@ -185,6 +207,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         // get real segment size
         let len = {
             let stat = fstat(fd.as_raw_fd()).map_err(|e| SegmentOpenError::OsError(e as u32))?;
+            // Holding a lock on an already-unlinked inode does not make its
+            // name valid again. Cleanup may have won before we took the lock.
+            #[cfg(not(shm_external_lockfile))]
+            if stat.st_nlink == 0 {
+                return Err(SegmentOpenError::InvalidatedSegment);
+            }
             NonZeroUsize::new(stat.st_size as usize).ok_or(SegmentOpenError::InvalidatedSegment)?
         };
 
@@ -200,6 +228,12 @@ impl<ID: SegmentID> SegmentImpl<ID> {
     }
 
     pub fn ensure_not_persistent(id: ID) {
+        #[cfg(not(shm_external_lockfile))]
+        if let Some(lock_fd) = Self::lock_dangling_segment(id) {
+            Self::cleanup_locked_segment(id, &lock_fd);
+        }
+
+        #[cfg(shm_external_lockfile)]
         if Self::is_dangling_segment(id) {
             Self::cleanup_segment(id);
         }
@@ -220,6 +254,25 @@ impl<ID: SegmentID> SegmentImpl<ID> {
 
 // PRIVATE
 impl<ID: SegmentID> SegmentImpl<ID> {
+    // Keep the exclusive lock alive until the name has been unlinked. Returning
+    // only a Boolean would let an opener acquire a shared lock in between.
+    #[cfg(not(shm_external_lockfile))]
+    fn lock_dangling_segment(id: ID) -> Option<OwnedFd> {
+        let lock_fd = shm_open(
+            Self::id_str(id).as_str(),
+            OFlag::O_RDWR,
+            Mode::S_IRUSR | Mode::S_IWUSR,
+        )
+        .ok()?;
+
+        #[cfg(all(test, target_os = "linux"))]
+        race_tests::pause(race_tests::Point::AfterCleanupOpen, id.into());
+
+        lock_fd.as_raw_fd().try_lock(FileLockMode::Exclusive).ok()?;
+        Some(lock_fd)
+    }
+
+    #[cfg(shm_external_lockfile)]
     fn is_dangling_segment(id: ID) -> bool {
         // we use separate lockfile on non-tmpfs for bsd
         #[cfg(shm_external_lockfile)]
@@ -242,24 +295,6 @@ impl<ID: SegmentID> SegmentImpl<ID> {
                     Err(_) => return false,
                 }
             })
-        };
-
-        // open shm fd
-        #[cfg(not(shm_external_lockfile))]
-        let lock_fd = {
-            let id = Self::id_str(id);
-            let flags = OFlag::O_RDWR;
-
-            // TODO: these flags probably can be exposed to the config
-            let mode = Mode::S_IRUSR | Mode::S_IWUSR;
-
-            // TODO: we cannot use our logger inside of atexit() callstack!
-            // tracing::trace!("shm_open(name={}, flag={:?}, mode={:?})", id, flags, mode);
-            match shm_open(id.as_str(), flags, mode) {
-                Ok(v) => v,
-                Err(nix::errno::Errno::ENOENT) => return true,
-                Err(_) => return false,
-            }
         };
 
         lock_fd
@@ -295,7 +330,26 @@ impl<ID: SegmentID> SegmentImpl<ID> {
         Ok(ptr)
     }
 
+    #[cfg(not(shm_external_lockfile))]
+    fn cleanup_locked_segment(id: ID, lock_fd: &OwnedFd) {
+        // The caller holds an exclusive lock on this inode. If another cleanup
+        // already unlinked it before we acquired that lock, the name may now
+        // refer to a replacement. Never unlink the replacement through a stale FD.
+        //
+        // Mixed versions: a process without this change releases its lock before it
+        // unlinks. A creator running this code can pass the link-count check inside that
+        // window, so the race stays open when an old and a new process share a segment.
+        // That window existed before this change and cannot be closed from the new side.
+        if fstat(lock_fd.as_raw_fd()).is_ok_and(|stat| stat.st_nlink != 0) {
+            Self::cleanup_segment(id);
+        }
+    }
+
     fn cleanup_segment(id: ID) {
+        // Last point before the unlink: a test can observe whether the caller still holds its lock.
+        #[cfg(all(test, target_os = "linux"))]
+        race_tests::pause(race_tests::Point::BeforeUnlink, id.into());
+
         let id = Self::id_str(id);
         // TODO: we cannot use our logger inside of atexit() callstack!
         // tracing::trace!("shm_unlink(name={})", id);
@@ -330,6 +384,9 @@ impl<ID: SegmentID> Drop for SegmentImpl<ID> {
             .try_lock(FileLockMode::Exclusive)
             .is_ok()
         {
+            #[cfg(not(shm_external_lockfile))]
+            Self::cleanup_locked_segment(self.id, &self.lock_fd);
+            #[cfg(shm_external_lockfile)]
             Self::cleanup_segment(self.id);
         }
     }
