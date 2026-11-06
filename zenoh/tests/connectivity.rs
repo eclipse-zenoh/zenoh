@@ -350,6 +350,91 @@ mod tests {
         test_context.close().await;
     }
 
+    #[cfg(feature = "transport_multilink")]
+    fn get_router_oneof_config(locators: Vec<EndPoint>) -> zenoh_config::Config {
+        let mut config = zenoh_config::Config::default();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        // Room for a link per locator, so only the strategy keeps it to one.
+        config
+            .transport
+            .unicast
+            .set_max_links(locators.len())
+            .unwrap();
+        config
+            .connect
+            .endpoints
+            .set(vec![EndPoints::Locators(Locators {
+                strategy: LocatorsStrategy::OneOf,
+                locators,
+            })])
+            .unwrap();
+        config
+    }
+
+    /// Test that a router given a oneOf locator group opens a single link,
+    /// to the group's first locator, where an allOf group would open one per locator.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_links_the_first_locator_only() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let listener_config = test_context.get_listener_config("tcp/127.0.0.1:0", 2);
+        let listener = test_context.open_listener_with_cfg(listener_config).await;
+        let locators = test_context.locators();
+        assert_eq!(locators.len(), 2, "Listener should expose 2 locators");
+
+        let router = test_context
+            .open_connector_with_cfg(get_router_oneof_config(locators.clone()))
+            .await;
+
+        wait_for_connection_counts(&listener, 1, 1).await;
+        wait_for_connection_counts(&router, 1, 1).await;
+        // Still one a while later: the second locator is not dialled once the first has linked.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        assert_eq!(router.info().links().await.count(), 1);
+        let link = router.info().links().await.next().unwrap();
+        assert_eq!(link.dst().to_string(), locators[0].to_locator().to_string());
+
+        test_context.close().await;
+    }
+
+    /// Test that a router given a oneOf locator group falls back to the next
+    /// locator when the first does not answer.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_falls_back_to_the_next_locator() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let listener = test_context.open_listener().await;
+        let reachable = test_context.locators();
+        assert_eq!(reachable.len(), 1, "Listener should expose 1 locator");
+
+        let unreachable_port = get_free_tcp_port();
+        let mut locators = vec![format!("tcp/127.0.0.1:{unreachable_port}")
+            .parse::<EndPoint>()
+            .unwrap()];
+        locators.extend(reachable.clone());
+
+        let router = test_context
+            .open_connector_with_cfg(get_router_oneof_config(locators))
+            .await;
+
+        wait_for_connection_counts(&listener, 1, 1).await;
+        wait_for_connection_counts(&router, 1, 1).await;
+        let link = router.info().links().await.next().unwrap();
+        assert_eq!(
+            link.dst().to_string(),
+            reachable[0].to_locator().to_string()
+        );
+
+        test_context.close().await;
+    }
+
     /// Test that event history works correctly - sends existing transports/links as Put events
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_event_history() {
