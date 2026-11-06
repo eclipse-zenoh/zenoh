@@ -153,18 +153,17 @@ impl StartConditions {
     }
 }
 
-impl Runtime {
-    fn warn_if_oneof(peer_group: &EndPoints) {
-        if let EndPoints::Locators(group) = peer_group {
-            if matches!(group.strategy, LocatorsStrategy::OneOf) {
-                tracing::warn!(
-                    "connect.endpoints locator groups with strategy=oneOf are not implemented yet; \
-                     falling back to current allOf behavior"
-                );
-            }
+/// The locators of a `oneOf` group, in the order they are preferred; `None` for anything else.
+fn oneof_locators(group: &EndPoints) -> Option<&Vec<EndPoint>> {
+    match group {
+        EndPoints::Locators(locators) if matches!(locators.strategy, LocatorsStrategy::OneOf) => {
+            Some(&locators.locators)
         }
+        _ => None,
     }
+}
 
+impl Runtime {
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
@@ -404,7 +403,6 @@ impl Runtime {
     async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
         let mut success_flag = false;
         for peer_group in peers {
-            Self::warn_if_oneof(peer_group);
             // try to connect to each peer in the group
             let mut peers_to_retry = Vec::new();
             for peer in peer_group.as_vec() {
@@ -452,7 +450,10 @@ impl Runtime {
 
     async fn connect_peers_multiply_links(&self, peers: &[EndPoints]) -> ZResult<()> {
         for peer_group in peers {
-            Self::warn_if_oneof(peer_group);
+            if let Some(locators) = oneof_locators(peer_group) {
+                self.connect_oneof(locators.clone()).await?;
+                continue;
+            }
             for peer in peer_group.as_vec() {
                 let endpoint = peer.clone();
                 let retry_config = self.get_connect_retry_config(&endpoint);
@@ -482,6 +483,97 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    /// A `oneOf` group: one link, to the first locator that answers, tried in order.
+    async fn connect_oneof(&self, peers: Vec<EndPoint>) -> ZResult<()> {
+        let Some(first) = peers.first() else {
+            return Ok(());
+        };
+        let retry_config = self.get_connect_retry_config(first);
+        if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+            for peer in &peers {
+                if self.peer_connector(peer.clone()).await.is_ok() {
+                    return Ok(());
+                }
+            }
+            if retry_config.exit_on_failure {
+                bail!("Unable to connect to any of {:?}", peers);
+            }
+            Ok(())
+        } else if retry_config.exit_on_failure {
+            self.oneof_connector_retry(peers).await.map(|_| ())
+        } else {
+            self.spawn_oneof_connector(peers);
+            Ok(())
+        }
+    }
+
+    fn spawn_oneof_connector(&self, peers: Vec<EndPoint>) {
+        let this = self.clone();
+        let idx = self.state.start_conditions.add_peer_connector();
+        let config_guard = this.config().lock();
+        let gossip = unwrap_or_default!(config_guard.scouting().gossip().enabled());
+        let wait_declares = unwrap_or_default!(config_guard.open().return_conditions().declares());
+        drop(config_guard);
+        self.spawn_abortable(async move {
+            if let Ok(zid) = this.oneof_connector_retry(peers).await {
+                this.state.start_conditions.set_peer_connector_zid(idx, zid);
+            }
+            if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
+                this.state.start_conditions.terminate_peer_connector(idx);
+            }
+        });
+    }
+
+    /// Tries each of `peers` in order until one links. Only when every one fails does it wait the
+    /// first locator's retry period and start again from the top; a link made is kept, not upgraded.
+    async fn oneof_connector_retry(&self, peers: Vec<EndPoint>) -> ZResult<ZenohIdProto> {
+        let Some(first) = peers.first() else {
+            bail!("An empty oneOf group connects to nothing");
+        };
+        let mut period = self.get_connect_retry_config(first).period();
+        let cancellation_token = self.get_cancellation_token();
+        loop {
+            for peer in &peers {
+                match self.open_configured_peer(peer).await {
+                    Ok(zid) => {
+                        tracing::debug!("Successfully connected to configured peer {}", peer);
+                        return Ok(zid);
+                    }
+                    Err(e) => {
+                        tracing::debug!("Unable to connect to configured peer {}! {}", peer, e)
+                    }
+                }
+                if cancellation_token.is_cancelled() {
+                    bail!("Connector for {:?} cancelled", peers);
+                }
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(period.next_duration()) => {}
+                _ = cancellation_token.cancelled() => bail!("Connector for {:?} cancelled", peers),
+            }
+        }
+    }
+
+    /// Opens a transport to a configured `peer` and records it as the endpoint the session
+    /// reconnects to.
+    async fn open_configured_peer(&self, peer: &EndPoint) -> ZResult<ZenohIdProto> {
+        self.manager()
+            .open_transport_unicast(peer.clone())
+            .await
+            .and_then(|transport| -> ZResult<_> {
+                let zid = transport.get_zid()?;
+                let cb = transport
+                    .get_callback()?
+                    .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                let session = cb
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                    .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                zwrite!(session.endpoints).insert(peer.clone());
+                Ok(zid)
+            })
     }
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -943,22 +1035,7 @@ impl Runtime {
                     self.get_global_connect_timeout(),
                     self.get_connect_retry_config(&peer)
                 );
-                let result = self
-                    .manager()
-                    .open_transport_unicast(peer.clone())
-                    .await
-                    .and_then(|transport| -> ZResult<_> {
-                        let zid = transport.get_zid()?;
-                        let cb = transport
-                            .get_callback()?
-                            .ok_or_else(|| zerror!("Transport closed immediately"))?;
-                        let session = cb
-                            .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                            .ok_or_else(|| zerror!("Unexpected callback type"))?;
-                        zwrite!(session.endpoints).insert(peer.clone());
-                        Ok(zid)
-                    });
+                let result = self.open_configured_peer(&peer).await;
 
                 match result {
                     Ok(zid) => {
@@ -1402,14 +1479,29 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let client = session.runtime.whatami() == WhatAmI::Client;
         let mut peers = vec![];
+        let mut groups = vec![];
         for peer in endpoints {
-            peers.extend(peer.flatten());
+            match oneof_locators(&peer) {
+                // A client links once in any case, so it keeps reconnecting as before.
+                Some(locators) if !client => groups.push(locators.clone()),
+                _ => peers.extend(peer.flatten()),
+            }
         }
 
-        if session.runtime.whatami() != WhatAmI::Client {
+        if !client {
             let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
             peers.retain(|p| endpoints.contains(p));
+            groups.retain(|group| group.iter().any(|p| endpoints.contains(p)));
+        }
+
+        // A lost `oneOf` link is dialled again from the group's first locator, not the one it had.
+        for group in groups {
+            let runtime = session.runtime.clone();
+            session.runtime.spawn_abortable(async move {
+                let _ = runtime.oneof_connector_retry(group).await;
+            });
         }
 
         if !peers.is_empty() {
@@ -1441,6 +1533,11 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let group = endpoints
+            .iter()
+            .filter_map(oneof_locators)
+            .find(|locators| locators.contains(&endpoint))
+            .cloned();
         let mut peers = vec![];
         for peer in endpoints {
             peers.extend(peer.flatten());
@@ -1449,7 +1546,15 @@ impl Runtime {
         if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
             let runtime = session.runtime.clone();
             session.runtime.spawn_abortable(async move {
-                let _ = runtime.peer_connector_retry(endpoint).await;
+                match group {
+                    // From the group's first locator, as when it was first dialled.
+                    Some(group) => {
+                        let _ = runtime.oneof_connector_retry(group).await;
+                    }
+                    None => {
+                        let _ = runtime.peer_connector_retry(endpoint).await;
+                    }
+                }
             });
         }
     }
