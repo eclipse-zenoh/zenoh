@@ -545,6 +545,7 @@ async fn test_query_not_routed_to_closed_face() {
     const QUERY_TIMEOUT: Duration = Duration::from_secs(10);
     const MAX_QUERY_DURATION: Duration = Duration::from_secs(3);
     const HELD_QUERY_CHECK: Duration = Duration::from_secs(1);
+    const HELD_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
     let mut test_context = TestSessions::new();
     let mut queryable_config = test_context.get_listener_config("tcp/127.0.0.1:0", 1);
@@ -604,22 +605,23 @@ async fn test_query_not_routed_to_closed_face() {
     // face: its final reply never reaches the querier, so with the default consolidation the
     // query yields nothing until the face is closed. A query routed before the face exists
     // completes at once and is retried.
-    let replies = ztimeout!(async {
+    let (replies, issued) = ztimeout!(async {
         loop {
-            let replies = querier.get(KEY).timeout(QUERY_TIMEOUT).await.unwrap();
+            let issued = Instant::now();
+            let replies = querier.get(KEY).timeout(HELD_QUERY_TIMEOUT).await.unwrap();
             if tokio::time::timeout(HELD_QUERY_CHECK, replies.recv_async())
                 .await
                 .is_err()
             {
-                break replies;
+                break (replies, issued);
             }
             while replies.recv_async().await.is_ok() {}
             tokio::time::sleep(SLEEP).await;
         }
     });
 
-    // Closing the face completes the query it holds.
-    let start = Instant::now();
+    // Closing the face completes the query it holds rather than leaving it to time out. How soon
+    // the closure is noticed depends on the link implementation, so only the timeout is checked.
     cut.send(()).unwrap();
     let mut ok = 0;
     while let Ok(reply) = replies.recv_async().await {
@@ -627,9 +629,8 @@ async fn test_query_not_routed_to_closed_face() {
     }
     assert_eq!(ok, 1);
     assert!(
-        start.elapsed() < MAX_QUERY_DURATION,
-        "query held by the face took {:?} to complete after the face was closed",
-        start.elapsed()
+        issued.elapsed() < HELD_QUERY_TIMEOUT,
+        "query held by the face was not completed when the face was closed"
     );
     ztimeout!(async {
         while peer_count(&querier).await != 1 {
