@@ -19,6 +19,13 @@ mod tests {
         sync::{atomic::AtomicUsize, Arc},
         time::Duration,
     };
+    #[cfg(feature = "transport_multilink")]
+    use std::{
+        net::{SocketAddr, TcpListener, TcpStream},
+        sync::atomic::{AtomicBool, Ordering},
+        thread::JoinHandle,
+        time::Instant,
+    };
 
     use zenoh::sample::SampleKind;
     #[cfg(feature = "transport_multilink")]
@@ -27,9 +34,9 @@ mod tests {
     use zenoh_config::EndPoint;
     #[cfg(feature = "transport_multilink")]
     use zenoh_protocol::core::{EndPoints, Locators, LocatorsStrategy};
-    #[cfg(feature = "transport_multilink")]
-    use zenoh_test::get_free_tcp_port;
     use zenoh_test::TestSessions;
+    #[cfg(feature = "transport_multilink")]
+    use zenoh_test::{get_free_tcp_port, get_tcp_locator};
 
     async fn collect_events<T: Debug>(events: &flume::Receiver<T>, timeout: Duration) -> Vec<T> {
         let mut collected = Vec::new();
@@ -431,6 +438,243 @@ mod tests {
             link.dst().to_string(),
             reachable[0].to_locator().to_string()
         );
+
+        test_context.close().await;
+    }
+
+    #[cfg(feature = "transport_multilink")]
+    fn free_tcp_endpoint() -> EndPoint {
+        format!("tcp/127.0.0.1:{}", get_free_tcp_port())
+            .parse()
+            .unwrap()
+    }
+
+    /// A TCP port that accepts every connection and drops it at once, so each dial to it
+    /// fails. Each dial is sent on `attempts` as `(name, when)` before the drop. The port
+    /// closes when this is dropped.
+    #[cfg(feature = "transport_multilink")]
+    struct RefusingEndpoint {
+        endpoint: EndPoint,
+        address: SocketAddr,
+        stop: Arc<AtomicBool>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    #[cfg(feature = "transport_multilink")]
+    impl RefusingEndpoint {
+        fn new(name: usize, attempts: flume::Sender<(usize, Instant)>) -> Self {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let address = listener.local_addr().unwrap();
+            let stop = Arc::new(AtomicBool::new(false));
+            let thread = std::thread::spawn({
+                let stop = stop.clone();
+                move || {
+                    for stream in listener.incoming() {
+                        if stop.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let _ = attempts.send((name, Instant::now()));
+                        drop(stream);
+                    }
+                }
+            });
+            RefusingEndpoint {
+                endpoint: format!("tcp/{address}").parse().unwrap(),
+                address,
+                stop,
+                thread: Some(thread),
+            }
+        }
+    }
+
+    #[cfg(feature = "transport_multilink")]
+    impl Drop for RefusingEndpoint {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::SeqCst);
+            // Wakes the accept loop so it sees `stop`.
+            let _ = TcpStream::connect(self.address);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    #[cfg(feature = "transport_multilink")]
+    async fn wait_for_single_link_to(session: &Session, endpoint: &EndPoint) {
+        let expected = vec![endpoint.to_locator().to_string()];
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let links: Vec<_> = session
+                    .info()
+                    .links()
+                    .await
+                    .map(|link| link.dst().to_string())
+                    .collect();
+                if links == expected {
+                    break;
+                }
+                tokio::time::sleep(SLEEP).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Timed out waiting for a single link to {endpoint}"));
+    }
+
+    /// Test that a router whose oneOf link is lost dials the group again from its
+    /// first locator, not the locator that had linked nor the one after it.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_reconnects_from_the_first_locator() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        // The second and third locators answer from the start, the first only later.
+        let second = zenoh::open(test_context.get_listener_config("tcp/127.0.0.1:0", 1))
+            .await
+            .unwrap();
+        let second_locator = get_tcp_locator(&second).await;
+        let third = test_context.open_listener().await;
+        let third_locator = get_tcp_locator(&third).await;
+        let first_locator = free_tcp_endpoint();
+
+        let router = test_context
+            .open_connector_with_cfg(get_router_oneof_config(vec![
+                first_locator.clone(),
+                second_locator.clone(),
+                third_locator,
+            ]))
+            .await;
+        wait_for_single_link_to(&router, &second_locator).await;
+
+        let first_config = test_context.get_listener_config(&first_locator.to_string(), 1);
+        test_context.open_listener_with_cfg(first_config).await;
+        second.close().await.unwrap();
+        wait_for_single_link_to(&router, &first_locator).await;
+        assert_eq!(third.info().transports().await.count(), 0);
+
+        test_context.close().await;
+    }
+
+    /// Test that a router whose oneOf locators all fail dials the group again until
+    /// one of them answers.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_retries_the_group_until_a_locator_answers() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let (attempts_tx, attempts) = flume::unbounded();
+        let refusing = RefusingEndpoint::new(0, attempts_tx);
+        let answering = free_tcp_endpoint();
+
+        let mut test_context = TestSessions::new();
+        let router = test_context
+            .open_connector_with_cfg(get_router_oneof_config(vec![
+                refusing.endpoint.clone(),
+                answering.clone(),
+            ]))
+            .await;
+
+        // A second round over the group, then the second locator answers.
+        for _ in 0..2 {
+            tokio::time::timeout(Duration::from_secs(10), attempts.recv_async())
+                .await
+                .expect("Timed out waiting for the group to be dialled")
+                .unwrap();
+        }
+        assert_eq!(router.info().links().await.count(), 0);
+        let listener_config = test_context.get_listener_config(&answering.to_string(), 1);
+        test_context.open_listener_with_cfg(listener_config).await;
+        wait_for_single_link_to(&router, &answering).await;
+
+        test_context.close().await;
+    }
+
+    /// Test that a router whose oneOf locators all fail waits a retry period after
+    /// the last of them before dialling the first again.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_waits_a_retry_period_between_rounds() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let (attempts_tx, attempts) = flume::unbounded();
+        let refusing = [
+            RefusingEndpoint::new(0, attempts_tx.clone()),
+            RefusingEndpoint::new(1, attempts_tx),
+        ];
+
+        let mut test_context = TestSessions::new();
+        test_context
+            .open_connector_with_cfg(get_router_oneof_config(
+                refusing.iter().map(|r| r.endpoint.clone()).collect(),
+            ))
+            .await;
+
+        let mut dialled = vec![];
+        for _ in 0..4 {
+            dialled.push(
+                tokio::time::timeout(Duration::from_secs(10), attempts.recv_async())
+                    .await
+                    .expect("Timed out waiting for the group to be dialled")
+                    .unwrap(),
+            );
+        }
+        let names: Vec<_> = dialled.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, [0, 1, 0, 1]);
+        // The retry period is 1 s by default.
+        let wait = dialled[2].1 - dialled[1].1;
+        assert!(
+            wait >= Duration::from_millis(900),
+            "Dialled again {wait:?} after the round failed"
+        );
+
+        test_context.close().await;
+    }
+
+    /// Test that a router told not to retry dials each oneOf locator once, in order,
+    /// links the first that answers, and fails to open when none answers.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn router_connect_oneof_without_retry_dials_each_locator_once_in_order() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let no_retry = |locators| {
+            let mut config = get_router_oneof_config(locators);
+            config.insert_json5("connect/timeout_ms", "0").unwrap();
+            config
+                .insert_json5("connect/exit_on_failure", "true")
+                .unwrap();
+            config
+        };
+        let (attempts_tx, attempts) = flume::unbounded();
+        let refusing = [
+            RefusingEndpoint::new(0, attempts_tx.clone()),
+            RefusingEndpoint::new(1, attempts_tx),
+        ];
+        let refusing_endpoints: Vec<_> = refusing.iter().map(|r| r.endpoint.clone()).collect();
+        let dialled = || attempts.drain().map(|(name, _)| name).collect::<Vec<_>>();
+
+        let mut test_context = TestSessions::new();
+        let listener = test_context.open_listener().await;
+        let answering = get_tcp_locator(&listener).await;
+        let mut locators = refusing_endpoints.clone();
+        locators.push(answering.clone());
+        let router = test_context
+            .open_connector_with_cfg(no_retry(locators))
+            .await;
+        wait_for_single_link_to(&router, &answering).await;
+        assert_eq!(dialled(), [0, 1]);
+
+        let opened = tokio::time::timeout(
+            Duration::from_secs(10),
+            zenoh::open(no_retry(refusing_endpoints)),
+        )
+        .await
+        .expect("A router told not to retry should not keep dialling");
+        assert!(
+            opened.is_err(),
+            "A router that reaches none of its oneOf locators should fail to open"
+        );
+        assert_eq!(dialled(), [0, 1]);
 
         test_context.close().await;
     }

@@ -1587,6 +1587,8 @@ mod tests {
     use tokio::time::{timeout, Duration};
 
     use super::*;
+    use zenoh_transport::TransportManager;
+
     use crate::{net::runtime::RuntimeBuilder, Config};
 
     #[tokio::test]
@@ -1635,5 +1637,95 @@ mod tests {
             .expect("timed out waiting for loopback multicast packet")
             .unwrap();
         assert_eq!(&buf[..n], payload);
+    }
+
+    /// Waits for a transport to `zid` whose session has recorded `endpoint` as the one it
+    /// reconnects to.
+    async fn wait_for_recorded_endpoint(
+        manager: &TransportManager,
+        zid: ZenohIdProto,
+        endpoint: &EndPoint,
+    ) {
+        timeout(Duration::from_secs(5), async {
+            loop {
+                let recorded = manager
+                    .get_transport_unicast(&zid)
+                    .await
+                    .and_then(|transport| transport.get_callback().ok().flatten())
+                    .is_some_and(|callback| {
+                        callback
+                            .as_any()
+                            .downcast_ref::<RuntimeSession>()
+                            .is_some_and(|session| zread!(session.endpoints).contains(endpoint))
+                    });
+                if recorded {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!("Timed out waiting for a transport to {zid} through {endpoint}")
+        });
+    }
+
+    /// A `oneOf` link this router closes itself reaches `closed_session` with its endpoint
+    /// still recorded, and is dialled again from the group's first locator.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn oneof_link_this_router_closes_redials_from_the_first_locator() {
+        let listening_on = |endpoint: &str| {
+            let mut config = Config::default();
+            config
+                .insert_json5("scouting/multicast/enabled", "false")
+                .unwrap();
+            config
+                .insert_json5("listen/endpoints", &format!(r#"["{endpoint}"]"#))
+                .unwrap();
+            config
+        };
+        let second = crate::open(listening_on("tcp/127.0.0.1:0")).await.unwrap();
+        let second_locator = second.static_runtime().unwrap().get_locators()[0].to_endpoint();
+        let first_locator: EndPoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port())
+            .parse()
+            .unwrap();
+
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
+        config.insert_json5("listen/endpoints", "[]").unwrap();
+        config
+            .insert_json5("scouting/multicast/enabled", "false")
+            .unwrap();
+        config
+            .insert_json5("scouting/gossip/enabled", "false")
+            .unwrap();
+        config
+            .insert_json5(
+                "connect/endpoints",
+                &format!(
+                    r#"[{{ strategy: "oneOf", locators: ["{first_locator}", "{second_locator}"] }}]"#
+                ),
+            )
+            .unwrap();
+        let router = crate::open(config).await.unwrap();
+        let manager = router.static_runtime().unwrap().manager();
+        wait_for_recorded_endpoint(manager, second.zid().into(), &second_locator).await;
+
+        let first = crate::open(listening_on(&first_locator.to_string()))
+            .await
+            .unwrap();
+        manager
+            .get_transport_unicast(&second.zid().into())
+            .await
+            .unwrap()
+            .close()
+            .await
+            .unwrap();
+        wait_for_recorded_endpoint(manager, first.zid().into(), &first_locator).await;
+        assert_eq!(manager.get_transports_unicast().await.len(), 1);
+
+        router.close().await.unwrap();
+        first.close().await.unwrap();
+        second.close().await.unwrap();
     }
 }
