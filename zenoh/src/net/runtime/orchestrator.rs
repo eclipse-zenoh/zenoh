@@ -153,18 +153,17 @@ impl StartConditions {
     }
 }
 
-impl Runtime {
-    fn warn_if_oneof(peer_group: &EndPoints) {
-        if let EndPoints::Locators(group) = peer_group {
-            if matches!(group.strategy, LocatorsStrategy::OneOf) {
-                tracing::warn!(
-                    "connect.endpoints locator groups with strategy=oneOf are not implemented yet; \
-                     falling back to current allOf behavior"
-                );
-            }
+/// The locators of a `oneOf` group, in the order they are preferred; `None` for anything else.
+fn oneof_locators(group: &EndPoints) -> Option<&Vec<EndPoint>> {
+    match group {
+        EndPoints::Locators(locators) if matches!(locators.strategy, LocatorsStrategy::OneOf) => {
+            Some(&locators.locators)
         }
+        _ => None,
     }
+}
 
+impl Runtime {
     pub async fn start(&mut self) -> ZResult<()> {
         match self.whatami() {
             WhatAmI::Client => self.start_client().await,
@@ -404,7 +403,6 @@ impl Runtime {
     async fn connect_peers_single_link(&self, peers: &[EndPoints]) -> ZResult<()> {
         let mut success_flag = false;
         for peer_group in peers {
-            Self::warn_if_oneof(peer_group);
             // try to connect to each peer in the group
             let mut peers_to_retry = Vec::new();
             for peer in peer_group.as_vec() {
@@ -452,7 +450,10 @@ impl Runtime {
 
     async fn connect_peers_multiply_links(&self, peers: &[EndPoints]) -> ZResult<()> {
         for peer_group in peers {
-            Self::warn_if_oneof(peer_group);
+            if let Some(locators) = oneof_locators(peer_group) {
+                self.connect_oneof(locators.clone()).await?;
+                continue;
+            }
             for peer in peer_group.as_vec() {
                 let endpoint = peer.clone();
                 let retry_config = self.get_connect_retry_config(&endpoint);
@@ -482,6 +483,97 @@ impl Runtime {
             }
         }
         Ok(())
+    }
+
+    /// A `oneOf` group: one link, to the first locator that answers, tried in order.
+    async fn connect_oneof(&self, peers: Vec<EndPoint>) -> ZResult<()> {
+        let Some(first) = peers.first() else {
+            return Ok(());
+        };
+        let retry_config = self.get_connect_retry_config(first);
+        if retry_config.timeout().is_zero() || self.get_global_connect_timeout().is_zero() {
+            for peer in &peers {
+                if self.peer_connector(peer.clone()).await.is_ok() {
+                    return Ok(());
+                }
+            }
+            if retry_config.exit_on_failure {
+                bail!("Unable to connect to any of {:?}", peers);
+            }
+            Ok(())
+        } else if retry_config.exit_on_failure {
+            self.oneof_connector_retry(peers).await.map(|_| ())
+        } else {
+            self.spawn_oneof_connector(peers);
+            Ok(())
+        }
+    }
+
+    fn spawn_oneof_connector(&self, peers: Vec<EndPoint>) {
+        let this = self.clone();
+        let idx = self.state.start_conditions.add_peer_connector();
+        let config_guard = this.config().lock();
+        let gossip = unwrap_or_default!(config_guard.scouting().gossip().enabled());
+        let wait_declares = unwrap_or_default!(config_guard.open().return_conditions().declares());
+        drop(config_guard);
+        self.spawn_abortable(async move {
+            if let Ok(zid) = this.oneof_connector_retry(peers).await {
+                this.state.start_conditions.set_peer_connector_zid(idx, zid);
+            }
+            if !gossip && (!wait_declares || this.whatami() != WhatAmI::Peer) {
+                this.state.start_conditions.terminate_peer_connector(idx);
+            }
+        });
+    }
+
+    /// Tries each of `peers` in order until one links. Only when every one fails does it wait the
+    /// first locator's retry period and start again from the top; a link made is kept, not upgraded.
+    async fn oneof_connector_retry(&self, peers: Vec<EndPoint>) -> ZResult<ZenohIdProto> {
+        let Some(first) = peers.first() else {
+            bail!("An empty oneOf group connects to nothing");
+        };
+        let mut period = self.get_connect_retry_config(first).period();
+        let cancellation_token = self.get_cancellation_token();
+        loop {
+            for peer in &peers {
+                match self.open_configured_peer(peer).await {
+                    Ok(zid) => {
+                        tracing::debug!("Successfully connected to configured peer {}", peer);
+                        return Ok(zid);
+                    }
+                    Err(e) => {
+                        tracing::debug!("Unable to connect to configured peer {}! {}", peer, e)
+                    }
+                }
+                if cancellation_token.is_cancelled() {
+                    bail!("Connector for {:?} cancelled", peers);
+                }
+            }
+            tokio::select! {
+                _ = tokio::time::sleep(period.next_duration()) => {}
+                _ = cancellation_token.cancelled() => bail!("Connector for {:?} cancelled", peers),
+            }
+        }
+    }
+
+    /// Opens a transport to a configured `peer` and records it as the endpoint the session
+    /// reconnects to.
+    async fn open_configured_peer(&self, peer: &EndPoint) -> ZResult<ZenohIdProto> {
+        self.manager()
+            .open_transport_unicast(peer.clone())
+            .await
+            .and_then(|transport| -> ZResult<_> {
+                let zid = transport.get_zid()?;
+                let cb = transport
+                    .get_callback()?
+                    .ok_or_else(|| zerror!("Transport closed immediately"))?;
+                let session = cb
+                    .as_any()
+                    .downcast_ref::<super::RuntimeSession>()
+                    .ok_or_else(|| zerror!("Unexpected callback type"))?;
+                zwrite!(session.endpoints).insert(peer.clone());
+                Ok(zid)
+            })
     }
 
     async fn peer_connector(&self, peer: EndPoint) -> ZResult<()> {
@@ -943,22 +1035,7 @@ impl Runtime {
                     self.get_global_connect_timeout(),
                     self.get_connect_retry_config(&peer)
                 );
-                let result = self
-                    .manager()
-                    .open_transport_unicast(peer.clone())
-                    .await
-                    .and_then(|transport| -> ZResult<_> {
-                        let zid = transport.get_zid()?;
-                        let cb = transport
-                            .get_callback()?
-                            .ok_or_else(|| zerror!("Transport closed immediately"))?;
-                        let session = cb
-                            .as_any()
-                            .downcast_ref::<super::RuntimeSession>()
-                            .ok_or_else(|| zerror!("Unexpected callback type"))?;
-                        zwrite!(session.endpoints).insert(peer.clone());
-                        Ok(zid)
-                    });
+                let result = self.open_configured_peer(&peer).await;
 
                 match result {
                     Ok(zid) => {
@@ -1402,14 +1479,29 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let client = session.runtime.whatami() == WhatAmI::Client;
         let mut peers = vec![];
+        let mut groups = vec![];
         for peer in endpoints {
-            peers.extend(peer.flatten());
+            match oneof_locators(&peer) {
+                // A client links once in any case, so it keeps reconnecting as before.
+                Some(locators) if !client => groups.push(locators.clone()),
+                _ => peers.extend(peer.flatten()),
+            }
         }
 
-        if session.runtime.whatami() != WhatAmI::Client {
+        if !client {
             let endpoints = std::mem::take(zwrite!(session.endpoints).deref_mut());
             peers.retain(|p| endpoints.contains(p));
+            groups.retain(|group| group.iter().any(|p| endpoints.contains(p)));
+        }
+
+        // A lost `oneOf` link is dialled again from the group's first locator, not the one it had.
+        for group in groups {
+            let runtime = session.runtime.clone();
+            session.runtime.spawn_abortable(async move {
+                let _ = runtime.oneof_connector_retry(group).await;
+            });
         }
 
         if !peers.is_empty() {
@@ -1441,6 +1533,11 @@ impl Runtime {
             .get(session.runtime.state.whatami)
             .unwrap_or(&vec![])
             .clone();
+        let group = endpoints
+            .iter()
+            .filter_map(oneof_locators)
+            .find(|locators| locators.contains(&endpoint))
+            .cloned();
         let mut peers = vec![];
         for peer in endpoints {
             peers.extend(peer.flatten());
@@ -1449,7 +1546,15 @@ impl Runtime {
         if peers.contains(&endpoint) && zwrite!(session.endpoints).remove(&endpoint) {
             let runtime = session.runtime.clone();
             session.runtime.spawn_abortable(async move {
-                let _ = runtime.peer_connector_retry(endpoint).await;
+                match group {
+                    // From the group's first locator, as when it was first dialled.
+                    Some(group) => {
+                        let _ = runtime.oneof_connector_retry(group).await;
+                    }
+                    None => {
+                        let _ = runtime.peer_connector_retry(endpoint).await;
+                    }
+                }
             });
         }
     }
@@ -1482,6 +1587,8 @@ mod tests {
     use tokio::time::{timeout, Duration};
 
     use super::*;
+    use zenoh_transport::TransportManager;
+
     use crate::{net::runtime::RuntimeBuilder, Config};
 
     #[tokio::test]
@@ -1530,5 +1637,95 @@ mod tests {
             .expect("timed out waiting for loopback multicast packet")
             .unwrap();
         assert_eq!(&buf[..n], payload);
+    }
+
+    /// Waits for a transport to `zid` whose session has recorded `endpoint` as the one it
+    /// reconnects to.
+    async fn wait_for_recorded_endpoint(
+        manager: &TransportManager,
+        zid: ZenohIdProto,
+        endpoint: &EndPoint,
+    ) {
+        timeout(Duration::from_secs(5), async {
+            loop {
+                let recorded = manager
+                    .get_transport_unicast(&zid)
+                    .await
+                    .and_then(|transport| transport.get_callback().ok().flatten())
+                    .is_some_and(|callback| {
+                        callback
+                            .as_any()
+                            .downcast_ref::<RuntimeSession>()
+                            .is_some_and(|session| zread!(session.endpoints).contains(endpoint))
+                    });
+                if recorded {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!("Timed out waiting for a transport to {zid} through {endpoint}")
+        });
+    }
+
+    /// A `oneOf` link this router closes itself reaches `closed_session` with its endpoint
+    /// still recorded, and is dialled again from the group's first locator.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn oneof_link_this_router_closes_redials_from_the_first_locator() {
+        let listening_on = |endpoint: &str| {
+            let mut config = Config::default();
+            config
+                .insert_json5("scouting/multicast/enabled", "false")
+                .unwrap();
+            config
+                .insert_json5("listen/endpoints", &format!(r#"["{endpoint}"]"#))
+                .unwrap();
+            config
+        };
+        let second = crate::open(listening_on("tcp/127.0.0.1:0")).await.unwrap();
+        let second_locator = second.static_runtime().unwrap().get_locators()[0].to_endpoint();
+        let first_locator: EndPoint = format!("tcp/127.0.0.1:{}", zenoh_test::get_free_tcp_port())
+            .parse()
+            .unwrap();
+
+        let mut config = Config::default();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
+        config.insert_json5("listen/endpoints", "[]").unwrap();
+        config
+            .insert_json5("scouting/multicast/enabled", "false")
+            .unwrap();
+        config
+            .insert_json5("scouting/gossip/enabled", "false")
+            .unwrap();
+        config
+            .insert_json5(
+                "connect/endpoints",
+                &format!(
+                    r#"[{{ strategy: "oneOf", locators: ["{first_locator}", "{second_locator}"] }}]"#
+                ),
+            )
+            .unwrap();
+        let router = crate::open(config).await.unwrap();
+        let manager = router.static_runtime().unwrap().manager();
+        wait_for_recorded_endpoint(manager, second.zid().into(), &second_locator).await;
+
+        let first = crate::open(listening_on(&first_locator.to_string()))
+            .await
+            .unwrap();
+        manager
+            .get_transport_unicast(&second.zid().into())
+            .await
+            .unwrap()
+            .close()
+            .await
+            .unwrap();
+        wait_for_recorded_endpoint(manager, first.zid().into(), &first_locator).await;
+        assert_eq!(manager.get_transports_unicast().await.len(), 1);
+
+        router.close().await.unwrap();
+        first.close().await.unwrap();
+        second.close().await.unwrap();
     }
 }
