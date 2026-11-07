@@ -1,11 +1,11 @@
 [files]
 extend-exclude = [
   # Ignore files containing hexa.
+  "io/zenoh-links/zenoh-link-tls/src/concurrent_io_tests.rs",
   "io/zenoh-transport/tests/*.rs",
   "zenoh/src/net/tests/regions",
   "zenoh/tests/authentication.rs",
   "zenoh/tests/open_time.rs",
-  "io/zenoh-links/zenoh-link-tls/src/concurrent_io_tests.rs",
 ]
 
 
