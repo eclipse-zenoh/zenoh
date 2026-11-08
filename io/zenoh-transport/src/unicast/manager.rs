@@ -613,7 +613,11 @@ impl TransportManager {
 
         // Verify that the node does not try to connect to itself
         if config.zid == self.zid() {
-            let e = zerror!("{} Attempt to establish transport to itself", self.zid());
+            let e = zerror!(
+                "{} Attempt to establish transport to itself on {}",
+                self.zid(),
+                link.link
+            );
             tracing::warn!("{e}");
             let (l, asl) = link.fail();
             return Err(InitTransportError::Link(Box::new((
