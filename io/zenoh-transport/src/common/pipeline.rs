@@ -26,7 +26,7 @@ use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
-    ZBuf,
+    ZBuf, ZSlice,
 };
 use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::{QueueAllocConf, QueueAllocMode, QueueSizeConf};
@@ -38,7 +38,7 @@ use zenoh_protocol::{
         fragment,
         fragment::FragmentHeader,
         frame::{self, FrameHeader},
-        AtomicBatchSize, BatchSize, TransportMessage,
+        AtomicBatchSize, BatchSize, TransportBody, TransportMessage,
     },
 };
 use zenoh_sync::{event, Notifier, WaitDeadlineError, Waiter};
@@ -419,10 +419,23 @@ impl StageIn {
                 // Otherwise, an ephemeral batch is created to send the stop fragment
                 } else {
                     let mut batch = Box::new(WBatch::new_ephemeral(self.batch_config));
-                    self.fragbuf.clear();
-                    fragment.ext_drop = Some(fragment::ext::Drop::new());
-                    let _ = batch.encode((&mut self.fragbuf.reader(), &mut fragment));
-                    self.s_out.move_batch(batch);
+                    // The stop fragment carries no payload, so it is encoded as a whole
+                    // message: the fragment batch codec fails on an empty reader.
+                    let stop = TransportMessage {
+                        body: TransportBody::Fragment(fragment::Fragment {
+                            reliability: fragment.reliability,
+                            more: true,
+                            sn: fragment.sn,
+                            ext_qos: fragment.ext_qos,
+                            ext_first: None,
+                            ext_drop: Some(fragment::ext::Drop::new()),
+                            payload: ZSlice::empty(),
+                        }),
+                    };
+                    match batch.encode(&stop) {
+                        Ok(()) => self.s_out.move_batch(batch),
+                        Err(_) => tracing::warn!("Unable to encode the fragment stop marker"),
+                    }
                 }
             });
 
@@ -1541,6 +1554,41 @@ mod tests {
             assert!(producer.push_network_message(message.as_ref()).is_err());
         }
 
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tx_pipeline_drop_marker() -> ZResult<()> {
+        let mut config = CONFIG_NOT_STREAMED;
+        config.batch.mtu = 512;
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
+        let priorities = vec![tct];
+        let (producer, mut consumer) =
+            TransmissionPipeline::make(config, priorities.as_slice(), false);
+
+        // A droppable message spanning several batches: the only batch is used by the first
+        // fragment and nothing refills it, so the fragmentation gives up mid-chain.
+        let message = NetworkMessage::from(Push {
+            wire_expr: "test".into(),
+            ext_qos: ext::QoSType::new(Priority::Data, CongestionControl::Drop, false),
+            ..Push::from(vec![0_u8; 4096])
+        });
+        assert!(!producer.push_network_message(message.as_ref()).unwrap());
+
+        let mut fragments = vec![];
+        while let Ok(Ok((batch, _))) = timeout(SLEEP, consumer.pull()).await.map(|b| b.ok_or(())) {
+            let mut reader = batch.as_slice().reader();
+            let codec = Zenoh080::new();
+            while let Ok(TransportMessage { body }) =
+                RCodec::<TransportMessage, _>::read(codec, &mut reader)
+            {
+                if let TransportBody::Fragment(f) = body {
+                    fragments.push(f);
+                }
+            }
+        }
+        assert!(fragments.first().is_some_and(|f| f.ext_first.is_some()));
+        assert!(fragments.last().is_some_and(|f| f.ext_drop.is_some()));
         Ok(())
     }
 }
