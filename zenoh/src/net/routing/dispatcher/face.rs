@@ -61,7 +61,6 @@ use crate::net::{
 
 #[derive(Debug)]
 pub(crate) struct InterestState {
-    face: FaceId,
     pub(crate) options: InterestOptions,
     pub(crate) res: Option<Arc<Resource>>,
     pub(crate) finalized: bool,
@@ -69,13 +68,12 @@ pub(crate) struct InterestState {
 
 impl InterestState {
     pub(crate) fn new(
-        face: FaceId,
+        _face: FaceId,
         options: InterestOptions,
         res: Option<Arc<Resource>>,
         finalized: bool,
     ) -> Self {
         let mut interest = Self {
-            face,
             options,
             res,
             finalized: false,
@@ -89,39 +87,6 @@ impl InterestState {
     #[tracing::instrument(level = "debug", ret)]
     pub(crate) fn set_finalized(&mut self) {
         self.finalized = true;
-        if self.options.subscribers() || self.options.queryables() {
-            if let Some(res) = self.res.as_mut().map(get_mut_unchecked) {
-                if let Some(ctx) = res.face_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
-                    if self.options.subscribers() {
-                        ctx.subscriber_interest_finalized = true;
-                    }
-                    if self.options.queryables() {
-                        ctx.queryable_interest_finalized = true;
-                    }
-                }
-            }
-        }
-    }
-}
-
-impl InterestState {
-    /// Undoes [`InterestState::set_finalized`] when the interest goes away. The remote stops
-    /// sending declarations for this resource, so the flags must not keep claiming that the
-    /// face's declarations are complete, or data routed on them would be dropped.
-    pub(crate) fn unset_finalized(&mut self) {
-        if !self.finalized {
-            return;
-        }
-        if let Some(res) = self.res.as_mut().map(get_mut_unchecked) {
-            if let Some(ctx) = res.face_ctxs.get_mut(&self.face).map(get_mut_unchecked) {
-                if self.options.subscribers() {
-                    ctx.subscriber_interest_finalized = false;
-                }
-                if self.options.queryables() {
-                    ctx.queryable_interest_finalized = false;
-                }
-            }
-        }
     }
 }
 
@@ -238,6 +203,31 @@ impl FaceStateBuilder {
 }
 
 impl FaceState {
+    // Finalization belongs to active interests, not the lifetime of a key
+    // mapping. An older Final must not complete a newer pending snapshot.
+    pub(crate) fn interest_finalized(&self, resource: &Resource, queryable: bool) -> bool {
+        let mut found = false;
+        for interest in self.local_interests.values() {
+            let relevant_kind = if queryable {
+                interest.options.queryables()
+            } else {
+                interest.options.subscribers()
+            };
+            if relevant_kind
+                && interest
+                    .res
+                    .as_ref()
+                    .is_some_and(|res| std::ptr::eq(res.as_ref(), resource))
+            {
+                if !interest.finalized {
+                    return false;
+                }
+                found = true;
+            }
+        }
+        found
+    }
+
     #[inline]
     pub(crate) fn get_mapping(
         &self,
