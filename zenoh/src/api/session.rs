@@ -1082,13 +1082,13 @@ impl Session {
     /// ```
     /// # #[tokio::main]
     /// # async fn main() {
+    /// use zenoh::Wait;
     ///
     /// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
     /// let shm_provider = session.get_shm_provider();
     /// assert!(shm_provider.into_option().is_none());
-    /// std::thread::sleep(std::time::Duration::from_millis(100));
-    /// let shm_provider = session.get_shm_provider();
-    /// assert!(shm_provider.into_option().is_some());
+    /// let shm_provider = session.get_shm_provider().wait();
+    /// assert!(shm_provider.is_some());
     /// # }
     /// ```
     #[cfg(feature = "shared-memory")]
