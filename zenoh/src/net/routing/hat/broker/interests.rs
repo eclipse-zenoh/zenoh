@@ -20,10 +20,13 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use zenoh_core::polyfill::*;
 use zenoh_protocol::network::{
-    declare::{self, queryable::ext::QueryableInfoType, QueryableId, SubscriberId, TokenId},
+    declare::{
+        self, common::ext::WireExprType, queryable::ext::QueryableInfoType, QueryableId,
+        SubscriberId, TokenId,
+    },
     interest::{InterestId, InterestMode},
     Declare, DeclareBody, DeclareFinal, DeclareQueryable, DeclareSubscriber, DeclareToken,
-    Interest,
+    Interest, UndeclareQueryable, UndeclareSubscriber,
 };
 
 use super::Hat;
@@ -478,6 +481,62 @@ impl HatInterestTrait for Hat {
             return None;
         };
 
+        let aggregate = remote_interest.options.aggregate();
+        // Aggregated interests without an expression never advertised a resource.
+        if !aggregate || remote_interest.res.is_some() {
+            let aggregate_res = aggregate.then_some(remote_interest.res.as_ref()).flatten();
+            let subscribers = if remote_interest.options.subscribers() {
+                self.face_hat_mut(ctx.src_face)
+                    .local_subs
+                    .remove_interest(msg.id, aggregate_res)
+            } else {
+                Vec::new()
+            };
+            let queryables = if remote_interest.options.queryables() {
+                self.face_hat_mut(ctx.src_face)
+                    .local_qabls
+                    .remove_interest(msg.id, aggregate_res)
+            } else {
+                Vec::new()
+            };
+            for (id, resource) in subscribers {
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        resource.expr().to_string(),
+                    ),
+                );
+            }
+            for (id, resource) in queryables {
+                (ctx.send_declare)(
+                    &ctx.src_face.primitives,
+                    RoutingContext::with_expr(
+                        Declare {
+                            interest_id: None,
+                            ext_qos: declare::ext::QoSType::DECLARE,
+                            ext_tstamp: None,
+                            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
+                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                id,
+                                ext_wire_expr: WireExprType::null(),
+                            }),
+                        },
+                        resource.expr().to_string(),
+                    ),
+                );
+            }
+        }
+
         self.owned_faces(ctx.tables)
             .all(|face| {
                 !self
@@ -494,5 +553,199 @@ impl HatInterestTrait for Hat {
         self.owned_faces(tables)
             .flat_map(|face| self.face_hat(face).remote_interests.values().cloned())
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod retention_tests {
+    use zenoh_config::{Config, WhatAmI};
+    use zenoh_protocol::{core::Region, network::interest::InterestOptions};
+
+    use super::{super::HatFace, *};
+    use crate::net::{
+        primitives::{DummyPrimitives, Primitives},
+        routing::gateway::{GatewayBuilder, NodeId},
+    };
+
+    #[test]
+    fn final_interest_reclaims_broker_subscriber_and_queryable_references() {
+        for aggregated in [false, true] {
+            let mut config = Config::default().expanded();
+            config.set_mode(Some(WhatAmI::Client)).unwrap();
+            let gateway = GatewayBuilder::new(&config)
+                .subregions(vec![Region::Local])
+                .build()
+                .unwrap();
+            let source = gateway.new_session(Arc::new(DummyPrimitives {}));
+            let requester = gateway.new_session(Arc::new(DummyPrimitives {}));
+            source.declare_subscriber(
+                1,
+                &"retention/topic".into(),
+                &SubscriberInfo,
+                NodeId::default(),
+                &mut |p, m| {
+                    m.with_mut(|m| p.send_declare(m));
+                },
+            );
+            source.declare_queryable(
+                2,
+                &"retention/topic".into(),
+                &QueryableInfoType {
+                    complete: true,
+                    distance: 0,
+                },
+                NodeId::default(),
+                &mut |p, m| {
+                    m.with_mut(|m| p.send_declare(m));
+                },
+            );
+            let counts = || {
+                let _guard = gateway.tables.tables.read().unwrap();
+                let hat = requester.state.hats[Region::Local]
+                    .downcast_ref::<HatFace>()
+                    .unwrap();
+                (
+                    hat.local_subs.interest_count(),
+                    hat.local_qabls.interest_count(),
+                )
+            };
+            let options = InterestOptions::SUBSCRIBERS
+                + InterestOptions::QUERYABLES
+                + if aggregated {
+                    InterestOptions::AGGREGATE
+                } else {
+                    InterestOptions::empty()
+                };
+            for round in 0..256 {
+                for id in [round * 2, round * 2 + 1] {
+                    requester.send_interest(&mut Interest {
+                        id,
+                        mode: InterestMode::CurrentFuture,
+                        options,
+                        wire_expr: Some("retention/topic".into()),
+                        ext_qos: Default::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: Default::default(),
+                    });
+                }
+                assert_eq!(counts(), (2, 2), "unexpected retained interest count");
+                for (id, expected) in [(round * 2, 1), (round * 2 + 1, 0)] {
+                    requester.send_interest(&mut Interest {
+                        id,
+                        mode: InterestMode::Final,
+                        options: InterestOptions::empty(),
+                        wire_expr: None,
+                        ext_qos: Default::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: Default::default(),
+                    });
+                    assert_eq!(counts(), (expected, expected), "final interest retained or removed a live sibling; aggregated={aggregated}");
+                }
+            }
+            requester.send_close();
+            source.send_close();
+        }
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn repeated_interests_do_not_leave_stale_matches() {
+        use std::time::Duration;
+
+        use tokio::time::{sleep, timeout};
+
+        async fn open(mode: WhatAmI, endpoint: &str) -> crate::Session {
+            let mut config = Config::default();
+            config.set_mode(Some(mode)).unwrap();
+            config.scouting.multicast.set_enabled(Some(false)).unwrap();
+            config.scouting.gossip.set_enabled(Some(false)).unwrap();
+            if mode == WhatAmI::Router {
+                config
+                    .listen
+                    .endpoints
+                    .set(vec![endpoint.parse().unwrap()])
+                    .unwrap();
+            } else {
+                config.listen.endpoints.set(vec![]).unwrap();
+                config
+                    .connect
+                    .endpoints
+                    .set(vec![endpoint.parse().unwrap()])
+                    .unwrap();
+            }
+            crate::open(config).await.unwrap()
+        }
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("tcp/127.0.0.1:{}", listener.local_addr().unwrap().port());
+        drop(listener);
+        let router = open(WhatAmI::Router, &endpoint).await;
+        let source = open(WhatAmI::Client, &endpoint).await;
+        let observer = open(WhatAmI::Client, &endpoint).await;
+        let subscriber = source
+            .declare_subscriber("retention/matching")
+            .await
+            .unwrap();
+        let queryable = source
+            .declare_queryable("retention/matching")
+            .complete(true)
+            .await
+            .unwrap();
+        for _ in 0..32 {
+            let publisher = observer
+                .declare_publisher("retention/matching")
+                .await
+                .unwrap();
+            let querier = observer
+                .declare_querier("retention/matching")
+                .await
+                .unwrap();
+            timeout(Duration::from_secs(2), async {
+                while !publisher.matching_status().await.unwrap().matching()
+                    || !querier.matching_status().await.unwrap().matching()
+                {
+                    sleep(Duration::from_millis(1)).await;
+                }
+            })
+            .await
+            .expect("live endpoints were not discovered");
+            drop(querier);
+            drop(publisher);
+            // Allow both Final interests to reach the router before the next generation.
+            sleep(Duration::from_millis(5)).await;
+        }
+        let publisher = observer
+            .declare_publisher("retention/matching")
+            .await
+            .unwrap();
+        let querier = observer
+            .declare_querier("retention/matching")
+            .await
+            .unwrap();
+        timeout(Duration::from_secs(2), async {
+            while !publisher.matching_status().await.unwrap().matching()
+                || !querier.matching_status().await.unwrap().matching()
+            {
+                sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .unwrap();
+        drop(subscriber);
+        drop(queryable);
+        timeout(Duration::from_secs(2), async {
+            while publisher.matching_status().await.unwrap().matching()
+                || querier.matching_status().await.unwrap().matching()
+            {
+                sleep(Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("completed interests left stale matching declarations");
+        drop(publisher);
+        drop(querier);
+        for session in [observer, source, router] {
+            timeout(Duration::from_secs(5), session.close())
+                .await
+                .unwrap()
+                .unwrap();
+        }
     }
 }
