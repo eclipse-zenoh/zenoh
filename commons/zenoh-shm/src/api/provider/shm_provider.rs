@@ -239,7 +239,7 @@ impl ConstPolicy for JustAlloc {
 /// Garbage collection policy.
 ///
 /// Try to reclaim old buffers if allocation failed and allocate again
-/// if the largest reclaimed chuk is not smaller than the one required.
+/// if the total reclaimed size is not smaller than the one required.
 ///
 /// If `Safe` is set to false, the policy may lead to reallocate memory currently in-use.
 #[zenoh_macros::unstable_doc]
@@ -270,7 +270,9 @@ where
     fn alloc(&self, layout: &MemoryLayout, provider: &ShmProvider<Backend>) -> ChunkAllocResult {
         let result = self.inner_policy.alloc(layout, provider);
         if result.is_err() {
-            // try to alloc again only if GC managed to reclaim big enough chunk
+            // Try to alloc again if GC reclaimed enough memory in total. The backend
+            // coalesces adjacent freed chunks, so the retry can succeed even when no single
+            // freed chunk is big enough; if it still fails, it costs one allocation attempt.
             let collected = if self.safe.get() {
                 provider.garbage_collect()
             } else {
@@ -870,7 +872,7 @@ where
         }
 
         tracing::trace!("Running Garbage Collector");
-        let mut largest = 0usize;
+        let mut total_freed = 0usize;
         retain_unordered(&mut zlock!(self.busy_list), |chunk| {
             let header = chunk.metadata.header();
             if header.refcount.load(Ordering::SeqCst) == 0
@@ -879,17 +881,17 @@ where
                 tracing::trace!("Garbage Collecting Chunk: {:?}", chunk);
                 let descriptor_to_free = chunk.descriptor();
                 self.backend.free(&descriptor_to_free);
-                largest = largest.max(descriptor_to_free.len.get());
+                total_freed += descriptor_to_free.len.get();
                 return false;
             }
             true
         });
-        largest
+        total_freed
     }
 
     /// Try to collect free chunks.
     ///
-    /// Returns the size of largest collected chunk
+    /// Returns the total size of collected chunks
     #[zenoh_macros::unstable_doc]
     pub fn garbage_collect(&self) -> usize {
         self.garbage_collect_impl::<true>()
@@ -897,7 +899,7 @@ where
 
     /// Try to collect free chunks.
     ///
-    /// Returns the size of largest collected chunk
+    /// Returns the total size of collected chunks
     ///
     /// # Safety
     ///
