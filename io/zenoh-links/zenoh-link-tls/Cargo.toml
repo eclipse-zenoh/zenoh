@@ -38,7 +38,13 @@ secrecy = { workspace = true }
 socket2 = { workspace = true }
 time = { workspace = true }
 tls-listener = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "net", "sync", "time"] }
+tokio = { workspace = true, features = [
+  "fs",
+  "io-util",
+  "net",
+  "sync",
+  "time",
+] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
