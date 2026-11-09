@@ -569,6 +569,14 @@ async fn accept_task(
                             tracing::error!("{}-{}: {}", file!(), line!(), e)
                         }
                     }
+                    // A failed handshake concerns one client only. A sleep here would also stop the
+                    // handshakes of all other clients, because they make progress only in accept().
+                    Err(tls_listener::Error::TlsAcceptError { error, peer_addr, .. }) => {
+                        tracing::warn!("TLS handshake with {} failed: {}", peer_addr, error);
+                    }
+                    Err(tls_listener::Error::HandshakeTimeout { peer_addr, .. }) => {
+                        tracing::warn!("TLS handshake with {} timed out", peer_addr);
+                    }
                     Err(e) => {
                         tracing::warn!("{}. Hint: increase the system open file limit.", e);
                         // Throttle the accept loop upon an error

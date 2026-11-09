@@ -50,5 +50,9 @@ zenoh-link-commons = { workspace = true, features = ["tls"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 
+[dev-dependencies]
+flume = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]
