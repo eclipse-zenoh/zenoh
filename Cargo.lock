@@ -5252,6 +5252,7 @@ version = "1.10.2"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
+ "flume",
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
