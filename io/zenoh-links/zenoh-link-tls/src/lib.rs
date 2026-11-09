@@ -81,7 +81,7 @@ zconfigurable! {
     // Time limit in milliseconds to close a TLS link. After it, the link shuts down the TCP
     // connection and resets it when the link drops.
     static ref TLS_CLOSE_TIMEOUT: u64 = 2_500;
-    // Amount of time in microseconds to throttle the accept loop upon an error.
+    // Amount of time in microseconds to throttle the accept loop upon a listener error.
     // Default set to 100 ms.
     static ref TLS_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
