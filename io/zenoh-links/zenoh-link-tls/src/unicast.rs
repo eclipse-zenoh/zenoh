@@ -47,7 +47,8 @@ use zenoh_result::{zerror, ZResult};
 
 use crate::{
     utils::{get_tls_addr, get_tls_host, get_tls_server_name, TlsClientConfig, TlsServerConfig},
-    TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    TLS_ACCEPT_THROTTLE_TIME, TLS_CLOSE_TIMEOUT, TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT,
+    TLS_LOCATOR_PREFIX,
 };
 
 #[derive(Default, Debug, PartialEq, Eq, Hash)]
@@ -67,6 +68,9 @@ pub struct LinkUnicastTls {
     // `read_exact` / `write_all` from interleaving with another on the same half.
     reader: AsyncMutex<ReadHalf<TlsStream<TcpStream>>>,
     writer: AsyncMutex<WriteHalf<TlsStream<TcpStream>>>,
+    // A second handle to the TCP socket, because the halves do not expose it.
+    // `close` uses it to shut down and reset the connection when the close times out.
+    abort_socket: socket2::Socket,
     // The source socket address of this link (address used on the local host)
     src_addr: SocketAddr,
     src_locator: Locator,
@@ -81,6 +85,7 @@ pub struct LinkUnicastTls {
 impl LinkUnicastTls {
     fn new(
         socket: TlsStream<TcpStream>,
+        abort_socket: socket2::Socket,
         src_addr: SocketAddr,
         dst_addr: SocketAddr,
         auth_identifier: LinkAuthId,
@@ -141,6 +146,7 @@ impl LinkUnicastTls {
         LinkUnicastTls {
             reader: AsyncMutex::new(reader),
             writer: AsyncMutex::new(writer),
+            abort_socket,
             src_addr,
             src_locator: Locator::new(TLS_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
@@ -153,14 +159,36 @@ impl LinkUnicastTls {
 
     async fn close(&self) -> ZResult<()> {
         tracing::trace!("Closing TLS link: {}", self);
-        let mut writer = zasynclock!(self.writer);
-        let res = writer.flush().await;
-        tracing::trace!("TLS link flush {}: {:?}", self, res);
-        // close_notify, then the underlying TCP shutdown.
-        let res = writer.shutdown().await;
+        let close = async {
+            let mut writer = zasynclock!(self.writer);
+            let res = writer.flush().await;
+            tracing::trace!("TLS link flush {}: {:?}", self, res);
+            // close_notify, then the underlying TCP shutdown.
+            writer.shutdown().await
+        };
+        // The flush and the shutdown wait until the kernel takes all pending TLS
+        // records. A peer that is gone or does not read can make this take minutes.
+        let timeout = Duration::from_millis(*TLS_CLOSE_TIMEOUT);
+        let Ok(res) = tokio::time::timeout(timeout, close).await else {
+            // A linger of 0 makes the last close of the socket reset the connection
+            // instead of waiting for the pending data.
+            if let Err(e) = self.abort_socket.set_linger(Some(Duration::ZERO)) {
+                tracing::warn!("Unable to reset TLS link {}: {}", self, e);
+            }
+            // The reset happens only when the link drops. The shutdown makes the reads and
+            // writes of the link fail now, so that its owner drops it.
+            if let Err(e) = self.abort_socket.shutdown(std::net::Shutdown::Both) {
+                tracing::warn!("Unable to shut down TLS link {}: {}", self, e);
+            }
+            bail!("TLS link {} close timed out after {:?}", self, timeout);
+        };
         tracing::trace!("TLS link shutdown {}: {:?}", self, res);
         res.map_err(|e| zerror!(e).into())
     }
+}
+
+fn abort_socket(socket: &TlsStream<TcpStream>) -> std::io::Result<socket2::Socket> {
+    socket2::SockRef::from(socket.get_ref().0).try_clone()
 }
 
 #[async_trait]
@@ -370,6 +398,13 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             .expect("server should have certificate chain");
 
         let tls_stream = TlsStream::Client(tls_stream);
+        let abort_socket = abort_socket(&tls_stream).map_err(|e| {
+            zerror!(
+                "Can not create a new TLS link bound to {:?}: {}",
+                server_name,
+                e
+            )
+        })?;
 
         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
             let mut expiration_manager = None;
@@ -385,6 +420,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             }
             LinkUnicastTls::new(
                 tls_stream,
+                abort_socket,
                 src_addr,
                 dst_addr,
                 auth_identifier.into(),
@@ -539,6 +575,14 @@ async fn accept_task(
                         }
 
                         tracing::debug!("Accepted TLS connection on {:?}: {:?}. {:?}.", src_addr, dst_addr, auth_identifier);
+                        let tls_stream = tokio_rustls::TlsStream::Server(tls_stream);
+                        let abort_socket = match abort_socket(&tls_stream) {
+                            Ok(abort_socket) => abort_socket,
+                            Err(e) => {
+                                tracing::warn!("Can not create TLS link {:?} => {:?}: {}", src_addr, dst_addr, e);
+                                continue;
+                            }
+                        };
                         // Create the new link object
                         let link = Arc::<LinkUnicastTls>::new_cyclic(|weak_link| {
                             let mut expiration_manager = None;
@@ -553,7 +597,8 @@ async fn accept_task(
                                 ));
                             }
                             LinkUnicastTls::new(
-                                tokio_rustls::TlsStream::Server(tls_stream),
+                                tls_stream,
+                                abort_socket,
                                 src_addr,
                                 dst_addr,
                                 auth_identifier.into(),

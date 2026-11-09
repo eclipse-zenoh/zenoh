@@ -38,7 +38,7 @@ secrecy = { workspace = true }
 socket2 = { workspace = true }
 time = { workspace = true }
 tls-listener = { workspace = true }
-tokio = { workspace = true, features = ["fs", "io-util", "net", "sync"] }
+tokio = { workspace = true, features = ["fs", "io-util", "net", "sync", "time"] }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
@@ -49,6 +49,10 @@ zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true, features = ["tls"] }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+
+[dev-dependencies]
+flume = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 
 [package.metadata.cargo-machete]
 ignored = ["rustls-webpki"]
