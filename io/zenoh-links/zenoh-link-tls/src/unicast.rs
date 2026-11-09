@@ -175,8 +175,8 @@ impl LinkUnicastTls {
             if let Err(e) = self.abort_socket.set_linger(Some(Duration::ZERO)) {
                 tracing::warn!("Unable to reset TLS link {}: {}", self, e);
             }
-            // The reset happens only when the link drops. The shutdown makes the reads and
-            // writes of the link fail now, so that its owner drops it.
+            // The reset happens only when the link drops. On Unix, the shutdown makes the reads
+            // and writes of the link fail at once, so that its owner drops it.
             if let Err(e) = self.abort_socket.shutdown(std::net::Shutdown::Both) {
                 tracing::warn!("Unable to shut down TLS link {}: {}", self, e);
             }

@@ -12,6 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 //! Closes a TLS link while TLS records wait for a peer that stopped reading.
+// On Windows the writes do not reliably block the close. A local shutdown there also does not
+// wake a pending read.
+#![cfg(unix)]
+
 use std::time::{Duration, Instant};
 
 use zenoh_link_commons::{tls::config::*, LinkManagerUnicastTrait};
