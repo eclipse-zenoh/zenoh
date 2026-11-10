@@ -16,9 +16,11 @@
 //! [`PendingSample`] distinguishes abandoned, whole, and fragmented publications.
 //! [`FragmentAssembly`] stores fragments, tracks genuine progress, and selects
 //! missing ranges for one recovery attempt at a time. Complete assemblies retain
-//! their fragments and attempt identity until delivery, so late duplicates can
-//! still replace fragments. The subscriber owns per-source ordering, query
-//! dispatch, and the decision to abandon a publication that blocks delivery.
+//! their fragments until delivery, so late duplicates can still replace fragments.
+//! Assembly completion preserves any in-flight attempt identity; finishing that
+//! attempt clears it even if delivery is still pending. The subscriber owns
+//! per-source ordering, query dispatch, and the decision to abandon a publication
+//! that blocks delivery.
 
 use std::{
     sync::Arc,
@@ -27,11 +29,10 @@ use std::{
 
 use zenoh::{bytes::ZBytes, internal::zerror, sample::Sample, Result as ZResult};
 
-/// Per-source DoS cap on the number of fragments a single sample may carry.
+/// Default limit on the number of fragments per publication.
 ///
-/// 4096 fragments times each fragment's payload size (typically at most the
-/// link MTU) bounds worst-case per-sequence-number memory while still allowing
-/// very large payloads.  Users can raise this limit via
+/// This bounds the fragment count, not bytes: memory use also depends on
+/// payload and attachment sizes and assembly overhead. Override via
 /// [`AdvancedSubscriberBuilder::max_fragments`](crate::AdvancedSubscriberBuilder::max_fragments).
 pub(crate) const MAX_FRAGMENTS_DEFAULT: u32 = 4096;
 
@@ -156,7 +157,7 @@ pub(crate) enum FragInsertError {
     InvalidFragCount { frag_count: u32 },
     /// The advertised fragment count differs from the pending publication's count.
     CountMismatch { expected: u32, got: u32 },
-    /// The first fragment advertises more fragments than the subscriber permits.
+    /// The advertised fragment count exceeds the subscriber's limit.
     ExceedsMax { frag_count: u32, max: u32 },
 }
 

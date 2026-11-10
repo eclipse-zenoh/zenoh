@@ -394,9 +394,8 @@ async fn test_fragmentation_multislice_payload() {
 }
 
 // In-order fragmented publications under no-loss conditions must not trigger
-// any recovery query: sample recovery in this test runs only on sequence-number
-// gaps, and the fragment recovery timer finds the sample complete when it
-// fires after `frag_recovery_delay`.
+// recovery queries. Delivery cancels the fragment recovery timer once no
+// incomplete samples remain.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_no_recovery_query_on_in_order_fragmentation() {
     zenoh_util::init_log_from_env_or("error");
@@ -437,9 +436,8 @@ async fn test_no_recovery_query_on_in_order_fragmentation() {
         ztimeout!(publ.put(payload.clone())).unwrap();
     }
 
-    // Wait beyond the fragment recovery delay (1s by default) so that any
-    // armed fragment recovery timer has fired, and any immediate
-    // sample-recovery query has been sent.
+    // Wait beyond the fragment recovery delay (1s by default) to make any
+    // unintended recovery queries observable.
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     // All samples must have been delivered in order via the live path.

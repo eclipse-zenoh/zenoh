@@ -155,7 +155,8 @@ impl SequencedSource {
         let is_fragmented = sample.frag_info().is_some();
         let deliver_directly = !is_fragmented
             && match arrival {
-                // History depth one delivers whole samples immediately.
+                // A pending-buffer limit of one delivers whole samples immediately,
+                // even while initial history is pending.
                 Arrival::InitialHistory => context.max_pending_samples == 1,
                 // With recovery, even whole samples wait for buffered predecessors.
                 Arrival::FirstOrConsecutive => {
