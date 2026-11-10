@@ -257,7 +257,9 @@ const MSG_SIZE_NO_SEGMENTATION_OFFLOAD: [usize; 2] = [1_024, 131_072];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
+    feature = "transport_quic",
     feature = "transport_quic_datagram",
+    feature = "transport_tls",
     feature = "transport_unixsock-stream",
     feature = "transport_ws",
 ))]
@@ -1248,6 +1250,63 @@ async fn transport_unicast_quic_only_server() {
     // Run
     let endpoints = vec![endpoint];
     run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
+}
+
+/// A client dials a listener on an IPv6 address: TLS takes the address without its brackets
+/// as the server name. The test certificate names only localhost, so the name is not verified.
+#[cfg(all(feature = "transport_tls", target_family = "unix"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_tls_only_server_ipv6() {
+    use zenoh_link_commons::tls::config::*;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let mut endpoint: EndPoint = format!("tls/[::1]:{}", get_free_tcp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_VERIFY_NAME_ON_CONNECT, "false"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    let channel = [Channel {
+        priority: Priority::DEFAULT,
+        reliability: Reliability::Reliable,
+    }];
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
+}
+
+/// A client dials a listener on an IPv6 address: TLS takes the address without its brackets
+/// as the server name. The test certificate names only localhost, so the name is not verified.
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server_ipv6() {
+    use zenoh_link_commons::tls::config::TLS_VERIFY_NAME_ON_CONNECT;
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let mut endpoint = quic_endpoint(&format!("quic/[::1]:{}", get_free_udp_port()));
+    endpoint
+        .config_mut()
+        .extend_from_iter([(TLS_VERIFY_NAME_ON_CONNECT, "false")].iter().copied())
+        .unwrap();
+
+    let channel = [Channel {
+        priority: Priority::DEFAULT,
+        reliability: Reliability::Reliable,
+    }];
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
 }
 
 /// Regression test for https://github.com/eclipse-zenoh/zenoh/issues/2719:
