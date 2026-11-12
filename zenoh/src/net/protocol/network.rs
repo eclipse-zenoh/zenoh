@@ -146,6 +146,13 @@ pub(crate) struct Network {
     pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
     pub(crate) runtime: WeakRuntime,
     pub(crate) link_weights: HashMap<ZenohIdProto, LinkEdgeWeight>,
+    /// Neighbours whose link was (re)established since the last [`Network::compute_trees`].
+    ///
+    /// A neighbour router that restarted with the same zid, whose old link went and new link came before the trees
+    /// were computed, may stay in the graph through other routers, so the trees look unchanged. It has lost every
+    /// declaration we sent it, and only new children are sent them again: the next computation reports it as a new
+    /// child of every tree where it is our child.
+    relinked: HashSet<ZenohIdProto>,
 }
 
 impl Network {
@@ -191,6 +198,7 @@ impl Network {
             graph,
             runtime: Runtime::downgrade(&runtime),
             link_weights,
+            relinked: HashSet::new(),
         }
     }
 
@@ -851,6 +859,10 @@ impl Network {
 
         let zid = transport.get_zid().unwrap();
         let whatami = transport.get_whatami().unwrap();
+        // Only full linkstate networks compute trees (and clear this set).
+        if self.full_linkstate {
+            self.relinked.insert(zid);
+        }
 
         if self.full_linkstate || self.gossip_multihop {
             let (idx, new) = match self.get_idx(&zid) {
@@ -1058,6 +1070,7 @@ impl Network {
 
         let old_children: Vec<Vec<NodeIndex>> =
             self.trees.iter().map(|t| t.children.clone()).collect();
+        let relinked = std::mem::take(&mut self.relinked);
 
         self.trees.clear();
         self.trees.resize_with(max_idx.index() + 1, || Tree {
@@ -1144,7 +1157,10 @@ impl Network {
                 self.trees[i]
                     .children
                     .iter()
-                    .filter(|idx| !old_children[i].contains(idx))
+                    .filter(|idx| {
+                        // A child whose link to us was (re)established is new to that link.
+                        !old_children[i].contains(idx) || relinked.contains(&self.graph[**idx].zid)
+                    })
                     .cloned()
                     .collect()
             } else {
@@ -1490,6 +1506,132 @@ mod tests {
                 .count(),
             1,
             "node a2 in a0's graph should have `whatami.is_router()`"
+        );
+    }
+
+    fn zid(s: &str) -> ZenohIdProto {
+        s.parse().unwrap()
+    }
+
+    fn router_ls(psid: u64, zid: Option<ZenohIdProto>, sn: u64, links: Vec<u64>) -> LinkState {
+        LinkState {
+            psid,
+            sn,
+            zid,
+            whatami: Some(WhatAmI::Router),
+            locators: None,
+            links,
+            link_weights: None,
+            is_gateway: false,
+        }
+    }
+
+    /// The linkstate network of a router `z`.
+    fn router_network(z: &str) -> Network {
+        Network::new(
+            format!("[{z}]"),
+            zid(z),
+            minimal_runtime(WhatAmI::Router),
+            /* full_linkstate */ true,
+            /* gossip */ false,
+            /* gossip_multihop */ false,
+            WhatAmIMatcher::empty(),
+            AutoConnect::disabled(),
+            HashMap::new(),
+            Bound::North,
+        )
+    }
+
+    fn add_router_link(net: &mut Network, z: &str) {
+        use zenoh_transport::unicast::test_helpers::mock_transport_unicast;
+
+        let (transport, transport_guard) =
+            mock_transport_unicast(zid(z), WhatAmI::Router, Arc::new(|_| {}));
+        mem::forget(transport_guard);
+        net.add_link(transport);
+    }
+
+    /// The network of router a2, linked to routers a1 and e1, which are linked to each other too. All link weights
+    /// are the default.
+    fn triangle() -> Network {
+        let (a1, a2, e1) = (zid("a1"), zid("a2"), zid("e1"));
+        let mut net = router_network("a2");
+        add_router_link(&mut net, "a1");
+        add_router_link(&mut net, "e1");
+        net.link_states(
+            vec![
+                router_ls(0, Some(a1), 5, vec![1, 2]),
+                router_ls(1, Some(a2), 0, vec![]),
+                router_ls(2, Some(e1), 0, vec![]),
+            ],
+            a1,
+        );
+        net.link_states(
+            vec![
+                router_ls(0, Some(e1), 5, vec![1, 2]),
+                router_ls(1, Some(a1), 0, vec![]),
+                router_ls(2, Some(a2), 0, vec![]),
+            ],
+            e1,
+        );
+        net.compute_trees();
+        net
+    }
+
+    /// The children of this router's own tree that [`Network::compute_trees`] reports as new.
+    fn new_own_children(net: &mut Network) -> Vec<ZenohIdProto> {
+        let own = net.idx.index();
+        let mut children: Vec<_> = net.compute_trees()[own]
+            .iter()
+            .map(|idx| net.graph[*idx].zid)
+            .collect();
+        children.sort();
+        children
+    }
+
+    /// Verifies that a neighbour router that relinked with the same zid is reported as a new child (so that it is
+    /// sent our declarations again), exactly once, even though the trees did not change: its old link went and its
+    /// new link came before the trees were computed, and it stayed in the graph through another router.
+    #[test]
+    fn test_relinked_router_is_a_new_child_once() {
+        let mut net = triangle();
+        assert_eq!(new_own_children(&mut net), Vec::<ZenohIdProto>::new());
+
+        let a1 = zid("a1");
+        net.remove_link(&a1);
+        add_router_link(&mut net, "a1");
+        net.link_states(
+            vec![
+                router_ls(0, Some(a1), 6, vec![1, 2]),
+                router_ls(1, Some(zid("a2")), 0, vec![]),
+                router_ls(2, Some(zid("e1")), 0, vec![]),
+            ],
+            a1,
+        );
+        assert_eq!(new_own_children(&mut net), vec![a1]);
+        // A later computation without a new link reports nothing.
+        assert_eq!(new_own_children(&mut net), Vec::<ZenohIdProto>::new());
+    }
+
+    /// Verifies that a relinked neighbour router is reported only in the trees where it is our child: e1 is a2's
+    /// child in a2's own tree, but not in a1's tree (a1 reaches e1 directly).
+    #[test]
+    fn test_relinked_router_is_new_only_where_it_is_a_child() {
+        let mut net = triangle();
+        let e1 = zid("e1");
+        net.remove_link(&e1);
+        add_router_link(&mut net, "e1");
+        let new_children = net.compute_trees();
+        let a1_idx = net.get_idx(&zid("a1")).unwrap().index();
+        assert!(new_children[a1_idx]
+            .iter()
+            .all(|idx| net.graph[*idx].zid != e1));
+        assert_eq!(
+            new_children[net.idx.index()]
+                .iter()
+                .map(|idx| net.graph[*idx].zid)
+                .collect::<Vec<_>>(),
+            vec![e1]
         );
     }
 }
