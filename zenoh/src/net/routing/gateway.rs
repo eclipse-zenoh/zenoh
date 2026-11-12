@@ -193,6 +193,7 @@ impl<'conf> GatewayBuilder<'conf> {
                 tables: RwLock::new(Tables { data, hats }),
                 ctrl_lock: Mutex::new(()),
                 queries_lock: RwLock::new(()),
+                routing: Default::default(),
             }),
         })
     }
