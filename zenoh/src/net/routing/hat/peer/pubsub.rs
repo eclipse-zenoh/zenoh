@@ -404,8 +404,11 @@ impl HatPubSubTrait for Hat {
         }
 
         // TODO(regions): does this still cause a "buffer overflow" on Windows?
+        // Declarations received from this region (e.g. over the multicast group itself) must not be
+        // echoed back into the multicast group, otherwise every peer holding a matching subscriber
+        // re-sends it and the declaration ping-pongs forever.
         #[cfg(not(windows))]
-        {
+        if !self.owns(ctx.src_face) {
             // HACK(regions): if we have a multicast group, we use it to propagate subscribers to upstream gateways.
             for group in self.multicast_groups(ctx.tables) {
                 tracing::debug!(dst = %group);
