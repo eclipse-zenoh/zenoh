@@ -55,6 +55,11 @@
     /// It doesn't make any difference for the peer or router mode.
     /// endpoints: [{"strategy": "allOf", "locators": ["tcp/10.10.10.10:7447?rel=0", "tcp/10.10.10.10:7447?rel=1"]}] is equivalent to endpoints: ["tcp/10.10.10.10:7447?rel=0", "tcp/10.10.10.10:7447?rel=1"].
     ///
+    /// A "oneOf" group opens a single link in router and peer mode, to the first of its locators that answers, trying them in the order given.
+    /// When that link is lost, the group is dialled again from its first locator, so the first stays preferred.
+    /// E.g. endpoints: [{"strategy": "oneOf", "locators": ["quic/10.10.10.10:7447", "tls/10.10.10.10:7447"]}]
+    /// links over QUIC where it answers, and over TLS only where it does not.
+    ///
     /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     endpoints: [
       // "<proto>/<address>"
