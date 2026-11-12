@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use quinn::{crypto::rustls::HandshakeData, TransportConfig};
+use quinn::{crypto::rustls::HandshakeData, TransportConfig, VarInt};
 use rustls::{
     crypto::CryptoProvider,
     pki_types::{CertificateDer, PrivateKeyDer, TrustAnchor},
@@ -69,6 +69,24 @@ pub const QUIC_MTU_DISCOVERY_INTERVAL: &str = "mtu_discovery_interval_secs";
 ///
 /// When disabled, each QUIC datagram is passed to the OS in its own system call.
 pub const QUIC_SEGMENTATION_OFFLOAD: &str = "segmentation_offload";
+
+// QUIC flow control windows config
+/// The most bytes the link keeps from application writes, waiting to be sent or acknowledged,
+/// across all its streams. A positive integer; quinn's default (10,000,000) when not given.
+///
+/// On a slow link, what this window holds can delay messages written after it, whatever their
+/// priority: on a single stream they are sent after it, and once the window is full every write
+/// waits for it to drain. A smaller window bounds that delay. It affects only what this side sends.
+pub const QUIC_SEND_WINDOW: &str = "send_window";
+/// The most bytes the peer may send on any one stream before this side has read them. A positive
+/// integer; quinn's default (1,250,000) when not given.
+///
+/// It bounds what the peer can have queued ahead of later messages on a stream to this side, so a
+/// receiver on a slow link can limit that delay without configuring the sender.
+pub const QUIC_STREAM_RECEIVE_WINDOW: &str = "stream_receive_window";
+/// The most bytes the peer may send across all streams before this side has read them. A positive
+/// integer; unlimited by default.
+pub const QUIC_RECEIVE_WINDOW: &str = "receive_window";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
@@ -752,6 +770,49 @@ impl TryFrom<&Config<'_>> for QuicSegmentationOffloadConfig {
     }
 }
 
+pub(crate) struct QuicWindowConfig {
+    send: Option<u64>,
+    stream_receive: Option<VarInt>,
+    receive: Option<VarInt>,
+}
+
+impl TryFrom<&Config<'_>> for QuicWindowConfig {
+    type Error = zenoh_result::Error;
+
+    fn try_from(config: &Config) -> ZResult<Self> {
+        Ok(Self {
+            send: window(config, QUIC_SEND_WINDOW)?,
+            stream_receive: window(config, QUIC_STREAM_RECEIVE_WINDOW)?
+                .map(VarInt::from_u64)
+                .transpose()
+                .map_err(|err| {
+                    zerror!("QUIC endpoint's {QUIC_STREAM_RECEIVE_WINDOW} is too large: {err}")
+                })?,
+            receive: window(config, QUIC_RECEIVE_WINDOW)?
+                .map(VarInt::from_u64)
+                .transpose()
+                .map_err(|err| {
+                    zerror!("QUIC endpoint's {QUIC_RECEIVE_WINDOW} is too large: {err}")
+                })?,
+        })
+    }
+}
+
+/// A window in bytes from the endpoint's `key`, if given. A zero window would block the link for
+/// good, so it is refused.
+fn window(config: &Config, key: &str) -> ZResult<Option<u64>> {
+    let Some(v) = config.get(key) else {
+        return Ok(None);
+    };
+    let bytes = v
+        .parse::<u64>()
+        .map_err(|err| zerror!("could not parse QUIC endpoint's {key} value `{v}`: {err}"))?;
+    if bytes == 0 {
+        bail!("QUIC endpoint's {key} must be greater than 0");
+    }
+    Ok(Some(bytes))
+}
+
 /// Helper wrapper for configuring QUIC transport
 pub(crate) struct QuicTransportConfigurator<'a>(pub(crate) &'a mut quinn::TransportConfig);
 
@@ -780,6 +841,19 @@ impl QuicTransportConfigurator<'_> {
     ) -> Self {
         if let Some(enabled) = segmentation_offload_config.enabled {
             self.0.enable_segmentation_offload(enabled);
+        }
+        self
+    }
+
+    pub(crate) fn configure_windows(self, windows: &QuicWindowConfig) -> Self {
+        if let Some(bytes) = windows.send {
+            self.0.send_window(bytes);
+        }
+        if let Some(bytes) = windows.stream_receive {
+            self.0.stream_receive_window(bytes);
+        }
+        if let Some(bytes) = windows.receive {
+            self.0.receive_window(bytes);
         }
         self
     }
@@ -818,5 +892,33 @@ mod tests {
             Some(false)
         );
         assert!(segmentation_offload("quic/localhost:7447#segmentation_offload=0").is_err());
+    }
+
+    fn windows(endpoint: &str) -> ZResult<(Option<u64>, Option<u64>, Option<u64>)> {
+        let endpoint: EndPoint = endpoint.parse().unwrap();
+        QuicWindowConfig::try_from(&endpoint.config()).map(|c| {
+            (
+                c.send,
+                c.stream_receive.map(u64::from),
+                c.receive.map(u64::from),
+            )
+        })
+    }
+
+    #[test]
+    fn window_config() {
+        assert_eq!(windows("quic/localhost:7447").unwrap(), (None, None, None));
+        assert_eq!(
+            windows("quic/localhost:7447#send_window=65536;stream_receive_window=32768;receive_window=131072")
+                .unwrap(),
+            (Some(65536), Some(32768), Some(131072))
+        );
+        for key in ["send_window", "stream_receive_window", "receive_window"] {
+            assert!(windows(&format!("quic/localhost:7447#{key}=0")).is_err());
+            assert!(windows(&format!("quic/localhost:7447#{key}=-1")).is_err());
+            assert!(windows(&format!("quic/localhost:7447#{key}=64KB")).is_err());
+        }
+        // Past a QUIC variable-length integer's range.
+        assert!(windows("quic/localhost:7447#stream_receive_window=4611686018427387904").is_err());
     }
 }
