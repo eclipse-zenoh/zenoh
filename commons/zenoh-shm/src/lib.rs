@@ -184,7 +184,7 @@ impl ShmBufInner {
         new_layout: MemoryLayout,
     ) -> Result<(), BufferRelayoutError> {
         let address = self.as_ref().as_ptr() as usize;
-        if address % new_layout.alignment().get_alignment_value().get() != 0 {
+        if address % new_layout.alignment().get_alignment_value() != 0 {
             return Err(BufferRelayoutError::IncompatibleAlignment);
         }
 
