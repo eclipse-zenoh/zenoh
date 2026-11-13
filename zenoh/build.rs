@@ -25,4 +25,13 @@ fn main() {
         // https://github.com/rust-lang/rust/issues/138696
         println!("cargo:rustc-cfg=nolocal_thread_not_available");
     }
+
+    // Only use `git_version!` when the workspace root has its own `.git` (a zenoh checkout),
+    // otherwise it may pick up an unrelated enclosing repository:
+    // https://github.com/eclipse-zenoh/zenoh/issues/2663
+    // No `rerun-if-changed` on `.git`: that would rebuild zenoh on every git operation.
+    let manifest_dir = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    if manifest_dir.join("../.git").exists() {
+        println!("cargo:rustc-cfg=zenoh_git_checkout");
+    }
 }
