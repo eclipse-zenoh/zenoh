@@ -603,5 +603,41 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
 }
 
 pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
-    Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
+    let host = get_tls_host(address)?;
+    // TLS does not accept the brackets of an IPv6 address.
+    let host = host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host);
+    Ok(ServerName::try_from(host).map_err(|e| zerror!(e))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls_server_name() {
+        let server_name = |address: &str| {
+            get_tls_server_name(&Address::from(address))
+                .unwrap()
+                .to_owned()
+        };
+        assert_eq!(
+            server_name("localhost:7447"),
+            ServerName::try_from("localhost").unwrap()
+        );
+        assert_eq!(
+            server_name("127.0.0.1:7447"),
+            ServerName::try_from("127.0.0.1").unwrap()
+        );
+        assert_eq!(
+            server_name("[::1]:7447"),
+            ServerName::try_from("::1").unwrap()
+        );
+        assert!(matches!(
+            server_name("[::1]:7447"),
+            ServerName::IpAddress(_)
+        ));
+    }
 }
