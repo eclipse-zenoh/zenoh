@@ -113,7 +113,7 @@ impl TxHandoffChannel {
     }
 }
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 static mut GLOBAL_HANDOFF_REACTOR: HandoffReactor = HandoffReactor::new();
 
 struct HandoffReactor {
@@ -184,11 +184,16 @@ impl TxHandoffInner {
     pub fn new(counter: ShmTXCounterLease) -> Self {
         let task = Arc::new(TxHandoffTask::new(counter));
 
-        GLOBAL_HANDOFF_REACTOR
-            .read()
-            .task_sender
-            .send(task.clone())
-            .unwrap();
+        // This might be executed while the process is exiting and the reactor
+        // static has already been finalized, so statics might not be available here.
+        // The reactor is initialized on first use, unless its initialization was
+        // already attempted: init() panics after finalization.
+        if GLOBAL_HANDOFF_REACTOR.phase().is_empty() {
+            GLOBAL_HANDOFF_REACTOR.init();
+        }
+        if let Ok(reactor) = GLOBAL_HANDOFF_REACTOR.try_read() {
+            let _ = reactor.task_sender.send(task.clone());
+        }
 
         Self {
             task,
@@ -458,6 +463,23 @@ where
             let prio: PriorityContainer<ShmCounterID> = self.read(&mut *reader)?;
             HandoffCounterIds::PerPrio(prio)
         })
+    }
+}
+
+#[cfg(test)]
+mod reactor_tests {
+    use super::*;
+    use crate::unicast::establishment::ext::shm::segment::TXAuthSegment;
+
+    #[test]
+    fn task_is_registered_with_uninitialized_reactor() {
+        // The reactor is process-global: this only checks the first-use init when
+        // no other test in the process touched the reactor before.
+        let auth_segment = Arc::new(TXAuthSegment::create(0, &[]).unwrap());
+        let handoff = TxHandoff::new(ShmTXCounterLease::new(auth_segment).unwrap());
+
+        // One reference is ours, the other one is held by the reactor.
+        assert_eq!(Arc::strong_count(&handoff.inner.task), 2);
     }
 }
 
