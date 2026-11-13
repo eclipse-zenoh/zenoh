@@ -17,7 +17,6 @@ pub struct CommonArgs {
     ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
     ///
     /// Example: `--cfg='transport/unicast/max_links:2'`
-    #[arg(long)]
     cfg: Vec<String>,
     #[arg(short, long)]
     /// The Zenoh session mode [default: peer].
