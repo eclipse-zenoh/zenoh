@@ -622,3 +622,24 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
 pub fn get_tls_server_name<'a>(address: &'a Address<'a>) -> ZResult<ServerName<'a>> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tls_configurator_use_public_pki() {
+        let mut config = ZenohConfig::default();
+        let params = TlsConfigurator.inspect_config(&config).unwrap();
+        assert_eq!(parameters::get(&params, TLS_USE_PUBLIC_PKI), Some("true"));
+
+        config
+            .transport
+            .link
+            .tls
+            .set_use_public_pki(Some(false))
+            .unwrap();
+        let params = TlsConfigurator.inspect_config(&config).unwrap();
+        assert_eq!(parameters::get(&params, TLS_USE_PUBLIC_PKI), Some("false"));
+    }
+}

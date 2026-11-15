@@ -836,4 +836,20 @@ mod tests {
         );
         assert!(segmentation_offload("quic/localhost:7447#segmentation_offload=0").is_err());
     }
+
+    #[test]
+    fn tls_configurator_use_public_pki() {
+        let mut config = ZenohConfig::default();
+        let params = TlsConfigurator.inspect_config(&config).unwrap();
+        assert_eq!(parameters::get(&params, TLS_USE_PUBLIC_PKI), Some("true"));
+
+        config
+            .transport
+            .link
+            .tls
+            .set_use_public_pki(Some(false))
+            .unwrap();
+        let params = TlsConfigurator.inspect_config(&config).unwrap();
+        assert_eq!(parameters::get(&params, TLS_USE_PUBLIC_PKI), Some("false"));
+    }
 }
