@@ -137,7 +137,7 @@ impl HatQueriesTrait for Hat {
     ///
     /// ## This hat's state
     /// + `mres.owned_face_ctx.qabl` for all matching resources `mres`.
-    /// + `mres.face_ctx.queryable_interest_finalized` for all matching resources `mres`.
+    /// + `face.local_interests` finalization for all matching resources `mres`.
     #[tracing::instrument(level = "debug", skip(tables, src_region, _node_id), ret)]
     fn compute_query_route(
         &self,
@@ -178,8 +178,7 @@ impl HatQueriesTrait for Hat {
             {
                 let has_interest_finalized = expr
                     .resource()
-                    .and_then(|res| res.face_ctxs.get(&face.id))
-                    .is_some_and(|ctx| ctx.queryable_interest_finalized);
+                    .is_some_and(|res| face.interest_finalized(res, true));
                 if !has_interest_finalized {
                     tracing::debug!(dst = %face, dst.has_unfinalized_queryable_interest = true);
                     let wire_expr = expr.get_best_key(face.id);
