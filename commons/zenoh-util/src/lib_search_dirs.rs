@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{env, error::Error, fmt::Display, path::PathBuf, str::FromStr};
+use std::{env, error::Error, fmt::Display, path::PathBuf};
 
 use serde::{
     de::{value::MapAccessDeserializer, Visitor},
@@ -158,8 +158,7 @@ impl LibSearchSpec {
                 let expanded =
                     shellexpand::full(value).map_err(|err| error_from_source(&self, err))?;
 
-                let path =
-                    PathBuf::from_str(&expanded).map_err(|err| error_from_source(&self, err))?;
+                let path = PathBuf::from(expanded.as_ref());
 
                 Ok(path)
             }
