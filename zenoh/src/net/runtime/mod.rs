@@ -238,6 +238,15 @@ pub trait IRuntime: Send + Sync {
     ) -> crate::matching::MatchingStatus;
 
     fn get_config(&self) -> GenericConfig;
+
+    /// Dials one unicast endpoint once; see [`orchestrator::connect_peer_endpoint`].
+    #[cfg(feature = "unstable")]
+    fn connect_peer_endpoint(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: Option<ZenohIdProto>,
+        open_timeout: Option<std::time::Duration>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = ZResult<ZenohIdProto>> + Send>>;
 }
 
 impl IConfig for Notifier<ExpandedConfig> {
@@ -333,6 +342,27 @@ impl IRuntime for RuntimeState {
 
     fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.transport_handlers).push(handler);
+    }
+
+    #[cfg(feature = "unstable")]
+    fn connect_peer_endpoint(
+        &self,
+        endpoint: EndPoint,
+        expected_zid: Option<ZenohIdProto>,
+        open_timeout: Option<std::time::Duration>,
+    ) -> std::pin::Pin<Box<dyn Future<Output = ZResult<ZenohIdProto>> + Send>> {
+        let manager = self.manager.clone();
+        let whatami = self.whatami;
+        Box::pin(async move {
+            orchestrator::connect_peer_endpoint(
+                &manager,
+                whatami,
+                endpoint,
+                expected_zid,
+                open_timeout,
+            )
+            .await
+        })
     }
 
     fn get_transports(&self) -> Box<dyn Iterator<Item = Transport> + Send + Sync> {
