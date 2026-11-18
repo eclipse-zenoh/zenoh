@@ -2873,8 +2873,8 @@ impl Session {
         tracing::debug!("Cancelling query: {qid}");
         let mut state = zwrite!(self.0.state);
         match state.queries.remove(&qid) {
-            Some(_) => bail!("Unable to find query {qid}"),
-            None => Ok(()),
+            Some(_) => Ok(()),
+            None => bail!("Unable to find query {qid}"),
         }
     }
 
@@ -2960,8 +2960,8 @@ impl Session {
         tracing::debug!("Cancelling liveliness query: {qid}");
         let mut state = zwrite!(self.0.state);
         match state.liveliness_queries.remove(&qid) {
-            Some(_) => bail!("Unable to find liveliness query {qid}"),
-            None => Ok(()),
+            Some(_) => Ok(()),
+            None => bail!("Unable to find liveliness query {qid}"),
         }
     }
 
