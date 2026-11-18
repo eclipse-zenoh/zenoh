@@ -95,6 +95,19 @@ pub trait LinkUnicastTrait: Send + Sync {
     async fn close(&self) -> ZResult<()>;
     #[cfg(all(feature = "uring", target_os = "linux"))]
     fn get_fd(&self) -> ZResult<RawFd>;
+    /// Called once io_uring owns the RX side of this link, before the transport
+    /// starts the TX/RX tasks. Links whose fd stays registered with a tokio
+    /// reactor for READABLE interest should re-register it for WRITABLE only:
+    /// otherwise every data arrival also wakes that reactor (the runtime that
+    /// accepted or connected the socket) for nothing. Default: no-op.
+    ///
+    /// # Safety
+    /// The caller must ensure there are no pending I/O futures or concurrent
+    /// accesses to this link, including through clones, during this call.
+    #[cfg(all(feature = "uring", target_os = "linux"))]
+    unsafe fn detach_rx_from_reactor(&self) -> ZResult<()> {
+        Ok(())
+    }
 }
 
 impl Deref for LinkUnicast {
