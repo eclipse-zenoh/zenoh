@@ -615,6 +615,16 @@ pub fn get_quic_host<'a>(address: &Address<'a>) -> ZResult<&'a str> {
         .0)
 }
 
+/// The server name a QUIC client gives TLS: the address's host, and an IPv6 address
+/// without its brackets, which TLS does not accept.
+pub fn get_quic_server_name<'a>(address: &Address<'a>) -> ZResult<&'a str> {
+    let host = get_quic_host(address)?;
+    Ok(host
+        .strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host))
+}
+
 pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
     use base64::{engine::general_purpose, Engine};
     Ok(general_purpose::STANDARD
@@ -818,5 +828,19 @@ mod tests {
             Some(false)
         );
         assert!(segmentation_offload("quic/localhost:7447#segmentation_offload=0").is_err());
+    }
+
+    #[test]
+    fn quic_server_name() {
+        fn server_name(address: &str) -> &str {
+            get_quic_server_name(&Address::from(address)).unwrap()
+        }
+        assert_eq!(server_name("localhost:7447"), "localhost");
+        assert_eq!(server_name("127.0.0.1:7447"), "127.0.0.1");
+        assert_eq!(server_name("[::1]:7447"), "::1");
+        assert!(matches!(
+            rustls_pki_types::ServerName::try_from(server_name("[::1]:7447")),
+            Ok(rustls_pki_types::ServerName::IpAddress(_))
+        ));
     }
 }
