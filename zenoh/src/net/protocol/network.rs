@@ -1187,7 +1187,10 @@ impl Network {
     }
 
     fn successor_entry(&self, src: NodeIndex, dst: NodeIndex) -> Option<SuccessorEntry> {
-        let succ = self.trees[src.index()].directions[dst.index()]?;
+        // The trees are recomputed asynchronously after a graph change, so they
+        // may not cover the current graph yet (see #2831). Treat a missing tree
+        // or direction as "no successor known yet" instead of panicking.
+        let succ = (*self.trees.get(src.index())?.directions.get(dst.index())?)?;
         Some(SuccessorEntry {
             source: self.graph[src].zid,
             destination: self.graph[dst].zid,
@@ -1491,5 +1494,72 @@ mod tests {
             1,
             "node a2 in a0's graph should have `whatami.is_router()`"
         );
+    }
+
+    /// Verifies that [`Network::successor_entry`] and its callers return
+    /// `None` instead of panicking when the routing trees have not been
+    /// recomputed yet for the current graph, e.g. in the window right after
+    /// a node joined or left.
+    ///
+    /// See https://github.com/eclipse-zenoh/zenoh/issues/2831.
+    #[test]
+    fn test_successor_entry_with_stale_trees() {
+        use super::{Node, Tree};
+
+        let self_zid = "a0".parse::<ZenohIdProto>().unwrap();
+        let other_zid = "a1".parse::<ZenohIdProto>().unwrap();
+
+        let mut net = Network::new(
+            "[Test]".to_string(),
+            self_zid,
+            minimal_runtime(WhatAmI::Router),
+            /* full_linkstate */ true,
+            /* gossip */ false,
+            /* gossip_multihop */ false,
+            WhatAmIMatcher::empty(),
+            AutoConnect::disabled(),
+            HashMap::new(),
+            Bound::default(),
+        );
+
+        let self_idx = net.idx;
+
+        // A second node joins the graph, but `compute_trees` has not run
+        // yet: `trees` is still sized for the single-node graph.
+        let other_idx = net.graph.add_node(Node {
+            zid: other_zid,
+            whatami: Some(WhatAmI::Router),
+            locators: None,
+            sn: 0,
+            links: HashMap::new(),
+            is_gateway: false,
+        });
+
+        // `src` beyond the last computed tree.
+        assert!(net.successor_entry(other_idx, self_idx).is_none());
+        // `dst` beyond the last computed `directions`.
+        assert!(net.successor_entry(self_idx, other_idx).is_none());
+
+        // A tree left over for a removed node keeps the default empty
+        // `directions`: the "len is 0 but the index is 0" case from #2831.
+        net.trees[self_idx.index()].directions = vec![];
+        assert!(net.successor_entry(self_idx, self_idx).is_none());
+
+        // Both callers treat the stale state as "no successor known yet".
+        assert!(net.route_successors().is_empty());
+        assert_eq!(net.route_successor(self_zid, other_zid), None);
+
+        // Once the trees cover the current graph, successors resolve again.
+        net.trees[self_idx.index()].directions = vec![Some(self_idx), Some(self_idx)];
+        net.trees.push(Tree {
+            parent: None,
+            children: vec![],
+            directions: vec![Some(self_idx), Some(other_idx)],
+        });
+        let entry = net.successor_entry(self_idx, other_idx).unwrap();
+        assert_eq!(entry.source, self_zid);
+        assert_eq!(entry.destination, other_zid);
+        assert_eq!(entry.successor, self_zid);
+        assert_eq!(net.route_successors().len(), 4);
     }
 }
