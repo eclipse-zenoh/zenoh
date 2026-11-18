@@ -70,6 +70,17 @@ pub const QUIC_MTU_DISCOVERY_INTERVAL: &str = "mtu_discovery_interval_secs";
 /// When disabled, each QUIC datagram is passed to the OS in its own system call.
 pub const QUIC_SEGMENTATION_OFFLOAD: &str = "segmentation_offload";
 
+// QUIC socket buffer config, with the same keys as for TCP
+/// Size in bytes of the UDP socket receive buffer (`SO_RCVBUF`). The OS default applies when unset.
+///
+/// The OS may cap the value, e.g. Linux caps it at `net.core.rmem_max`.
+pub const QUIC_SO_RCV_BUF: &str = crate::TCP_SO_RCV_BUF;
+/// Size in bytes of the UDP socket send buffer (`SO_SNDBUF`). The OS default applies when unset.
+///
+/// For UDP, it limits the datagrams queued in the OS for sending, not the throughput.
+/// The OS may cap the value, e.g. Linux caps it at `net.core.wmem_max`.
+pub const QUIC_SO_SND_BUF: &str = crate::TCP_SO_SND_BUF;
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
 
