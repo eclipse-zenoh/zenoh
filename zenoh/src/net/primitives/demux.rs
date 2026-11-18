@@ -14,7 +14,7 @@
 use std::{any::Any, cell::OnceCell, sync::Arc};
 
 use arc_swap::ArcSwapOption;
-use zenoh_link::Link;
+use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::ZenohIdProto,
     network::{
@@ -226,7 +226,7 @@ impl TransportPeerEventHandler for DeMux {
 
     fn new_link(&self, _link: Link) {}
 
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
 
     fn closed(&self) {
         self.face.send_close();
