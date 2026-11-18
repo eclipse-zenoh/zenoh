@@ -421,3 +421,23 @@ async fn zenoh_shm_multicast_with_buffer_shrink_relayout() {
     .await;
     test_context.close().await;
 }
+
+#[cfg(all(feature = "shared-memory", feature = "unstable"))]
+#[test]
+fn alloc_after_gc_fits_in_combined_reclaimed_space() {
+    use zenoh::{shm::*, Wait};
+    const KIB: usize = 1024;
+    let provider = ShmProviderBuilder::default_backend(1024 * KIB).wait().unwrap();
+
+    // Unreferenced buffers stay allocated until the next garbage collection.
+    let released: Vec<_> = (0..4)
+        .map(|_| provider.alloc(200 * KIB).wait().unwrap())
+        .collect();
+    drop(released);
+
+    let result = provider
+        .alloc(300 * KIB)
+        .with_policy::<GarbageCollect<Defragment>>()
+        .wait();
+    assert!(result.is_ok(), "{:?}", result.err());
+}
