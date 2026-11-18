@@ -196,7 +196,14 @@ jobs:
       - name: Perform no_std checks
         run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
 
+      - name: Run doctests (prlimit)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo prlimit --memlock=unlimited --pid=$$
+          cargo test --doc
+
       - name: Run doctests
+        if: ${{ matrix.os != 'ubuntu-latest' }}
         run: cargo test --doc
 
       - name: Build doc
@@ -308,20 +315,20 @@ jobs:
       - name: Run tests with unstable (sudo macos)
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
-          sudo cargo build -p zenoh-plugin-rest --lib
+          sudo cargo build -p zenoh-plugin-rest --lib -F zenoh/shared-memory
           sudo cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with unstable (prlimit)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          cargo build -p zenoh-plugin-rest --lib
+          cargo build -p zenoh-plugin-rest --lib -F zenoh/shared-memory
           sudo prlimit --memlock=unlimited --pid=$$
           cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Run tests with unstable
         if: ${{ matrix.os == 'windows-latest' }}
         run: |
-          cargo build -p zenoh-plugin-rest --lib
+          cargo build -p zenoh-plugin-rest --lib -F zenoh/shared-memory
           cargo nextest run -F test -F plugins,unstable,internal --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
 
       - name: Upload test results to Codecov
