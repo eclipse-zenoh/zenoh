@@ -461,13 +461,13 @@ pub fn get_ipv6_ipaddrs(interface: Option<&str>, noloopback: bool) -> Vec<IpAddr
         .collect()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
 pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult<()> {
     socket.bind_device(Some(iface.as_bytes()))?;
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "fuchsia"))]
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
     socket.bind_device(Some(iface.as_bytes()))?;
     Ok(())
