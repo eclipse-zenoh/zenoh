@@ -407,6 +407,11 @@ impl HatPubSubTrait for Hat {
         #[cfg(not(windows))]
         {
             // HACK(regions): if we have a multicast group, we use it to propagate subscribers to upstream gateways.
+            // A declaration received from that group must not be sent back to it: every peer would
+            // otherwise repeat the declaration with a fresh transport sequence number.
+            if ctx.src_face.mcast_group.is_some() {
+                return;
+            }
             for group in self.multicast_groups(ctx.tables) {
                 tracing::debug!(dst = %group);
                 (ctx.send_declare)(
