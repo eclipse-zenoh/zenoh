@@ -495,6 +495,74 @@ async fn clean_test() {
     assert!(res5.upgrade().is_none());
 }
 
+/// Resources referenced several times by a closing face (here: two expr mappings, a token and a
+/// queryable on the same key, under a mapped prefix) must all be removed when the face closes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+async fn clean_shared_resources_on_close_test() {
+    let router = new_router();
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face0 = &router.new_session(primitives);
+
+    register_expr(&tables, &mut face0.state.clone(), 1, &"todrop1".into());
+    register_expr(
+        &tables,
+        &mut face0.state.clone(),
+        2,
+        &WireExpr::from(1).with_suffix("/todrop11"),
+    );
+    register_expr(
+        &tables,
+        &mut face0.state.clone(),
+        3,
+        &"todrop1/todrop11".into(),
+    );
+    face0.declare_token(
+        0,
+        &WireExpr::from(2),
+        NodeId::default(),
+        None,
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+    face0.declare_queryable(
+        0,
+        &WireExpr::from(3),
+        &QueryableInfoType {
+            complete: true,
+            distance: 0,
+        },
+        NodeId::default(),
+        &mut |p, m| {
+            m.with_mut(|m| {
+                p.send_declare(m);
+            })
+        },
+    );
+
+    let get = |key: &str| {
+        Resource::get_resource(zread!(tables.tables).data._get_root(), key)
+            .map(|res| Arc::downgrade(&res))
+            .unwrap()
+    };
+    let res1 = get("todrop1");
+    let res2 = get("todrop1/todrop11");
+
+    face0.send_close();
+    assert!(res2.upgrade().is_none());
+    assert!(res1.upgrade().is_none());
+    assert!(zread!(tables.tables)
+        .data
+        ._get_root()
+        .children
+        .iter()
+        .all(|c| c.expr() != "todrop1"));
+}
+
 pub struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
     mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,

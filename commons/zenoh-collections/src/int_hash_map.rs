@@ -168,7 +168,10 @@ impl<K: Copy + Into<usize> + Eq + Hash, V> IntHashMap<K, V> {
     #[inline]
     pub fn clear(&mut self) {
         match self {
-            Self::Vec { vec, .. } => vec.clear(),
+            Self::Vec { vec, items } => {
+                vec.clear();
+                *items = 0;
+            }
             Self::Map(map) => map.clear(),
         }
     }
