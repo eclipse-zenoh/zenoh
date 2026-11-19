@@ -13,7 +13,7 @@
 //
 #[cfg(all(feature = "uring", target_os = "linux"))]
 use std::os::fd::{AsRawFd, RawFd};
-use std::{cell::UnsafeCell, convert::TryInto, fmt, net::SocketAddr, sync::Arc, time::Duration};
+use std::{cell::UnsafeCell, fmt, net::SocketAddr, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use tokio::{
@@ -33,10 +33,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
-use crate::{
-    utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
-    TCP_LOCATOR_PREFIX,
-};
+use crate::{utils::TcpLinkConfig, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LOCATOR_PREFIX};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the tokio library
@@ -65,18 +62,12 @@ impl LinkUnicastTcp {
             );
         }
 
-        // Set the TCP linger option
-        #[allow(deprecated)]
-        if let Err(err) = socket.set_linger(Some(Duration::from_secs(
-            (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
-        ))) {
-            tracing::warn!(
-                "Unable to set LINGER option on TCP link {} => {}: {}",
-                src_addr,
-                dst_addr,
-                err
-            );
-        }
+        // SO_LINGER is deliberately left unset. With linger enabled, the final close(2) of
+        // the socket, run by whichever task drops the link (possibly a runtime worker),
+        // blocks until the peer acknowledges our FIN or the timeout expires; meanwhile no
+        // other link served by that worker is read. Without linger, close(2) returns at
+        // once and the kernel still sends any queued data and the FIN in the background.
+        // See https://github.com/eclipse-zenoh/zenoh/issues/1101.
 
         // Compute the MTU
         // See IETF RFC6691: https://datatracker.ietf.org/doc/rfc6691/
@@ -443,4 +434,32 @@ async fn accept_task(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // A TCP link must not set SO_LINGER, see the comment in `LinkUnicastTcp::new`.
+    #[test]
+    fn tcp_link_does_not_set_linger() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let (connected, accepted) = tokio::join!(TcpStream::connect(addr), listener.accept());
+            for stream in [connected.unwrap(), accepted.unwrap().0] {
+                let src_addr = stream.local_addr().unwrap();
+                let dst_addr = stream.peer_addr().unwrap();
+                let link = LinkUnicastTcp::new(stream, src_addr, dst_addr);
+                let linger = socket2::SockRef::from(&*link.get_mut_socket())
+                    .linger()
+                    .unwrap();
+                assert_eq!(linger, None);
+            }
+        });
+    }
 }
