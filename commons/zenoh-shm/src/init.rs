@@ -28,6 +28,21 @@ pub fn init() {
     GLOBAL_VALIDATOR.init();
 }
 
+/// Get read access to a lazy static, initializing it on first use.
+///
+/// `read()` panics once the static is finalized at process exit, `try_read()` never
+/// initializes and `init()` panics after finalization. So the static is initialized
+/// only if its initialization was never attempted, and then accessed with `try_read()`.
+macro_rules! try_read_init {
+    ($lazy:expr) => {{
+        if $lazy.phase().is_empty() {
+            $lazy.init();
+        }
+        $lazy.try_read()
+    }};
+}
+pub(crate) use try_read_init;
+
 /// Raise `RLIMIT_NOFILE` soft limit to hard limit.
 ///
 /// Call from SHM segment fan-in: [create], [open], [ensure_not_persistent]; not [init].

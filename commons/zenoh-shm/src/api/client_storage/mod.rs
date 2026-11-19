@@ -29,7 +29,7 @@ use crate::{
     reader::{ClientStorage, GlobalDataSegmentId},
 };
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 /// A global lazily-initialized SHM client storage.
 ///
 /// When initialized, contains default client set, see [with_default_client_set](ShmClientSetBuilder::with_default_client_set)
