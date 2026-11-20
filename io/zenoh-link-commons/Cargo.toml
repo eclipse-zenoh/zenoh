@@ -81,6 +81,9 @@ zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 zenoh-util = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { workspace = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
