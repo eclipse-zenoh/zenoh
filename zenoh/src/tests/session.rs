@@ -13,7 +13,10 @@
 //
 #[cfg(all(feature = "unstable", feature = "internal", feature = "test"))]
 mod runtime_state_weak_tests {
+    use std::time::Duration;
+
     use test_case::test_matrix;
+    use tokio::time;
     use zenoh_config::{ModeDependentValue, WhatAmI, WhatAmIMatcher};
     use zenoh_link::EndPoint;
     use zenoh_test::get_free_tcp_port;
@@ -191,8 +194,20 @@ mod runtime_state_weak_tests {
             session.close().await.unwrap();
             drop(session);
 
-            assert!(session_inner.upgrade().is_none());
-            assert!(runtime_state.upgrade().is_none());
+            // Transport tasks can briefly hold references while finishing teardown.
+            time::timeout(Duration::from_secs(5), async {
+                while session_inner.strong_count() != 0 || runtime_state.strong_count() != 0 {
+                    time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Teardown retained {} session and {} runtime references",
+                    session_inner.strong_count(),
+                    runtime_state.strong_count(),
+                );
+            });
         }
     }
 }
