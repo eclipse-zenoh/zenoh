@@ -42,6 +42,7 @@
   /// For QUIC links, it is possible to bound how many bytes can queue ahead of later, higher-priority messages:
   /// send_window bounds what this side keeps from its writes (10000000 by default), and stream_receive_window
   /// (1250000 by default) and receive_window (unlimited by default) bound what the peer may send before this side reads it.
+  /// These windows apply only to the streams of QUIC links, not to their datagrams.
   /// E.g. quic/192.168.0.1:7447#send_window=65536;stream_receive_window=32768
   connect: {
     /// timeout waiting for all endpoints connected (0: no retry, -1: infinite timeout)
@@ -107,6 +108,7 @@
   /// For QUIC links, it is possible to bound how many bytes can queue ahead of later, higher-priority messages:
   /// send_window bounds what this side keeps from its writes (10000000 by default), and stream_receive_window
   /// (1250000 by default) and receive_window (unlimited by default) bound what the peer may send before this side reads it.
+  /// These windows apply only to the streams of QUIC links, not to their datagrams.
   /// E.g. quic/192.168.0.1:7447#send_window=65536;stream_receive_window=32768
   listen: {
     /// timeout waiting for all listen endpoints (0: no retry, -1: infinite timeout)
