@@ -48,6 +48,73 @@ fn zbuf_test() {
     assert_eq!(ret, zbuf);
 }
 
+#[test]
+fn codec_frag_info_original_timestamp() {
+    let timestamp = Timestamp::new(
+        uhlc::NTP64(42),
+        uhlc::ID::try_from(&[1, 2, 3, 4][..]).unwrap(),
+    );
+    for original_timestamp in [None, Some(timestamp)] {
+        let frag_info = zenoh::put::ext::FragInfoType {
+            fcount: 3,
+            fnum: 1,
+            original_timestamp,
+        };
+
+        let codec = Zenoh080::new();
+        let mut bytes = Vec::new();
+        codec
+            .write(&mut bytes.writer(), (&frag_info, false))
+            .unwrap();
+
+        let mut reader = bytes.reader();
+        let header: u8 = codec.read(&mut reader).unwrap();
+        let decoded: (zenoh::put::ext::FragInfoType, bool) =
+            Zenoh080Header::new(header).read(&mut reader).unwrap();
+        assert_eq!(decoded, (frag_info, false));
+        assert!(!reader.can_read());
+    }
+}
+
+#[test]
+fn codec_frag_info_ignores_unknown_trailing_data() {
+    const UNKNOWN_FLAG: u8 = 1 << 7;
+    const TRAILING_BYTE: u8 = 0x55;
+    const SENTINEL: u8 = 0xaa;
+
+    let codec = Zenoh080::new();
+    let mut body = Vec::new();
+    {
+        let mut writer = body.writer();
+        codec.write(&mut writer, UNKNOWN_FLAG).unwrap();
+        codec.write(&mut writer, 3_u32).unwrap();
+        codec.write(&mut writer, 1_u32).unwrap();
+        codec.write(&mut writer, TRAILING_BYTE).unwrap();
+    }
+
+    let header = ZExtZBufHeader::<{ zenoh::put::ext::FragInfo::ID }>::new(body.len());
+    let mut bytes = Vec::new();
+    {
+        let mut writer = bytes.writer();
+        codec.write(&mut writer, (&header, false)).unwrap();
+        for byte in body {
+            codec.write(&mut writer, byte).unwrap();
+        }
+        codec.write(&mut writer, SENTINEL).unwrap();
+    }
+
+    let mut reader = bytes.reader();
+    let header: u8 = codec.read(&mut reader).unwrap();
+    let (frag_info, more): (zenoh::put::ext::FragInfoType, bool) =
+        Zenoh080Header::new(header).read(&mut reader).unwrap();
+    assert_eq!(frag_info.fcount, 3);
+    assert_eq!(frag_info.fnum, 1);
+    assert_eq!(frag_info.original_timestamp, None);
+    assert!(!more);
+    assert_eq!(reader.read_u8().unwrap(), SENTINEL);
+    assert!(!reader.can_read());
+}
+
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
 

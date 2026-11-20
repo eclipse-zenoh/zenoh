@@ -50,6 +50,7 @@ pub struct Put {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_finfo: Option<ext::FragInfoType>,
     pub ext_attachment: Option<ext::AttachmentType>,
     #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::ShmType>,
@@ -77,6 +78,11 @@ pub mod ext {
     /// # User attachment
     pub type Attachment = zextzbuf!(0x3, false);
     pub type AttachmentType = crate::zenoh::ext::AttachmentType<{ Attachment::ID }>;
+
+    /// # FragInfo extension
+    /// Used to carry additional information about the fragmentation of data
+    pub type FragInfo = zextzbuf!(0x4, false);
+    pub type FragInfoType = crate::zenoh::ext::FragInfoType<{ FragInfo::ID }>;
 }
 
 impl Put {
@@ -95,15 +101,13 @@ impl Put {
         });
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let ext_finfo = rng.gen_bool(0.5).then_some(ext::FragInfoType::rand());
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
-            ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::Attachment::ID) + 1,
-                false,
-            ));
+            ext_unknown.push(ZExtUnknown::rand2(iext::mid(ext::FragInfo::ID) + 1, false));
         }
         let payload = ZBuf::rand(rng.gen_range(1..=64));
 
@@ -111,6 +115,7 @@ impl Put {
             timestamp,
             encoding,
             ext_sinfo,
+            ext_finfo,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_attachment,

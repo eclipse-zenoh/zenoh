@@ -38,6 +38,18 @@ use crate::api::{
 #[zenoh_macros::unstable]
 pub type SourceSn = u32;
 
+/// The total number of fragments in the original publication.
+///
+/// Internal fragmentation metadata; see [`FragInfo`].
+#[zenoh_macros::unstable]
+pub type FragCount = u32;
+
+/// The zero-based index of a fragment within the original publication.
+///
+/// Internal fragmentation metadata; see [`FragInfo`].
+#[zenoh_macros::unstable]
+pub type FragNum = u32;
+
 /// The locality of samples/queries to be received by subscribers/queryables or targeted by publishers/queriers.
 ///
 /// There are queryable's [`allowed_origin`](crate::query::QueryableBuilder::allowed_origin) and
@@ -139,6 +151,90 @@ impl<const ID: u8> From<SourceInfo> for zenoh_protocol::zenoh::ext::SourceInfoTy
         zenoh_protocol::zenoh::ext::SourceInfoType {
             id: value.source_id.into(),
             sn: value.source_sn,
+        }
+    }
+}
+
+/// Fragmentation metadata attached to a [`Sample`].
+///
+/// This is an internal API, not intended for direct application use.
+/// It carries the total fragment count, a zero-based fragment index, and an optional
+/// original timestamp. Zenoh transports this metadata without splitting or reassembling payloads.
+#[zenoh_macros::unstable]
+#[derive(Debug, Clone)]
+pub struct FragInfo {
+    pub(crate) frag_count: FragCount,
+    pub(crate) frag_num: FragNum,
+    // TODO: add timestamped sources support.
+    pub(crate) original_timestamp: Option<Timestamp>,
+}
+
+#[zenoh_macros::unstable]
+impl FragInfo {
+    #[zenoh_macros::unstable]
+    /// Build new fragmentation information.
+    pub fn new(frag_count: FragCount, frag_num: FragNum) -> Self {
+        Self {
+            frag_count,
+            frag_num,
+            original_timestamp: None,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    /// Build fragmentation information carrying the timestamp of the original sample.
+    ///
+    /// Advanced subscribers currently still require [`SourceInfo`]
+    /// to identify and reassemble fragments.
+    pub fn new_with_timestamp(
+        frag_count: FragCount,
+        frag_num: FragNum,
+        original_timestamp: Timestamp,
+    ) -> Self {
+        Self {
+            frag_count,
+            frag_num,
+            original_timestamp: Some(original_timestamp),
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    /// The total number of fragments in the original publication.
+    pub fn frag_count(&self) -> FragCount {
+        self.frag_count
+    }
+
+    #[zenoh_macros::unstable]
+    /// The zero-based index of this fragment within the original publication.
+    pub fn frag_num(&self) -> FragNum {
+        self.frag_num
+    }
+
+    /// The timestamp of the original sample before fragmentation, if present.
+    #[zenoh_macros::unstable]
+    pub fn original_timestamp(&self) -> Option<&Timestamp> {
+        self.original_timestamp.as_ref()
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const ID: u8> From<zenoh_protocol::zenoh::ext::FragInfoType<ID>> for FragInfo {
+    fn from(value: zenoh_protocol::zenoh::ext::FragInfoType<ID>) -> Self {
+        FragInfo {
+            frag_count: value.fcount,
+            frag_num: value.fnum,
+            original_timestamp: value.original_timestamp,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const ID: u8> From<FragInfo> for zenoh_protocol::zenoh::ext::FragInfoType<ID> {
+    fn from(value: FragInfo) -> Self {
+        zenoh_protocol::zenoh::ext::FragInfoType {
+            fcount: value.frag_count,
+            fnum: value.frag_num,
+            original_timestamp: value.original_timestamp,
         }
     }
 }
@@ -255,6 +351,8 @@ pub struct Sample {
     pub(crate) reliability: Reliability,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: Option<FragInfo>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) timestamp_stack: Option<TimestampStack>,
@@ -277,6 +375,16 @@ impl Sample {
     #[inline]
     pub fn payload_mut(&mut self) -> &mut ZBytes {
         &mut self.payload
+    }
+
+    /// Return a new sample with the given payload.
+    #[zenoh_macros::internal]
+    pub fn with_payload<IntoZBytes>(mut self, payload: IntoZBytes) -> Sample
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        self.payload = payload.into();
+        self
     }
 
     /// Gets the kind of this Sample.
@@ -325,6 +433,15 @@ impl Sample {
         self.source_info.as_ref()
     }
 
+    /// Gets the optional fragmentation metadata of this sample.
+    ///
+    /// This is an internal API intended for use by Advanced Pub/Sub; see [`FragInfo`].
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn frag_info(&self) -> Option<&FragInfo> {
+        self.frag_info.as_ref()
+    }
+
     /// Gets the optional timestamp stack attached to this sample.
     ///
     /// The timestamp stack carries interception records (Send, Route, Receive)
@@ -361,6 +478,8 @@ impl Sample {
             reliability: Reliability::default(),
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
             attachment: None,
             #[cfg(feature = "unstable")]
             timestamp_stack: None,
@@ -390,6 +509,8 @@ impl Sample {
                 reliability,
                 #[cfg(feature = "unstable")]
                 source_info: put.ext_sinfo.map(Into::into),
+                #[cfg(feature = "unstable")]
+                frag_info: put.ext_finfo.map(Into::into),
                 attachment: mem::take(&mut put.ext_attachment).map(Into::into),
                 #[cfg(feature = "unstable")]
                 timestamp_stack,
@@ -405,6 +526,8 @@ impl Sample {
                 reliability,
                 #[cfg(feature = "unstable")]
                 source_info: del.ext_sinfo.map(Into::into),
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: mem::take(&mut del.ext_attachment).map(Into::into),
                 #[cfg(feature = "unstable")]
                 timestamp_stack,

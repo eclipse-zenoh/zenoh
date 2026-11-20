@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,6 +11,8 @@ use std::time::Duration;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::{num::NonZeroUsize, time::Duration};
+
 use clap::Parser;
 use zenoh::{config::Config, key_expr::KeyExpr};
 use zenoh_config::ModeDependentValue;
@@ -24,25 +24,27 @@ async fn main() {
     // Initiate logging
     zenoh::init_log_from_env_or("error");
 
-    let (config, key_expr, value, history) = parse_args();
+    let (config, args) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).await.unwrap();
 
-    println!("Declaring AdvancedPublisher on {}", key_expr);
-    let publisher = session
-        .declare_publisher(&key_expr)
-        .cache(CacheConfig::default().max_samples(history))
+    println!("Declaring AdvancedPublisher on {}", args.key);
+    let mut publisher = session
+        .declare_publisher(&args.key)
+        .cache(CacheConfig::default().max_samples(args.history))
         .sample_miss_detection(MissDetectionConfig::default().heartbeat(Duration::from_millis(500)))
-        .publisher_detection()
-        .await
-        .unwrap();
+        .publisher_detection();
+    if let Some(size) = args.fragment {
+        publisher = publisher.fragmentation(size.get());
+    }
+    let publisher = publisher.await.unwrap();
 
     println!("Press CTRL-C to quit...");
     for idx in 0..u32::MAX {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        let buf = format!("[{idx:4}] {value}");
-        println!("Put Data ('{}': '{}')", key_expr, buf);
+        let buf = format!("[{idx:4}] {}", args.value);
+        println!("Put Data ('{}': '{}')", args.key, buf);
         publisher.put(buf).await.unwrap();
     }
 }
@@ -53,21 +55,24 @@ struct Args {
     /// The key expression to publish.
     key: KeyExpr<'static>,
     #[arg(short, long, default_value = "Pub from Rust!")]
-    /// The value to reply to queries.
+    /// The value to publish.
     value: String,
     #[arg(short = 'i', long, default_value = "1")]
     /// The number of publications to keep in cache.
     history: usize,
+    #[arg(long, value_name = "BYTES")]
+    /// Fragment payloads larger than this size in bytes (disabled by default).
+    fragment: Option<NonZeroUsize>,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>, String, usize) {
+fn parse_args() -> (Config, Args) {
     let args = Args::parse();
-    let mut config: Config = args.common.into();
+    let mut config: Config = (&args.common).into();
     config
         .timestamping
         .set_enabled(Some(ModeDependentValue::Unique(true)))
         .unwrap();
-    (config, args.key, args.value, args.history)
+    (config, args)
 }

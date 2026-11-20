@@ -47,7 +47,7 @@ where
     }
 }
 
-/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+/// Some extensions to the [`SubscriberBuilder`].
 #[zenoh_macros::unstable]
 #[deprecated = "Use `AdvancedPublisher` and `AdvancedSubscriber` instead."]
 #[allow(deprecated)]
@@ -131,28 +131,22 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
 
-/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::pubsub::SubscriberBuilder)
+/// Extend a [`SubscriberBuilder`] with advanced subscription options.
 #[zenoh_macros::unstable]
 pub trait AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler> {
-    /// Enable query for historical data.
-    ///
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Retrieve cached publications; see [`AdvancedSubscriberBuilder::history`].
     #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
-    /// Ask for retransmission of detected lost Samples.
-    ///
-    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
-    /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// Request retransmission; see [`AdvancedSubscriberBuilder::recovery`] for prerequisites.
     #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
-    /// Allow this subscriber to be detected through liveliness.
+    /// Advertise subscriber presence; see [`AdvancedSubscriberBuilder::subscriber_detection`].
     #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 
-    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
+    /// Convert this builder into an [`AdvancedSubscriberBuilder`].
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>;
 }
@@ -268,31 +262,32 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler> for SubscriberBuilde
 impl<'a, 'b, 'c, Handler> AdvancedSubscriberBuilderExt<'a, 'b, 'c, Handler>
     for SubscriberBuilder<'a, 'b, Handler>
 {
-    /// Enable query for historical data.
+    /// Retrieve cached publications when the subscriber is declared.
     ///
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Requires [`AdvancedPublishers`](crate::AdvancedPublisher) to enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// See [`AdvancedSubscriberBuilder::history`] for query timing and publisher discovery.
     #[zenoh_macros::unstable]
     fn history(self, config: HistoryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).history(config)
     }
 
-    /// Ask for retransmission of detected lost Samples.
+    /// Request retransmission of missing publications and fragments.
     ///
-    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// Requires [`AdvancedPublishers`](crate::AdvancedPublisher) to enable
+    /// [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     fn recovery(self, conf: RecoveryConfig) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).recovery(conf)
     }
 
-    /// Allow this subscriber to be detected through liveliness.
+    /// Advertise this subscriber's presence through liveliness.
     #[zenoh_macros::unstable]
     fn subscriber_detection(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self).subscriber_detection()
     }
 
-    /// Turn this [`Subscriber`](zenoh::subscriber::Subscriber) into an [`AdvancedSubscriber`](crate::AdvancedSubscriber).
+    /// Convert this [`SubscriberBuilder`] into an [`AdvancedSubscriberBuilder`].
     #[zenoh_macros::unstable]
     fn advanced(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler> {
         AdvancedSubscriberBuilder::new(self)

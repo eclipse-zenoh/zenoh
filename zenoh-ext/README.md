@@ -40,59 +40,46 @@ assert_eq!(z_deserialize::<(i32, Vec<u8>)>(&zbytes).unwrap(), (42i32, vec![1u8, 
 
 ## Advanced publisher and subscriber
 
-The components `AdvancedPublisher` and `AdvancedSubscriber` combine basic Zenoh functionalities to
-provide publishing and subscribing data with extended delivery guarantees and full control over mechanisms
-that provide these guarantees.
+`AdvancedPublisher` and `AdvancedSubscriber` provide:
 
-These components require the "unstable" feature to be enabled.
+- **History:** retrieve cached publications at startup and optionally on publisher discovery.
+- **Recovery:** request missing publications and fragments while they remain cached and reachable.
+- **Fragmentation:** split large payloads and automatically reassemble them in advanced subscribers.
+- **Discovery:** advertise publisher/subscriber presence through liveliness.
 
-### Advanced publisher and subscriber examples
+Enable the **`unstable`** feature with `cargo add zenoh-ext --features unstable`.
+These APIs may change between releases. Serialization does not require this feature.
 
-Publisher
+### Example
 
 ```rust
-use zenoh_ext::{AdvancedPublisherBuilderExt, CacheConfig, MissDetectionConfig};
-let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-let publisher = session
-    .declare_publisher("key/expression")
+use std::time::Duration;
+use zenoh_ext::{
+    AdvancedPublisherBuilderExt, AdvancedSubscriberBuilderExt,
+    CacheConfig, HistoryConfig, MissDetectionConfig, RecoveryConfig,
+};
+
+let session = zenoh::open(zenoh::Config::default()).await?;
+let publisher = session.declare_publisher("example/data")
     .cache(CacheConfig::default().max_samples(10))
-    .sample_miss_detection(
-        MissDetectionConfig::default().heartbeat(std::time::Duration::from_secs(1))
-    )
+    .sample_miss_detection(MissDetectionConfig::default().heartbeat(Duration::from_secs(1)))
+    .fragmentation(1024)
     .publisher_detection()
-    .await
-    .unwrap();
-publisher.put("Value").await.unwrap();
-```
+    .await?;
+publisher.put(vec![0u8; 8192]).attachment("metadata").await?;
 
-Subscriber
-
-```rust
-use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
-let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-let subscriber = session
-    .declare_subscriber("key/expression")
+let subscriber = session.declare_subscriber("example/data")
     .history(HistoryConfig::default().detect_late_publishers())
     .recovery(RecoveryConfig::default().heartbeat())
-    .subscriber_detection()
-    .await
-    .unwrap();
-let miss_listener = subscriber.sample_miss_listener().await.unwrap();
-loop {
-    tokio::select! {
-        sample = subscriber.recv_async() => {
-            if let Ok(sample) = sample {
-                // ...
-            }
-        },
-        miss = miss_listener.recv_async() => {
-            if let Ok(miss) = miss {
-                // ...
-            }
-        },
-    }
-}
+    .await?;
+let sample = subscriber.recv_async().await?;
+assert_eq!(sample.payload().len(), 8192);
 ```
+
+History and recovery are opt-in. Cache/history limits count publications, not fragments.
+Ordinary subscribers and direct cache queries receive raw fragments.
+Use `sample_miss_listener()` to observe gaps in delivered publications; see the API documentation
+for configuration limits and prerequisites.
 
 # Documentation and examples
 

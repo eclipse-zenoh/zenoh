@@ -33,6 +33,8 @@ use crate::pubsub::{
     PublicationBuilder, PublicationBuilderDelete, PublicationBuilderPut, Publisher,
 };
 #[cfg(feature = "unstable")]
+use crate::sample::FragInfo;
+#[cfg(feature = "unstable")]
 use crate::sample::SourceInfo;
 pub trait QoSBuilderTrait {
     /// Changes the [`CongestionControl`](crate::qos::CongestionControl) to apply when routing the data.
@@ -58,6 +60,21 @@ pub trait SampleBuilderTrait {
     /// The method accepts any `T` where `T: Into<ZBytes>` or `Option<T>` where `T: Into<ZBytes>`.
     /// See [`OptionZBytes`](crate::api::bytes::OptionZBytes) for the exact accepted forms.
     fn attachment<T: Into<OptionZBytes>>(self, attachment: T) -> Self;
+}
+
+/// Attach fragmentation information to a [`Sample`] or publication builder.
+///
+/// This is an internal API intended for use by
+/// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+/// This attaches metadata only; it does not split the payload.
+#[zenoh_macros::unstable]
+pub trait FragInfoBuilderTrait {
+    /// Attach fragmentation information.
+    ///
+    /// This is an internal API intended for use by
+    /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+    /// Manually setting `frag_info` on a Sample is not recommended.
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self;
 }
 
 pub trait TimestampInstrumentationBuilderTrait {
@@ -124,6 +141,8 @@ impl SampleBuilder<SampleBuilderPut> {
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
                 source_info: None,
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: None,
                 #[cfg(feature = "unstable")]
                 timestamp_stack: None,
@@ -158,6 +177,8 @@ impl SampleBuilder<SampleBuilderDelete> {
                 reliability: Reliability::DEFAULT,
                 #[cfg(feature = "unstable")]
                 source_info: None,
+                #[cfg(feature = "unstable")]
+                frag_info: None,
                 attachment: None,
                 #[cfg(feature = "unstable")]
                 timestamp_stack: None,
@@ -237,6 +258,25 @@ impl<T> SampleBuilderTrait for SampleBuilder<T> {
         Self {
             sample: Sample {
                 attachment: attachment.into(),
+                ..self.sample
+            },
+            _t: PhantomData::<T>,
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[zenoh_macros::unstable]
+impl<T> FragInfoBuilderTrait for SampleBuilder<T> {
+    /// Attach fragmentation metadata.
+    ///
+    /// This is an internal API intended for use by
+    /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+    #[zenoh_macros::unstable]
+    fn frag_info<F: Into<Option<FragInfo>>>(self, frag_info: F) -> Self {
+        Self {
+            sample: Sample {
+                frag_info: frag_info.into(),
                 ..self.sample
             },
             _t: PhantomData::<T>,
@@ -368,6 +408,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderPut>> for Sample
             reliability: builder.publisher.reliability,
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
+            #[cfg(feature = "unstable")]
+            frag_info: builder.frag_info.clone(),
             attachment: builder.attachment.clone(),
             #[cfg(feature = "unstable")]
             timestamp_stack: None,
@@ -393,6 +435,8 @@ impl From<&PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete>> for Sam
             reliability: builder.publisher.reliability,
             #[cfg(feature = "unstable")]
             source_info: builder.source_info.clone(),
+            #[cfg(feature = "unstable")]
+            frag_info: builder.frag_info.clone(),
             attachment: builder.attachment.clone(),
             #[cfg(feature = "unstable")]
             timestamp_stack: None,

@@ -11,31 +11,36 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    cmp::min, collections::BTreeMap, fmt, future::IntoFuture, hash::Hash, str::FromStr, sync::Weak,
-    time::Instant,
-};
+//! Advanced subscriber API and source-identity routing.
+//!
+//! Implementation responsibilities:
+//! - `source`: arrival classification, buffered samples, ordering, and delivery.
+//! - `recovery`: when to query and how query completion permits delivery.
+//! - `queries`: request dispatch and reservation/reply lifetimes.
+//! - `runtime`: subscriptions, heartbeat/liveliness callbacks, and retention.
+//! - `crate::fragmentation`: one sample's fragment assembly and retry state.
+//!
+//! Publications and query replies use the same arrival path. Publications can
+//! schedule immediate recovery after unlocking; query replies leave scheduling
+//! to query completion. See the sibling modules for these ordering invariants.
+
+use std::{fmt, future::IntoFuture, time::Instant};
 
 use lru::LruCache;
 use tokio_util::task::AbortOnDropHandle;
 use zenoh::{
-    config::ZenohId,
-    handlers::{Callback, CallbackDrop, CallbackParameter, IntoHandler},
+    handlers::{Callback, CallbackParameter, IntoHandler},
     internal::bail,
     key_expr::KeyExpr,
     liveliness::{LivelinessSubscriberBuilder, LivelinessToken},
     pubsub::{SubscriberBuilder, SubscriberUndeclaration},
-    query::{
-        ConsolidationMode, Parameters, Selector, TimeBound, TimeExpr, TimeRange, ZenohParameters,
-    },
-    sample::{Locality, Sample, SampleKind},
-    session::{EntityGlobalId, EntityId, WeakSession},
-    Resolvable, Session, Wait, KE_ADV_PREFIX, KE_EMPTY, KE_PUB, KE_STAR, KE_STARSTAR, KE_SUB,
+    sample::{Locality, Sample},
+    session::EntityGlobalId,
+    Resolvable, Session, Wait, KE_ADV_PREFIX, KE_PUB, KE_STARSTAR,
 };
 #[zenoh_macros::unstable]
 use {
     std::collections::HashMap,
-    std::convert::TryFrom,
     std::future::Ready,
     std::sync::{Arc, Mutex},
     std::time::Duration,
@@ -43,19 +48,28 @@ use {
     zenoh::handlers::{locked, DefaultHandler},
     zenoh::internal::{runtime::ZRuntime, zlock},
     zenoh::pubsub::Subscriber,
-    zenoh::query::{QueryTarget, Reply, ReplyKeyExpr},
-    zenoh::time::Timestamp,
+    zenoh::query::QueryTarget,
+    zenoh::session::WeakSession,
     zenoh::Result as ZResult,
 };
 
-use crate::{
-    advanced_cache::{ke_liveliness, KE_UHLC},
-    utils::WrappingSn,
-    z_deserialize,
-};
+use crate::fragmentation::{validate_fragment_metadata, FragInsertError, MAX_FRAGMENTS_DEFAULT};
+
+mod queries;
+mod recovery;
+mod runtime;
+mod source;
+use source::{ArrivalContext, DeliveryContext, ReceiveOutcome, SequencedSource, TimestampedSource};
+
+/// Default bound on the number of samples buffered per source for reordering
+/// and fragment reassembly. Overridable via
+/// [`AdvancedSubscriberBuilder::max_pending_samples`].
+pub(crate) const DEFAULT_MAX_PENDING_SAMPLES: usize = 100;
 
 #[derive(Debug, Default, Clone)]
-/// Configure query for historical data for [`history`](crate::AdvancedSubscriberBuilder::history) method.
+/// Configure cached history retrieval through [`AdvancedSubscriberBuilder::history`].
+///
+/// By default, query all retained publications at startup, without an age limit.
 #[zenoh_macros::unstable]
 pub struct HistoryConfig {
     liveliness: bool,
@@ -67,8 +81,8 @@ pub struct HistoryConfig {
 impl HistoryConfig {
     /// Enable detection of late joiner publishers and query for their historical data.
     ///
-    /// Late joiner detection can only be achieved for [`AdvancedPublishers`](crate::AdvancedPublisher) that enable publisher_detection.
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Requires publishers to enable [`publisher_detection`](crate::AdvancedPublisherBuilder::publisher_detection)
+    /// and [`cache`](crate::AdvancedPublisherBuilder::cache).
     #[inline]
     #[zenoh_macros::unstable]
     pub fn detect_late_publishers(mut self) -> Self {
@@ -76,18 +90,26 @@ impl HistoryConfig {
         self
     }
 
-    /// Specify how many samples to query for each resource.
+    /// Request at most `depth` of the newest publications from each publisher cache.
     ///
-    /// Builder will fail if `max_samples` is set to zero.
+    /// A fragmented publication counts once. The limit applies to each cache,
+    /// rather than the total across matching publishers. It also bounds samples
+    /// buffered per source for reordering and reassembly, unless
+    /// [`max_pending_samples`](AdvancedSubscriberBuilder::max_pending_samples)
+    /// is set.
+    ///
+    /// Subscriber declaration fails if `depth` is zero.
     #[zenoh_macros::unstable]
     pub fn max_samples(mut self, depth: usize) -> Self {
         self.max_samples = Some(depth);
         self
     }
 
-    /// Specify the maximum age of samples to query.
+    /// Specify the maximum age of historical publications, in seconds.
     ///
-    /// Builder will fail if `max_age` is set to zero.
+    /// Age filtering uses publication timestamps. Enable `timestamping/enabled`
+    /// on publishers to apply the limit; untimestamped cached samples are included.
+    /// Subscriber declaration fails if `seconds` is zero.
     #[zenoh_macros::unstable]
     pub fn max_age(mut self, seconds: f64) -> Self {
         self.max_age = Some(seconds);
@@ -95,29 +117,68 @@ impl HistoryConfig {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy)]
-/// Configure retransmission.
+#[derive(Debug, Clone, Copy)]
+/// Configure recovery of missing publications and fragments.
+///
+/// Used by [`AdvancedSubscriberBuilder::recovery`]. By default, later publications
+/// reveal gaps; [`heartbeat`](RecoveryConfig::heartbeat) or
+/// [`periodic_queries`](RecoveryConfig::periodic_queries) also detect missing trailing publications.
+/// These two options are mutually exclusive.
+///
+/// Incomplete samples survive history-query completion. Failed fragment recovery
+/// is retried after a delay, until a newer complete sample needs delivery or the
+/// buffer or source-retention limit discards the sample. Recovery depends on the
+/// publisher's cache remaining available and retaining the requested publications.
 #[zenoh_macros::unstable]
 pub struct RecoveryConfig<const CONFIGURED: bool = true> {
+    frag_recovery_delay: Duration,
     periodic_queries: Option<Duration>,
     heartbeat: bool,
     retention_period: Option<Duration>,
 }
 
+impl<const CONFIGURED: bool> Default for RecoveryConfig<CONFIGURED> {
+    fn default() -> Self {
+        Self {
+            frag_recovery_delay: Duration::from_secs(1),
+            periodic_queries: None,
+            heartbeat: false,
+            retention_period: None,
+        }
+    }
+}
+
+#[zenoh_macros::unstable]
+impl<const CONFIGURED: bool> RecoveryConfig<CONFIGURED> {
+    /// Set the fragment check and retry delay (default: 1 second).
+    ///
+    /// Gaps before received fragments can be queried immediately. Missing trailing
+    /// fragments are queried after no new fragment has arrived for this delay.
+    /// Failed attempts wait at least this delay before retrying.
+    ///
+    /// Subscriber declaration fails if `delay` is zero.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn fragments_recovery_delay(self, delay: Duration) -> RecoveryConfig<CONFIGURED> {
+        RecoveryConfig {
+            frag_recovery_delay: delay,
+            ..self
+        }
+    }
+}
+
 #[zenoh_macros::unstable]
 impl RecoveryConfig<false> {
-    /// Enable periodic queries for not yet received Samples and specify their period.
+    /// Periodically query known publishers for missing publications.
     ///
-    /// This allows retrieving the last Sample(s) if the last Sample(s) is/are lost.
-    /// So it is useful for sporadic publications but useless for periodic publications
-    /// with a period smaller or equal to this period.
-    /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// This can recover trailing publications when no later publication reveals the loss.
+    /// Requires publishers to enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
     #[zenoh_macros::unstable]
     #[inline]
     pub fn periodic_queries(self, period: Duration) -> RecoveryConfig<true> {
         RecoveryConfig {
+            frag_recovery_delay: self.frag_recovery_delay,
             periodic_queries: Some(period),
             heartbeat: false,
             retention_period: self.retention_period,
@@ -126,9 +187,8 @@ impl RecoveryConfig<false> {
 
     /// Subscribe to heartbeats of [`AdvancedPublishers`](crate::AdvancedPublisher).
     ///
-    /// This allows receiving the last published Sample's sequence number and check for misses.
-    /// Heartbeat subscriber must be paired with [`AdvancedPublishers`](crate::AdvancedPublisher)
-    /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
+    /// Heartbeats reveal missing trailing publications. Requires publishers to enable
+    /// [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection) with
     /// [`heartbeat`](crate::advanced_publisher::MissDetectionConfig::heartbeat) or
     /// [`sporadic_heartbeat`](crate::advanced_publisher::MissDetectionConfig::sporadic_heartbeat).
@@ -136,6 +196,7 @@ impl RecoveryConfig<false> {
     #[inline]
     pub fn heartbeat(self) -> RecoveryConfig<true> {
         RecoveryConfig {
+            frag_recovery_delay: self.frag_recovery_delay,
             periodic_queries: None,
             heartbeat: true,
             retention_period: self.retention_period,
@@ -147,7 +208,11 @@ impl RecoveryConfig<false> {
 impl<const CONFIGURED: bool> RecoveryConfig<CONFIGURED> {
     const RETENTION_PERIOD_DEFAULT: Duration = Duration::from_secs(3600);
 
-    /// Set the retention period of publishers last Sample state (default to 1h).
+    /// Set how long to retain inactive publisher state (default: 1 hour).
+    ///
+    /// Expiry forgets buffered samples and the ordering/deduplication baseline.
+    /// Publishers tracked by [`HistoryConfig::detect_late_publishers`] retain their
+    /// state while their liveliness token remains present.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn retention_period(mut self, period: Duration) -> RecoveryConfig<CONFIGURED> {
@@ -165,6 +230,8 @@ pub struct AdvancedSubscriberBuilder<'a, 'b, 'c, Handler, const BACKGROUND: bool
     pub(crate) retransmission: Option<RecoveryConfig>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_timeout: Duration,
+    pub(crate) max_fragments: u32,
+    pub(crate) max_pending_samples: Option<usize>,
     pub(crate) history: Option<HistoryConfig>,
     pub(crate) liveliness: bool,
     pub(crate) meta_key_expr: Option<ZResult<KeyExpr<'c>>>,
@@ -183,6 +250,8 @@ impl<Handler, const BACKGROUND: bool> fmt::Debug
             .field("retransmission", &self.retransmission)
             .field("query_target", &self.query_target)
             .field("query_timeout", &self.query_timeout)
+            .field("max_fragments", &self.max_fragments)
+            .field("max_pending_samples", &self.max_pending_samples)
             .field("history", &self.history)
             .field("liveliness", &self.liveliness)
             .field("meta_key_expr", &self.meta_key_expr)
@@ -204,6 +273,8 @@ impl<'a, 'b, Handler> AdvancedSubscriberBuilder<'a, 'b, '_, Handler> {
             retransmission: None,
             query_target: QueryTarget::All,
             query_timeout: Duration::from_secs(10),
+            max_fragments: MAX_FRAGMENTS_DEFAULT,
+            max_pending_samples: None,
             history: None,
             liveliness: false,
             meta_key_expr: None,
@@ -239,7 +310,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
         self.callback(locked(callback))
     }
 
-    /// Make the built AdvancedSubscriber an [`AdvancedSubscriber`](AdvancedSubscriber).
+    /// Set the handler used to receive samples.
     #[inline]
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Handler>
@@ -253,6 +324,8 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
+            max_fragments: self.max_fragments,
+            max_pending_samples: self.max_pending_samples,
             history: self.history,
             liveliness: self.liveliness,
             meta_key_expr: self.meta_key_expr,
@@ -265,7 +338,8 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, DefaultHandler> {
 impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
     /// Make the subscriber run in background until the session is closed.
     ///
-    /// Background builder doesn't return a `AdvancedSubscriber` object anymore.
+    /// Resolves to `()` instead of an [`AdvancedSubscriber`].
+    #[zenoh_macros::unstable]
     pub fn background(self) -> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>, true> {
         AdvancedSubscriberBuilder {
             session: self.session,
@@ -274,6 +348,8 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
+            max_fragments: self.max_fragments,
+            max_pending_samples: self.max_pending_samples,
             history: self.history,
             liveliness: self.liveliness,
             meta_key_expr: self.meta_key_expr,
@@ -286,7 +362,7 @@ impl<'a, 'b, 'c> AdvancedSubscriberBuilder<'a, 'b, 'c, Callback<Sample>> {
 impl<'a, 'c, Handler, const BACKGROUND: bool>
     AdvancedSubscriberBuilder<'a, '_, 'c, Handler, BACKGROUND>
 {
-    /// Restrict the matching publications that will be received by this [`Subscriber`] to the ones that have the given [`Locality`](crate::prelude::Locality).
+    /// Restrict received publications to the given [`Locality`].
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -294,11 +370,14 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Ask for retransmission of detected lost Samples.
+    /// Request retransmission of missing publications and fragments.
     ///
     /// Retransmission can only be achieved by [`AdvancedPublishers`](crate::AdvancedPublisher)
     /// that enable [`cache`](crate::AdvancedPublisherBuilder::cache) and
     /// [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    ///
+    /// See [`RecoveryConfig`] for retry behavior and [`max_pending_samples`](Self::max_pending_samples)
+    /// for buffering limits. Fragment reassembly itself is automatic, even without recovery.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn recovery(mut self, conf: RecoveryConfig) -> Self {
@@ -314,7 +393,10 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
     //     self
     // }
 
-    /// Change the timeout to be used for queries (history, retransmission).
+    /// Set the timeout for each history or recovery query (default: 10 seconds).
+    ///
+    /// Includes fragment queries. This limits each query, rather than the total
+    /// recovery time; failed fragment recovery may be retried.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -322,9 +404,39 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
         self
     }
 
-    /// Enable query for historical data.
+    /// Set the maximum fragments per publication (default: 4096).
     ///
-    /// History can only be retransmitted by [`AdvancedPublishers`](crate::AdvancedPublisher) that enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// Publications advertising a larger count are rejected. This is a fragment-count
+    /// limit, not a byte limit. Subscriber declaration fails if `max` is zero.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn max_fragments(mut self, max: u32) -> Self {
+        self.max_fragments = max;
+        self
+    }
+
+    /// Set the maximum publications buffered per source for reordering and reassembly.
+    ///
+    /// Fragmented publications count once. When the bound is exceeded, the oldest
+    /// buffered publication is delivered if complete, otherwise discarded. Misses
+    /// are reported on a later delivery; see [`sample_miss_listener`](AdvancedSubscriber::sample_miss_listener).
+    ///
+    /// The bound is this explicit setting, otherwise [`HistoryConfig::max_samples`]
+    /// if configured, otherwise 100. It limits counts per source, not total bytes.
+    /// Subscriber declaration fails if `max` is zero.
+    #[zenoh_macros::unstable]
+    #[inline]
+    pub fn max_pending_samples(mut self, max: usize) -> Self {
+        self.max_pending_samples = Some(max);
+        self
+    }
+
+    /// Retrieve cached publications when the subscriber is declared.
+    ///
+    /// Requires publishers to enable [`cache`](crate::AdvancedPublisherBuilder::cache).
+    /// [`HistoryConfig::detect_late_publishers`] additionally retrieves history on discovery.
+    /// Declaration starts the query; it does not wait for all history to arrive.
+    /// Use [`recovery`](Self::recovery) to recover losses during the subscription.
     #[zenoh_macros::unstable]
     #[inline]
     pub fn history(mut self, config: HistoryConfig) -> Self {
@@ -361,6 +473,8 @@ impl<'a, 'c, Handler, const BACKGROUND: bool>
             retransmission: self.retransmission,
             query_target: self.query_target,
             query_timeout: self.query_timeout,
+            max_fragments: self.max_fragments,
+            max_pending_samples: self.max_pending_samples,
             history: self.history,
             liveliness: self.liveliness,
             meta_key_expr: self.meta_key_expr.map(|s| s.map(|s| s.into_owned())),
@@ -398,7 +512,6 @@ where
 {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
-
     #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
@@ -424,7 +537,6 @@ impl Wait for AdvancedSubscriberBuilder<'_, '_, '_, Callback<Sample>, true> {
 impl IntoFuture for AdvancedSubscriberBuilder<'_, '_, '_, Callback<Sample>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
-
     #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
@@ -435,21 +547,23 @@ impl IntoFuture for AdvancedSubscriberBuilder<'_, '_, '_, Callback<Sample>, true
 struct State {
     next_id: usize,
     global_pending_queries: u64,
-    sequenced_states: LruCache<EntityGlobalId, SourceState<WrappingSn>>,
-    timestamped_states: LruCache<ID, SourceState<Timestamp>>,
+    sequenced_states: LruCache<EntityGlobalId, SequencedSource>,
+    timestamped_states: LruCache<ID, TimestampedSource>,
     session: WeakSession,
     key_expr: KeyExpr<'static>,
     retransmission: bool,
+    frag_recovery_delay: Duration,
     period: Option<Duration>,
-    max_history_depth: usize,
+    max_pending_samples: usize,
     query_target: QueryTarget,
     query_timeout: Duration,
+    max_fragments: u32,
     // Callback must be dropped when the underlying subscriber is undeclared
     // (for example when session is closed), in order to "close" the advanced
     // subscriber receiver, hence the `Option`.
     callback: Option<Callback<Sample>>,
     miss_handlers: HashMap<usize, Callback<Miss>>,
-    token: Option<LivelinessToken>,
+    subscriber_liveliness_token: Option<LivelinessToken>,
     _gc_task: AbortOnDropHandle<()>,
 }
 
@@ -468,102 +582,19 @@ impl State {
     }
 }
 
-#[zenoh_macros::unstable]
-struct SourceState<T> {
-    last_delivered: Option<T>,
-    pending_queries: u64,
-    pending_samples: BTreeMap<T, Sample>,
-    /// Latest access instant used for garbage collection with retention period
-    latest_access: Instant,
-    /// Periodic queries task
-    periodic_task: Option<AbortOnDropHandle<()>>,
-    /// Alive as per liveliness subscriber
-    alive: bool,
-}
-
-impl<T> Default for SourceState<T> {
-    fn default() -> Self {
-        Self {
-            last_delivered: None,
-            pending_queries: 0,
-            pending_samples: BTreeMap::new(),
-            periodic_task: None,
-            alive: false,
-            latest_access: Instant::now(),
-        }
-    }
-}
-
-/*
-use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
-
-let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-let subscriber = session
-    .declare_subscriber("key/expression")
-    .history(HistoryConfig::default().detect_late_publishers())
-    .recovery(RecoveryConfig::default())
-    .await
-    .unwrap();
-
-let miss_listener = subscriber.sample_miss_listener().await.unwrap();
-loop {
-    tokio::select! {
-        sample = subscriber.recv_async() => {
-            if let Ok(sample) = sample {
-                // ...
-            }
-        },
-        miss = miss_listener.recv_async() => {
-            if let Ok(miss) = miss {
-                // ...
-            }
-        },
-    }
-}
-*/
-
-/// The extension to [`Subscriber`](zenoh::pubsub::Subscriber) that provides advanced functionalities
+/// A subscriber supporting reassembly, history, loss recovery, and discovery.
 ///
-/// The `AdvancedSubscriber` is constructed over a regular [`Subscriber`](zenoh::pubsub::Subscriber)
-/// through [`advanced`](crate::AdvancedSubscriberBuilderExt::advanced) method or by using
-/// any other method of [`AdvancedSubscriberBuilder`](crate::AdvancedSubscriberBuilder).
+/// Create one through [`AdvancedSubscriberBuilderExt`](crate::AdvancedSubscriberBuilderExt).
+/// It automatically reassembles fragmented publications. Other features are opt-in:
 ///
-/// The `AdvancedSubscriber` works with [`AdvancedPublisher`](crate::AdvancedPublisher) to provide additional functionalities such as:
-/// * missing samples detection using periodic queries or heartbeat subscription configurable with [`recovery`](crate::AdvancedSubscriberBuilder::recovery) method
-/// * recovering missing samples, configured with [`history`](crate::AdvancedSubscriberBuilder::history) method
-///   (max age and sample count, late joiner detection and requesting)
-/// * liveliness-based subscriber detection with [`subscriber_detection`](crate::AdvancedSubscriberBuilder::subscriber_detection) method
+/// - [`history`](AdvancedSubscriberBuilder::history): retrieve cached publications at startup and optionally on discovery.
+/// - [`recovery`](AdvancedSubscriberBuilder::recovery): request missing publications and fragments.
+/// - [`sample_miss_listener`](Self::sample_miss_listener): receive notifications of delivery gaps.
+/// - [`subscriber_detection`](AdvancedSubscriberBuilder::subscriber_detection): advertise this subscriber's presence.
 ///
-/// # Examples
-/// ```no_run
-/// # #[tokio::main]
-/// # async fn main() {
-/// use zenoh_ext::{AdvancedSubscriberBuilderExt, HistoryConfig, RecoveryConfig};
-/// let session = zenoh::open(zenoh::Config::default()).await.unwrap();
-/// let subscriber = session
-///     .declare_subscriber("key/expression")
-///     .history(HistoryConfig::default().detect_late_publishers())
-///     .recovery(RecoveryConfig::default().heartbeat())
-///     .subscriber_detection()
-///     .await
-///     .unwrap();
-/// let miss_listener = subscriber.sample_miss_listener().await.unwrap();
-/// loop {
-///     tokio::select! {
-///         sample = subscriber.recv_async() => {
-///             if let Ok(sample) = sample {
-///                 // ...
-///             }
-///         },
-///         miss = miss_listener.recv_async() => {
-///             if let Ok(miss) = miss {
-///                 // ...
-///             }
-///         },
-///     }
-/// }
-/// # }
-/// ```
+/// Buffering is bounded by [`max_fragments`](AdvancedSubscriberBuilder::max_fragments)
+/// and [`max_pending_samples`](AdvancedSubscriberBuilder::max_pending_samples).
+/// See the [paired publisher/subscriber example](crate#advanced-pubsub).
 #[zenoh_macros::unstable]
 pub struct AdvancedSubscriber<Receiver> {
     statesref: Arc<Mutex<State>>,
@@ -601,235 +632,107 @@ impl<Receiver> std::ops::DerefMut for AdvancedSubscriber<Receiver> {
     }
 }
 
-#[zenoh_macros::unstable]
-fn handle_sample(states: &mut State, sample: Sample) -> bool {
-    let Some(callback) = states.callback.as_ref() else {
-        return false;
-    };
-    if let Some(source_info) = sample.source_info().cloned() {
-        #[inline]
-        fn deliver_and_flush(
-            sample: Sample,
-            source_sn: impl Into<WrappingSn>,
-            callback: &Callback<Sample>,
-            state: &mut SourceState<WrappingSn>,
-        ) {
-            let mut source_sn = source_sn.into();
-            callback.call(sample);
-            state.last_delivered = Some(source_sn);
-            while let Some(sample) = state.pending_samples.remove(&(source_sn + 1)) {
-                callback.call(sample);
-                source_sn += 1;
-                state.last_delivered = Some(source_sn);
-            }
-        }
+/// Without `SourceInfo`, we cannot tell which sample a fragment belongs to.
+/// The source ID and sequence number are needed to group fragments together.
+#[inline]
+fn is_orphan_fragment(sample: &Sample) -> bool {
+    // TODO: update when timestamped sources are supported on fragmentation
+    sample.source_info().is_none() && sample.frag_info().is_some()
+}
 
-        let mut new = false;
-        let state = states
-            .sequenced_states
-            .get_or_insert_mut(*source_info.source_id(), || {
-                new = true;
-                Default::default()
-            });
-        if state.last_delivered.is_none() && states.global_pending_queries != 0 {
-            // Avoid going through the Map if history_depth == 1
-            if states.max_history_depth == 1 {
-                state.last_delivered = Some(source_info.source_sn().into());
-                callback.call(sample);
-            } else {
-                state
-                    .pending_samples
-                    .insert(source_info.source_sn().into(), sample);
-                if state.pending_samples.len() >= states.max_history_depth {
-                    if let Some((sn, sample)) = state.pending_samples.pop_first() {
-                        deliver_and_flush(sample, sn, callback, state);
-                    }
+/// Tells the publication callback whether to start recovery timers or queries.
+/// Query replies leave that work until the query finishes.
+#[derive(Default)]
+struct SampleInsertion {
+    new_source: bool,
+    /// A new per-SN entry, not progress within an existing assembly.
+    new_fragment_slot: bool,
+}
+
+fn rejected_fragment(sn: u32, error: FragInsertError) -> SampleInsertion {
+    tracing::warn!("AdvancedSubscriber: rejected fragment (sn={sn}): {error:?}");
+    SampleInsertion::default()
+}
+
+/// Route input by its ordering identity.
+///
+/// Stateful arrival processing belongs to the source; this boundary preserves
+/// the source-cache access operations.
+#[zenoh_macros::unstable]
+fn handle_sample(states: &mut State, sample: Sample) -> SampleInsertion {
+    let Some(callback) = states.callback.as_ref() else {
+        return SampleInsertion::default();
+    };
+    if is_orphan_fragment(&sample) {
+        tracing::debug!(
+            "AdvancedSubscriber: dropped fragmented sample without source_info: \
+             fragmentation information is meaningless without sequence-number \
+             source_info. Fragments must originate from an AdvancedPublisher \
+             with sample_miss_detection enabled."
+        );
+        return SampleInsertion::default();
+    }
+    if let Some(info) = sample.source_info().cloned() {
+        let source_id = *info.source_id();
+        let new_source = !states.sequenced_states.contains(&source_id);
+        if new_source {
+            // Reject malformed first fragments before allocating any source
+            // state, changing the LRU, or starting recovery timers.
+            if let Some(fi) = sample.frag_info() {
+                if let Err(error) =
+                    validate_fragment_metadata(fi.frag_num(), fi.frag_count(), states.max_fragments)
+                {
+                    return rejected_fragment(info.source_sn(), error);
                 }
             }
-        } else if state.last_delivered.is_some()
-            && source_info.source_sn() != state.last_delivered.unwrap() + 1
-        {
-            if source_info.source_sn() > state.last_delivered.unwrap() {
-                if states.retransmission {
-                    state
-                        .pending_samples
-                        .insert(source_info.source_sn().into(), sample);
-                } else {
-                    tracing::info!(
-                        "Sample missed: missed {} samples from {:?}.",
-                        source_info.source_sn() - state.last_delivered.unwrap() - 1,
-                        source_info.source_id(),
-                    );
-                    for miss_callback in states.miss_handlers.values() {
-                        miss_callback.call(Miss {
-                            source: *source_info.source_id(),
-                            nb: source_info.source_sn() - state.last_delivered.unwrap() - 1,
-                        });
-                    }
-                    callback.call(sample);
-                    state.last_delivered = Some(source_info.source_sn().into());
-                }
-            }
-        } else {
-            deliver_and_flush(sample, source_info.source_sn(), callback, state);
+            states
+                .sequenced_states
+                .put(source_id, SequencedSource::default());
         }
-        state.latest_access = Instant::now();
-        new
+        let source = states.sequenced_states.peek_mut(&source_id).unwrap();
+        let outcome = source.receive(
+            sample,
+            &info,
+            &ArrivalContext {
+                delivery: DeliveryContext {
+                    callback,
+                    miss_handlers: &states.miss_handlers,
+                    source_id,
+                },
+                history_pending: states.global_pending_queries != 0,
+                retransmission: states.retransmission,
+                max_pending_samples: states.max_pending_samples,
+                max_fragments: states.max_fragments,
+            },
+        );
+        match outcome {
+            Ok(ReceiveOutcome::Accepted { new_fragment_slot }) => {
+                // Keep time and LRU order in sync: only valid activity touches
+                // either, including valid duplicates with no new entry.
+                source.latest_access = Instant::now();
+                states.sequenced_states.promote(&source_id);
+                SampleInsertion {
+                    new_source,
+                    new_fragment_slot,
+                }
+            }
+            Ok(ReceiveOutcome::Ignored) => SampleInsertion::default(),
+            Err(error) => rejected_fragment(info.source_sn(), error),
+        }
     } else if let Some(timestamp) = sample.timestamp() {
-        let state = states
+        let source = states
             .timestamped_states
             .get_or_insert_mut(*timestamp.get_id(), Default::default);
-        if state.last_delivered.map(|t| t < *timestamp).unwrap_or(true) {
-            if (states.global_pending_queries == 0 && state.pending_queries == 0)
-                || states.max_history_depth == 1
-            {
-                state.last_delivered = Some(*timestamp);
-                callback.call(sample);
-            } else {
-                state.pending_samples.entry(*timestamp).or_insert(sample);
-                if state.pending_samples.len() >= states.max_history_depth {
-                    flush_timestamped_source(state, Some(callback));
-                }
-            }
-        }
-        state.latest_access = Instant::now();
-        false
+        source.receive(
+            sample,
+            callback,
+            states.global_pending_queries,
+            states.max_pending_samples,
+        );
+        SampleInsertion::default()
     } else {
         callback.call(sample);
-        false
-    }
-}
-
-#[zenoh_macros::unstable]
-fn seq_num_range(start: Option<WrappingSn>, end: Option<WrappingSn>) -> String {
-    match (start, end) {
-        (Some(start), Some(end)) => format!("_sn={start}..{end}"),
-        (Some(start), None) => format!("_sn={start}.."),
-        (None, Some(end)) => format!("_sn=..{end}"),
-        (None, None) => "_sn=..".to_string(),
-    }
-}
-
-fn spawn_periodic_queries(
-    statesref: &Arc<Mutex<State>>,
-    period: Option<Duration>,
-    source_id: EntityGlobalId,
-) -> Option<AbortOnDropHandle<()>> {
-    let period = period?;
-    let statesref = statesref.clone();
-    Some(AbortOnDropHandle::new(ZRuntime::Application.spawn(
-        async move {
-            let mut interval = tokio::time::interval(period);
-            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            interval.tick().await; // interval first tick is immediate
-            loop {
-                interval.tick().await;
-                periodic_query(&statesref, source_id);
-            }
-        },
-    )))
-}
-
-fn periodic_query(statesref: &Arc<Mutex<State>>, source_id: EntityGlobalId) {
-    let mut guard = statesref.lock().unwrap();
-    let states = &mut *guard;
-    // use peek_mut so query without samples do not prevent the state to be garbage collected
-    let Some(state) = states.sequenced_states.peek_mut(&source_id) else {
-        return;
-    };
-    state.pending_queries += 1;
-    let query_expr = &states.key_expr
-        / KE_ADV_PREFIX
-        / KE_STAR
-        / &source_id.zid().into_keyexpr()
-        / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
-        / KE_STARSTAR;
-    let seq_num_range = seq_num_range(state.last_delivered.map(|s| s + 1), None);
-
-    let session = states.session.clone();
-    let key_expr = states.key_expr.clone().into_owned();
-    let query_target = states.query_target;
-    let query_timeout = states.query_timeout;
-
-    tracing::trace!(
-        "AdvancedSubscriber{{key_expr: {}}}: Querying undelivered samples {}?{}",
-        states.key_expr,
-        query_expr,
-        seq_num_range
-    );
-    drop(guard);
-
-    let handler = SequencedRepliesHandler {
-        source_id,
-        statesref: statesref.clone(),
-    };
-    let _ = session
-        .get(Selector::from((query_expr, seq_num_range)))
-        .callback({
-            move |r: Reply| {
-                if let Ok(s) = r.into_result() {
-                    if key_expr.intersects(s.key_expr()) {
-                        let states = &mut *zlock!(handler.statesref);
-                        tracing::trace!(
-                            "AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}",
-                            states.key_expr,
-                            s.source_info(),
-                            s.timestamp()
-                        );
-                        handle_sample(states, s);
-                    }
-                }
-            }
-        })
-        .consolidation(ConsolidationMode::None)
-        .accept_replies(ReplyKeyExpr::Any)
-        .target(query_target)
-        .timeout(query_timeout)
-        .wait();
-}
-
-/// Garbage collects the source states' lists.
-///
-/// Reclamation is based on `SourceState::latest_access`; alive publishers are not reclaimed.
-async fn gc_task(statesref: Weak<Mutex<State>>, retention_period: Duration) {
-    /// Garbage collect a lists and return the oldest access.
-    fn garbage_collect<K: Copy + Eq + Hash, T>(
-        states: &mut LruCache<K, SourceState<T>>,
-        retention_period: Duration,
-        now: Instant,
-    ) -> Instant {
-        while let Some((&key, state)) = states.peek_lru() {
-            if now.duration_since(state.latest_access) <= retention_period {
-                return state.latest_access;
-            // if the publisher is still marked as alive, just update its latest access
-            // (accessing the state will also move it to the back of the LRU list)
-            } else if state.alive {
-                states.get_mut(&key).unwrap().latest_access = now;
-            } else {
-                states.pop_lru();
-            }
-        }
-        now
-    }
-    // start by sleeping for the initial retention period
-    tokio::time::sleep(retention_period).await;
-    loop {
-        let oldest_access = {
-            let Some(states) = statesref.upgrade() else {
-                // either the task was scheduled concurrently to its abortion, so we don't care
-                // sleeping, or we are in the theoretically possible but zero probability case
-                // of `new_cyclic` not having returned yet, so we still don't care sleeping.
-                tokio::time::sleep(retention_period).await;
-                continue;
-            };
-            let mut states = states.lock().unwrap();
-            let now = Instant::now();
-            min(
-                garbage_collect(&mut states.sequenced_states, retention_period, now),
-                garbage_collect(&mut states.timestamped_states, retention_period, now),
-            )
-        };
-        tokio::time::sleep_until((oldest_access + retention_period).into()).await;
+        SampleInsertion::default()
     }
 }
 
@@ -848,6 +751,19 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 bail!("max_age must not be zero")
             }
         }
+        if conf.max_fragments == 0 {
+            bail!("max_fragments must not be zero")
+        }
+        if conf
+            .retransmission
+            .as_ref()
+            .is_some_and(|r| r.frag_recovery_delay.is_zero())
+        {
+            bail!("frag_recovery_delay must not be zero")
+        }
+        if conf.max_pending_samples.is_some_and(|m| m == 0) {
+            bail!("max_pending_samples must not be zero")
+        }
         let (callback, receiver) = conf.handler.into_handler();
         let key_expr = conf.key_expr?;
         let meta = match conf.meta_key_expr {
@@ -855,14 +771,10 @@ impl<Handler> AdvancedSubscriber<Handler> {
             None => None,
         };
         let retransmission = conf.retransmission;
-        let query_target = conf.query_target;
-        let query_timeout = conf.query_timeout;
-        let max_history_depth = conf
-            .history
-            .as_ref()
-            .and_then(|h| h.max_samples)
-            // If the query is not bounded with `_max`, then it can receive unbounded number of responses
-            .unwrap_or(usize::MAX);
+        let max_pending_samples = conf
+            .max_pending_samples
+            .or(conf.history.as_ref().and_then(|h| h.max_samples))
+            .unwrap_or(DEFAULT_MAX_PENDING_SAMPLES);
         let retention_period = retransmission
             .as_ref()
             .and_then(|r| r.retention_period)
@@ -877,544 +789,64 @@ impl<Handler> AdvancedSubscriber<Handler> {
                 period: retransmission.as_ref().and_then(|r| r.periodic_queries),
                 key_expr: key_expr.clone().into_owned(),
                 retransmission: retransmission.is_some(),
-                max_history_depth,
+                frag_recovery_delay: retransmission.unwrap_or_default().frag_recovery_delay,
+                max_pending_samples,
                 query_target: conf.query_target,
                 query_timeout: conf.query_timeout,
+                max_fragments: conf.max_fragments,
                 callback: Some(callback),
                 miss_handlers: HashMap::new(),
-                token: None,
+                subscriber_liveliness_token: None,
                 _gc_task: AbortOnDropHandle::new(
-                    ZRuntime::Application.spawn(gc_task(weak.clone(), retention_period)),
+                    ZRuntime::Application.spawn(runtime::gc_task(weak.clone(), retention_period)),
                 ),
             })
         });
-
-        let sub_callback = {
-            let statesref = statesref.clone();
-            let session = conf.session.downgrade();
-            let key_expr = key_expr.clone().into_owned();
-
-            move |s: Sample| {
-                let mut lock = zlock!(statesref);
-                let states = &mut *lock;
-                let source_id = s.source_info().map(|si| *si.source_id());
-                let new = handle_sample(states, s);
-
-                if let Some(source_id) = source_id {
-                    if let Some(state) = states.sequenced_states.get_mut(&source_id) {
-                        if new {
-                            state.periodic_task =
-                                spawn_periodic_queries(&statesref, states.period, source_id);
-                        }
-                        if retransmission.is_some()
-                            && state.pending_queries == 0
-                            && !state.pending_samples.is_empty()
-                        {
-                            state.pending_queries += 1;
-                            let query_expr = &key_expr
-                                / KE_ADV_PREFIX
-                                / KE_STAR
-                                / &source_id.zid().into_keyexpr()
-                                / &KeyExpr::try_from(source_id.eid().to_string()).unwrap()
-                                / KE_STARSTAR;
-                            let seq_num_range =
-                                seq_num_range(state.last_delivered.map(|s| s + 1), None);
-                            tracing::trace!(
-                                "AdvancedSubscriber{{key_expr: {}}}: Querying missing samples {}?{}",
-                                states.key_expr,
-                                query_expr,
-                                seq_num_range
-                            );
-                            drop(lock);
-                            let handler = SequencedRepliesHandler {
-                                source_id,
-                                statesref: statesref.clone(),
-                            };
-                            let _ = session
-                                .get(Selector::from((query_expr, seq_num_range)))
-                                .callback({
-                                    let key_expr = key_expr.clone().into_owned();
-                                    move |r: Reply| {
-                                        if let Ok(s) = r.into_result() {
-                                            if key_expr.intersects(s.key_expr()) {
-                                                let states = &mut *zlock!(handler.statesref);
-                                                tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
-                                                handle_sample(states, s);
-                                            }
-                                        }
-                                    }
-                                })
-                                .consolidation(ConsolidationMode::None)
-                                .accept_replies(ReplyKeyExpr::Any)
-                                .target(query_target)
-                                .timeout(query_timeout)
-                                .wait();
-                        }
-                    }
-                }
-            }
-        };
-
-        // When the underlying subscriber is undeclared (for example when the session is closed)
-        // the advanced subscriber callback must be dropped to "close" the receiver.
-        let drop_callback = {
-            let statesref = statesref.clone();
-            move || {
-                let mut states = statesref.lock().unwrap();
-                states.callback.take();
-                states.miss_handlers.clear();
-            }
-        };
-
-        let subscriber = conf
-            .session
-            .declare_subscriber(&key_expr)
-            .with(CallbackDrop {
-                callback: sub_callback,
-                drop: drop_callback,
-            })
-            .allowed_origin(conf.origin)
-            .wait()?;
-
-        tracing::debug!("Create AdvancedSubscriber{{key_expr: {}}}", key_expr,);
-
-        if let Some(historyconf) = conf.history.as_ref() {
-            let handler = InitialRepliesHandler {
-                statesref: statesref.clone(),
-            };
-            let mut params = Parameters::empty();
-            if let Some(max) = historyconf.max_samples {
-                params.insert("_max", max.to_string());
-            }
-            if let Some(age) = historyconf.max_age {
-                params.set_time_range(TimeRange {
-                    start: TimeBound::Inclusive(TimeExpr::Now { offset_secs: -age }),
-                    end: TimeBound::Unbounded,
-                });
-            }
-            tracing::trace!(
-                "AdvancedSubscriber{{key_expr: {}}} Querying historical samples {}?{}",
-                key_expr,
-                &key_expr / KE_ADV_PREFIX / KE_STARSTAR,
-                params
-            );
-            let _ = conf
-                .session
-                .get(Selector::from((
-                    &key_expr / KE_ADV_PREFIX / KE_STARSTAR,
-                    params,
-                )))
-                .callback({
-                    let key_expr = key_expr.clone().into_owned();
-                    move |r: Reply| {
-                        if let Ok(s) = r.into_result() {
-                            if key_expr.intersects(s.key_expr()) {
-                                let states = &mut *zlock!(handler.statesref);
-                                tracing::trace!(
-                                    "AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}",
-                                    states.key_expr,
-                                    s.source_info(),
-                                    s.timestamp()
-                                );
-                                handle_sample(states, s);
-                            }
-                        }
-                    }
-                })
-                .consolidation(ConsolidationMode::None)
-                .accept_replies(ReplyKeyExpr::Any)
-                .target(query_target)
-                .timeout(query_timeout)
-                .wait();
+        let subscriber =
+            runtime::declare_data_subscriber(conf.session, &key_expr, conf.origin, &statesref)?;
+        tracing::debug!("Create AdvancedSubscriber{{key_expr: {}}}", key_expr);
+        if let Some(history) = conf.history.as_ref() {
+            runtime::send_initial_history_query(&statesref, &key_expr, history);
         }
-
-        let liveliness_subscriber = if let Some(historyconf) = conf.history.as_ref() {
-            if historyconf.liveliness {
-                let live_callback = {
-                    let session = conf.session.downgrade();
-                    let statesref = statesref.clone();
-                    let key_expr = key_expr.clone().into_owned();
-                    let historyconf = historyconf.clone();
-                    move |s: Sample| {
-                        let Ok(parsed) = ke_liveliness::parse(s.key_expr().as_keyexpr()) else {
-                            tracing::warn!(
-                                "AdvancedSubscriber{{}}: Received malformed liveliness token key expression: {}",
-                                s.key_expr()
-                            );
-                            return;
-                        };
-                        if let Ok(zid) = ZenohId::from_str(parsed.zid().as_str()) {
-                            // TODO : If we already have a state associated to this discovered source
-                            // we should query with the appropriate range to avoid unnecessary retransmissions
-                            if parsed.eid() == KE_UHLC {
-                                let mut lock = zlock!(statesref);
-                                let states = &mut *lock;
-                                if s.kind() == SampleKind::Delete {
-                                    tracing::trace!(
-                                        "AdvancedSubscriber{{key_expr: {}}}: Liveliness loss for publishers with zid={}",
-                                        states.key_expr,
-                                        parsed.zid().as_str()
-                                    );
-                                    if let Some(state) =
-                                        states.timestamped_states.peek_mut(&ID::from(zid))
-                                    {
-                                        state.alive = false;
-                                    }
-                                    return;
-                                }
-                                tracing::trace!(
-                                    "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
-                                    states.key_expr,
-                                    parsed.zid().as_str()
-                                );
-                                let state = states
-                                    .timestamped_states
-                                    .get_or_insert_mut(ID::from(zid), Default::default);
-                                state.pending_queries += 1;
-                                state.alive = true;
-                                state.latest_access = Instant::now();
-
-                                let mut params = Parameters::empty();
-                                if let Some(max) = historyconf.max_samples {
-                                    params.insert("_max", max.to_string());
-                                }
-                                if let Some(age) = historyconf.max_age {
-                                    params.set_time_range(TimeRange {
-                                        start: TimeBound::Inclusive(TimeExpr::Now {
-                                            offset_secs: -age,
-                                        }),
-                                        end: TimeBound::Unbounded,
-                                    });
-                                }
-                                tracing::trace!(
-                                    "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
-                                    states.key_expr,
-                                    s.key_expr(),
-                                    params
-                                );
-                                drop(lock);
-
-                                let handler = TimestampedRepliesHandler {
-                                    id: ID::from(zid),
-                                    statesref: statesref.clone(),
-                                };
-                                let _ = session
-                                    .get(Selector::from((s.key_expr(), params)))
-                                    .callback({
-                                        let key_expr = key_expr.clone().into_owned();
-                                        move |r: Reply| {
-                                            if let Ok(s) = r.into_result() {
-                                                if key_expr.intersects(s.key_expr()) {
-                                                    let states =
-                                                        &mut *zlock!(handler.statesref);
-                                                    tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
-                                                    handle_sample(states, s);
-                                                }
-                                            }
-                                        }
-                                    })
-                                    .consolidation(ConsolidationMode::None)
-                                    .accept_replies(ReplyKeyExpr::Any)
-                                    .target(query_target)
-                                    .timeout(query_timeout)
-                                    .wait();
-                            } else if let Ok(eid) = EntityId::from_str(parsed.eid().as_str()) {
-                                let source_id = EntityGlobalId::new(zid, eid);
-                                let mut lock = zlock!(statesref);
-                                let states = &mut *lock;
-                                if s.kind() == SampleKind::Delete {
-                                    tracing::trace!(
-                                        "AdvancedSubscriber{{key_expr: {}}}: Liveliness loss for publishers with zid={}",
-                                        states.key_expr,
-                                        parsed.zid().as_str()
-                                    );
-                                    if let Some(state) =
-                                        states.sequenced_states.peek_mut(&source_id)
-                                    {
-                                        state.alive = false;
-                                    }
-                                    return;
-                                }
-                                tracing::trace!(
-                                    "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
-                                    states.key_expr,
-                                    parsed.zid().as_str()
-                                );
-                                let mut new = false;
-                                let state =
-                                    states.sequenced_states.get_or_insert_mut(source_id, || {
-                                        new = true;
-                                        Default::default()
-                                    });
-                                if new {
-                                    state.periodic_task = spawn_periodic_queries(
-                                        &statesref,
-                                        states.period,
-                                        source_id,
-                                    );
-                                }
-                                state.pending_queries += 1;
-                                state.alive = true;
-                                state.latest_access = Instant::now();
-
-                                let mut params = Parameters::empty();
-                                if let Some(max) = historyconf.max_samples {
-                                    params.insert("_max", max.to_string());
-                                }
-                                if let Some(age) = historyconf.max_age {
-                                    params.set_time_range(TimeRange {
-                                        start: TimeBound::Inclusive(TimeExpr::Now {
-                                            offset_secs: -age,
-                                        }),
-                                        end: TimeBound::Unbounded,
-                                    });
-                                }
-                                tracing::trace!(
-                                    "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
-                                    states.key_expr,
-                                    s.key_expr(),
-                                    params,
-                                );
-                                drop(lock);
-
-                                let handler = SequencedRepliesHandler {
-                                    source_id,
-                                    statesref: statesref.clone(),
-                                };
-                                let _ = session
-                                    .get(Selector::from((s.key_expr(), params)))
-                                    .callback({
-                                        let key_expr = key_expr.clone().into_owned();
-                                        move |r: Reply| {
-                                            if let Ok(s) = r.into_result() {
-                                                if key_expr.intersects(s.key_expr()) {
-                                                    let states = &mut *zlock!(handler.statesref);
-                                                    tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
-                                                    handle_sample(states, s);
-                                                }
-                                            }
-                                        }
-                                    })
-                                    .consolidation(ConsolidationMode::None)
-                                    .accept_replies(ReplyKeyExpr::Any)
-                                    .target(query_target)
-                                    .timeout(query_timeout)
-                                    .wait();
-                            }
-                        } else if s.kind() == SampleKind::Put {
-                            let mut lock = zlock!(statesref);
-                            let states = &mut *lock;
-                            tracing::trace!(
-                                "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers with zid={}",
-                                states.key_expr,
-                                parsed.zid().as_str()
-                            );
-                            states.global_pending_queries += 1;
-
-                            let mut params = Parameters::empty();
-                            if let Some(max) = historyconf.max_samples {
-                                params.insert("_max", max.to_string());
-                            }
-                            if let Some(age) = historyconf.max_age {
-                                params.set_time_range(TimeRange {
-                                    start: TimeBound::Inclusive(TimeExpr::Now {
-                                        offset_secs: -age,
-                                    }),
-                                    end: TimeBound::Unbounded,
-                                });
-                            }
-                            tracing::trace!(
-                                "AdvancedSubscriber{{key_expr: {}}}: Querying historical samples {}?{}",
-                                states.key_expr,
-                                s.key_expr(),
-                                params,
-                            );
-                            drop(lock);
-
-                            let handler = InitialRepliesHandler {
-                                statesref: statesref.clone(),
-                            };
-                            let _ = session
-                                .get(Selector::from((s.key_expr(), params)))
-                                .callback({
-                                    let key_expr = key_expr.clone().into_owned();
-                                    move |r: Reply| {
-                                        if let Ok(s) = r.into_result() {
-                                            if key_expr.intersects(s.key_expr()) {
-                                                let states = &mut *zlock!(handler.statesref);
-                                                tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
-                                                handle_sample(states, s);
-                                            }
-                                        }
-                                    }
-                                })
-                                .consolidation(ConsolidationMode::None)
-                                .accept_replies(ReplyKeyExpr::Any)
-                                .target(query_target)
-                                .timeout(query_timeout)
-                                .wait();
-                        }
-                    }
-                };
-
-                tracing::debug!(
-                    "AdvancedSubscriber{{key_expr: {}}}: Detect late joiner publishers on {}",
-                    key_expr,
-                    &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR
-                );
-                Some(
-                    conf.session
-                        .liveliness()
-                        .declare_subscriber(&key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR)
-                        // .declare_subscriber(keformat!(ke_liveliness_all::formatter(), zid = 0, eid = 0, remaining = key_expr).unwrap())
-                        .history(true)
-                        .callback(live_callback)
-                        .wait()?,
+        let liveliness_subscriber = conf
+            .history
+            .as_ref()
+            .filter(|history| history.liveliness)
+            .map(|history| {
+                runtime::declare_source_liveliness_subscriber(
+                    conf.session,
+                    &key_expr,
+                    &statesref,
+                    history,
                 )
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
+            })
+            .transpose()?;
         let heartbeat_subscriber = if retransmission.is_some_and(|r| r.heartbeat) {
-            let ke_heartbeat_sub = &key_expr / KE_ADV_PREFIX / KE_PUB / KE_STARSTAR;
-            let statesref = statesref.clone();
-            tracing::debug!(
-                "AdvancedSubscriber{{key_expr: {}}}: Enable heartbeat subscriber on {}",
-                key_expr,
-                ke_heartbeat_sub
-            );
-            let heartbeat_sub = conf
-                .session
-                .declare_subscriber(ke_heartbeat_sub)
-                .callback(move |sample_hb| {
-                    if sample_hb.kind() != SampleKind::Put {
-                        return;
-                    }
-
-                    let heartbeat_keyexpr = sample_hb.key_expr().as_keyexpr();
-                    let Ok(parsed_keyexpr) = ke_liveliness::parse(heartbeat_keyexpr) else {
-                        return;
-                    };
-                    let source_id = {
-                        let Ok(zid) = ZenohId::from_str(parsed_keyexpr.zid().as_str()) else {
-                            return;
-                        };
-                        let Ok(eid) = EntityId::from_str(parsed_keyexpr.eid().as_str()) else {
-                            return;
-                        };
-                        EntityGlobalId::new(zid, eid)
-                    };
-
-                    let Ok(heartbeat_sn) = z_deserialize::<WrappingSn>(sample_hb.payload()) else {
-                        tracing::debug!(
-                            "AdvancedSubscriber{{}}: Skipping invalid heartbeat payload on '{}'",
-                            heartbeat_keyexpr
-                        );
-                        return;
-                    };
-
-                    let mut lock = zlock!(statesref);
-                    let states = &mut *lock;
-                    let mut new = false;
-                    let state = states.sequenced_states.get_or_insert_mut(source_id, ||{
-                        new = true;
-                        Default::default()
-                    });
-                    state.latest_access = Instant::now();
-                    if new {
-                        // NOTE: API does not allow both heartbeat and periodic_queries
-                        state.periodic_task = spawn_periodic_queries(&statesref, states.period, source_id);
-                        if states.global_pending_queries > 0 {
-                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Skipping heartbeat on '{}' from publisher that is currently being pulled by global query", states.key_expr, heartbeat_keyexpr);
-                            return;
-                        }
-                    }
-
-                    // check that it's not an old sn, and that there are no pending queries
-                    if (state.last_delivered.is_none()
-                        || state.last_delivered.is_some_and(|sn| heartbeat_sn > sn))
-                        && state.pending_queries == 0
-                    {
-                        let seq_num_range = seq_num_range(
-                            state.last_delivered.map(|s| s + 1),
-                            Some(heartbeat_sn),
-                        );
-
-                        let session = states.session.clone();
-                        let key_expr = states.key_expr.clone().into_owned();
-                        let query_target = states.query_target;
-                        let query_timeout = states.query_timeout;
-                        state.pending_queries += 1;
-
-                        tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Querying missing samples {}?{}", states.key_expr, heartbeat_keyexpr, seq_num_range);
-                        drop(lock);
-
-                        let handler = SequencedRepliesHandler {
-                            source_id,
-                            statesref: statesref.clone(),
-                        };
-                        let _ = session
-                            .get(Selector::from((heartbeat_keyexpr, seq_num_range)))
-                            .callback({
-                                move |r: Reply| {
-                                    if let Ok(s) = r.into_result() {
-                                        if key_expr.intersects(s.key_expr()) {
-                                            let states = &mut *zlock!(handler.statesref);
-                                            tracing::trace!("AdvancedSubscriber{{key_expr: {}}}: Received reply with Sample{{info:{:?}, ts:{:?}}}", states.key_expr, s.source_info(), s.timestamp());
-                                            handle_sample(states, s);
-                                        }
-                                    }
-                                }
-                            })
-                            .consolidation(ConsolidationMode::None)
-                            .accept_replies(ReplyKeyExpr::Any)
-                            .target(query_target)
-                            .timeout(query_timeout)
-                            .wait();
-                    }
-                })
-                .allowed_origin(conf.origin)
-                .wait()?;
-            Some(heartbeat_sub)
+            Some(runtime::declare_source_heartbeat_subscriber(
+                conf.session,
+                &key_expr,
+                conf.origin,
+                &statesref,
+            )?)
         } else {
             None
         };
-
         if conf.liveliness {
-            let suffix = KE_ADV_PREFIX
-                / KE_SUB
-                / &subscriber.id().zid().into_keyexpr()
-                / &KeyExpr::try_from(subscriber.id().eid().to_string()).unwrap();
-            let suffix = match meta {
-                Some(meta) => suffix / &meta,
-                // We need this empty chunk because of a routing matching bug
-                _ => suffix / KE_EMPTY,
-            };
-            tracing::debug!(
-                "AdvancedSubscriber{{key_expr: {}}}: Declare liveliness token {}",
-                key_expr,
-                &key_expr / &suffix,
-            );
-            let token = conf
-                .session
-                .liveliness()
-                .declare_token(&key_expr / &suffix)
-                .wait()?;
-            zlock!(statesref).token = Some(token)
+            runtime::declare_subscriber_liveliness_token(
+                conf.session,
+                &key_expr,
+                &subscriber,
+                &statesref,
+                meta,
+            )?;
         }
-
-        let reliable_subscriber = AdvancedSubscriber {
+        Ok(AdvancedSubscriber {
             statesref,
             subscriber,
             receiver,
             liveliness_subscriber,
             heartbeat_subscriber,
-        };
-
-        Ok(reliable_subscriber)
+        })
     }
 
     /// Returns the [`EntityGlobalId`] of this AdvancedSubscriber.
@@ -1447,10 +879,13 @@ impl<Handler> AdvancedSubscriber<Handler> {
         &mut self.receiver
     }
 
-    /// Declares a listener to detect missed samples.
+    /// Declare a listener for gaps in delivered publications.
     ///
-    /// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
-    /// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// Requires publishers to enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+    /// A notification is emitted when a later complete publication is delivered across
+    /// a sequence-number gap, including after eviction or failed recovery. It counts
+    /// whole publications, not fragments. No notification is emitted before the first
+    /// delivery from a source, or for a trailing loss without a later delivery.
     #[zenoh_macros::unstable]
     pub fn sample_miss_listener(&self) -> SampleMissListenerBuilder<'_, DefaultHandler> {
         SampleMissListenerBuilder {
@@ -1498,166 +933,9 @@ impl<Handler> AdvancedSubscriber<Handler> {
     }
 }
 
-#[zenoh_macros::unstable]
-#[inline]
-fn flush_sequenced_source(
-    state: &mut SourceState<WrappingSn>,
-    callback: Option<&Callback<Sample>>,
-    source_id: &EntityGlobalId,
-    miss_handlers: &HashMap<usize, Callback<Miss>>,
-) {
-    let Some(callback) = callback else {
-        return;
-    };
-    if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        let mut pending_samples = BTreeMap::new();
-        std::mem::swap(&mut state.pending_samples, &mut pending_samples);
-        for (seq_num, sample) in pending_samples {
-            match state.last_delivered {
-                None => {
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                Some(last) if seq_num == last + 1 => {
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                Some(last) if seq_num > last + 1 => {
-                    tracing::warn!(
-                        "Sample missed: missed {} samples from {:?}.",
-                        seq_num - last - 1,
-                        source_id,
-                    );
-                    for miss_callback in miss_handlers.values() {
-                        miss_callback.call(Miss {
-                            source: *source_id,
-                            nb: seq_num - last - 1,
-                        })
-                    }
-                    state.last_delivered = Some(seq_num);
-                    callback.call(sample);
-                }
-                _ => {
-                    // duplicate
-                }
-            }
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-#[inline]
-fn flush_timestamped_source(
-    state: &mut SourceState<Timestamp>,
-    callback: Option<&Callback<Sample>>,
-) {
-    let Some(callback) = callback else {
-        return;
-    };
-    if state.pending_queries == 0 && !state.pending_samples.is_empty() {
-        for (timestamp, sample) in std::mem::take(&mut state.pending_samples) {
-            if state
-                .last_delivered
-                .map(|last| timestamp > last)
-                .unwrap_or(true)
-            {
-                state.last_delivered = Some(timestamp);
-                callback.call(sample);
-            }
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-#[derive(Clone)]
-struct InitialRepliesHandler {
-    statesref: Arc<Mutex<State>>,
-}
-
-#[zenoh_macros::unstable]
-impl Drop for InitialRepliesHandler {
-    fn drop(&mut self) {
-        let states = &mut *zlock!(self.statesref);
-        states.global_pending_queries = states.global_pending_queries.saturating_sub(1);
-        tracing::trace!(
-            "AdvancedSubscriber{{key_expr: {}}}: Flush initial replies",
-            states.key_expr
-        );
-
-        if states.global_pending_queries == 0 {
-            for (source_id, state) in states.sequenced_states.iter_mut() {
-                flush_sequenced_source(
-                    state,
-                    states.callback.as_ref(),
-                    source_id,
-                    &states.miss_handlers,
-                );
-                state.periodic_task =
-                    spawn_periodic_queries(&self.statesref, states.period, *source_id);
-            }
-            for (_, state) in states.timestamped_states.iter_mut() {
-                flush_timestamped_source(state, states.callback.as_ref());
-            }
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-#[derive(Clone)]
-struct SequencedRepliesHandler {
-    source_id: EntityGlobalId,
-    statesref: Arc<Mutex<State>>,
-}
-
-#[zenoh_macros::unstable]
-impl Drop for SequencedRepliesHandler {
-    fn drop(&mut self) {
-        let states = &mut *zlock!(self.statesref);
-        // use peek_mut so query without samples do not prevent the state to be garbage collected
-        if let Some(state) = states.sequenced_states.peek_mut(&self.source_id) {
-            state.pending_queries = state.pending_queries.saturating_sub(1);
-            if states.global_pending_queries == 0 {
-                tracing::trace!(
-                    "AdvancedSubscriber{{key_expr: {}}}: Flush sequenced samples",
-                    states.key_expr
-                );
-                flush_sequenced_source(
-                    state,
-                    states.callback.as_ref(),
-                    &self.source_id,
-                    &states.miss_handlers,
-                )
-            }
-        }
-    }
-}
-
-#[zenoh_macros::unstable]
-#[derive(Clone)]
-struct TimestampedRepliesHandler {
-    id: ID,
-    statesref: Arc<Mutex<State>>,
-}
-
-#[zenoh_macros::unstable]
-impl Drop for TimestampedRepliesHandler {
-    fn drop(&mut self) {
-        let states = &mut *zlock!(self.statesref);
-        // use peek_mut so query without samples do not prevent the state to be garbage collected
-        if let Some(state) = states.timestamped_states.peek_mut(&self.id) {
-            state.pending_queries = state.pending_queries.saturating_sub(1);
-            if states.global_pending_queries == 0 {
-                tracing::trace!(
-                    "AdvancedSubscriber{{key_expr: {}}}: Flush timestamped samples",
-                    states.key_expr
-                );
-                flush_timestamped_source(state, states.callback.as_ref());
-            }
-        }
-    }
-}
-
-/// A struct that represent missed samples.
+/// The number and source of missed publications.
+///
+/// See [`AdvancedSubscriber::sample_miss_listener`] for notification timing.
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct Miss {
@@ -1667,11 +945,13 @@ pub struct Miss {
 
 impl Miss {
     /// The source of missed samples.
+    #[zenoh_macros::unstable]
     pub fn source(&self) -> EntityGlobalId {
         self.source
     }
 
     /// The number of missed samples.
+    #[zenoh_macros::unstable]
     pub fn nb(&self) -> u32 {
         self.nb
     }
@@ -1679,16 +959,14 @@ impl Miss {
 
 impl CallbackParameter for Miss {
     type Message<'a> = Self;
-
     fn from_message(msg: Self::Message<'_>) -> Self {
         msg
     }
 }
 
-/// A listener to detect missed samples.
+/// A listener for missed-publication notifications.
 ///
-/// Missed samples can only be detected from [`AdvancedPublisher`](crate::AdvancedPublisher) that
-/// enable [`sample_miss_detection`](crate::AdvancedPublisherBuilder::sample_miss_detection).
+/// Created by [`AdvancedSubscriber::sample_miss_listener`].
 #[zenoh_macros::unstable]
 pub struct SampleMissListener<Handler> {
     id: usize,
@@ -1711,6 +989,8 @@ impl<Handler> fmt::Debug for SampleMissListener<Handler> {
 
 #[zenoh_macros::unstable]
 impl<Handler> SampleMissListener<Handler> {
+    /// Stop receiving missed-publication notifications.
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn undeclare(self) -> SampleMissHandlerUndeclaration<Handler>
     where
@@ -1746,7 +1026,7 @@ impl<Handler> Drop for SampleMissListener<Handler> {
 // #[zenoh_macros::unstable]
 // impl<Handler: Send> UndeclarableSealed<()> for SampleMissHandler<Handler> {
 //     type Undeclaration = SampleMissHandlerUndeclaration<Handler>;
-
+//
 //     fn undeclare_inner(self, _: ()) -> Self::Undeclaration {
 //         SampleMissHandlerUndeclaration(self)
 //     }
@@ -1755,7 +1035,6 @@ impl<Handler> Drop for SampleMissListener<Handler> {
 #[zenoh_macros::unstable]
 impl<Handler> std::ops::Deref for SampleMissListener<Handler> {
     type Target = Handler;
-
     fn deref(&self) -> &Self::Target {
         &self.handler
     }
@@ -1784,6 +1063,7 @@ impl<Handler> fmt::Debug for SampleMissHandlerUndeclaration<Handler> {
 
 impl<Handler> SampleMissHandlerUndeclaration<Handler> {
     /// Block in undeclare operation until all currently running instances of sample miss listener callback (if any) return.
+    #[zenoh_macros::unstable]
     pub fn wait_callbacks(self) -> Self {
         // Note: no particular synchronization is required as of now since miss listener callbacks are always executed
         // under state lock
@@ -1807,7 +1087,6 @@ impl<Handler> Wait for SampleMissHandlerUndeclaration<Handler> {
 impl<Handler> IntoFuture for SampleMissHandlerUndeclaration<Handler> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
-
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
@@ -1873,7 +1152,7 @@ impl<'a> SampleMissListenerBuilder<'a, DefaultHandler> {
 impl<'a> SampleMissListenerBuilder<'a, Callback<Miss>> {
     /// Make the sample miss notification run in the background until the advanced subscriber is undeclared.
     ///
-    /// Background builder doesn't return a `SampleMissHandler` object anymore.
+    /// Resolves to `()` instead of a [`SampleMissListener`].
     #[zenoh_macros::unstable]
     pub fn background(self) -> SampleMissListenerBuilder<'a, Callback<Miss>, true> {
         SampleMissListenerBuilder {
@@ -1919,7 +1198,6 @@ where
 {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
-
     #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
@@ -1945,9 +1223,12 @@ impl Wait for SampleMissListenerBuilder<'_, Callback<Miss>, true> {
 impl IntoFuture for SampleMissListenerBuilder<'_, Callback<Miss>, true> {
     type Output = <Self as Resolvable>::To;
     type IntoFuture = Ready<<Self as Resolvable>::To>;
-
     #[zenoh_macros::unstable]
     fn into_future(self) -> Self::IntoFuture {
         std::future::ready(self.wait())
     }
 }
+
+#[cfg(all(test, feature = "unstable"))]
+#[path = "advanced_subscriber/tests/mod.rs"]
+mod tests;
