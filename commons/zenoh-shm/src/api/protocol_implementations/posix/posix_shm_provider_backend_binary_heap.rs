@@ -132,9 +132,8 @@ impl PosixShmProviderBackendBinaryHeap {
         // because of platform specific, our shm segment is >= requested size, so in order to utilize
         // additional memory we re-layout the size
         let real_size = segment.segment.elem_count().get();
-        let aligned_size = (real_size
-            - (real_size % layout.alignment().get_alignment_value().get()))
-        .try_into()?;
+        let aligned_size =
+            (real_size - (real_size % layout.alignment().get_alignment_value())).try_into()?;
 
         let mut free_list = BinaryHeap::new();
         let root_chunk = Chunk {

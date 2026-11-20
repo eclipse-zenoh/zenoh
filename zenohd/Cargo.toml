@@ -47,6 +47,7 @@ zenoh-util = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
+tokio = { workspace = true, features = ["macros", "process", "rt", "time"] }
 
 [build-dependencies]
 rustc_version = { workspace = true }

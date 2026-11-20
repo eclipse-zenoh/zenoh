@@ -259,7 +259,9 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                 );
                 match reason {
-                    close::reason::MAX_LINKS => tracing::debug!("{}", e),
+                    close::reason::MAX_LINKS | close::reason::CONNECTION_TO_SELF => {
+                        tracing::debug!("{}", e)
+                    }
                     _ => tracing::error!("{}", e),
                 }
                 return Err((e.into(), None));
@@ -529,7 +531,9 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
                     link,
                 );
                 match reason {
-                    close::reason::MAX_LINKS => tracing::debug!("{}", e),
+                    close::reason::MAX_LINKS | close::reason::CONNECTION_TO_SELF => {
+                        tracing::debug!("{}", e)
+                    }
                     _ => tracing::error!("{}", e),
                 }
                 return Err((e.into(), None));
