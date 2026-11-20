@@ -439,6 +439,14 @@ impl fmt::Debug for PublisherUndeclaration<'_> {
 impl<'a> PublisherUndeclaration<'a> {
     #[zenoh_macros::internal_or_unstable]
     /// Block in undeclare operation until all currently running instances of matching listeners' callbacks (if any) return.
+    ///
+    /// # Calling this from inside the entity's own callback
+    ///
+    /// If this is reached from within a callback of the same entity - for instance by
+    /// dropping the last reference to the entity inside its callback - the barrier cannot
+    /// be honored: the running callback holds the very permit the wait needs. In that case
+    /// the call returns immediately and the remaining callbacks are drained in the
+    /// background. Callbacks of *other* entities are still waited for as usual.
     pub fn wait_callbacks(mut self) -> Self {
         self.wait_callbacks = true;
         self
