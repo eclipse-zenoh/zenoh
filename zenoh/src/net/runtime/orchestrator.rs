@@ -1585,10 +1585,9 @@ impl Runtime {
 #[cfg(test)]
 mod tests {
     use tokio::time::{timeout, Duration};
-
-    use super::*;
     use zenoh_transport::TransportManager;
 
+    use super::*;
     use crate::{net::runtime::RuntimeBuilder, Config};
 
     #[tokio::test]
