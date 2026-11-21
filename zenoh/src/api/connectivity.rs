@@ -89,7 +89,7 @@ impl TransportPeerEventHandler for ConnectivityPeerHandler {
         );
     }
 
-    fn del_link(&self, link: zenoh_link::Link) {
+    fn del_link(&self, link: zenoh_link::Link, _opened_from: Option<&zenoh_link::EndPoint>) {
         // Broadcast link removed event
         self.session.broadcast_link_event(
             SampleKind::Delete,

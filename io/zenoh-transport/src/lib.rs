@@ -39,7 +39,7 @@ use std::{any::Any, sync::Arc};
 
 pub use manager::*;
 use serde::Serialize;
-use zenoh_link::Link;
+use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{RegionName, WhatAmI, ZenohIdProto},
     network::NetworkMessageMut,
@@ -126,7 +126,10 @@ pub struct TransportPeer {
 pub trait TransportPeerEventHandler: Send + Sync {
     fn handle_message(&self, msg: NetworkMessageMut) -> ZResult<()>;
     fn new_link(&self, src: Link);
-    fn del_link(&self, link: Link);
+    /// `opened_from` is the endpoint that this node gave to `open_transport_unicast` for this
+    /// link, including its config part, which can hold secrets. It is `None` for a link that the
+    /// remote node opened.
+    fn del_link(&self, link: Link, opened_from: Option<&EndPoint>);
     fn closed(&self);
     fn as_any(&self) -> &dyn Any;
 }
@@ -141,7 +144,7 @@ impl TransportPeerEventHandler for DummyTransportPeerEventHandler {
     }
 
     fn new_link(&self, _link: Link) {}
-    fn del_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link, _opened_from: Option<&EndPoint>) {}
     fn closed(&self) {}
 
     fn as_any(&self) -> &dyn Any {
