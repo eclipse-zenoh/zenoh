@@ -63,6 +63,25 @@ jobs:
               - "**"
               - "!**/*.md"
 
+  test_debian_packaging:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    name: Debian package lifecycle on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:bookworm", "debian:trixie", "ubuntu:24.04"]
+    steps:
+      - name: Clone this repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test installation, upgrade, removal, and purge
+        run: |
+          docker run --rm \
+            --volume "$PWD:/src:ro" --workdir /src \
+            "${{ matrix.image }}" sh ci/debian-packaging.sh
+
   determine-runner:
     needs: changes
     if: needs.changes.outputs.code == 'true'
