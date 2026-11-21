@@ -49,16 +49,14 @@ fn main() {
     println!("Warming up for {warmup:?}...");
     let now = Instant::now();
     while now.elapsed() < warmup {
-        let data = data.clone();
-        publisher.put(data).wait().unwrap();
+        publisher.put(&data).wait().unwrap();
 
         let _ = sub.recv();
     }
 
     for _ in 0..n {
-        let data = data.clone();
         let write_time = Instant::now();
-        publisher.put(data).wait().unwrap();
+        publisher.put(&data).wait().unwrap();
 
         let _ = sub.recv();
         let ts = write_time.elapsed().as_micros();
