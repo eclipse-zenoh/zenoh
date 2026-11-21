@@ -308,3 +308,110 @@ impl DownsamplingInterceptor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use nonempty_collections::nev;
+    use test_case::test_case;
+    use zenoh_protocol::{core::Reliability, zenoh::Put};
+
+    use super::*;
+
+    struct TestContext {
+        cache: Option<Box<dyn Any + Send + Sync>>,
+    }
+
+    impl InterceptorContext for TestContext {
+        fn face(&self) -> Option<crate::net::routing::dispatcher::face::Face> {
+            None
+        }
+
+        fn full_expr(&self, _msg: &NetworkMessageMut) -> Option<&str> {
+            Some("robot/thermal_image/sensor_msgs::msg::dds_::Image_/frame")
+        }
+
+        fn get_cache(&self, _msg: &NetworkMessageMut) -> Option<&Box<dyn Any + Send + Sync>> {
+            self.cache.as_ref()
+        }
+    }
+
+    #[test_case(false, false, InterceptorFlow::Ingress; "ingress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Ingress; "ingress_cached")]
+    #[test_case(true, false, InterceptorFlow::Ingress; "ingress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Ingress; "ingress_reversed_cached")]
+    #[test_case(false, false, InterceptorFlow::Egress; "egress_uncached")]
+    #[test_case(false, true, InterceptorFlow::Egress; "egress_cached")]
+    #[test_case(true, false, InterceptorFlow::Egress; "egress_reversed_uncached")]
+    #[test_case(true, true, InterceptorFlow::Egress; "egress_reversed_cached")]
+    fn overlapping_downsampling_enforces_every_matching_rule(
+        reverse_rules: bool,
+        cached: bool,
+        flow: InterceptorFlow,
+    ) {
+        // Regression for #2200: both matching maximum-frequency budgets must apply.
+        let specific = DownsamplingRuleConf {
+            key_expr: "*/thermal_image/sensor_msgs::msg::dds_::Image_/*"
+                .try_into()
+                .unwrap(),
+            freq: 10.0,
+        };
+        let general = DownsamplingRuleConf {
+            key_expr: "**/sensor_msgs::msg::dds_::Image_/*".try_into().unwrap(),
+            freq: 1.0,
+        };
+        let rules = if reverse_rules {
+            nev![general, specific]
+        } else {
+            nev![specific, general]
+        };
+        let interceptor = DownsamplingInterceptor::new(
+            DownsamplingFilters::new([DataMessage::Put]),
+            &rules,
+            flow,
+            #[cfg(feature = "stats")]
+            zenoh_stats::StatsRegistry::new(
+                zenoh_protocol::core::ZenohIdProto::default(),
+                zenoh_protocol::core::WhatAmI::Peer,
+                "test",
+            )
+            .unicast_transport_stats(
+                zenoh_protocol::core::ZenohIdProto::default(),
+                zenoh_protocol::core::WhatAmI::Peer,
+                None,
+            )
+            .drop_stats(zenoh_stats::ReasonLabel::Downsampling),
+        );
+        let mut push = Push::from(Put::default());
+        let mut msg = NetworkMessageMut {
+            body: NetworkBodyMut::Push(&mut push),
+            reliability: Reliability::Reliable,
+        };
+        let mut ctx = TestContext { cache: None };
+        if cached {
+            ctx.cache = interceptor
+                .compute_keyexpr_cache(keyexpr::new(ctx.full_expr(&msg).unwrap()).unwrap());
+        }
+
+        let mut allowed = Vec::new();
+        for saturated in [[false, false], [true, true], [true, false], [false, true]] {
+            // Set independent rule budgets without sleeps or random tree traversal assumptions.
+            let now = Instant::now();
+            for (state, saturated) in interceptor.ke_state.iter().zip(saturated) {
+                *state.latest_message_timestamp.lock().unwrap() = if saturated {
+                    now
+                } else {
+                    now - Duration::from_secs(2)
+                };
+            }
+            allowed.push(interceptor.intercept(&mut msg, &mut ctx));
+        }
+
+        assert_eq!(
+            allowed,
+            [true, false, false, false],
+            "only a message with both matching rule budgets available may pass"
+        );
+    }
+}
