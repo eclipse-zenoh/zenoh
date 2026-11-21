@@ -957,10 +957,14 @@ where
     fn alloc_resources() -> Result<(AllocatedMetadataDescriptor, ConfirmedDescriptor), ZAllocError>
     {
         // allocate metadata
-        let allocated_metadata = GLOBAL_METADATA_STORAGE.read().allocate()?;
+        let allocated_metadata = crate::read_unless_finalized!(GLOBAL_METADATA_STORAGE)
+            .map_err(|_| ZAllocError::Other)?
+            .allocate()?;
 
         // add watchdog to confirmator
-        let confirmed_metadata = GLOBAL_CONFIRMATOR.read().add(allocated_metadata.clone());
+        let confirmed_metadata = crate::read_unless_finalized!(GLOBAL_CONFIRMATOR)
+            .map_err(|_| ZAllocError::Other)?
+            .add(allocated_metadata.clone());
 
         Ok((allocated_metadata, confirmed_metadata))
     }
@@ -983,10 +987,10 @@ where
             .protocol
             .store(self.backend.id(), Ordering::Relaxed);
 
-        // add watchdog to validator
-        GLOBAL_VALIDATOR
-            .read()
-            .add(confirmed_metadata.owned.clone());
+        // add watchdog to validator, unless it is already finalized at process exit
+        if let Ok(validator) = crate::read_unless_finalized!(GLOBAL_VALIDATOR) {
+            validator.add(confirmed_metadata.owned.clone());
+        }
 
         // Create buffer's info
         let info = ShmBufInfo::new(

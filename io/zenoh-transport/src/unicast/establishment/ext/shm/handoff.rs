@@ -184,11 +184,10 @@ impl TxHandoffInner {
     pub fn new(counter: ShmTXCounterLease) -> Self {
         let task = Arc::new(TxHandoffTask::new(counter));
 
-        GLOBAL_HANDOFF_REACTOR
-            .read()
-            .task_sender
-            .send(task.clone())
-            .unwrap();
+        // The reactor and its polling task are gone at process exit, when the task no longer needs polling
+        if let Ok(reactor) = zenoh_shm::read_unless_finalized!(GLOBAL_HANDOFF_REACTOR) {
+            let _ = reactor.task_sender.send(task.clone());
+        }
 
         Self {
             task,

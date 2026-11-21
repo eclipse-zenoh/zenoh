@@ -38,7 +38,7 @@ shared-memory = [
   "zenoh-stats?/shared-memory",
 ]
 stats = ["zenoh-stats"]
-test = []
+test = ["zenoh-shm?/test"]
 transport_auth = []
 transport_compression = []
 transport_multilink = ["auth_pubkey"]
