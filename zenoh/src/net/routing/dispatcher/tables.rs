@@ -17,7 +17,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
     time::Duration,
@@ -266,8 +266,55 @@ pub struct TablesLock {
     pub tables: RwLock<Tables>,
     pub(crate) ctrl_lock: Mutex<()>,
     pub(crate) queries_lock: RwLock<()>,
+    /// Routing stops here before the runtime clears the tables. See [`RoutingGate`].
+    pub(crate) routing: RoutingGate,
 }
 
+/// Lets the runtime stop routing before it clears the tables, which takes every resource's
+/// context: a transport rx task, a timer or a session call can outlive the close, and the routing
+/// code unwraps the contexts it clears.
+///
+/// A flag and a count rather than a lock, so a callback that calls back into zenoh while a close
+/// waits cannot deadlock.
+#[derive(Default)]
+pub(crate) struct RoutingGate {
+    closed: AtomicBool,
+    in_flight: AtomicUsize,
+}
+
+/// One routing call under way; see [`RoutingGate::enter`].
+pub(crate) struct RoutingCall<'a>(&'a RoutingGate);
+
+impl RoutingGate {
+    /// Counts a routing call in, or returns `None` once routing has stopped.
+    pub(crate) fn enter(&self) -> Option<RoutingCall<'_>> {
+        self.in_flight.fetch_add(1, Ordering::SeqCst);
+        let call = RoutingCall(self);
+        if self.closed.load(Ordering::SeqCst) {
+            return None;
+        }
+        Some(call)
+    }
+
+    /// Stops new routing calls and waits for those under way. Cancelling the wait leaves routing
+    /// stopped.
+    pub(crate) async fn stop(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        while self.in_flight() > 0 {
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+    }
+
+    pub(crate) fn in_flight(&self) -> usize {
+        self.in_flight.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for RoutingCall<'_> {
+    fn drop(&mut self) {
+        self.0.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 /// Gateway state.
 ///
 /// In order to mutably borrow [`Tables::data`] and [`Tables::hats`] at the same time given an
@@ -544,5 +591,35 @@ impl TablesLock {
             face.set_interceptors_from_factories(&tables.data.interceptors, version + 1);
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod routing_gate_tests {
+    use std::time::Duration;
+
+    use super::RoutingGate;
+
+    #[tokio::test]
+    async fn a_call_under_way_holds_the_close_and_later_calls_are_refused() {
+        let gate = RoutingGate::default();
+        let call = gate.enter().expect("routing is open");
+        let stopping = gate.stop();
+        tokio::pin!(stopping);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), &mut stopping)
+                .await
+                .is_err(),
+            "the close went ahead under a call"
+        );
+        assert!(
+            gate.enter().is_none(),
+            "a call was let in after the close began"
+        );
+        drop(call);
+        tokio::time::timeout(Duration::from_secs(5), stopping)
+            .await
+            .expect("the close did not see the call finish");
+        assert_eq!(gate.in_flight(), 0);
     }
 }

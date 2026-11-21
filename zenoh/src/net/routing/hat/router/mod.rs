@@ -84,6 +84,11 @@ impl TreesComputationWorker {
                 .await;
 
                 if let Ok(tables_ref) = rx.recv_async().await {
+                    // A computation asked for before the runtime closed must not walk the
+                    // tables after they are cleared.
+                    let Some(_routing) = tables_ref.routing.enter() else {
+                        break;
+                    };
                     let mut wtables = zwrite!(tables_ref.tables);
                     let tables = &mut *wtables;
 
