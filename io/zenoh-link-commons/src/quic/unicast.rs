@@ -37,7 +37,7 @@ use zenoh_result::ZResult;
 
 use crate::{
     quic::{
-        get_negotiated_alpn, get_quic_addr, get_quic_host,
+        get_negotiated_alpn, get_quic_addr, get_quic_host, get_quic_server_name,
         plaintext::{PlainTextClientConfig, PlainTextServerConfig},
         socket::QuicSocketConfig,
         QuicMtuConfig, QuicSegmentationOffloadConfig, QuicTransportConfigurator, TlsClientConfig,
@@ -520,6 +520,7 @@ impl QuicClient {
     async fn new(endpoint: &EndPoint, is_streamed: bool, is_secure: bool) -> ZResult<Self> {
         let epaddr = endpoint.address();
         let host = get_quic_host(&epaddr)?;
+        let server_name = get_quic_server_name(&epaddr)?;
         let epconf = endpoint.config();
         let dst_addr = get_quic_addr(&epaddr).await?;
 
@@ -584,7 +585,7 @@ impl QuicClient {
             .map_err(|e| zerror!("Can not get QUIC local_addr bound to {}: {}", host, e))?;
 
         let quic_conn = quic_endpoint
-            .connect(dst_addr, host)
+            .connect(dst_addr, server_name)
             .map_err(|e| {
                 zerror!(
                     "Can not get connect quick endpoint : {} : {} : {}",
