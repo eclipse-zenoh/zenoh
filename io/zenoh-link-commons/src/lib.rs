@@ -54,6 +54,7 @@ pub const BIND_INTERFACE: &str = "iface";
 pub const TCP_SO_SND_BUF: &str = "so_sndbuf";
 pub const TCP_SO_RCV_BUF: &str = "so_rcvbuf";
 pub const DSCP: &str = "dscp";
+pub const OPEN_TIMEOUT_MS: &str = "open_timeout_ms";
 
 /// Resolves `address` to all of its socket addresses, in resolver order.
 pub async fn get_ip_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {

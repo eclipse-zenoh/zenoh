@@ -84,6 +84,41 @@ mod tests {
         config
     }
 
+    /// Waits until the links of `session` go exactly to `expected`, then
+    /// checks that no other link shows up.
+    #[cfg(feature = "transport_multilink")]
+    async fn wait_for_links(session: &Session, expected: &[EndPoint]) {
+        let mut expected: Vec<String> = expected
+            .iter()
+            .map(|e| e.to_locator().to_string())
+            .collect();
+        expected.sort();
+        let links = || async {
+            let mut links: Vec<String> = session
+                .info()
+                .links()
+                .await
+                .map(|l| l.dst().to_string())
+                .collect();
+            links.sort();
+            links
+        };
+        let waited = tokio::time::timeout(Duration::from_secs(10), async {
+            while links().await != expected {
+                tokio::time::sleep(SLEEP).await;
+            }
+        })
+        .await;
+        if waited.is_err() {
+            panic!(
+                "Timed out waiting for links to {expected:?}, got {:?}",
+                links().await
+            );
+        }
+        tokio::time::sleep(5 * SLEEP).await;
+        assert_eq!(links().await, expected, "Unexpected links");
+    }
+
     /// Test that transports() returns an iterator of Transport objects
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_info_transports() {
@@ -346,6 +381,86 @@ mod tests {
 
         wait_for_connection_counts(&listener, 1, 1).await;
         wait_for_connection_counts(&client, 1, 1).await;
+
+        test_context.close().await;
+    }
+
+    /// Test that the `open_timeout_ms` endpoint configuration bounds an attempt
+    /// to that endpoint, instead of `transport/unicast/open_timeout`.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn connect_honours_endpoint_open_timeout() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let _listener = test_context.open_listener().await;
+        let reachable = test_context.locators().remove(0);
+        // Accepts TCP connections but never answers the Zenoh handshake.
+        let black_hole_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let black_hole: EndPoint = format!(
+            "tcp/{}#open_timeout_ms=500",
+            black_hole_listener.local_addr().unwrap()
+        )
+        .parse()
+        .unwrap();
+
+        let mut config =
+            test_context.get_connector_config_with_endpoint(vec![black_hole, reachable.clone()]);
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        config
+            .insert_json5("transport/unicast/open_timeout", "10000")
+            .unwrap();
+        let start = std::time::Instant::now();
+        let client = test_context.open_connector_with_cfg(config).await;
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "open() took {elapsed:?}, the endpoint open timeout was not applied"
+        );
+        wait_for_links(&client, &[reachable]).await;
+
+        test_context.close().await;
+    }
+
+    /// Test that an invalid `open_timeout_ms` falls back to
+    /// `transport/unicast/open_timeout`, instead of giving up at once.
+    #[cfg(feature = "transport_multilink")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn connect_falls_back_to_global_open_timeout() {
+        zenoh_util::init_log_from_env_or("error");
+
+        let mut test_context = TestSessions::new();
+        let _listener = test_context.open_listener().await;
+        let reachable = test_context.locators().remove(0);
+        // Accepts TCP connections but never answers the Zenoh handshake.
+        let black_hole_listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let black_hole: EndPoint = format!(
+            "tcp/{}#open_timeout_ms=abc",
+            black_hole_listener.local_addr().unwrap()
+        )
+        .parse()
+        .unwrap();
+
+        let mut config =
+            test_context.get_connector_config_with_endpoint(vec![black_hole, reachable.clone()]);
+        config.set_mode(Some(WhatAmI::Client)).unwrap();
+        config
+            .insert_json5("transport/unicast/open_timeout", "1000")
+            .unwrap();
+        let start = std::time::Instant::now();
+        let client = test_context.open_connector_with_cfg(config).await;
+        let elapsed = start.elapsed();
+
+        assert!(
+            elapsed >= Duration::from_millis(700),
+            "open() took {elapsed:?}, an invalid value should not shorten the timeout"
+        );
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "open() took {elapsed:?}, the global open timeout was not applied"
+        );
+        wait_for_links(&client, &[reachable]).await;
 
         test_context.close().await;
     }
