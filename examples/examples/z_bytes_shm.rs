@@ -69,13 +69,13 @@ fn main() {
     // branch to illustrate mutable access to SHM data
     {
         // deserialize ZBytes as mutably borrowed zshm (ZBytes -> &mut zshm)
-        let borrowed_shm_buf = payload.as_shm_mut().unwrap();
+        let mut borrowed_shm_buf = unsafe { payload.as_shm_mut().unwrap() };
 
         // immutable API
-        let _data: &[u8] = borrowed_shm_buf;
+        let _data: &[u8] = &borrowed_shm_buf;
 
         // convert zshm to zshmmut (&mut zshm -> &mut zshmmut)
-        let borrowed_shm_buf_mut: &mut zshmmut = borrowed_shm_buf.try_into().unwrap();
+        let borrowed_shm_buf_mut: &mut zshmmut = (&mut *borrowed_shm_buf).try_into().unwrap();
 
         // mutable and immutable API
         let _data: &[u8] = borrowed_shm_buf_mut;
