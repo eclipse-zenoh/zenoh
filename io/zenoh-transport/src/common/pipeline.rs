@@ -41,7 +41,7 @@ use zenoh_protocol::{
         AtomicBatchSize, BatchSize, TransportMessage,
     },
 };
-use zenoh_sync::{event, Notifier, WaitDeadlineError, Waiter};
+use zenoh_sync::{event, Notifier, WaitDeadlineError, WaitTimeoutError, Waiter};
 
 use super::{
     batch::{Encode, WBatch},
@@ -84,18 +84,42 @@ impl StageInRefill {
         }
     }
 
-    fn wait(&self) -> bool {
-        self.n_ref_r.wait().is_ok()
+    // the waits below wake every `DISABLED_POLL` and give up once the pipeline is
+    // disabled. A waiting producer holds its queue's `current` lock, which `disable()` and the
+    // consumer's `drain()` need, so a close would otherwise wait for its deadline
+    // (`wait_before_close` for `CongestionControl::Block`).
+    fn wait(&self, status: &TransmissionPipelineStatus) -> bool {
+        loop {
+            match self.n_ref_r.wait_timeout(DISABLED_POLL) {
+                Ok(()) => return true,
+                Err(WaitTimeoutError::Timeout) if !status.is_disabled() => {}
+                Err(_) => return false,
+            }
+        }
     }
 
-    fn wait_deadline(&self, instant: Instant) -> Result<bool, TransportClosed> {
-        match self.n_ref_r.wait_deadline(instant) {
-            Ok(()) => Ok(true),
-            Err(WaitDeadlineError::Deadline) => Ok(false),
-            Err(WaitDeadlineError::WaitError) => Err(TransportClosed),
+    fn wait_deadline(
+        &self,
+        instant: Instant,
+        status: &TransmissionPipelineStatus,
+    ) -> Result<bool, TransportClosed> {
+        loop {
+            let slice = instant.min(Instant::now() + DISABLED_POLL);
+            match self.n_ref_r.wait_deadline(slice) {
+                Ok(()) => return Ok(true),
+                Err(WaitDeadlineError::WaitError) => return Err(TransportClosed),
+                Err(WaitDeadlineError::Deadline) if slice == instant => return Ok(false),
+                Err(WaitDeadlineError::Deadline) if status.is_disabled() => {
+                    return Err(TransportClosed);
+                }
+                Err(WaitDeadlineError::Deadline) => {}
+            }
         }
     }
 }
+
+// how often a producer waiting for a batch checks whether the pipeline was disabled.
+const DISABLED_POLL: Duration = Duration::from_millis(10);
 
 lazy_static::lazy_static! {
    static ref LOCAL_EPOCH: Instant = Instant::now();
@@ -266,10 +290,14 @@ impl Deadline {
     }
 
     #[inline]
-    fn wait(&mut self, s_ref: &StageInRefill) -> Result<bool, TransportClosed> {
+    fn wait(
+        &mut self,
+        s_ref: &StageInRefill,
+        status: &TransmissionPipelineStatus,
+    ) -> Result<bool, TransportClosed> {
         match self.lazy_deadline.deadline() {
             DeadlineSetting::Immediate => Ok(false),
-            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant),
+            DeadlineSetting::Finite(instant) => s_ref.wait_deadline(*instant, status),
         }
     }
 
@@ -316,7 +344,7 @@ impl StageIn {
                             }
                             None => {
                                 // Wait for an available batch until deadline
-                                if !deadline.wait(&self.s_ref)? {
+                                if !deadline.wait(&self.s_ref, &c_guard.status)? {
                                     // Still no available batch.
                                     // Restore the sequence number and drop the message
                                     $($restore_sn)?
@@ -479,7 +507,7 @@ impl StageIn {
                                 break batch;
                             }
                             None => {
-                                if !self.s_ref.wait() {
+                                if !self.s_ref.wait(&c_guard.status) {
                                     return false;
                                 }
                             }
@@ -694,6 +722,7 @@ impl TransmissionPipeline {
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
         let status = Arc::new(TransmissionPipelineStatus {
             disabled: AtomicBool::new(false),
+            unresponsive: AtomicBool::new(false),
             congested: AtomicU8::new(0),
             pending: AtomicU8::new(0),
             waits: Waits {
@@ -808,6 +837,9 @@ impl TransmissionPipeline {
 struct TransmissionPipelineStatus {
     // The whole pipeline is enabled or disabled
     disabled: AtomicBool,
+    // a non-droppable push missed `wait_before_close`, so the transport is being closed
+    // as unresponsive and `drain()` does not flush to the link.
+    unresponsive: AtomicBool,
     // Bitflags to indicate the given priority queue is congested
     congested: AtomicU8,
     // Bitflags to indicate the given priority queue has messages waiting to be sent
@@ -824,6 +856,14 @@ impl TransmissionPipelineStatus {
 
     fn is_disabled(&self) -> bool {
         self.disabled.load(Ordering::Relaxed)
+    }
+
+    fn set_unresponsive(&self) {
+        self.unresponsive.store(true, Ordering::Relaxed);
+    }
+
+    fn is_unresponsive(&self) -> bool {
+        self.unresponsive.load(Ordering::Relaxed)
     }
 
     fn set_congested(&self, priority: Priority, status: bool) {
@@ -928,6 +968,10 @@ impl TransmissionPipelineProducer {
             // congested flag in that case. However, if some batches were available,
             // that means that they would have still been pushed, so we can expect them to
             // be refilled, and they will eventually unset the congested flag.
+        }
+        // the caller closes the transport (`TransportUnicastUniversal::handle_push_result()`).
+        if !sent && !msg.is_droppable() {
+            self.status.set_unresponsive();
         }
         Ok(sent)
     }
@@ -1056,6 +1100,11 @@ impl PipelineConsumer for TransmissionPipelineConsumer {
     }
 
     fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
+        // flushing to an unresponsive link only delays the close by up to `keep_alive`.
+        if self.status.is_unresponsive() {
+            return vec![];
+        }
+
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -1134,6 +1183,10 @@ impl PipelineConsumer for SplitTransmissionPipelineConsumer {
     }
 
     fn drain(&mut self) -> Vec<(BoxedWBatch, Priority)> {
+        // see `TransmissionPipelineConsumer::drain()`.
+        if self.status.is_unresponsive() {
+            return vec![];
+        }
         let current = self.stage_out.s_in.current.clone();
         let batches = self.stage_out.drain(&mut current.lock().unwrap());
         batches.into_iter().map(|b| (b, self.priority)).collect()
@@ -1508,6 +1561,75 @@ mod tests {
             prev_size = current;
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
+    }
+
+    fn half_batch_block_message() -> NetworkMessage {
+        // More than half a batch, so two messages never share a batch.
+        NetworkMessage::from(Push {
+            wire_expr: "test".into(),
+            ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+            ..Push::from(vec![0_u8; (CONFIG_NOT_STREAMED.batch.mtu / 2) as usize])
+        })
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tx_pipeline_disable_unblocks_producer() -> ZResult<()> {
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
+        let priorities = vec![tct];
+        for link_supports_priority in [false, true] {
+            // The consumer is kept alive but never pulls, like the TX task of a stalled link.
+            let (producer, _consumer) = TransmissionPipeline::make(
+                CONFIG_NOT_STREAMED,
+                priorities.as_slice(),
+                link_supports_priority,
+            );
+            let message = half_batch_block_message();
+            // Takes the only batch.
+            assert!(producer.push_network_message(message.as_ref())?);
+
+            let c_producer = producer.clone();
+            let blocked = task::spawn_blocking(move || {
+                let start = Instant::now();
+                let res = c_producer.push_network_message(half_batch_block_message().as_ref());
+                (res, start.elapsed())
+            });
+            tokio::time::sleep(SLEEP).await;
+            producer.disable();
+
+            let (res, elapsed) = timeout(TIMEOUT, blocked).await??;
+            assert!(res.is_err(), "a push blocked on a disabled pipeline fails");
+            assert!(
+                elapsed < CONFIG_NOT_STREAMED.wait_before_close,
+                "disable() unblocks the push before `wait_before_close`: {elapsed:?}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn tx_pipeline_unresponsive_drains_nothing() -> ZResult<()> {
+        let config = TransmissionPipelineConf {
+            wait_before_close: Duration::from_millis(10),
+            ..CONFIG_NOT_STREAMED
+        };
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
+        let priorities = vec![tct];
+
+        // A pipeline whose pushes all went through still drains its pending batch.
+        let (producer, mut consumer) =
+            TransmissionPipeline::make(config.clone(), &priorities, false);
+        assert!(producer.push_network_message(half_batch_block_message().as_ref())?);
+        assert_eq!(consumer.drain().len(), 1);
+
+        // Once a non-droppable push misses its deadline, the transport is closed as
+        // unresponsive and nothing is flushed to the link.
+        let (producer, mut consumer) = TransmissionPipeline::make(config, &priorities, false);
+        assert!(producer.push_network_message(half_batch_block_message().as_ref())?);
+        assert!(!producer.push_network_message(half_batch_block_message().as_ref())?);
+        assert!(consumer.drain().is_empty());
+
+        Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
