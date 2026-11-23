@@ -208,6 +208,15 @@ impl TransportUnicastUniversal {
             .await?;
         }
 
+        // Without its last link the transport is over, so retire it before closing that link.
+        // Closing may wait for as long as the socket refuses the data that is still queued, e.g.
+        // towards a peer that went silent. A transport left registered during that wait would
+        // take the link of the returning peer, which has started a new transport of its own:
+        // sequence numbers and declarations would no longer match between the two ends.
+        // delete() still reports closed() before it unregisters the transport, so the handler
+        // never holds two transports for the same peer.
+        let delete_res = if is_last { self.delete().await } else { Ok(()) };
+
         // Associated link must also be closed. run both close calls, return whichever failed first
         let close_asl = async {
             match associated_link {
@@ -217,10 +226,7 @@ impl TransportUnicastUniversal {
         };
         let (close_stl_res, close_asl_res) = tokio::join!(stl.close(), close_asl);
 
-        if is_last {
-            self.delete().await?;
-        }
-        close_stl_res.and(close_asl_res)
+        delete_res.and(close_stl_res).and(close_asl_res)
     }
 
     async fn sync(
