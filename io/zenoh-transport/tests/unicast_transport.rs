@@ -254,6 +254,9 @@ const MSG_SIZE_ALL: [usize; 3] = [1_024, 131_072, 100 * 1024 * 1024];
 // One datagram per send without UDP segmentation offload: 100 MiB messages exceed the CI time budget.
 #[cfg(any(feature = "transport_udp", feature = "transport_quic"))]
 const MSG_SIZE_NO_SEGMENTATION_OFFLOAD: [usize; 2] = [1_024, 131_072];
+// Windows of tens of KiB turn a 100 MiB message into thousands of waits for credit.
+#[cfg(any(feature = "transport_udp", feature = "transport_quic"))]
+const MSG_SIZE_SMALL_WINDOWS: [usize; 2] = [1_024, 131_072];
 #[cfg(any(
     feature = "transport_tcp",
     feature = "transport_udp",
@@ -803,6 +806,47 @@ async fn transport_unicast_udp_reliable_without_segmentation_offload() {
         &MSG_SIZE_NO_SEGMENTATION_OFFLOAD,
     )
     .await;
+}
+
+#[cfg(feature = "transport_udp")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_udp_reliable_with_small_windows() {
+    use zenoh_link_commons::quic::{
+        QUIC_RECEIVE_WINDOW, QUIC_SEND_WINDOW, QUIC_STREAM_RECEIVE_WINDOW,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("udp/localhost:{}?rel=1", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (QUIC_SEND_WINDOW, "65536"),
+                (QUIC_STREAM_RECEIVE_WINDOW, "32768"),
+                (QUIC_RECEIVE_WINDOW, "131072"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_SMALL_WINDOWS).await;
 }
 
 #[cfg(feature = "transport_udp")]
@@ -1398,6 +1442,52 @@ async fn transport_unicast_quic_no_bi_stream_does_not_block_admission() {
     ztimeout!(router_manager.del_listener(&endpoint)).unwrap();
     ztimeout!(client_manager.close());
     ztimeout!(router_manager.close());
+}
+
+#[cfg(feature = "transport_quic")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_only_server_with_small_windows() {
+    use zenoh_link_commons::{
+        quic::{QUIC_RECEIVE_WINDOW, QUIC_SEND_WINDOW, QUIC_STREAM_RECEIVE_WINDOW},
+        tls::config::*,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", get_free_udp_port())
+        .parse()
+        .unwrap();
+    // Smaller than the larger message, so writes wait for credit and for the window to drain.
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEND_WINDOW, "65536"),
+                (QUIC_STREAM_RECEIVE_WINDOW, "32768"),
+                (QUIC_RECEIVE_WINDOW, "131072"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_SMALL_WINDOWS).await;
 }
 
 #[cfg(feature = "transport_quic")]
@@ -2197,6 +2287,51 @@ async fn transport_unicast_quic_datagram_only_server_without_segmentation_offloa
                 (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
                 (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
                 (QUIC_SEGMENTATION_OFFLOAD, "false"),
+            ]
+            .iter()
+            .copied(),
+        )
+        .unwrap();
+
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::DEFAULT,
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    let endpoints = vec![endpoint];
+    run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
+}
+
+#[cfg(feature = "transport_quic_datagram")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_unicast_quic_datagram_only_server_with_small_windows() {
+    use zenoh_link_commons::{
+        quic::{QUIC_RECEIVE_WINDOW, QUIC_SEND_WINDOW, QUIC_STREAM_RECEIVE_WINDOW},
+        tls::config::*,
+    };
+
+    zenoh_util::init_log_from_env_or("error");
+    // Define the locator
+    let mut endpoint: EndPoint = format!("quic/localhost:{}?rel=0", get_free_udp_port())
+        .parse()
+        .unwrap();
+    endpoint
+        .config_mut()
+        .extend_from_iter(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_LISTEN_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_LISTEN_PRIVATE_KEY_RAW, SERVER_KEY),
+                (QUIC_SEND_WINDOW, "65536"),
+                (QUIC_STREAM_RECEIVE_WINDOW, "32768"),
+                (QUIC_RECEIVE_WINDOW, "131072"),
             ]
             .iter()
             .copied(),
