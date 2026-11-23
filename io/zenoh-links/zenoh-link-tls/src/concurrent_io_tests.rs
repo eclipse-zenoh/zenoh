@@ -41,7 +41,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use zenoh_link_commons::{LinkAuthId, LinkUnicastTrait};
 
-use super::LinkUnicastTls;
+use super::{abort_socket, LinkUnicastTls};
 
 fn env_usize(name: &str, default: usize) -> usize {
     env::var(name)
@@ -163,7 +163,15 @@ fn tls_ends() -> &'static TlsEnds {
 fn link_from_stream(stream: TlsStream<TcpStream>) -> LinkUnicastTls {
     let src_addr = stream.get_ref().0.local_addr().expect("local addr");
     let dst_addr = stream.get_ref().0.peer_addr().expect("peer addr");
-    LinkUnicastTls::new(stream, src_addr, dst_addr, LinkAuthId::Tls(None), None)
+    let abort_socket = abort_socket(&stream).expect("abort socket");
+    LinkUnicastTls::new(
+        stream,
+        abort_socket,
+        src_addr,
+        dst_addr,
+        LinkAuthId::Tls(None),
+        None,
+    )
 }
 
 async fn exchange(link: Arc<LinkUnicastTls>, payload: Arc<[u8]>, rounds: usize) {
