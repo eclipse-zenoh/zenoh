@@ -73,6 +73,7 @@
 //!         Capability{
 //!             persistence: Persistence::Volatile,
 //!             history: History::Latest,
+//!             read_only: false,
 //!         }
 //!     }
 //!
@@ -155,10 +156,22 @@ const FEATURES: &str =
 
 /// Capability of a storage indicates the guarantees of the storage
 /// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
+    /// Read-only storages serve reads (queries) but ignore incoming writes/samples.
+    ///
+    /// When `true`, the storage manager does not declare a write subscriber for the
+    /// storage, so samples published on its key expression are never dispatched to the
+    /// backend (which would otherwise trigger a guaranteed-to-fail `put`). The queryable
+    /// is still declared, so reads keep working.
+    ///
+    /// Backends report this through [`Volume::get_capability`]. A backend whose
+    /// read-only mode is configured per-storage should determine the value when the
+    /// storage is created and reflect it here. Defaults to `false`, preserving the
+    /// previous write-subscribing behavior for existing backends.
+    pub read_only: bool,
 }
 
 /// Persistence is the guarantee expected from a storage in case of failures
@@ -166,8 +179,9 @@ pub struct Capability {
 /// This will include also persisting the metadata that Zenoh stores for the updates.
 /// If a storage is marked Persistent::Volatile, the storage will not have any guarantees on its content after a crash.
 /// This option should be used only if the storage is considered to function as a cache.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Persistence {
+    #[default]
     Volatile, //default
     Durable,
 }
@@ -175,8 +189,9 @@ pub enum Persistence {
 /// History is the number of values that the backend is expected to save per key
 /// History::Latest saves only the latest value per key
 /// History::All saves all the values including historical values
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum History {
+    #[default]
     Latest, //default
     All,
 }
@@ -227,6 +242,17 @@ pub trait Storage: Send + Sync {
     /// on the administration space for this storage.
     fn get_admin_status(&self) -> JsonValue;
 
+    /// Returns capability overrides for this specific storage instance, if any.
+    ///
+    /// Returns `None` by default, meaning the storage inherits its volume's
+    /// [`Capability`] as reported by [`Volume::get_capability`]. Backends whose
+    /// capability depends on per-storage configuration (for example a read-only
+    /// flag set in the storage's volume config) can override this to report the
+    /// effective capability for the created storage.
+    fn capability(&self) -> Option<Capability> {
+        None
+    }
+
     /// Function called for each incoming data ([`Sample`](zenoh::sample::Sample)) to be stored in this storage.
     /// A key can be `None` if it matches the `strip_prefix` exactly.
     /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
@@ -263,4 +289,32 @@ pub trait Storage: Send + Sync {
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
     /// Remember to fetch the entry corresponding to the `None` key
     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Capability, History, Persistence};
+
+    #[test]
+    fn read_only_defaults_to_false_for_writable_backends() {
+        let capability = Capability {
+            persistence: Persistence::Volatile,
+            history: History::Latest,
+            read_only: false,
+        };
+
+        assert!(!capability.read_only);
+    }
+
+    #[test]
+    fn capability_default_is_writable() {
+        // Backends can build a Capability from defaults and only override what
+        // they need (e.g. `Capability { read_only: true, ..Default::default() }`),
+        // which keeps adding capability fields source-compatible.
+        let capability = Capability::default();
+
+        assert_eq!(capability.persistence, Persistence::Volatile);
+        assert_eq!(capability.history, History::Latest);
+        assert!(!capability.read_only);
+    }
 }
