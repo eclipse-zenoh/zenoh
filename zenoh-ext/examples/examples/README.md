@@ -19,8 +19,11 @@
 ### z_advanced_pub
 
    Declares an AdvancedPublisher with a given key expression.  
-   All the publications are locally cached (with a configurable history size - i.e. max number of cached data per resource, default 1). The cache can be queried by an AdvancedSubscriber for history
+   All the publications are locally cached (with a configurable history size - i.e. max number of cached publications, default 1). The cache can be queried by an AdvancedSubscriber for history
    or retransmission.
+
+   Use `--fragment <BYTES>` to split payloads larger than the given size into fragments.
+   The size is in payload bytes, excluding metadata and attachments. A fragmented publication counts as one cache entry.
 
    Typical usage:
 
@@ -45,6 +48,21 @@
 
    ```bash
    z_advanced_sub
+   ```
+
+   Fragmented publications are automatically reassembled. Configure the maximum fragments per publication with
+   `--max-fragments <COUNT>` (default 4096), the maximum buffered publications per source with
+   `--max-pending-samples <COUNT>` (default 100), and the fragment check/retry delay with
+   `--fragment-recovery-delay <MS>` (default 1000 milliseconds). All four fragmentation options require positive values.
+
+   To try fragmentation, run the following commands in separate terminals:
+
+   ```bash
+   # Subscriber: receives each complete, reassembled publication.
+   z_advanced_sub --max-fragments 64 --max-pending-samples 20 --fragment-recovery-delay 500
+
+   # Publisher: splits each payload into fragments of at most 8 bytes.
+   z_advanced_pub --fragment 8 --history 10 --value "A fragmented publication"
    ```
 
 ### z_member

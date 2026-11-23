@@ -19,7 +19,9 @@ use zenoh_protocol::core::CongestionControl;
 use zenoh_protocol::core::Reliability;
 
 #[cfg(feature = "unstable")]
-use crate::api::sample::SourceInfo;
+use crate::api::builders::sample::FragInfoBuilderTrait;
+#[cfg(feature = "unstable")]
+use crate::api::sample::{FragInfo, SourceInfo};
 #[cfg(feature = "unstable")]
 use crate::api::timestamp_stack::TimestampInstrumentation;
 use crate::{
@@ -105,6 +107,8 @@ pub struct PublicationBuilder<P, T> {
     pub(crate) timestamp: Option<uhlc::Timestamp>,
     #[cfg(feature = "unstable")]
     pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
+    pub(crate) frag_info: Option<FragInfo>,
     pub(crate) attachment: Option<ZBytes>,
     #[cfg(feature = "unstable")]
     pub(crate) timestamp_instrumentation: Option<TimestampInstrumentation>,
@@ -194,6 +198,31 @@ impl<P> EncodingBuilderTrait for PublicationBuilder<P, PublicationBuilderPut> {
     }
 }
 
+impl<P> PublicationBuilder<P, PublicationBuilderPut> {
+    /// Changes the payload of this `put`.
+    #[zenoh_macros::internal]
+    #[inline]
+    pub fn payload<IntoZBytes>(self, payload: IntoZBytes) -> Self
+    where
+        IntoZBytes: Into<ZBytes>,
+    {
+        Self {
+            kind: PublicationBuilderPut {
+                payload: payload.into(),
+                ..self.kind
+            },
+            ..self
+        }
+    }
+
+    /// Gets a reference to the payload of this `put`.
+    #[zenoh_macros::internal]
+    #[inline]
+    pub fn payload_ref(&self) -> &ZBytes {
+        &self.kind.payload
+    }
+}
+
 #[zenoh_macros::internal_trait]
 impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
     /// Sets an optional [`SourceInfo`](crate::sample::SourceInfo) to be sent along with the publication.
@@ -210,6 +239,23 @@ impl<P, T> SampleBuilderTrait for PublicationBuilder<P, T> {
         let attachment: OptionZBytes = attachment.into();
         Self {
             attachment: attachment.into(),
+            ..self
+        }
+    }
+}
+
+#[zenoh_macros::internal_trait]
+#[cfg(feature = "unstable")]
+impl<P, T> FragInfoBuilderTrait for PublicationBuilder<P, T> {
+    /// Attach fragmentation metadata.
+    ///
+    /// This is an internal API intended for use by
+    /// [`AdvancedPublisher`](https://docs.rs/zenoh-ext).
+    /// Manually setting `frag_info` on a publication is not recommended.
+    #[zenoh_macros::unstable]
+    fn frag_info<TF: Into<Option<FragInfo>>>(self, frag_info: TF) -> Self {
+        Self {
+            frag_info: frag_info.into(),
             ..self
         }
     }
@@ -262,6 +308,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderPut
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
             #[cfg(feature = "unstable")]
             self.timestamp_instrumentation,
@@ -287,6 +335,8 @@ impl Wait for PublicationBuilder<PublisherBuilder<'_, '_>, PublicationBuilderDel
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
             #[cfg(feature = "unstable")]
             self.timestamp_instrumentation,
@@ -528,6 +578,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderPut> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
             #[cfg(feature = "unstable")]
             self.timestamp_instrumentation,
@@ -551,6 +603,8 @@ impl Wait for PublicationBuilder<&Publisher<'_>, PublicationBuilderDelete> {
             self.timestamp,
             #[cfg(feature = "unstable")]
             self.source_info,
+            #[cfg(feature = "unstable")]
+            self.frag_info,
             self.attachment,
             #[cfg(feature = "unstable")]
             self.timestamp_instrumentation,

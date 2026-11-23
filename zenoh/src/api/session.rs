@@ -76,7 +76,9 @@ use super::{
 use crate::api::timestamp_stack::{push_ts_interception, TimestampInstrumentation, TimestampStack};
 #[cfg(feature = "unstable")]
 use crate::api::{
-    cancellation::CancellationToken, sample::SourceInfo, selector::ZenohParameters,
+    cancellation::CancellationToken,
+    sample::{FragInfo, SourceInfo},
+    selector::ZenohParameters,
     timestamp_stack::GetTimestampCallback,
 };
 #[cfg(feature = "internal")]
@@ -1352,6 +1354,8 @@ impl Session {
             #[cfg(feature = "unstable")]
             source_info: None,
             #[cfg(feature = "unstable")]
+            frag_info: None,
+            #[cfg(feature = "unstable")]
             timestamp_instrumentation: None,
         }
     }
@@ -1388,6 +1392,8 @@ impl Session {
             attachment: None,
             #[cfg(feature = "unstable")]
             source_info: None,
+            #[cfg(feature = "unstable")]
+            frag_info: None,
             #[cfg(feature = "unstable")]
             timestamp_instrumentation: None,
         }
@@ -2091,6 +2097,8 @@ impl Session {
                             reliability: Reliability::Reliable,
                             #[cfg(feature = "unstable")]
                             source_info: None,
+                            #[cfg(feature = "unstable")]
+                            frag_info: None,
                             attachment: None,
                             #[cfg(feature = "unstable")]
                             timestamp_stack: None,
@@ -2513,6 +2521,7 @@ impl Session {
         #[cfg(feature = "unstable")] reliability: Reliability,
         timestamp: Option<uhlc::Timestamp>,
         #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
+        #[cfg(feature = "unstable")] frag_info: Option<FragInfo>,
         attachment: Option<ZBytes>,
         #[cfg(feature = "unstable")] timestamp_instrumentation: Option<TimestampInstrumentation>,
     ) -> ZResult<()> {
@@ -2539,6 +2548,10 @@ impl Session {
                     ext_sinfo: source_info.map(Into::into),
                     #[cfg(not(feature = "unstable"))]
                     ext_sinfo: None,
+                    #[cfg(feature = "unstable")]
+                    ext_finfo: frag_info.map(Into::into),
+                    #[cfg(not(feature = "unstable"))]
+                    ext_finfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
                     ext_attachment: attachment.map(Into::into),
@@ -3232,6 +3245,8 @@ impl Primitives for WeakSession {
                                         reliability: Reliability::Reliable,
                                         #[cfg(feature = "unstable")]
                                         source_info: None,
+                                        #[cfg(feature = "unstable")]
+                                        frag_info: None,
                                         attachment: None,
                                         #[cfg(feature = "unstable")]
                                         timestamp_stack: None,

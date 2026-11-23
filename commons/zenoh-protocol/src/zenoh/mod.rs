@@ -139,7 +139,7 @@ impl From<Err> for ResponseBody {
 pub mod ext {
     use zenoh_buffers::ZBuf;
 
-    use crate::core::{Encoding, EntityGlobalIdProto};
+    use crate::core::{Encoding, EntityGlobalIdProto, Timestamp};
 
     /// ```text
     ///  7 6 5 4 3 2 1 0
@@ -169,6 +169,56 @@ pub mod ext {
             let id = EntityGlobalIdProto::rand();
             let sn: u32 = rng.gen();
             Self { id, sn }
+        }
+    }
+
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |X|X|X|X|X|X|X|T|
+    /// +---------------+
+    /// %    fcount     %
+    /// +---------------+
+    /// %     fnum      %
+    /// +---------------+
+    /// ~  original_ts  ~  if T==1
+    /// +---------------+
+    /// ```
+    ///
+    /// Fragment metadata is carried separately from source identity. Advanced
+    /// pub/sub groups fragments by source identifier and sequence number, then
+    /// validates the count and zero-based index when assembling the publication.
+    /// The length-delimited extension allows readers to skip unknown trailing data.
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct FragInfoType<const ID: u8> {
+        /// Number of fragments in the original publication.
+        pub fcount: u32,
+        /// Zero-based index within that publication.
+        pub fnum: u32,
+        /// Optional original publication timestamp, distinct from a fragment's timestamp.
+        pub original_timestamp: Option<Timestamp>,
+    }
+
+    impl<const ID: u8> FragInfoType<{ ID }> {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let fcount: u32 = rng.gen();
+            let fnum: u32 = rng.gen();
+            let original_timestamp = rng.gen_bool(0.5).then_some({
+                use crate::core::ZenohIdProto;
+
+                let time = uhlc::NTP64(rng.gen());
+                let id = uhlc::ID::try_from(ZenohIdProto::rand().to_le_bytes()).unwrap();
+                Timestamp::new(time, id)
+            });
+            Self {
+                fcount,
+                fnum,
+                original_timestamp,
+            }
         }
     }
 

@@ -225,6 +225,8 @@ pub(crate) fn init(session: WeakSession) {
                 None,
                 #[cfg(feature = "unstable")]
                 None,
+                #[cfg(feature = "unstable")]
+                None,
                 None,
                 #[cfg(feature = "unstable")]
                 None,
@@ -280,6 +282,8 @@ pub(crate) fn init(session: WeakSession) {
                     Locality::SessionLocal,
                     #[cfg(feature = "unstable")]
                     Reliability::default(),
+                    None,
+                    #[cfg(feature = "unstable")]
                     None,
                     #[cfg(feature = "unstable")]
                     None,

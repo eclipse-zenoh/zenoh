@@ -589,6 +589,10 @@ impl Query {
         let ext_sinfo = None;
         #[cfg(feature = "unstable")]
         let ext_sinfo = sample.source_info.map(Into::into);
+        #[cfg(not(feature = "unstable"))]
+        let ext_finfo = None;
+        #[cfg(feature = "unstable")]
+        let ext_finfo = sample.frag_info.map(Into::into);
         let mut response = Response {
             rid: self.inner.qid,
             wire_expr: self.inner.primitives.keyexpr_to_wire(&sample.key_expr),
@@ -600,6 +604,7 @@ impl Query {
                         timestamp: sample.timestamp,
                         encoding: sample.encoding.into(),
                         ext_sinfo,
+                        ext_finfo,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         ext_attachment: sample.attachment.map(|a| a.into()),
