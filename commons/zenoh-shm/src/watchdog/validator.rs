@@ -25,7 +25,7 @@ use crate::{
     metadata::descriptor::OwnedMetadataDescriptor, watchdog::periodic_task::TaskWakeReason,
 };
 
-#[dynamic(lazy, drop)]
+#[dynamic(lazy, drop, tolerate_leak)]
 pub static mut GLOBAL_VALIDATOR: WatchdogValidator =
     WatchdogValidator::new(Duration::from_millis(100));
 

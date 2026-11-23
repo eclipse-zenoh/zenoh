@@ -42,10 +42,14 @@ impl AllocatedMetadataDescriptor {
 
 impl Drop for AllocatedMetadataDescriptor {
     fn drop(&mut self) {
-        GLOBAL_VALIDATOR.read().remove(self.descriptor.clone());
-        GLOBAL_METADATA_STORAGE
-            .read()
-            .reclaim(self.descriptor.clone());
+        // This drop might be executed inside static drop callstack or while the
+        // process is exiting, so statics might not be available here.
+        if let Ok(validator) = GLOBAL_VALIDATOR.try_read() {
+            validator.remove(self.descriptor.clone());
+        }
+        if let Ok(storage) = GLOBAL_METADATA_STORAGE.try_read() {
+            storage.reclaim(self.descriptor.clone());
+        }
     }
 }
 
