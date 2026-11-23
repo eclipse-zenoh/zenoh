@@ -15,7 +15,7 @@
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use tokio::sync::MutexGuard as AsyncMutexGuard;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bound, RegionName, WhatAmI, ZenohIdProto},
@@ -70,6 +70,13 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
 
     async fn get_status(&self) -> AsyncMutexGuard<'_, TransportStatus>;
+    /// The mutex guarding this transport's status.
+    ///
+    /// Every clone of a transport shares it, so it also identifies the transport instance
+    /// itself: the manager compares it with [`Arc::ptr_eq`] to make sure a late `delete()` of
+    /// an already closed transport does not remove a transport that the same peer has
+    /// re-established in the meantime.
+    fn get_status_mutex(&self) -> &Arc<AsyncMutex<TransportStatus>>;
     fn get_zid(&self) -> ZenohIdProto;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
