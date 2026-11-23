@@ -727,8 +727,8 @@ impl EndPoint {
 pub enum LocatorsStrategy {
     /// Open links to all locators in the group.
     AllOf,
-    /// Reserved for future support. The runtime currently only implements
-    /// `AllOf` semantics.
+    /// Open one link, to the first locator in the group that answers, trying them in order.
+    /// A lost link is dialled again from the first. Clients link once in any case.
     OneOf,
 }
 
