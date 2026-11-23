@@ -70,9 +70,27 @@ pub trait IKeyExprTree<'a, Weight> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     ///
-    /// You can obtain an iterator over key-value pairs using `iter.filter_map(|node| node.weight.map(|w| (node.keyexpr(), w)))`,
-    /// keep in mind that the full keyexpr of nodes is not stored in them by default, but computed using the tree:
-    /// if you need to get a node's key often, inserting its keyexpr in the `Weight` could be a good idea.
+    /// You can obtain an iterator over key-value pairs by filtering out unweighted nodes:
+    ///
+    /// ```
+    /// use zenoh_keyexpr::{
+    ///     keyexpr,
+    ///     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
+    /// };
+    ///
+    /// let mut tree = KeBoxTree::<String>::new();
+    /// tree.insert(keyexpr::new("sensor/temperature").unwrap(), "value".into());
+    /// let query = keyexpr::new("sensor/*").unwrap();
+    /// let pairs: Vec<_> = tree.intersecting_nodes(query)
+    ///     .filter_map(|node| node.weight().map(|w| (node.keyexpr(), w)))
+    ///     .collect();
+    /// assert_eq!(pairs.len(), 1);
+    /// assert_eq!(pairs[0].0.as_str(), "sensor/temperature");
+    /// assert_eq!(pairs[0].1, "value");
+    /// ```
+    ///
+    /// The full key expression is computed from the tree rather than stored in each node.
+    /// If you need a node's key often, consider storing it in the weight.
     fn intersecting_nodes(&'a self, key: &'a keyexpr) -> Self::Intersection;
 
     /// Returns an iterator over the KEs contained in the tree that intersect with `key`
@@ -95,9 +113,27 @@ pub trait IKeyExprTree<'a, Weight> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     ///
-    /// You can obtain an iterator over key-value pairs using `iter.filter_map(|node| node.weight.map(|w| (node.keyexpr(), w)))`,
-    /// keep in mind that the full keyexpr of nodes is not stored in them by default, but computed using the tree:
-    /// if you need to get a node's key often, inserting its keyexpr in the `Weight` could be a good idea.
+    /// You can obtain an iterator over key-value pairs by filtering out unweighted nodes:
+    ///
+    /// ```
+    /// use zenoh_keyexpr::{
+    ///     keyexpr,
+    ///     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
+    /// };
+    ///
+    /// let mut tree = KeBoxTree::<String>::new();
+    /// tree.insert(keyexpr::new("sensor/temperature").unwrap(), "value".into());
+    /// let query = keyexpr::new("sensor/**").unwrap();
+    /// let pairs: Vec<_> = tree.included_nodes(query)
+    ///     .filter_map(|node| node.weight().map(|w| (node.keyexpr(), w)))
+    ///     .collect();
+    /// assert_eq!(pairs.len(), 1);
+    /// assert_eq!(pairs[0].0.as_str(), "sensor/temperature");
+    /// assert_eq!(pairs[0].1, "value");
+    /// ```
+    ///
+    /// The full key expression is computed from the tree rather than stored in each node.
+    /// If you need a node's key often, consider storing it in the weight.
     fn included_nodes(&'a self, key: &'a keyexpr) -> Self::Inclusion;
 
     /// Returns an iterator over the KEs contained in the tree that are included by `key`
@@ -117,9 +153,27 @@ pub trait IKeyExprTree<'a, Weight> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     ///
-    /// You can obtain an iterator over key-value pairs using `iter.filter_map(|node| node.weight.map(|w| (node.keyexpr(), w)))`,
-    /// keep in mind that the full keyexpr of nodes is not stored in them by default, but computed using the tree:
-    /// if you need to get a node's key often, inserting its keyexpr in the `Weight` could be a good idea.
+    /// You can obtain an iterator over key-value pairs by filtering out unweighted nodes:
+    ///
+    /// ```
+    /// use zenoh_keyexpr::{
+    ///     keyexpr,
+    ///     keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, IKeyExprTreeNode, KeBoxTree},
+    /// };
+    ///
+    /// let mut tree = KeBoxTree::<String>::new();
+    /// tree.insert(keyexpr::new("sensor/**").unwrap(), "value".into());
+    /// let query = keyexpr::new("sensor/temperature").unwrap();
+    /// let pairs: Vec<_> = tree.nodes_including(query)
+    ///     .filter_map(|node| node.weight().map(|w| (node.keyexpr(), w)))
+    ///     .collect();
+    /// assert_eq!(pairs.len(), 1);
+    /// assert_eq!(pairs[0].0.as_str(), "sensor/**");
+    /// assert_eq!(pairs[0].1, "value");
+    /// ```
+    ///
+    /// The full key expression is computed from the tree rather than stored in each node.
+    /// If you need a node's key often, consider storing it in the weight.
     fn nodes_including(&'a self, key: &'a keyexpr) -> Self::Includer;
 
     /// Returns an iterator over the KEs contained in the tree that include `key`
@@ -248,9 +302,27 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     ///
-    /// You can obtain an iterator over key-value pairs using `iter.filter_map(|node| node.weight.map(|w| (node.keyexpr(), w)))`,
-    /// keep in mind that the full keyexpr of nodes is not stored in them by default, but computed using the tree:
-    /// if you need to get a node's key often, inserting its keyexpr in the `Weight` could be a good idea.
+    /// You can obtain owned key-value pairs by filtering out unweighted nodes and cloning the weights:
+    ///
+    /// ```
+    /// use zenoh_keyexpr::{
+    ///     keyexpr,
+    ///     keyexpr_tree::{IKeyExprTreeNode, ITokenKeyExprTree, KeArcTree},
+    /// };
+    ///
+    /// let (tree, mut token) = KeArcTree::<String>::new().unwrap();
+    /// tree.insert(&mut token, keyexpr::new("sensor/temperature").unwrap(), "warm".into());
+    /// let query = keyexpr::new("sensor/*").unwrap();
+    /// let pairs: Vec<_> = tree.intersecting_nodes(&token, query)
+    ///     .filter_map(|node| node.weight().map(|w| (node.keyexpr(), w.clone())))
+    ///     .collect();
+    /// assert_eq!(pairs.len(), 1);
+    /// assert_eq!(pairs[0].0.as_str(), "sensor/temperature");
+    /// assert_eq!(pairs[0].1, "warm");
+    /// ```
+    ///
+    /// The full key expression is computed from the tree rather than stored in each node.
+    /// If you need a node's key often, consider storing it in the weight.
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection;
 
     /// Returns an iterator over the KEs contained in the tree that intersect with `key`
