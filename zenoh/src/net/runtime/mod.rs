@@ -23,11 +23,10 @@ mod region;
 
 #[cfg(all(feature = "unstable", feature = "shared-memory"))]
 use std::future::IntoFuture;
-#[cfg(feature = "unstable")]
-use std::sync::OnceLock;
-#[cfg(feature = "unstable")]
-#[cfg(feature = "plugins")]
+#[cfg(all(feature = "plugins", feature = "unstable"))]
 use std::sync::{Mutex, MutexGuard};
+#[cfg(feature = "unstable")]
+use std::sync::{OnceLock, RwLock};
 use std::{
     any::Any,
     collections::HashSet,
@@ -165,6 +164,12 @@ impl IntoFuture for ShmProviderState {
     }
 }
 
+#[cfg(feature = "unstable")]
+#[derive(Default)]
+struct RuntimeCallbacks {
+    timestamp: Option<GetTimestampCallback>,
+}
+
 pub(crate) struct RuntimeState {
     zid: ZenohId,
     whatami: WhatAmI,
@@ -182,7 +187,7 @@ pub(crate) struct RuntimeState {
     #[cfg(feature = "unstable")]
     lazy_hlc: OnceLock<Arc<HLC>>,
     #[cfg(feature = "unstable")]
-    timestamp_callback: Option<GetTimestampCallback>,
+    callbacks: RwLock<RuntimeCallbacks>,
     task_controller: TaskController,
     #[cfg(feature = "plugins")]
     plugins_manager: Mutex<PluginsManager>,
@@ -277,7 +282,8 @@ impl IRuntime for RuntimeState {
 
     #[cfg(feature = "unstable")]
     fn get_ts_stack_timestamp(&self, context: TimestampContext) -> (Vec<u8>, bool) {
-        if let Some(cb) = &self.timestamp_callback {
+        let callback = zread!(self.callbacks).timestamp.clone();
+        if let Some(cb) = callback {
             return (cb(context), true);
         }
 
@@ -648,7 +654,7 @@ pub struct RuntimeBuilder {
     #[cfg(feature = "shared-memory")]
     shm_clients: Option<Arc<ShmClientStorage>>,
     #[cfg(feature = "unstable")]
-    timestamp_callback: Option<GetTimestampCallback>,
+    callbacks: RuntimeCallbacks,
     #[cfg(test)]
     subregions: Option<Vec<Region>>,
     #[cfg(test)]
@@ -686,7 +692,7 @@ impl RuntimeBuilder {
             #[cfg(feature = "shared-memory")]
             shm_clients: None,
             #[cfg(feature = "unstable")]
-            timestamp_callback: None,
+            callbacks: RuntimeCallbacks::default(),
             #[cfg(test)]
             subregions: None,
             #[cfg(test)]
@@ -708,7 +714,7 @@ impl RuntimeBuilder {
 
     #[cfg(feature = "unstable")]
     pub fn timestamp_callback(mut self, cb: Option<GetTimestampCallback>) -> Self {
-        self.timestamp_callback = cb;
+        self.callbacks.timestamp = cb;
         self
     }
 
@@ -734,7 +740,7 @@ impl RuntimeBuilder {
             #[cfg(feature = "shared-memory")]
             shm_clients,
             #[cfg(feature = "unstable")]
-            timestamp_callback,
+            callbacks,
             #[cfg(test)]
             subregions,
             #[cfg(test)]
@@ -827,7 +833,7 @@ impl RuntimeBuilder {
                 #[cfg(feature = "unstable")]
                 lazy_hlc: OnceLock::new(),
                 #[cfg(feature = "unstable")]
-                timestamp_callback,
+                callbacks: RwLock::new(callbacks),
                 task_controller: TaskController::default(),
                 #[cfg(feature = "plugins")]
                 plugins_manager: Mutex::new(plugins_manager),
@@ -1312,6 +1318,15 @@ impl Closee for Arc<RuntimeState> {
         // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
         self.task_controller.terminate_all_async().await;
         self.manager.close().await;
+        #[cfg(feature = "unstable")]
+        {
+            // Like SessionInner::state (RwLock<SessionState>) in session shutdown,
+            // take the callbacks under the write lock, then drop them outside it.
+            // Captured values can reenter the runtime during destruction.
+            let mut state = zwrite!(self.callbacks);
+            let _callbacks = std::mem::take(&mut *state);
+            drop(state);
+        }
         // clean up to break cyclic reference of self.state to itself
         self.transport_handlers.write().unwrap().clear();
         // TODO: the call below is needed to prevent intermittent leak
@@ -1369,5 +1384,103 @@ impl From<DynamicRuntime> for GenericRuntime {
             dynamic_runtime: value,
             static_runtime: None,
         }
+    }
+}
+
+#[cfg(all(test, feature = "unstable"))]
+mod runtime_callback_tests {
+    use std::{
+        sync::atomic::{AtomicBool, Ordering},
+        time::Duration,
+    };
+
+    use super::*;
+
+    fn callback_config() -> Config {
+        let mut config = Config::default();
+        config.listen.endpoints.set(vec![]).unwrap();
+        config.connect.endpoints.set(vec![]).unwrap();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config
+    }
+
+    fn timestamp_context(runtime: &Runtime) -> TimestampContext {
+        TimestampContext {
+            zid: runtime.zid(),
+            whatami: runtime.whatami(),
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_preserves_an_in_flight_callback() {
+        let timeout = Duration::from_secs(10);
+        let (started, wait_started) = flume::bounded(1);
+        let (finish, wait_finish) = flume::bounded(1);
+        let capture = Arc::new(());
+        let weak_capture = Arc::downgrade(&capture);
+        let runtime = RuntimeBuilder::new(callback_config())
+            .timestamp_callback(Some(Arc::new(move |_| {
+                let _ = &capture;
+                started.send(()).unwrap();
+                wait_finish.recv_timeout(timeout).unwrap();
+                vec![42]
+            })))
+            .build()
+            .await
+            .unwrap();
+        let worker = {
+            let runtime = runtime.clone();
+            std::thread::spawn(move || {
+                runtime
+                    .state
+                    .get_ts_stack_timestamp(timestamp_context(&runtime))
+            })
+        };
+        wait_started.recv_timeout(timeout).unwrap();
+
+        runtime.get_closee().close_inner(()).await;
+        assert!(zread!(runtime.state.callbacks).timestamp.is_none());
+        assert!(weak_capture.upgrade().is_some());
+        finish.send(()).unwrap();
+        assert_eq!(worker.join().unwrap(), (vec![42], true));
+        assert!(weak_capture.upgrade().is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn shutdown_drops_callback_captures_outside_the_lock() {
+        struct Capture {
+            runtime: Arc<OnceLock<WeakRuntime>>,
+            dropped: Arc<AtomicBool>,
+        }
+
+        impl Drop for Capture {
+            fn drop(&mut self) {
+                if let Some(runtime) = self.runtime.get().and_then(WeakRuntime::upgrade) {
+                    let callbacks = runtime.state.callbacks.try_read().unwrap();
+                    assert!(callbacks.timestamp.is_none());
+                    self.dropped.store(true, Ordering::SeqCst);
+                }
+            }
+        }
+
+        let weak_runtime = Arc::new(OnceLock::new());
+        let dropped = Arc::new(AtomicBool::new(false));
+        let capture = Capture {
+            runtime: weak_runtime.clone(),
+            dropped: dropped.clone(),
+        };
+        let runtime = RuntimeBuilder::new(callback_config())
+            .timestamp_callback(Some(Arc::new(move |_| {
+                let _ = &capture;
+                Vec::new()
+            })))
+            .build()
+            .await
+            .unwrap();
+        weak_runtime.set(Runtime::downgrade(&runtime)).unwrap();
+
+        runtime.get_closee().close_inner(()).await;
+        assert!(dropped.load(Ordering::SeqCst));
     }
 }

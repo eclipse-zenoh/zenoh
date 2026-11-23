@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use std::sync::Arc;
+
 use zenoh_protocol::{
     core::WhatAmI,
     network::timestamp_stack::{interception_point, Interception, TsStackType},
@@ -33,7 +35,7 @@ pub struct TimestampContext {
 }
 
 #[zenoh_macros::unstable]
-pub(crate) type GetTimestampCallback = Box<dyn Fn(TimestampContext) -> Vec<u8> + Send + Sync>;
+pub(crate) type GetTimestampCallback = Arc<dyn Fn(TimestampContext) -> Vec<u8> + Send + Sync>;
 
 /// Identifies which interception point a timestamp record was captured at.
 ///

@@ -41,6 +41,64 @@ const SLEEP: Duration = Duration::from_secs(1);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
+fn callback_session_config() -> zenoh::Config {
+    let mut config = zenoh::Config::default();
+    config.listen.endpoints.set(vec![]).unwrap();
+    config.connect.endpoints.set(vec![]).unwrap();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    config.scouting.gossip.set_enabled(Some(false)).unwrap();
+    config
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_timestamp_callback_released_on_close() {
+    let owner = Arc::new(std::sync::Mutex::new(None::<Session>));
+    let weak_owner = Arc::downgrade(&owner);
+    let callback_owner = owner.clone();
+    let session = ztimeout!(
+        zenoh::open(callback_session_config()).with_timestamp_callback(move |_| {
+            let _ = &callback_owner;
+            Vec::new()
+        })
+    )
+    .unwrap();
+    *owner.lock().unwrap() = Some(session.clone());
+    drop(owner);
+    assert!(weak_owner.upgrade().is_some());
+
+    ztimeout!(session.close()).unwrap();
+    assert!(weak_owner.upgrade().is_none());
+    assert!(session.is_closed());
+    ztimeout!(session.close()).unwrap();
+}
+
+#[cfg(feature = "internal")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_shared_runtime_callbacks_released_only_on_runtime_close() {
+    let capture = Arc::new(());
+    let weak_capture = Arc::downgrade(&capture);
+    let runtime = ztimeout!(zenoh::internal::runtime::RuntimeBuilder::new(
+        callback_session_config()
+    )
+    .timestamp_callback(Some(Arc::new(move |_| {
+        let _ = &capture;
+        Vec::new()
+    })))
+    .build())
+    .unwrap();
+    let first = ztimeout!(zenoh::session::init(runtime.clone().into())).unwrap();
+    let second = ztimeout!(zenoh::session::init(runtime.clone().into())).unwrap();
+
+    ztimeout!(first.close()).unwrap();
+    assert!(!second.is_closed());
+    assert!(weak_capture.upgrade().is_some());
+    ztimeout!(second.close()).unwrap();
+    assert!(weak_capture.upgrade().is_some());
+
+    ztimeout!(runtime.close()).unwrap();
+    assert!(weak_capture.upgrade().is_none());
+}
+
 async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
     let msg_count = match reliability {
