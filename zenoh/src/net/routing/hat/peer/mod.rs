@@ -139,6 +139,23 @@ impl Hat {
         tables.faces.values().filter(|face| self.owns(face))
     }
 
+    /// Like [`Self::owned_faces`], but also yields the per-peer faces of multicast transports.
+    /// Those are tracked in `mcast_faces` and never inserted into `tables.faces`, so
+    /// `owned_faces` alone misses entities declared by multicast peers.
+    pub(crate) fn owned_faces_incl_mcast<'h, 't>(
+        &'h self,
+        tables: &'t TablesData,
+    ) -> impl Iterator<Item = &'t Arc<FaceState>> + 'h
+    where
+        't: 'h,
+    {
+        tables
+            .faces
+            .values()
+            .chain(tables.hats[self.region()].mcast_faces.iter())
+            .filter(|face| self.owns(face))
+    }
+
     pub(crate) fn owned_faces_mut<'h, 't>(
         &'h self,
         tables: &'t mut TablesData,
