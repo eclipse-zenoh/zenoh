@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-#[cfg(feature = "shared-memory")]
+#[cfg(any(feature = "shared-memory", feature = "unstable"))]
 use std::sync::Arc;
 use std::{
     fmt,
@@ -119,7 +119,7 @@ where
         mut self,
         cb: F,
     ) -> Self {
-        self.timestamp_callback = Some(Box::new(cb));
+        self.timestamp_callback = Some(Arc::new(cb));
         self
     }
 }
