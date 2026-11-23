@@ -30,18 +30,17 @@ use std::{
 
 use socket2::{Domain, Protocol, Socket, Type};
 use zenoh::{Config, Session};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::ztimeout;
+use zenoh_protocol::{
+    network::{declare::DeclareBody, Declare, NetworkBody},
+    transport::{TransportBody, TransportMessage},
+};
 use zenoh_test::{get_free_udp_port, get_tcp_locator};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const JOIN_INTERVAL_MS: u64 = 500;
-// Long enough for both peers to receive each other's JOIN before the subscribers are declared.
-const DISCOVERY: Duration = Duration::from_millis(4 * JOIN_INTERVAL_MS);
-const SETTLE: Duration = Duration::from_secs(3);
 const OBSERVE: Duration = Duration::from_secs(6);
-// In steady state the group only carries a few JOIN and KEEP_ALIVE messages per peer and
-// second. The declaration storm produces thousands of datagrams per second.
-const MAX_STEADY_STATE_DATAGRAMS: usize = 200;
 
 /// Opens a socket that receives every datagram sent to `group`, bound the same way
 /// zenoh binds its own multicast socket (shared address and port).
@@ -53,7 +52,7 @@ fn multicast_observer(group: SocketAddrV4) -> std::net::UdpSocket {
         .bind(&SocketAddr::from((Ipv4Addr::UNSPECIFIED, group.port())).into())
         .unwrap();
     socket
-        .join_multicast_v4(group.ip(), &Ipv4Addr::UNSPECIFIED)
+        .join_multicast_v4(group.ip(), &Ipv4Addr::LOCALHOST)
         .unwrap();
     socket
         .set_read_timeout(Some(Duration::from_millis(100)))
@@ -61,17 +60,32 @@ fn multicast_observer(group: SocketAddrV4) -> std::net::UdpSocket {
     socket.into()
 }
 
-/// Counts the datagrams received on `socket` during `duration`.
-fn count_datagrams(socket: &std::net::UdpSocket, duration: Duration) -> usize {
+fn observe_declarations(socket: &std::net::UdpSocket, key_expr: &str) -> Vec<SocketAddr> {
     let mut buf = vec![0u8; u16::MAX as usize];
-    let mut count = 0;
+    let mut sources = Vec::new();
     let start = Instant::now();
-    while start.elapsed() < duration {
-        if socket.recv(&mut buf).is_ok() {
-            count += 1;
+    while start.elapsed() < OBSERVE && sources.len() <= 2 {
+        let Ok((len, source)) = socket.recv_from(&mut buf) else {
+            continue;
+        };
+        let mut datagram = &buf[..len];
+        while !datagram.is_empty() {
+            let message: TransportMessage = Zenoh080::new().read(&mut datagram).unwrap();
+            if let TransportBody::Frame(frame) = message.body {
+                sources.extend(frame.payload.iter().filter_map(|message| {
+                    matches!(
+                        &message.body,
+                        NetworkBody::Declare(Declare {
+                            body: DeclareBody::DeclareSubscriber(subscriber),
+                            ..
+                        }) if subscriber.wire_expr.scope == 0 && subscriber.wire_expr.suffix == key_expr
+                    )
+                    .then_some(source)
+                }));
+            }
         }
     }
-    count
+    sources
 }
 
 fn peer_config(group: SocketAddrV4) -> Config {
@@ -80,7 +94,7 @@ fn peer_config(group: SocketAddrV4) -> Config {
     config
         .insert_json5(
             "listen/endpoints",
-            &format!(r#"["udp/{group}", "tcp/127.0.0.1:0"]"#),
+            &format!(r#"["udp/{group}#iface=127.0.0.1", "tcp/127.0.0.1:0"]"#),
         )
         .unwrap();
     config
@@ -125,28 +139,24 @@ async fn multicast_subscriber_declarations_are_not_echoed() {
     let peer02 = ztimeout!(zenoh::open(peer_config(group))).unwrap();
     let client01 = open_client(&peer01).await;
     let client02 = open_client(&peer02).await;
-    // The echo only happens once the peers know each other on the multicast group.
-    tokio::time::sleep(DISCOVERY).await;
+    let (zid01, zid02) = (peer01.zid(), peer02.zid());
+    ztimeout!(async {
+        while !peer01.info().transports().await.any(|t| t.zid() == &zid02)
+            || !peer02.info().transports().await.any(|t| t.zid() == &zid01)
+        {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    });
 
     let _sub01 = ztimeout!(client01.declare_subscriber(key_expr)).unwrap();
     let _sub02 = ztimeout!(client02.declare_subscriber(key_expr)).unwrap();
-    tokio::time::sleep(SETTLE).await;
 
-    let datagrams = tokio::task::spawn_blocking(move || count_datagrams(&observer, OBSERVE))
+    let sources = tokio::task::spawn_blocking(move || observe_declarations(&observer, key_expr))
         .await
         .unwrap();
-    println!("Observed {datagrams} datagrams in {OBSERVE:?} on {group}");
-
-    // The observer must see the group traffic at all (JOIN messages are sent periodically),
-    // otherwise the upper bound below would pass trivially.
     assert!(
-        datagrams > 0,
-        "The observer did not receive any datagram on {group}"
-    );
-    assert!(
-        datagrams <= MAX_STEADY_STATE_DATAGRAMS,
-        "{datagrams} datagrams in {OBSERVE:?} on {group}: subscriber declarations are echoed \
-         back into the multicast group (expected at most {MAX_STEADY_STATE_DATAGRAMS})"
+        matches!(sources.as_slice(), [first, second] if first != second),
+        "Expected one subscriber declaration from each peer on {group}, got {sources:?}"
     );
 
     for session in [client01, client02, peer01, peer02] {
