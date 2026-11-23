@@ -247,11 +247,11 @@ pub(crate) fn init(session: WeakSession) {
         move |event: LinkEvent| {
             // Find the transport to determine if it's multicast
             let transport_zid = &event.link.zid;
+            // Only build the transport that matches: listing every transport would query the
+            // interfaces of all existing links on each new link (quadratic on a busy router).
             let transport = session
                 .runtime()
-                .get_transports_blocking()
-                .into_iter()
-                .find(|t| t.zid == *transport_zid);
+                .get_transport_blocking(&(*transport_zid).into());
 
             if let Some(transport) = transport {
                 let key_expr =

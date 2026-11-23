@@ -224,6 +224,10 @@ pub trait IRuntime: Send + Sync {
 
     fn get_transports_blocking(&self) -> Vec<Transport>;
 
+    /// Returns the transport with the given zid, building the peer info (and its links)
+    /// of that transport only. Unicast transports take precedence over multicast ones.
+    fn get_transport_blocking(&self, zid: &ZenohIdProto) -> Option<Transport>;
+
     fn get_links(
         &self,
         transport: Option<&Transport>,
@@ -371,6 +375,22 @@ impl IRuntime for RuntimeState {
                     .map(|peer| Transport::new(&peer, true)),
             )
             .collect()
+    }
+
+    fn get_transport_blocking(&self, zid: &ZenohIdProto) -> Option<Transport> {
+        if let Some(peer) = self
+            .manager
+            .get_transport_unicast_blocking(zid)
+            .and_then(|t| t.get_peer().ok())
+        {
+            return Some(Transport::new(&peer, false));
+        }
+        self.manager
+            .get_transports_multicast_blocking()
+            .into_iter()
+            .flat_map(|t| t.get_peers().ok().unwrap_or_default())
+            .find(|peer| peer.zid == *zid)
+            .map(|peer| Transport::new(&peer, true))
     }
 
     fn get_links(

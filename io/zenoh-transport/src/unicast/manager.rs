@@ -911,6 +911,15 @@ impl TransportManager {
             .map(|t| TransportUnicast(Arc::downgrade(t)))
     }
 
+    pub fn get_transport_unicast_blocking(&self, peer: &ZenohIdProto) -> Option<TransportUnicast> {
+        self.state
+            .unicast
+            .transports
+            .blocking_lock()
+            .get(peer)
+            .map(|t| TransportUnicast(Arc::downgrade(t)))
+    }
+
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .values()
