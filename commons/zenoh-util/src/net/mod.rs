@@ -188,8 +188,12 @@ pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
             let mut result = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {
+                // Advance first, so that skipping this adapter below moves on.
+                next_iface = iface.Next.as_ref();
                 if let Some(interface) = interface.as_ref() {
-                    if ffi::pstr_to_string(iface.AdapterName) != *interface {
+                    if ffi::pstr_to_string(iface.AdapterName) != *interface
+                        && ffi::pwstr_to_string(iface.FriendlyName) != *interface
+                    {
                         continue;
                     }
                 }
@@ -200,7 +204,6 @@ pub fn get_local_addresses(interface: Option<&str>) -> ZResult<Vec<IpAddr>> {
                     }
                     next_ucast_addr = ucast_addr.Next.as_ref();
                 }
-                next_iface = iface.Next.as_ref();
             }
             Ok(result)
         }
@@ -493,4 +496,40 @@ pub fn set_bind_to_device_tcp_socket(socket: &TcpSocket, iface: &str) -> ZResult
 pub fn set_bind_to_device_udp_socket(socket: &UdpSocket, iface: &str) -> ZResult<()> {
     tracing::warn!("Binding the socket {socket:?} to the interface {iface} is not supported on macOS, iOS, FreeBSD and Windows");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_addresses_of_an_unknown_interface() {
+        let addrs = get_local_addresses(Some("zenoh-test-no-such-interface")).unwrap();
+        assert!(addrs.is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn local_addresses_by_adapter_name_and_friendly_name() {
+        use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+        use crate::ffi;
+
+        let all = get_local_addresses(None).unwrap();
+        let mut found = vec![];
+        unsafe {
+            let buffer = get_adapters_addresses(winapi::shared::ws2def::AF_UNSPEC).unwrap();
+            let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
+            while let Some(iface) = next_iface {
+                let adapter_name = ffi::pstr_to_string(iface.AdapterName);
+                let friendly_name = ffi::pwstr_to_string(iface.FriendlyName);
+                let by_adapter_name = get_local_addresses(Some(&adapter_name)).unwrap();
+                let by_friendly_name = get_local_addresses(Some(&friendly_name)).unwrap();
+                assert_eq!(by_adapter_name, by_friendly_name, "{friendly_name}");
+                found.extend(by_adapter_name);
+                next_iface = iface.Next.as_ref();
+            }
+        }
+        assert_eq!(found, all);
+    }
 }
