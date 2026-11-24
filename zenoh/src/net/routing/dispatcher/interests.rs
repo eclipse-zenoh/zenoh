@@ -358,9 +358,12 @@ impl Face {
         };
 
         // Unregister keyexpr interest
-        get_mut_unchecked(ctx.src_face)
+        if let Some(Some(mut res)) = get_mut_unchecked(ctx.src_face)
             .remote_key_interests
-            .remove(&msg.id);
+            .remove(&msg.id)
+        {
+            Resource::clean(&mut res);
+        }
 
         let hats = &mut tables.hats;
         let region = ctx.src_face.region;

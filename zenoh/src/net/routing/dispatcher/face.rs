@@ -745,6 +745,11 @@ impl Primitives for Face {
         let region = self.state.region;
         let src_fid = ctx.src_face.id;
 
+        // Resources released by this face. They are only cleaned once the face dropped all its
+        // references to them (entities, expr mappings, interests), otherwise `Resource::clean`
+        // sees those references and leaves the resources in the tree forever.
+        let mut released = vec![];
+
         let UnregisterFaceEntitiesResult {
             removed_subscribers,
             removed_queryables,
@@ -764,7 +769,7 @@ impl Primitives for Face {
                     hat.unpropagate_subscriber(ctx.reborrow(), res.clone());
                 }
                 get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
-                Resource::clean(&mut res);
+                released.push(res);
             } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_subscriber(ctx.reborrow(), res.clone())
             }
@@ -787,7 +792,7 @@ impl Primitives for Face {
                         hat.unpropagate_queryable(ctx.reborrow(), res.clone());
                     }
                     get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
-                    Resource::clean(&mut res);
+                    released.push(res);
                 }
                 [(last_owner, _)] if last_owner != &region => hats[last_owner]
                     .unpropagate_last_non_owned_queryable(ctx.reborrow(), res.clone()),
@@ -815,7 +820,7 @@ impl Primitives for Face {
                     hat.unpropagate_token(ctx.reborrow(), res.clone());
                 }
                 get_mut_unchecked(&mut res).face_ctxs.remove(&src_fid);
-                Resource::clean(&mut res);
+                released.push(res);
             } else if let [last_owner] = &mut *remaining {
                 last_owner.unpropagate_last_non_owned_token(ctx.reborrow(), res.clone())
             }
@@ -823,22 +828,29 @@ impl Primitives for Face {
 
         for res in get_mut_unchecked(ctx.src_face).remote_mappings.values_mut() {
             get_mut_unchecked(res).face_ctxs.remove(&src_fid);
-            Resource::clean(res);
+            released.push(res.clone());
         }
         get_mut_unchecked(ctx.src_face).remote_mappings.clear();
 
         for res in get_mut_unchecked(ctx.src_face).local_mappings.values_mut() {
             get_mut_unchecked(res).face_ctxs.remove(&src_fid);
-            Resource::clean(res);
+            released.push(res.clone());
         }
         get_mut_unchecked(ctx.src_face).local_mappings.clear();
 
         for interest in get_mut_unchecked(ctx.src_face).local_interests.values_mut() {
-            if let Some(mut res) = interest.res.take() {
-                Resource::clean(&mut res);
+            if let Some(res) = interest.res.take() {
+                released.push(res);
             }
         }
         get_mut_unchecked(ctx.src_face).local_interests.clear();
+
+        released.extend(
+            get_mut_unchecked(ctx.src_face)
+                .remote_key_interests
+                .drain()
+                .filter_map(|(_, res)| res),
+        );
 
         hats[region].close_face(ctx);
         // Routes cached while the face was open may target it although it declared no matching
@@ -847,6 +859,13 @@ impl Primitives for Face {
         hats[region].disable_all_routes(&mut tables.data);
 
         tables.data.faces.remove(&src_fid);
+
+        // Clean deepest resources first so that parents are childless when cleaned. Duplicates
+        // are fine: only the last copy of a resource sees no extra reference and removes it.
+        released.sort_by_key(|res| std::cmp::Reverse(res.expr().len()));
+        for mut res in released {
+            Resource::clean(&mut res);
+        }
 
         drop(wtables);
         drop(ctrl_lock);
