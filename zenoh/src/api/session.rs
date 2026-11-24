@@ -697,6 +697,8 @@ pub(crate) struct SessionInner {
     state: RwLock<SessionState>,
     id: EntityId,
     task_controller: TaskController,
+    #[cfg(test)]
+    query_timer_count: Arc<std::sync::atomic::AtomicUsize>,
     face_id: OnceCell<usize>,
     pub(crate) callbacks_drop_sync_group: SyncGroup,
 }
@@ -884,6 +886,8 @@ impl Session {
                 state,
                 id: runtime.next_id(),
                 task_controller: TaskController::default(),
+                #[cfg(test)]
+                query_timer_count: Arc::default(),
                 face_id: OnceCell::new(),
                 callbacks_drop_sync_group: SyncGroup::default(),
             }));
@@ -2740,11 +2744,19 @@ impl Session {
             _ => 1,
         };
         let token = self.0.task_controller.get_cancellation_token();
+        // Each timer also belongs to its query. Final replies, cancellation and
+        // querier teardown remove the query; they must release a long-duration
+        // timeout task immediately instead of retaining it until session close.
+        let timeout_guard = token.clone().drop_guard();
+        #[cfg(test)]
+        let timer_count = QueryTimerCount::new(self.0.query_timer_count.clone());
         self.0
             .task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = self.downgrade();
                 async move {
+                    #[cfg(test)]
+                    let _timer_count = timer_count;
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
                             let mut state = zwrite!(session.0.state);
@@ -2772,6 +2784,7 @@ impl Session {
         state.queries.insert(
             qid,
             QueryState {
+                _timeout_guard: timeout_guard,
                 nb_final,
                 key_expr: key_expr.key_expr().into(),
                 parameters: parameters.clone().into_owned(),
@@ -2871,10 +2884,12 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.queries.remove(&qid) {
-            Some(_) => bail!("Unable to find query {qid}"),
-            None => Ok(()),
+        // Release the session lock before dropping the callback: foreign
+        // drop handlers may re-enter the session.
+        let query = zwrite!(self.0.state).queries.remove(&qid);
+        match query {
+            Some(_) => Ok(()),
+            None => bail!("Unable to find query {qid}"),
         }
     }
 
@@ -2908,10 +2923,18 @@ impl Session {
             &mut callback,
         )?;
         let token = self.0.task_controller.get_cancellation_token();
+        // Each timer also belongs to its query. Final replies, cancellation and
+        // querier teardown remove the query; they must release a long-duration
+        // timeout task immediately instead of retaining it until session close.
+        let timeout_guard = token.clone().drop_guard();
+        #[cfg(test)]
+        let timer_count = QueryTimerCount::new(self.0.query_timer_count.clone());
         self.0.task_controller
             .spawn_with_rt(zenoh_runtime::ZRuntime::Net, {
                 let session = self.downgrade();
                 async move {
+                    #[cfg(test)]
+                    let _timer_count = timer_count;
                     tokio::select! {
                         _ = tokio::time::sleep(timeout) => {
                             let mut state = zwrite!(session.0.state);
@@ -2937,9 +2960,13 @@ impl Session {
 
         tracing::trace!("Register liveliness query {}", id);
         let wexpr = key_expr.to_wire(self).to_owned();
-        state
-            .liveliness_queries
-            .insert(id, LivelinessQueryState { callback });
+        state.liveliness_queries.insert(
+            id,
+            LivelinessQueryState {
+                _timeout_guard: timeout_guard,
+                callback,
+            },
+        );
         drop(state);
 
         primitives.send_interest(&mut Interest {
@@ -2958,10 +2985,10 @@ impl Session {
     #[cfg(feature = "unstable")]
     pub(crate) fn cancel_liveliness_query(&self, qid: Id) -> ZResult<()> {
         tracing::debug!("Cancelling liveliness query: {qid}");
-        let mut state = zwrite!(self.0.state);
-        match state.liveliness_queries.remove(&qid) {
-            Some(_) => bail!("Unable to find liveliness query {qid}"),
-            None => Ok(()),
+        let query = zwrite!(self.0.state).liveliness_queries.remove(&qid);
+        match query {
+            Some(_) => Ok(()),
+            None => bail!("Unable to find liveliness query {qid}"),
         }
     }
 
@@ -3759,5 +3786,206 @@ impl Closeable for Session {
 
     fn get_closee(&self) -> Self::TClosee {
         self.downgrade()
+    }
+}
+
+// Observe actual spawned timeout-future lifetimes without exposing production
+// introspection or relying on allocator/RSS heuristics in the regression tests.
+#[cfg(test)]
+struct QueryTimerCount(Arc<std::sync::atomic::AtomicUsize>);
+#[cfg(test)]
+impl QueryTimerCount {
+    fn new(count: Arc<std::sync::atomic::AtomicUsize>) -> Self {
+        count.fetch_add(1, Ordering::SeqCst);
+        Self(count)
+    }
+}
+#[cfg(test)]
+impl Drop for QueryTimerCount {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[cfg(all(test, feature = "unstable"))]
+mod query_timer_lifetime_tests {
+    use super::*;
+    use crate::net::primitives::{DummyPrimitives, Primitives};
+
+    // Hold remote protocol messages so completion, cancellation and expiry can
+    // be driven independently. All query construction and timer paths are real.
+    async fn isolated_session() -> (Session, Arc<dyn Primitives>) {
+        let mut config = crate::Config::default();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config.scouting.gossip.set_enabled(Some(false)).unwrap();
+        config.listen.endpoints.set(vec![]).unwrap();
+        let session = crate::open(config).await.unwrap();
+        let original = zwrite!(session.0.state)
+            .primitives
+            .replace(Arc::new(DummyPrimitives))
+            .unwrap();
+        (session, original)
+    }
+
+    async fn timers_drained(session: &Session) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while session.0.query_timer_count.load(Ordering::SeqCst) != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("completed query retained its timeout task");
+    }
+
+    async fn close(session: Session, original: Arc<dyn Primitives>) {
+        zwrite!(session.0.state).primitives = Some(original);
+        session.close().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_queries_release_unbounded_timeout_tasks() {
+        let (session, original) = isolated_session().await;
+        for _ in 0..128 {
+            let replies = session
+                .get("test/timer/completed")
+                .allowed_destination(Locality::Remote)
+                .timeout(Duration::from_millis(u64::MAX))
+                .wait()
+                .unwrap();
+            let id = *zread!(session.0.state).queries.keys().next().unwrap();
+            assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 1);
+            session.downgrade().send_response_final(&mut ResponseFinal {
+                rid: id,
+                ext_qos: Default::default(),
+                ext_tstamp: None,
+            });
+            assert!(replies.recv_async().await.is_err());
+            timers_drained(&session).await;
+        }
+        close(session, original).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn canceled_queries_release_unbounded_timeout_tasks() {
+        let (session, original) = isolated_session().await;
+        let replies = session
+            .get("test/timer/canceled")
+            .allowed_destination(Locality::Remote)
+            .timeout(Duration::from_millis(u64::MAX))
+            .wait()
+            .unwrap();
+        let id = *zread!(session.0.state).queries.keys().next().unwrap();
+        assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 1);
+        assert!(session.cancel_query(id).is_ok());
+        assert!(session.cancel_query(id).is_err());
+        assert!(replies.recv_async().await.is_err());
+        timers_drained(&session).await;
+        close(session, original).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn completed_and_canceled_liveliness_queries_release_timeout_tasks() {
+        let (session, original) = isolated_session().await;
+        for cancel in [false, true] {
+            let replies = session
+                .liveliness()
+                .get("test/timer/liveliness")
+                .timeout(Duration::from_millis(u64::MAX))
+                .wait()
+                .unwrap();
+            let id = *zread!(session.0.state)
+                .liveliness_queries
+                .keys()
+                .next()
+                .unwrap();
+            assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 1);
+            if cancel {
+                assert!(session.cancel_liveliness_query(id).is_ok());
+                assert!(session.cancel_liveliness_query(id).is_err());
+            } else {
+                session.downgrade().send_declare(&mut Declare {
+                    interest_id: Some(id),
+                    ext_qos: Default::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: Default::default(),
+                    body: DeclareBody::DeclareFinal(DeclareFinal),
+                });
+            }
+            assert!(replies.recv_async().await.is_err());
+            timers_drained(&session).await;
+        }
+        close(session, original).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn public_cancellation_and_querier_drop_release_timeout_tasks() {
+        let (session, original) = isolated_session().await;
+        let cancellation = CancellationToken::default();
+        let replies = session
+            .get("test/timer/public_cancel")
+            .allowed_destination(Locality::Remote)
+            .timeout(Duration::from_millis(u64::MAX))
+            .cancellation_token(cancellation.clone())
+            .wait()
+            .unwrap();
+        let id = *zread!(session.0.state).queries.keys().next().unwrap();
+        assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 1);
+        cancellation.cancel().await.unwrap();
+        assert!(replies.recv_async().await.is_err());
+        // A remote final can arrive after local cancellation, including when
+        // a one-reply caller cancels immediately after its successful response.
+        session.downgrade().send_response_final(&mut ResponseFinal {
+            rid: id,
+            ext_qos: Default::default(),
+            ext_tstamp: None,
+        });
+        assert!(zread!(session.0.state).queries.is_empty());
+        timers_drained(&session).await;
+
+        let querier = session
+            .declare_querier("test/timer/querier_drop")
+            .allowed_destination(Locality::Remote)
+            .timeout(Duration::from_millis(u64::MAX))
+            .wait()
+            .unwrap();
+        let replies = querier.get().wait().unwrap();
+        assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 1);
+        drop(querier);
+        assert!(replies.recv_async().await.is_err());
+        assert!(zread!(session.0.state).queries.is_empty());
+        timers_drained(&session).await;
+        close(session, original).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn active_query_and_liveliness_timeout_still_fire() {
+        let (session, original) = isolated_session().await;
+        let timeout = Duration::from_millis(100);
+        let query = session
+            .get("test/timer/expiry")
+            .allowed_destination(Locality::Remote)
+            .timeout(timeout)
+            .wait()
+            .unwrap();
+        let liveliness = session
+            .liveliness()
+            .get("test/timer/expiry")
+            .timeout(timeout)
+            .wait()
+            .unwrap();
+        assert_eq!(session.0.query_timer_count.load(Ordering::SeqCst), 2);
+        assert!(query.try_recv().unwrap().is_none());
+        assert!(liveliness.try_recv().unwrap().is_none());
+        let (query_reply, live_reply) = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(query.recv_async(), liveliness.recv_async())
+        })
+        .await
+        .unwrap();
+        assert!(query_reply.unwrap().into_result().is_err());
+        assert!(live_reply.unwrap().into_result().is_err());
+        assert!(zread!(session.0.state).queries.is_empty());
+        assert!(zread!(session.0.state).liveliness_queries.is_empty());
+        timers_drained(&session).await;
+        close(session, original).await;
     }
 }

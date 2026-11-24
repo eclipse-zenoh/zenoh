@@ -233,10 +233,12 @@ impl From<Reply> for Result<Sample, ReplyError> {
 }
 
 pub(crate) struct LivelinessQueryState {
+    pub(crate) _timeout_guard: tokio_util::sync::DropGuard,
     pub(crate) callback: Callback<Reply>,
 }
 
 pub(crate) struct QueryState {
+    pub(crate) _timeout_guard: tokio_util::sync::DropGuard,
     pub(crate) nb_final: usize,
     pub(crate) key_expr: OwnedKeyExpr,
     pub(crate) parameters: Parameters<'static>,
