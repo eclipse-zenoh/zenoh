@@ -14,7 +14,7 @@
 
 use std::sync::Arc;
 
-use zenoh_result::ZResult;
+use zenoh_result::{zerror, ZResult};
 use zenoh_shm::{api::client_storage::GLOBAL_CLIENT_STORAGE, reader::ShmReader};
 
 use crate::{
@@ -113,8 +113,16 @@ impl ShmContext {
             reply: messages.contains(&zenoh_config::DataMessage::Reply),
         };
 
-        let shm_reader = external_reader
-            .unwrap_or_else(|| ShmReader::new((*GLOBAL_CLIENT_STORAGE.read()).clone()));
+        let shm_reader = external_reader.map_or_else(
+            || {
+                zenoh_shm::read_unless_finalized!(GLOBAL_CLIENT_STORAGE)
+                    .map(|storage| ShmReader::new((*storage).clone()))
+                    .map_err(|_| {
+                        zerror!("Unable to create SHM context: SHM client storage is finalized")
+                    })
+            },
+            Ok,
+        )?;
 
         let auth = AuthUnicast::new(&shm_reader.supported_protocols())?;
 
