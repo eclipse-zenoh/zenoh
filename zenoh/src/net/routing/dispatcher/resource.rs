@@ -737,15 +737,31 @@ impl Resource {
     /// then the parent tree is walked through. If there is still no declared keyexpr, the whole
     /// prefix+suffix string is used.
     pub fn get_best_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+        self.get_best_key_with_receiver(suffix, sid, true)
+    }
+
+    /// Data and queries may still be in flight when a receiver retires its own
+    /// mapping. Use a sender-owned scope, or a literal expression, instead.
+    pub fn get_best_sender_key<'a>(&self, suffix: &'a str, sid: usize) -> WireExpr<'a> {
+        self.get_best_key_with_receiver(suffix, sid, false)
+    }
+
+    fn get_best_key_with_receiver<'a>(
+        &self,
+        suffix: &'a str,
+        sid: usize,
+        allow_receiver: bool,
+    ) -> WireExpr<'a> {
         /// Retrieve a declared keyexpr, either local or remote.
         fn get_wire_expr<'a>(
             prefix: &Resource,
             suffix: impl FnOnce() -> Cow<'a, str>,
             sid: usize,
+            allow_receiver: bool,
         ) -> Option<WireExpr<'a>> {
             let ctx = prefix.face_ctxs.get(&sid)?;
             let (scope, mapping) = match (ctx.remote_expr_id, ctx.local_expr_id) {
-                (Some(expr_id), _) => (expr_id, Mapping::Receiver),
+                (Some(expr_id), _) if allow_receiver => (expr_id, Mapping::Receiver),
                 (_, Some(expr_id)) => (expr_id, Mapping::Sender),
                 _ => return None,
             };
@@ -760,6 +776,7 @@ impl Resource {
             mut prefix: &Resource,
             suffix: &'a str,
             sid: usize,
+            allow_receiver: bool,
         ) -> Option<WireExpr<'a>> {
             let mut suffix_rest = suffix;
             // do not use recursion as the tree may have arbitrary depth
@@ -773,7 +790,9 @@ impl Resource {
             }
             // then we go backward checking the child and its parents
             while suffix_rest != suffix {
-                if let Some(wire_expr) = get_wire_expr(prefix, || suffix_rest.into(), sid) {
+                if let Some(wire_expr) =
+                    get_wire_expr(prefix, || suffix_rest.into(), sid, allow_receiver)
+                {
                     return Some(wire_expr);
                 }
                 suffix_rest = &suffix[suffix.len() - suffix_rest.len() - prefix.suffix().len()..];
@@ -787,11 +806,12 @@ impl Resource {
             suffix: &'a str,
             sid: usize,
             mut parent: &Resource,
+            allow_receiver: bool,
         ) -> Option<WireExpr<'a>> {
             // do not use recursion as the tree may have arbitrary depth
             loop {
                 let parent_suffix = || [&prefix.expr[parent.expr.len()..], suffix].concat().into();
-                if let Some(wire_expr) = get_wire_expr(parent, parent_suffix, sid) {
+                if let Some(wire_expr) = get_wire_expr(parent, parent_suffix, sid, allow_receiver) {
                     return Some(wire_expr);
                 }
                 {
@@ -800,9 +820,11 @@ impl Resource {
                 }
             }
         }
-        get_best_child_key(self, suffix, sid)
-            .or_else(|| get_wire_expr(self, || suffix.into(), sid))
-            .or_else(|| get_best_parent_key(self, suffix, sid, self.parent.as_ref()?))
+        get_best_child_key(self, suffix, sid, allow_receiver)
+            .or_else(|| get_wire_expr(self, || suffix.into(), sid, allow_receiver))
+            .or_else(|| {
+                get_best_parent_key(self, suffix, sid, self.parent.as_ref()?, allow_receiver)
+            })
             .unwrap_or_else(|| [&self.expr, suffix].concat().into())
     }
 

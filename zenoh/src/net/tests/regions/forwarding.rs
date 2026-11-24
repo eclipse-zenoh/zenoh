@@ -2095,13 +2095,41 @@ fn test_multiple_gateways_query_routing_r2r_upstream_gateway_source() {
 fn test_push_message_consumption() {
     let g = HarnessBuilder::new()
         .mode(WhatAmI::Client) // Avoid the need for a runtime
-        .subregions([Region::Local])
+        .subregions([Region::Local, Region::default_south(WhatAmI::Client)])
         .start_runtime(false)
         .build();
     let s1 = g.new_session();
-    let s2 = g.new_session();
+    let s2 = g.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(Region::default_south(WhatAmI::Client)),
+    );
 
     s2.declare_subscriber(None, 3, "k/*");
+    // Establish an actual sender-owned scope, so forwarding still rewrites
+    // the expression and the consume=false assertion is meaningful.
+    s2.interest(
+        1,
+        InterestMode::Future,
+        InterestOptions::KEYEXPRS + InterestOptions::SUBSCRIBERS,
+        "k/0",
+    );
+    s1.declare_subscriber(None, 4, "k/0");
+    let sender_id = s2.recorder().with_messages(|messages| {
+        messages
+            .iter()
+            .find_map(|message| {
+                if let super::Message::Declare(declaration) = message {
+                    if let zenoh_protocol::network::DeclareBody::DeclareKeyExpr(key) =
+                        &declaration.body
+                    {
+                        return Some(key.id);
+                    }
+                }
+                None
+            })
+            .expect("the subscriber advertisement should establish a sender mapping")
+    });
     s2.declare_keyexpr(None, 5, "k/0");
 
     let mut push = Push::from(vec![42]);
@@ -2121,9 +2149,9 @@ fn test_push_message_consumption() {
     assert_eq!(
         s2.recorder().pushes()[0].wire_expr,
         WireExpr {
-            scope: 5,
+            scope: sender_id,
             suffix: "".into(),
-            mapping: Mapping::Receiver
+            mapping: Mapping::Sender
         },
         "s2's received publication should be scoped"
     );
