@@ -84,6 +84,26 @@ See also the [roadmap](https://github.com/eclipse-zenoh/roadmap) for more detail
 - **`-V, --version`**  
   Print version.
 
+## Debian packaging tests
+
+CI tests the Debian maintainer scripts on Debian 12, Debian 13, and Ubuntu 24.04
+using real `dpkg` installation, upgrade, removal, and purge operations. Run the
+same test locally in a disposable container (replace `docker` with `podman` if needed):
+
+```sh
+docker run --rm --volume "$PWD:/src:ro" --workdir /src \
+  debian:trixie sh ci/debian-packaging.sh
+```
+
+Run this command from the repository root. The test builds lightweight `.deb`
+fixtures containing the repository's maintainer scripts, service file, and
+configuration, without compiling or starting the router. Only `systemctl` is
+stubbed because the container does not run systemd. Coverage includes upgrades
+from the legacy destructive `postrm` (#2778), interrupted upgrades and retries,
+configuration and state preservation, account ownership, and purge followed by
+reinstallation. This checks the package lifecycle, not the release build or
+service startup.
+
 ## Plugins
 
 > [!WARNING]
