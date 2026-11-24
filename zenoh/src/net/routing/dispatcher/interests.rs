@@ -77,6 +77,34 @@ impl RemoteInterest {
     }
 }
 
+// Cached routes include the fallback decision while interest snapshots are
+// pending. Starting or ending a generation changes that decision even when no
+// subscriber/queryable declaration arrives at the same time.
+fn invalidate_interest_routes(
+    tables: &mut Tables,
+    res: Option<&Arc<Resource>>,
+    options: InterestOptions,
+) {
+    if !options.subscribers() && !options.queryables() {
+        return;
+    }
+    if let Some(res) = res {
+        let mut res = res.clone();
+        for hat in tables.hats.values_mut() {
+            if options.subscribers() {
+                hat.disable_data_routes(&mut res);
+            }
+            if options.queryables() {
+                hat.disable_query_routes(&mut res);
+            }
+        }
+    } else {
+        for hat in tables.hats.values_mut() {
+            hat.disable_all_routes(&mut tables.data);
+        }
+    }
+}
+
 pub(crate) fn finalize_pending_interests(
     _tables_ref: &TablesLock,
     face: &mut Arc<FaceState>,
@@ -254,6 +282,7 @@ impl Face {
         }
 
         self.with_mapped_optional_expr(wire_expr.as_ref(), |tables, res| {
+            invalidate_interest_routes(tables, res.as_ref(), msg.options);
             let hats = &mut tables.hats;
 
             let mut ctx = DispatcherContext {
@@ -370,6 +399,11 @@ impl Face {
         };
 
         hats[Region::North].route_interest_final(ctx, msg, &remote_interest);
+        invalidate_interest_routes(
+            tables,
+            remote_interest.res.as_ref(),
+            remote_interest.options,
+        );
     }
 
     #[tracing::instrument(level = "debug", skip(self, wtables, _node_id, send_declare), ret)]
