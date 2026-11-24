@@ -1084,3 +1084,65 @@ fn big_key_expr() {
     res.get_best_key("/a", face.state.id + 1);
     Resource::get_matches(&face.tables.tables.read().unwrap().data, &key_expr);
 }
+
+#[cfg(feature = "test")]
+#[test]
+fn control_declaration_mapping_uses_owned_scope_or_literal() {
+    use zenoh_sync::get_mut_unchecked;
+
+    use crate::net::tests::regions::{FaceDef, HarnessBuilder};
+
+    let gateway = HarnessBuilder::new()
+        .mode(WhatAmI::Client)
+        .subregions([Region::default_south(WhatAmI::Client)])
+        .start_runtime(false)
+        .build();
+    let face = gateway.new_face(
+        FaceDef::default()
+            .mode(WhatAmI::Client)
+            .region(Region::default_south(WhatAmI::Client)),
+    );
+    face.declare_keyexpr(None, 10, "control/topic");
+    face.declare_keyexpr(None, 11, "control/topic/**");
+    let root = zread!(gateway.gateway.tables.tables)
+        .data
+        ._get_root()
+        .clone();
+    let mut prefix = Resource::get_resource(&root, "control/topic").unwrap();
+    let wildcard = Resource::get_resource(&root, "control/topic/**").unwrap();
+    let mut state = face.face.state.clone();
+
+    // Receiver-owned scopes are unsafe even while still present at the sender.
+    assert_eq!(
+        Resource::decl_key(&prefix, &mut state),
+        "control/topic".into()
+    );
+    assert_eq!(
+        Resource::decl_key(&wildcard, &mut state),
+        "control/topic/**".into()
+    );
+    assert!(state.local_mappings.is_empty());
+
+    // Prefer an existing sender-owned mapping, including the wildcard suffix.
+    let sender_id = 42;
+    let context = get_mut_unchecked(&mut prefix)
+        .face_ctxs
+        .get_mut(&state.id)
+        .unwrap();
+    get_mut_unchecked(context).local_expr_id = Some(sender_id);
+    get_mut_unchecked(&mut state)
+        .local_mappings
+        .insert(sender_id, prefix.clone());
+    let expected = WireExpr {
+        scope: sender_id,
+        suffix: "".into(),
+        mapping: Mapping::Sender,
+    };
+    assert_eq!(Resource::decl_key(&prefix, &mut state), expected);
+    assert_eq!(
+        Resource::decl_key(&wildcard, &mut state),
+        expected.clone().with_suffix("/**")
+    );
+    unregister_expr(&gateway.gateway.tables, &mut state, 10);
+    assert_eq!(Resource::decl_key(&prefix, &mut state), expected);
+}

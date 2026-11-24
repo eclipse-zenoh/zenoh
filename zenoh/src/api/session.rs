@@ -3761,3 +3761,6 @@ impl Closeable for Session {
         self.downgrade()
     }
 }
+
+#[cfg(all(test, feature = "test"))]
+mod declaration_mapping_tests;

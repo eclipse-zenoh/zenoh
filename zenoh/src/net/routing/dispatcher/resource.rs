@@ -669,19 +669,17 @@ impl Resource {
                     .face_ctxs
                     .get(&face.id)
                 {
-                    if let Some(expr_id) = ctx.remote_expr_id {
-                        return WireExpr {
-                            scope: expr_id,
-                            suffix: wildsuffix.into(),
-                            mapping: Mapping::Receiver,
-                        };
-                    }
                     if let Some(expr_id) = ctx.local_expr_id {
                         return WireExpr {
                             scope: expr_id,
                             suffix: wildsuffix.into(),
                             mapping: Mapping::Sender,
                         };
+                    }
+                    if ctx.remote_expr_id.is_some() {
+                        // The receiver can retire its mapping while this declaration is
+                        // in flight. Use a literal unless we own a mapping above.
+                        return res.expr().to_string().into();
                     }
                 }
                 if face.region.bound().is_north()
