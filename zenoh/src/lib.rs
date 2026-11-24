@@ -236,6 +236,7 @@ lazy_static::lazy_static!(
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 );
 
+#[cfg(zenoh_git_checkout)]
 const GIT_COMMIT: &str = git_version::git_version!(
     args = [
         "--always",
@@ -245,6 +246,8 @@ const GIT_COMMIT: &str = git_version::git_version!(
     ],
     fallback = "release"
 );
+#[cfg(not(zenoh_git_checkout))]
+const GIT_COMMIT: &str = "release";
 
 pub const GIT_VERSION: &str =
     const_format::concatcp!("v", env!("CARGO_PKG_VERSION"), "-", GIT_COMMIT);
