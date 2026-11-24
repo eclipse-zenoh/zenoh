@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{fmt, thread, thread::ThreadId};
+use std::{fmt, io, thread, thread::ThreadId};
 
 use tracing::{field::Field, span, Event, Metadata, Subscriber};
 use tracing_subscriber::{
@@ -61,7 +61,8 @@ fn init_env_filter(env_filter: EnvFilter) {
         .with_thread_ids(true)
         .with_thread_names(true)
         .with_level(true)
-        .with_target(true);
+        .with_target(true)
+        .with_writer(io::stderr);
 
     let subscriber = subscriber.finish();
     let _ = tracing::subscriber::set_global_default(subscriber);
