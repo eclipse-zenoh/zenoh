@@ -631,7 +631,9 @@ fn handle_sample(states: &mut State, sample: Sample) -> bool {
                 new = true;
                 Default::default()
             });
-        if state.last_delivered.is_none() && states.global_pending_queries != 0 {
+        if state.last_delivered.is_none()
+            && (states.global_pending_queries != 0 || state.pending_queries != 0)
+        {
             // Avoid going through the Map if history_depth == 1
             if states.max_history_depth == 1 {
                 state.last_delivered = Some(source_info.source_sn().into());

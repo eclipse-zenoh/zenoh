@@ -19,7 +19,9 @@ use std::{
 use zenoh::{
     internal::ztimeout,
     key_expr::OwnedNonWildKeyExpr,
-    sample::{Sample, SampleKind},
+    query::Query,
+    sample::{Sample, SampleKind, SourceInfo},
+    session::EntityGlobalId,
     Session,
 };
 use zenoh_config::{EndPoint, EndPoints, ModeDependentValue, WhatAmI};
@@ -890,6 +892,76 @@ async fn test_advanced_late_joiner() {
         Some(nonwild_ke!("ns").into()),
     )
     .await;
+}
+
+/// A late joiner with `detect_late_publishers` queries history twice: globally and per publisher.
+/// The global query completing between two replies of the per publisher query
+/// must not lose the oldest samples.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn test_advanced_late_joiner_global_history_completes_first() {
+    const SLEEP: Duration = Duration::from_secs(1);
+    let ke = "test/advanced/late_joiner/global_history_completes_first";
+
+    zenoh_util::init_log_from_env_or("error");
+
+    let (peer1, peer2) = create_peer_pair().await;
+
+    // Emulate the publisher cache with a plain queryable to control the order of the replies.
+    let source_id = peer1.id();
+    let cache = ztimeout!(peer1.declare_queryable(format!("{ke}/@adv/**"))).unwrap();
+    let _token = ztimeout!(peer1.liveliness().declare_token(format!(
+        "{ke}/@adv/pub/{}/{}/_",
+        source_id.zid(),
+        source_id.eid()
+    )))
+    .unwrap();
+    tokio::time::sleep(SLEEP).await;
+
+    // More than the 3 replied samples, so that they are buffered until the queries complete.
+    let sub = ztimeout!(peer2.declare_subscriber(ke).history(
+        HistoryConfig::default()
+            .detect_late_publishers()
+            .max_samples(10)
+    ))
+    .unwrap();
+
+    let (mut global_query, mut publisher_query) = (None, None);
+    for _ in 0..2 {
+        let query = ztimeout!(cache.recv_async()).unwrap();
+        if query.key_expr().is_wild() {
+            global_query = Some(query);
+        } else {
+            publisher_query = Some(query);
+        }
+    }
+    let (global_query, publisher_query) = (global_query.unwrap(), publisher_query.unwrap());
+    async fn reply(query: &Query, ke: &str, source_id: EntityGlobalId, sn: u32) {
+        ztimeout!(query
+            .reply(ke, sn.to_string())
+            .source_info(SourceInfo::new(source_id, sn)))
+        .unwrap();
+    }
+
+    for sn in 0..3 {
+        reply(&global_query, ke, source_id, sn).await;
+    }
+    reply(&publisher_query, ke, source_id, 0).await;
+    drop(global_query);
+    tokio::time::sleep(SLEEP).await;
+    for sn in 1..3 {
+        reply(&publisher_query, ke, source_id, sn).await;
+    }
+    drop(publisher_query);
+
+    for expected in ["0", "1", "2"] {
+        let sample = ztimeout!(sub.recv_async()).unwrap();
+        assert_eq!(sample.payload().try_to_string().unwrap().as_ref(), expected);
+    }
+    tokio::time::sleep(SLEEP).await;
+    assert!(sub.try_recv().unwrap().is_none());
+
+    peer1.close().await.unwrap();
+    peer2.close().await.unwrap();
 }
 
 async fn test_advanced_retransmission_heartbeat_inner(
