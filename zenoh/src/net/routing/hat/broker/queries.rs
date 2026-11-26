@@ -435,7 +435,7 @@ impl HatQueriesTrait for Hat {
         match new_info {
             Some(new_info) => {
                 if new_info == old_info {
-                    Noop
+                    DisableRoutes { res }
                 } else {
                     InfoUpdate { res }
                 }
