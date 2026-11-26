@@ -2235,6 +2235,69 @@ fn test_complete_queryable_failover() {
     assert_eq!(r0_r2.a2b.recorder().requests().len(), 1);
 }
 
+/// Same as [`test_complete_queryable_failover`] but with the queryables on peers of a peer
+/// (`hat::peer`) or on clients of a router (`hat::broker`).
+#[test_case::test_matrix([WhatAmI::Peer, WhatAmI::Client])]
+fn test_complete_queryable_failover_on_peers_and_clients(mode: WhatAmI) {
+    try_init_tracing_subscriber();
+
+    let (gateway_mode, subregions, region) = match mode {
+        WhatAmI::Peer => (WhatAmI::Peer, vec![Region::Local], Region::North),
+        WhatAmI::Client => (
+            WhatAmI::Router,
+            vec![Region::Local, Region::default_south(mode)],
+            Region::default_south(mode),
+        ),
+        WhatAmI::Router => unreachable!("covered by test_complete_queryable_failover"),
+    };
+
+    let g = HarnessBuilder::new()
+        .mode(gateway_mode)
+        .subregions(subregions)
+        .build();
+
+    let new_face = || {
+        g.new_face(
+            FaceDef::default()
+                .mode(mode)
+                .region(region)
+                .remote_bound(Bound::North),
+        )
+    };
+    let q1 = new_face();
+    let q2 = new_face();
+    let s0 = g.new_session();
+
+    let ke = "k";
+    let complete = QueryableInfoType {
+        complete: true,
+        distance: 0,
+    };
+
+    q1.declare_queryable(None, 1, ke, complete);
+    q2.declare_queryable(None, 1, ke, complete);
+
+    s0.query(1, ke);
+
+    let q1_received = !q1.recorder().requests().is_empty();
+    let q2_received = !q2.recorder().requests().is_empty();
+    assert!(
+        q1_received != q2_received,
+        "exactly one complete queryable should receive the query"
+    );
+
+    if q1_received {
+        q1.undeclare_queryable(1);
+    } else {
+        q2.undeclare_queryable(1);
+    }
+
+    s0.query(2, ke);
+
+    assert_eq!(q1.recorder().requests().len(), 1);
+    assert_eq!(q2.recorder().requests().len(), 1);
+}
+
 #[test_case::test_matrix([WhatAmI::Client, WhatAmI::Peer])]
 fn test_routing_after_publisher_undeclaration(mode: WhatAmI) {
     const SUBSCRIBER_ID: u32 = 1;
