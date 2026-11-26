@@ -25,7 +25,7 @@ use std::{
 
 use uhlc::HLC;
 use zenoh_config::{unwrap_or_default, Config};
-use zenoh_keyexpr::keyexpr;
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::{
     core::{Bound, ExprId, Region, WireExpr, ZenohIdProto},
     network::Mapping,
@@ -145,6 +145,16 @@ pub(crate) struct TablesData {
 
     pub(crate) hats: RegionMap<HatTablesData>,
     pub(crate) routes_version: RoutesVersion,
+
+    /// Northbound declaration aggregation (`aggregation.upstream`). Prefixes whose downstream
+    /// subscribers/queryables a north-bound router HAT folds into one `${prefix}` declaration
+    /// upstream. `*_resources` are the corresponding aggregate `Resource`s, pre-created once at
+    /// gateway build (parallel to the prefix vecs) so the fold path never creates resources and the
+    /// aggregate's match-set is wired exactly once. Empty ⇒ behaviour identical to stock zenoh.
+    pub(crate) agg_sub_prefixes: Vec<OwnedKeyExpr>,
+    pub(crate) agg_sub_resources: Vec<Arc<Resource>>,
+    pub(crate) agg_qabl_prefixes: Vec<OwnedKeyExpr>,
+    pub(crate) agg_qabl_resources: Vec<Arc<Resource>>,
 }
 
 impl Debug for TablesData {
@@ -184,6 +194,8 @@ impl TablesData {
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let interests_timeout =
             Duration::from_millis(unwrap_or_default!(config.routing().interests().timeout()));
+        let agg_sub_prefixes = config.aggregation().upstream().subscribers().clone();
+        let agg_qabl_prefixes = config.aggregation().upstream().queryables().clone();
         #[cfg(feature = "stats")]
         let mut stats_keys = zenoh_stats::StatsKeysTree::default();
         #[cfg(feature = "stats")]
@@ -210,6 +222,10 @@ impl TablesData {
             #[cfg(feature = "stats")]
             stats,
             routes_version: 0,
+            agg_sub_prefixes,
+            agg_sub_resources: Vec::new(),
+            agg_qabl_prefixes,
+            agg_qabl_resources: Vec::new(),
         })
     }
 
@@ -294,6 +310,130 @@ pub struct Tables {
 }
 
 impl Tables {
+    /// Pre-create the aggregate `Resource` for every configured `aggregation.upstream` prefix, once,
+    /// at gateway build (where the full `Tables` is available for `make_resource`). The northbound
+    /// fold path then only *looks these up* — it never creates resources — and because each
+    /// aggregate persists for the gateway's lifetime its match-set is wired exactly once, so
+    /// reconnect/churn cannot accumulate duplicate match cross-links. No-op when unconfigured.
+    pub(crate) fn precreate_upstream_aggregates(&mut self) {
+        self.warn_on_aggregation_misconfig();
+        // Create + wire each UNIQUE prefix's aggregate exactly once (a prefix may be listed in both
+        // `subscribers` and `queryables`), then fill the parallel resource vecs by lookup. This
+        // avoids re-running `match_resource` on a shared prefix (which would duplicate match links).
+        let mut by_ke: HashMap<OwnedKeyExpr, Arc<Resource>> = HashMap::new();
+        let prefixes: Vec<OwnedKeyExpr> = self
+            .data
+            .agg_sub_prefixes
+            .iter()
+            .chain(self.data.agg_qabl_prefixes.iter())
+            .cloned()
+            .collect();
+        for ke in &prefixes {
+            if !by_ke.contains_key(ke) {
+                let res = self.make_aggregate_resource(ke);
+                by_ke.insert(ke.clone(), res);
+            }
+        }
+        let sub_res: Vec<Arc<Resource>> = self
+            .data
+            .agg_sub_prefixes
+            .iter()
+            .map(|ke| by_ke[ke].clone())
+            .collect();
+        let qabl_res: Vec<Arc<Resource>> = self
+            .data
+            .agg_qabl_prefixes
+            .iter()
+            .map(|ke| by_ke[ke].clone())
+            .collect();
+        self.data.agg_sub_resources = sub_res;
+        self.data.agg_qabl_resources = qabl_res;
+    }
+
+    /// Emit operator-facing warnings for suspicious `aggregation.upstream` prefixes (root wildcards,
+    /// admin-space prefixes, duplicates, mutual inclusion) plus a one-time note about the trade-offs.
+    /// Soft: never rejects config — folding still applies to the prefixes exactly as given.
+    fn warn_on_aggregation_misconfig(&self) {
+        let all: Vec<(&str, &OwnedKeyExpr)> = self
+            .data
+            .agg_sub_prefixes
+            .iter()
+            .map(|k| ("subscribers", k))
+            .chain(
+                self.data
+                    .agg_qabl_prefixes
+                    .iter()
+                    .map(|k| ("queryables", k)),
+            )
+            .collect();
+        if all.is_empty() {
+            return;
+        }
+        tracing::info!(
+            "northbound aggregation enabled for {} prefix declaration(s): upstream per-key declaration \
+             ACL/QoS/interceptors and upstream admin-space enumeration see only the ${{prefix}} aggregate, \
+             and the wildcard aggregate may forward data toward the edge for unsubscribed keys — apply \
+             per-key policy and per-key introspection at the owning edge",
+            all.len()
+        );
+        for (kind, ke) in &all {
+            let s = ke.as_str();
+            if s == "**" || s == "*" {
+                tracing::warn!(
+                    "aggregation.upstream.{kind} prefix `{s}` is a root wildcard and would fold EVERY \
+                     matching declaration into one aggregate — almost certainly a misconfiguration"
+                );
+            }
+            if s == "@" || s.starts_with("@/") {
+                tracing::warn!(
+                    "aggregation.upstream.{kind} prefix `{s}` targets the `@/` admin key-space; folding \
+                     admin declarations breaks per-node introspection — almost certainly a misconfiguration"
+                );
+            }
+        }
+        // Duplicates / mutual inclusion: matching is first-match, so a narrower prefix listed after a
+        // broader one that includes it never receives children (its aggregate stays empty).
+        for i in 0..all.len() {
+            for j in (i + 1)..all.len() {
+                let (a, b) = (all[i].1, all[j].1);
+                if a == b {
+                    tracing::warn!(
+                        "aggregation.upstream prefix `{}` is listed more than once (redundant)",
+                        a.as_str()
+                    );
+                } else if a.includes(b) {
+                    tracing::warn!(
+                        "aggregation.upstream prefix `{}` includes `{}`: children of the narrower prefix \
+                         fold into the broader one (first match), so `{}` may never aggregate anything",
+                        a.as_str(),
+                        b.as_str(),
+                        b.as_str()
+                    );
+                } else if b.includes(a) {
+                    tracing::warn!(
+                        "aggregation.upstream prefix `{}` includes `{}`: children of the narrower prefix \
+                         fold into the broader one (first match), so `{}` may never aggregate anything",
+                        b.as_str(),
+                        a.as_str(),
+                        a.as_str()
+                    );
+                }
+            }
+        }
+    }
+
+    fn make_aggregate_resource(&mut self, ke: &OwnedKeyExpr) -> Arc<Resource> {
+        // Compute matches BEFORE creating the resource so it does not appear in its own match-set
+        // (mirrors `Face::with_mapped_expr`), then wire it in so a wildcard route resolving to the
+        // aggregate still reaches the (later-declared) children.
+        let mut matches = Resource::get_matches(&self.data, ke);
+        let mut root = self.data.root_res.clone();
+        let mut res = Resource::make_resource(self, &mut root, ke.as_str());
+        matches.push(Arc::downgrade(&res));
+        Resource::match_resource(&self.data, &mut res, matches);
+        res
+    }
+
     pub(crate) fn sourced_subscribers(&self) -> HashMap<Arc<Resource>, Sources> {
         self.hats
             .values()
