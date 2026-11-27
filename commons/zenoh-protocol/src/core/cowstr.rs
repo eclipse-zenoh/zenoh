@@ -11,15 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
-use core::{
-    fmt::{Debug, Display, Formatter},
-    num::NonZeroUsize,
-};
+use alloc::{borrow::ToOwned, boxed::Box, string::String};
+use core::fmt::{Debug, Display, Formatter};
 
 enum CowStrInner<'a> {
     Borrowed(&'a str),
-    Owned { s: Box<str>, capacity: NonZeroUsize },
+    Owned(Box<str>),
 }
 pub struct CowStr<'a>(CowStrInner<'a>);
 impl<'a> CowStr<'a> {
@@ -48,11 +45,7 @@ impl From<String> for CowStr<'_> {
         if s.is_empty() {
             CowStr::borrowed("")
         } else {
-            let capacity = unsafe { NonZeroUsize::new_unchecked(s.capacity()) };
-            Self(CowStrInner::Owned {
-                s: s.into_boxed_str(),
-                capacity,
-            })
+            Self(CowStrInner::Owned(s.into_boxed_str()))
         }
     }
 }
@@ -66,7 +59,7 @@ impl core::ops::Deref for CowStr<'_> {
     fn deref(&self) -> &Self::Target {
         match &self.0 {
             CowStrInner::Borrowed(s) => s,
-            CowStrInner::Owned { s, .. } => s,
+            CowStrInner::Owned(s) => s,
         }
     }
 }
@@ -101,15 +94,36 @@ impl core::ops::Add<&str> for CowStr<'_> {
                 ans.push_str(rhs);
                 ans
             }
-            CowStrInner::Owned { mut s, capacity } => unsafe {
-                let mut s = String::from_utf8_unchecked(Vec::from_raw_parts(
-                    s.as_mut_ptr(),
-                    s.len(),
-                    capacity.get(),
-                ));
+            CowStrInner::Owned(s) => {
+                let mut s = s.into_string();
                 s += rhs;
                 s
-            },
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_borrowed() {
+        let s = CowStr::from("abc") + "def";
+        assert_eq!(s, "abcdef");
+    }
+
+    #[test]
+    fn add_owned() {
+        let s = CowStr::from(String::from("abc")) + "def";
+        assert_eq!(s, "abcdef");
+    }
+
+    #[test]
+    fn add_owned_with_spare_capacity() {
+        let mut owned = String::with_capacity(64);
+        owned.push_str("abc");
+        let s = CowStr::from(owned) + "def";
+        assert_eq!(s, "abcdef");
     }
 }
